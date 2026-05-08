@@ -132,7 +132,12 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
         parse_simple_frontmatter(yaml, &mut title, &mut aliases, &mut tags);
     }
 
-    let targets = extract_wikilinks(body);
+    let mut targets = extract_wikilinks(body);
+    for t in extract_md_links(body) {
+        if !targets.iter().any(|existing| existing.eq_ignore_ascii_case(&t)) {
+            targets.push(t);
+        }
+    }
     let inline_tags = extract_inline_tags(body);
     for t in inline_tags {
         if !tags.iter().any(|existing| existing.eq_ignore_ascii_case(&t)) {
@@ -320,25 +325,116 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
     result
 }
 
-// `[[...]]` 추출. 한 줄 안에서만 인정. 중첩 `[[` 거부.
-fn extract_wikilinks(body: &str) -> Vec<String> {
-    let mut result = Vec::new();
-    let mut rest = body;
-    while let Some(start) = rest.find("[[") {
-        let after_open = &rest[start + 2..];
-        if let Some(close_offset) = after_open.find("]]") {
-            let inner = &after_open[..close_offset];
-            if !inner.contains('\n') && !inner.contains("[[") {
-                let trimmed = inner.trim();
-                if !trimmed.is_empty() {
-                    result.push(trimmed.to_string());
-                }
-            }
-            rest = &after_open[close_offset + 2..];
-        } else {
-            break;
+// 한 줄에서 인라인 코드(`...`) 부분을 제거.
+fn strip_inline_code(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut in_code = false;
+    for c in line.chars() {
+        if c == '`' {
+            in_code = !in_code;
+            continue;
+        }
+        if !in_code {
+            out.push(c);
         }
     }
+    out
+}
+
+// "name.md" / "name.MD" → "name". ASCII 확장자라 byte slice 안전.
+fn strip_md_extension(name: &str) -> &str {
+    if name.len() >= 3 {
+        let tail = &name[name.len() - 3..];
+        if tail.eq_ignore_ascii_case(".md") {
+            return &name[..name.len() - 3];
+        }
+    }
+    name
+}
+
+// `[[...]]` 추출. 코드 펜스(```...```)와 인라인 코드(`...`) 안은 무시.
+// 중첩 `[[` 거부.
+fn extract_wikilinks(body: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut in_fence = false;
+
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+
+        let cleaned = strip_inline_code(line);
+        let mut rest = cleaned.as_str();
+        while let Some(start) = rest.find("[[") {
+            let after_open = &rest[start + 2..];
+            if let Some(close_offset) = after_open.find("]]") {
+                let inner = &after_open[..close_offset];
+                if !inner.contains('\n') && !inner.contains("[[") {
+                    let t = inner.trim();
+                    if !t.is_empty() {
+                        result.push(t.to_string());
+                    }
+                }
+                rest = &after_open[close_offset + 2..];
+            } else {
+                break;
+            }
+        }
+    }
+
+    result
+}
+
+// `[text](path)` 패턴에서 .md 확장자 가진 path만 추출.
+// path → last segment에서 .md 제거 → wikilink target과 동일 형식.
+// 코드 펜스 / 인라인 코드 안은 무시.
+fn extract_md_links(body: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut in_fence = false;
+
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+
+        let cleaned = strip_inline_code(line);
+        // ](path) 패턴 — `]`와 `(`가 인접한 경우만
+        let mut rest = cleaned.as_str();
+        while let Some(idx) = rest.find("](") {
+            let after = &rest[idx + 2..];
+            if let Some(close) = after.find(')') {
+                let path = &after[..close];
+                // anchor (`#section`) 제거, query 제거
+                let path_clean = path.split(['#', '?']).next().unwrap_or(path).trim();
+                let lower = path_clean.to_lowercase();
+                if lower.ends_with(".md")
+                    && !path_clean.starts_with("http://")
+                    && !path_clean.starts_with("https://")
+                    && !path_clean.starts_with("mailto:")
+                {
+                    let last = path_clean.rsplit('/').next().unwrap_or(path_clean);
+                    let stem = strip_md_extension(last).trim();
+                    if !stem.is_empty() {
+                        result.push(stem.to_string());
+                    }
+                }
+                rest = &after[close + 1..];
+            } else {
+                break;
+            }
+        }
+    }
+
     result
 }
 
