@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
   import { parseNote } from "$lib/markdown";
@@ -7,7 +8,10 @@
     vaultPath,
     currentNotePath,
     currentNoteContent,
+    linkIndex,
     restoreLastVault,
+    selectNote,
+    jumpToWikilink,
   } from "$lib/stores/vault";
   import {
     editorCollapsed,
@@ -16,6 +20,8 @@
     togglePreview,
     restorePaneState,
   } from "$lib/stores/layout";
+  import { getBacklinks, resolveTarget } from "$lib/linkIndex";
+  import type { LinkInfo } from "$lib/tauri/notes";
 
   const SAMPLE = `---
 title: Lapis Phase 1.1 Welcome
@@ -40,12 +46,17 @@ tags: [phase-1, vault-reader]
 - 노트 클릭 → 본문 로드 + 실시간 렌더
 - 마지막 vault 자동 복원 (재시작 시)
 
-## Phase 1.1에서 아직 안 되는 것
+## Phase 1.2에서 새로 가능한 것
 
-- 편집 후 저장 (read-only)
-- 외부 변경 자동 감지
-- Wikilink \`[[다른노트]]\` 점프
-- 검색 / Quick Switcher
+- Wikilink 인식 + 클릭 점프 — 예: \`[[STATE]]\`, \`[[PLAN]]\`
+  (실제 vault에 해당 이름 노트가 있으면 시안색, 없으면 빨간 점선)
+- 백링크 패널 — Preview 하단에 이 노트를 가리키는 노트 목록
+
+## 아직 안 되는 것
+
+- 편집 후 저장 (Phase 2)
+- 외부 변경 자동 감지 (Phase 2)
+- 검색 / Quick Switcher (Phase 1.3)
 `;
 
   let raw = $state(SAMPLE);
@@ -64,6 +75,84 @@ tags: [phase-1, vault-reader]
     const segments = path.split("/").filter(Boolean);
     return segments.slice(-2).join(" / ");
   }
+
+  // 현재 노트의 백링크 (다른 노트에서 이 노트를 [[wikilink]]로 가리키는 항목들)
+  const currentBacklinks = $derived.by<LinkInfo[]>(() => {
+    const idx = $linkIndex;
+    const path = $currentNotePath;
+    if (!idx || !path) return [];
+    return getBacklinks(path, idx);
+  });
+
+  // Preview 안의 모든 클릭을 가로채서 분기 처리 (event delegation)
+  // - .wikilink: 내부 노트 점프
+  // - <a href="http..."> 외부: 시스템 브라우저로 (Tauri opener)
+  // - <a href="..."> 내부 (./, ../, *.md, 상대 경로): 노트 점프 시도
+  // - 그 외: SvelteKit SPA navigation 절대 막음 (앱이 /파일명 으로 가서 404 화이트스크린 되는 사고 방지)
+  async function handlePreviewClick(e: MouseEvent) {
+    const el = e.target as HTMLElement | null;
+    if (!el) return;
+
+    // 1) wikilink (span)
+    const wikilink = el.closest(".wikilink") as HTMLElement | null;
+    if (wikilink) {
+      e.preventDefault();
+      const target = wikilink.getAttribute("data-target");
+      if (target) {
+        const ok = await jumpToWikilink(target);
+        if (!ok) console.info("wikilink unresolved:", target);
+      }
+      return;
+    }
+
+    // 2) 일반 <a> 태그 — markdown 링크 [텍스트](경로)
+    const anchor = el.closest("a") as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const href = anchor.getAttribute("href") ?? "";
+
+    // 외부 링크 → 시스템 브라우저
+    if (/^(https?:|mailto:|tel:)/i.test(href)) {
+      e.preventDefault();
+      try {
+        await openUrl(href);
+      } catch (err) {
+        console.error("openUrl failed", err);
+      }
+      return;
+    }
+
+    // 빈 href / # / 내부 경로 → SPA 라우팅 차단
+    e.preventDefault();
+    if (!href || href === "#") return;
+
+    // .md 확장자나 상대 경로 → wikilink 매칭 시도 (확장자 제거 + 마지막 segment)
+    const cleaned = href
+      .replace(/^\.\//, "")
+      .replace(/^\//, "")
+      .replace(/\.md$/i, "");
+    const lastSegment = cleaned.split("/").pop() ?? cleaned;
+    const ok = await jumpToWikilink(lastSegment);
+    if (!ok) console.info("note link unresolved:", href);
+  }
+
+  // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
+  let previewBodyEl: HTMLElement | null = $state(null);
+  $effect(() => {
+    const _html = parsed.html;
+    const idx = $linkIndex;
+    if (!previewBodyEl) return;
+    (async () => {
+      await tick();
+      if (!previewBodyEl) return;
+      const links = previewBodyEl.querySelectorAll<HTMLElement>(".wikilink");
+      for (const a of links) {
+        const target = a.getAttribute("data-target");
+        const resolved = idx && target ? !!resolveTarget(target, idx) : false;
+        a.classList.toggle("resolved", resolved);
+        a.classList.toggle("unresolved", !resolved);
+      }
+    })();
+  });
 
   let editorCopied = $state(false);
   let previewCopied = $state(false);
@@ -280,7 +369,9 @@ tags: [phase-1, vault-reader]
             {/if}
           </div>
         </div>
-        <div class="pane-body">
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick}>
         {#if Object.keys(parsed.data).length > 0}
           <details class="properties" open>
             <summary>Properties ({Object.keys(parsed.data).length})</summary>
@@ -309,6 +400,25 @@ tags: [phase-1, vault-reader]
         <article class="rendered">
           {@html parsed.html}
         </article>
+
+        {#if $currentNotePath && currentBacklinks.length > 0}
+          <section class="backlinks">
+            <h3>↰ Backlinks · {currentBacklinks.length}</h3>
+            <ul>
+              {#each currentBacklinks as bl (bl.source_path)}
+                <li>
+                  <button
+                    class="backlink"
+                    title={bl.source_path}
+                    onclick={() => selectNote(bl.source_path)}
+                  >
+                    {bl.title ?? bl.source_name}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
       </div>
       {/if}
     </section>
@@ -646,5 +756,82 @@ tags: [phase-1, vault-reader]
 
   .rendered :global(li) {
     margin: 0.2em 0;
+  }
+
+  /* Wikilink 스타일 (span 기반 — 안전한 navigation) */
+  .rendered :global(.wikilink) {
+    color: #6dd6ff;
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(109, 214, 255, 0.6);
+    cursor: pointer;
+    padding: 0 1px;
+    border-radius: 2px;
+    transition: background 0.1s;
+  }
+
+  .rendered :global(.wikilink:hover) {
+    background: rgba(109, 214, 255, 0.12);
+  }
+
+  .rendered :global(.wikilink:focus-visible) {
+    outline: 2px solid #6dd6ff;
+    outline-offset: 1px;
+  }
+
+  .rendered :global(.wikilink.unresolved) {
+    color: #f47174;
+    border-bottom-color: rgba(244, 113, 116, 0.6);
+    border-bottom-style: dotted;
+  }
+
+  .rendered :global(.wikilink.unresolved:hover) {
+    background: rgba(244, 113, 116, 0.12);
+  }
+
+  /* 백링크 패널 */
+  .backlinks {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid #333;
+  }
+
+  .backlinks h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+
+  .backlinks ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .backlinks li {
+    margin: 0;
+  }
+
+  .backlink {
+    background: transparent;
+    border: 1px solid #2d4a5a;
+    color: #6dd6ff;
+    padding: 4px 12px;
+    border-radius: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .backlink:hover {
+    background: #2d4a5a;
+    color: #fff;
+    border-color: #6dd6ff;
   }
 </style>
