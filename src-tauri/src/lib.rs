@@ -8,6 +8,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             vault::list_notes,
             vault::read_note,
+            vault::scan_links,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
