@@ -4,9 +4,11 @@
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
   import SearchModal from "$lib/SearchModal.svelte";
+  import GraphModal from "$lib/GraphModal.svelte";
   import { parseNote } from "$lib/markdown";
   import { openSearch, searchOpen } from "$lib/stores/search";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
+  import { openGraph } from "$lib/stores/graph";
   import {
     vaultPath,
     currentNotePath,
@@ -311,6 +313,9 @@ tags: [phase-1, vault-reader]
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
       openSearch("fulltext");
+    } else if (key === "g" && !e.shiftKey) {
+      e.preventDefault();
+      openGraph();
     }
   }
 
@@ -323,6 +328,7 @@ tags: [phase-1, vault-reader]
 <svelte:window onkeydown={handleGlobalKey} />
 
 <SearchModal />
+<GraphModal />
 
 <div class="app">
   <header class="topbar">
@@ -337,6 +343,18 @@ tags: [phase-1, vault-reader]
         Welcome
       {/if}
     </span>
+    <div class="topbar-actions">
+      <button
+        class="topbar-btn"
+        title="Quick Switcher (Cmd+P)"
+        onclick={() => openSearch("files")}
+      >🔎</button>
+      <button
+        class="topbar-btn"
+        title="Graph view (Cmd+G)"
+        onclick={openGraph}
+      >🕸</button>
+    </div>
   </header>
 
   <div
@@ -537,7 +555,36 @@ tags: [phase-1, vault-reader]
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    max-width: 50%;
+    max-width: 40%;
+  }
+
+  .topbar-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+  }
+
+  .topbar-btn {
+    width: 28px;
+    height: 24px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+
+  .topbar-btn:hover {
+    background: #333;
+    border-color: #6dd6ff;
+    color: #fff;
   }
 
   .workspace {
