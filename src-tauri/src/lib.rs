@@ -9,6 +9,7 @@ pub fn run() {
             vault::list_notes,
             vault::read_note,
             vault::scan_links,
+            vault::read_all_notes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

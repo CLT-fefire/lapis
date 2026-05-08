@@ -27,3 +27,13 @@ export interface LinkInfo {
 export function scanLinks(vaultPath: string): Promise<LinkInfo[]> {
   return invoke<LinkInfo[]>("scan_links", { vaultPath });
 }
+
+export interface NoteContent {
+  path: string;
+  name: string;
+  body: string;
+}
+
+export function readAllNotes(vaultPath: string): Promise<NoteContent[]> {
+  return invoke<NoteContent[]>("read_all_notes", { vaultPath });
+}
