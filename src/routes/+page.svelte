@@ -12,12 +12,20 @@
   import {
     vaultPath,
     currentNotePath,
-    currentNoteContent,
     linkIndex,
     restoreLastVault,
     selectNote,
     jumpToWikilink,
   } from "$lib/stores/vault";
+  import {
+    editorContent,
+    isDirty,
+    isSaving,
+    lastSaveError,
+    noteContentChanged,
+    saveCurrentNote,
+    markSaved,
+  } from "$lib/stores/editor";
   import {
     editorCollapsed,
     previewCollapsed,
@@ -64,15 +72,27 @@ tags: [phase-1, vault-reader]
 - 검색 / Quick Switcher (Phase 1.3)
 `;
 
+  // vault 미선택 상태에서만 SAMPLE 사용. 노트 선택 후엔 editor store가 진실의 원천.
   let raw = $state(SAMPLE);
 
   $effect(() => {
     if ($currentNotePath) {
-      raw = $currentNoteContent;
+      // editor store가 노트 콘텐츠를 보유 — 노트 변경 시 markSaved로 갱신됨
+      raw = $editorContent;
     } else if (!$vaultPath) {
       raw = SAMPLE;
+      markSaved(SAMPLE);
     }
   });
+
+  // Editor onChange로 들어오는 사용자 입력 → store에 위임 (dirty + autosave)
+  function handleEditorChange(next: string) {
+    if (!$currentNotePath) {
+      // SAMPLE 편집은 무시 (저장 대상 없음)
+      return;
+    }
+    noteContentChanged(next);
+  }
 
   const parsed = $derived(parseNote(raw));
 
@@ -316,6 +336,9 @@ tags: [phase-1, vault-reader]
     } else if (key === "g" && !e.shiftKey) {
       e.preventDefault();
       openGraph();
+    } else if (key === "s" && !e.shiftKey) {
+      e.preventDefault();
+      void saveCurrentNote();
     }
   }
 
@@ -333,10 +356,17 @@ tags: [phase-1, vault-reader]
 <div class="app">
   <header class="topbar">
     <span class="brand">Lapis</span>
-    <span class="phase">Phase 1.3 — Search</span>
+    <span class="phase">Phase 2.0 — Editable Vault</span>
     <span class="meta">
       {#if $currentNotePath}
         {noteDisplayName($currentNotePath)}
+        {#if $isSaving}
+          <span class="save-badge saving">saving…</span>
+        {:else if $lastSaveError}
+          <span class="save-badge error" title={$lastSaveError}>save failed</span>
+        {:else if $isDirty}
+          <span class="save-badge dirty" title="저장되지 않음 (자동 저장 2초 / Cmd+S)">● modified</span>
+        {/if}
       {:else if $vaultPath}
         노트를 선택하세요
       {:else}
@@ -377,7 +407,7 @@ tags: [phase-1, vault-reader]
         </button>
       {:else}
         <div class="pane-title">
-          <span>Editor (read-only)</span>
+          <span>Editor</span>
           <div class="pane-actions">
             <button
               class="copy-btn"
@@ -400,7 +430,7 @@ tags: [phase-1, vault-reader]
           </div>
         </div>
         <div class="pane-body">
-          <Editor bind:value={raw} />
+          <Editor bind:value={raw} onChange={handleEditorChange} />
         </div>
       {/if}
     </section>
@@ -556,6 +586,35 @@ tags: [phase-1, vault-reader]
     white-space: nowrap;
     text-overflow: ellipsis;
     max-width: 40%;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .save-badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .save-badge.dirty {
+    color: #f7c947;
+    background: rgba(247, 201, 71, 0.12);
+    border: 1px solid rgba(247, 201, 71, 0.3);
+  }
+
+  .save-badge.saving {
+    color: #6dd6ff;
+    background: rgba(109, 214, 255, 0.12);
+    border: 1px solid rgba(109, 214, 255, 0.3);
+  }
+
+  .save-badge.error {
+    color: #f47174;
+    background: rgba(244, 113, 116, 0.12);
+    border: 1px solid rgba(244, 113, 116, 0.4);
   }
 
   .topbar-actions {
