@@ -9,6 +9,7 @@ import {
 } from "$lib/tauri/notes";
 import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
+import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -54,10 +55,12 @@ export async function reloadNotes(): Promise<void> {
   try {
     const [links, contents] = await Promise.all([scanLinks(root), readAllNotes(root)]);
     linkIndex.set(buildIndex(links));
+    tagIndex.set(buildTagIndex(links));
     rebuildIndexes(links, contents);
   } catch (e) {
     console.error("link/search index build failed", e);
     linkIndex.set(null);
+    clearTagIndex();
     clearIndexes();
   }
 }
