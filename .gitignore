@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+*.swp
+
+# Editor
+.idea/
+*.iml
+# .vscode/ 는 추적함 (extensions.json 권장 설정 공유)
+
+# Node / Web
+node_modules/
+dist/
+build/
+.cache/
+.parcel-cache/
+
+# SvelteKit / Vite
+/.svelte-kit
+/package
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Rust / Tauri
+src-tauri/target/
+target/
+# Cargo.lock — Tauri 앱은 추적 권장 (재현성)
+
+# 환경 변수
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# 사용자별 vault (테스트용)
+test-vault/
+sample-vault/
+*.lapis-cache/
+
+# 로그
+*.log
+logs/
