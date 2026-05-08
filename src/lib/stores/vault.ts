@@ -79,10 +79,30 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
 }
 
 export async function selectNote(path: string): Promise<void> {
+  // editor 모듈을 lazy import — circular import 회피
+  // (editor가 vault store를 import하므로 직접 top-level import 시 초기화 순서 위험)
+  let editor: typeof import("./editor") | null = null;
+  try {
+    editor = await import("./editor");
+  } catch (e) {
+    console.warn("editor module load failed", e);
+  }
+
+  // 이전 노트가 dirty면 먼저 저장
+  if (editor && editor.getIsDirty()) {
+    try {
+      await editor.saveCurrentNote();
+    } catch (e) {
+      console.warn("save before navigate failed", e);
+    }
+  }
+
   try {
     const content = await readNote(path);
     currentNotePath.set(path);
     currentNoteContent.set(content);
+    // editor 상태 동기화 — 새 노트 기준으로 dirty 해제
+    if (editor) editor.markSaved(content);
   } catch (e) {
     console.error("read_note failed", e);
     currentNoteContent.set("");

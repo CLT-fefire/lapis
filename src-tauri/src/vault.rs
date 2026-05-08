@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct NoteEntry {
@@ -25,6 +26,66 @@ pub fn list_notes(vault_path: String) -> Result<Vec<NoteEntry>, String> {
 #[tauri::command]
 pub fn read_note(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+/// .md 파일 atomic 저장.
+/// 1) vault_path 하위인지 검증 (path traversal 방지)
+/// 2) .md 확장자 강제
+/// 3) 같은 디렉토리에 임시 파일로 쓴 후 rename (POSIX atomic)
+#[tauri::command]
+pub fn write_note(vault_path: String, path: String, content: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    let vault = PathBuf::from(&vault_path)
+        .canonicalize()
+        .map_err(|e| format!("vault canonicalize failed: {e}"))?;
+
+    let target_canon = target
+        .canonicalize()
+        .map_err(|e| format!("target canonicalize failed: {e}"))?;
+
+    if !target_canon.starts_with(&vault) {
+        return Err(format!(
+            "path traversal detected: {} is outside {}",
+            target_canon.display(),
+            vault.display()
+        ));
+    }
+
+    if target_canon
+        .extension()
+        .is_none_or(|e| !e.eq_ignore_ascii_case("md"))
+    {
+        return Err("only .md files allowed".to_string());
+    }
+
+    let dir = target_canon
+        .parent()
+        .ok_or_else(|| "no parent directory".to_string())?;
+    let file_name = target_canon
+        .file_name()
+        .ok_or_else(|| "no file name".to_string())?
+        .to_string_lossy()
+        .to_string();
+
+    let pid = std::process::id();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let temp_name = format!(".{file_name}.tmp.lapis-{pid}-{nanos}");
+    let temp_path = dir.join(temp_name);
+
+    if let Err(e) = fs::write(&temp_path, &content) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("temp write failed: {e}"));
+    }
+
+    if let Err(e) = fs::rename(&temp_path, &target_canon) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("rename failed: {e}"));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Clone)]

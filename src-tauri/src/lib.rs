@@ -8,6 +8,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             vault::list_notes,
             vault::read_note,
+            vault::write_note,
             vault::scan_links,
             vault::read_all_notes,
         ])
