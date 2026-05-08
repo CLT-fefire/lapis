@@ -22,6 +22,7 @@ export interface LinkInfo {
   title: string | null;
   aliases: string[];
   targets: string[]; // raw [[...]] inner text — `target` 또는 `target|alias` 그대로
+  tags: string[];    // frontmatter `tags` + 본문 `#tag` 통합 (대소문자 보존, 중복 제거됨)
 }
 
 export function scanLinks(vaultPath: string): Promise<LinkInfo[]> {

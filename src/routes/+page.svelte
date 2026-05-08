@@ -6,6 +6,7 @@
   import SearchModal from "$lib/SearchModal.svelte";
   import { parseNote } from "$lib/markdown";
   import { openSearch, searchOpen } from "$lib/stores/search";
+  import { selectTag, showTagsTab } from "$lib/stores/tags";
   import {
     vaultPath,
     currentNotePath,
@@ -85,6 +86,35 @@ tags: [phase-1, vault-reader]
     if (!idx || !path) return [];
     return getBacklinks(path, idx);
   });
+
+  // Properties: frontmatter 있으면 그대로, 없으면 합성 정보(file/path/tags/backlinks).
+  const effectiveProperties = $derived.by<Record<string, unknown>>(() => {
+    if (Object.keys(parsed.data).length > 0) return parsed.data;
+
+    const path = $currentNotePath;
+    if (!path) return {};
+
+    const synthetic: Record<string, unknown> = {};
+    const segs = path.split("/").filter(Boolean);
+    synthetic.file = segs[segs.length - 1] ?? path;
+    if (segs.length > 1) {
+      synthetic.path = segs.slice(-3, -1).join("/");
+    }
+
+    const idx = $linkIndex;
+    const info = idx?.byPath.get(path);
+    if (info && info.tags.length > 0) {
+      synthetic.tags = info.tags;
+    }
+
+    if (currentBacklinks.length > 0) {
+      synthetic.backlinks = currentBacklinks.length;
+    }
+
+    return synthetic;
+  });
+
+  const propertiesAuto = $derived(Object.keys(parsed.data).length === 0);
 
   // Preview 안의 모든 클릭을 가로채서 분기 처리 (event delegation)
   // - .wikilink: 내부 노트 점프
@@ -395,18 +425,28 @@ tags: [phase-1, vault-reader]
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick}>
-        {#if Object.keys(parsed.data).length > 0}
+        {#if Object.keys(effectiveProperties).length > 0}
           <details class="properties" open>
-            <summary>Properties ({Object.keys(parsed.data).length})</summary>
+            <summary>
+              Properties ({Object.keys(effectiveProperties).length}){#if propertiesAuto}<span class="auto-tag">· auto</span>{/if}
+            </summary>
             <table>
               <tbody>
-                {#each Object.entries(parsed.data) as [key, value]}
+                {#each Object.entries(effectiveProperties) as [key, value]}
                   <tr>
                     <th>{key}</th>
                     <td>
                       {#if Array.isArray(value)}
                         {#each value as v}
-                          <span class="chip">{v}</span>
+                          {#if key === "tags"}
+                            <button
+                              class="chip chip-tag"
+                              title="이 태그로 사이드바 필터"
+                              onclick={() => { selectTag(String(v)); showTagsTab(); }}
+                            >#{v}</button>
+                          {:else}
+                            <span class="chip">{v}</span>
+                          {/if}
                         {/each}
                       {:else if typeof value === "object" && value !== null}
                         <code>{JSON.stringify(value)}</code>
@@ -670,6 +710,15 @@ tags: [phase-1, vault-reader]
     user-select: none;
   }
 
+  .auto-tag {
+    margin-left: 6px;
+    color: #888;
+    font-weight: 400;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
   .properties table {
     width: 100%;
     border-collapse: collapse;
@@ -699,6 +748,19 @@ tags: [phase-1, vault-reader]
     border-radius: 10px;
     font-size: 12px;
     color: #9adff7;
+  }
+
+  .chip-tag {
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+
+  .chip-tag:hover {
+    background: #355a6e;
+    color: #fff;
+    border-color: #6dd6ff;
   }
 
   .rendered {

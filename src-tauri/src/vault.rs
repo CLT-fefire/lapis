@@ -34,6 +34,7 @@ pub struct LinkInfo {
     pub title: Option<String>,
     pub aliases: Vec<String>,
     pub targets: Vec<String>,
+    pub tags: Vec<String>,
 }
 
 #[tauri::command]
@@ -126,11 +127,18 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
     let (yaml_opt, body) = split_frontmatter(content);
     let mut title: Option<String> = None;
     let mut aliases: Vec<String> = Vec::new();
+    let mut tags: Vec<String> = Vec::new();
     if let Some(yaml) = yaml_opt {
-        parse_simple_frontmatter(yaml, &mut title, &mut aliases);
+        parse_simple_frontmatter(yaml, &mut title, &mut aliases, &mut tags);
     }
 
     let targets = extract_wikilinks(body);
+    let inline_tags = extract_inline_tags(body);
+    for t in inline_tags {
+        if !tags.iter().any(|existing| existing.eq_ignore_ascii_case(&t)) {
+            tags.push(t);
+        }
+    }
 
     LinkInfo {
         source_path: path.to_string_lossy().to_string(),
@@ -138,6 +146,7 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
         title,
         aliases,
         targets,
+        tags,
     }
 }
 
@@ -165,7 +174,12 @@ fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
     (None, content)
 }
 
-fn parse_simple_frontmatter(yaml: &str, title: &mut Option<String>, aliases: &mut Vec<String>) {
+fn parse_simple_frontmatter(
+    yaml: &str,
+    title: &mut Option<String>,
+    aliases: &mut Vec<String>,
+    tags: &mut Vec<String>,
+) {
     let lines: Vec<&str> = yaml.lines().collect();
     let mut i = 0;
     while i < lines.len() {
@@ -173,33 +187,55 @@ fn parse_simple_frontmatter(yaml: &str, title: &mut Option<String>, aliases: &mu
         if let Some(rest) = line.strip_prefix("title:") {
             *title = Some(strip_quotes(rest.trim()).to_string());
         } else if let Some(rest) = line.strip_prefix("aliases:") {
-            let rest = rest.trim();
-            if let Some(inner) = rest.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-                for item in inner.split(',') {
-                    let v = strip_quotes(item.trim());
-                    if !v.is_empty() {
-                        aliases.push(v.to_string());
-                    }
-                }
-            } else if rest.is_empty() {
-                i += 1;
-                while i < lines.len() {
-                    let l = lines[i].trim();
-                    if let Some(item) = l.strip_prefix('-') {
-                        let v = strip_quotes(item.trim());
-                        if !v.is_empty() {
-                            aliases.push(v.to_string());
-                        }
-                        i += 1;
-                    } else {
-                        break;
-                    }
-                }
+            if let Some(consumed) = parse_yaml_list(rest, &lines, i, aliases) {
+                i = consumed;
+                continue;
+            }
+        } else if let Some(rest) = line.strip_prefix("tags:") {
+            if let Some(consumed) = parse_yaml_list(rest, &lines, i, tags) {
+                i = consumed;
                 continue;
             }
         }
         i += 1;
     }
+}
+
+/// `key: [a, b]` 인라인 또는 `key:\n  - a\n  - b` 멀티라인 YAML 리스트를 out에 push.
+/// 멀티라인을 소비했으면 다음에 처리할 line index를 Some으로 반환.
+fn parse_yaml_list(
+    after_key: &str,
+    lines: &[&str],
+    start_line: usize,
+    out: &mut Vec<String>,
+) -> Option<usize> {
+    let rest = after_key.trim();
+    if let Some(inner) = rest.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        for item in inner.split(',') {
+            let v = strip_quotes(item.trim());
+            if !v.is_empty() {
+                out.push(v.to_string());
+            }
+        }
+        return None;
+    }
+    if !rest.is_empty() {
+        return None;
+    }
+    let mut i = start_line + 1;
+    while i < lines.len() {
+        let l = lines[i].trim();
+        if let Some(item) = l.strip_prefix('-') {
+            let v = strip_quotes(item.trim());
+            if !v.is_empty() {
+                out.push(v.to_string());
+            }
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    Some(i)
 }
 
 fn strip_quotes(s: &str) -> &str {
@@ -211,6 +247,77 @@ fn strip_quotes(s: &str) -> &str {
     } else {
         s
     }
+}
+
+// 본문에서 `#tag` 추출. 코드 펜스(``` 라인)와 인라인 코드(`...`) 안은 무시.
+// 단어 경계: 직전 글자가 영숫자/_가 아닌 경우만 인정 (URL fragment 제외).
+// 태그 본문: 영숫자, _, -, /, 비ASCII(한글 등)
+fn extract_inline_tags(body: &str) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    let mut in_fence = false;
+
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+
+        // 인라인 코드 (` 사이) 제거
+        let mut cleaned = String::with_capacity(line.len());
+        let mut in_inline = false;
+        for c in line.chars() {
+            if c == '`' {
+                in_inline = !in_inline;
+                continue;
+            }
+            if !in_inline {
+                cleaned.push(c);
+            }
+        }
+
+        let chars: Vec<char> = cleaned.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            if chars[i] != '#' {
+                i += 1;
+                continue;
+            }
+            // 단어 경계 체크
+            if i > 0 {
+                let p = chars[i - 1];
+                if p.is_alphanumeric() || p == '_' {
+                    i += 1;
+                    continue;
+                }
+            }
+            let mut j = i + 1;
+            while j < chars.len() {
+                let c = chars[j];
+                if c.is_alphanumeric() || c == '_' || c == '-' || c == '/' {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            if j > i + 1 {
+                let raw: String = chars[i + 1..j].iter().collect();
+                let trimmed = raw.trim_end_matches(|c: char| c == '-' || c == '/');
+                // 순수 숫자(예: #2026)는 태그가 아닐 가능성 높지만 일단 허용 — 사용자가 의도한 #2026 같은 연도 태그도 흔함
+                if !trimmed.is_empty()
+                    && !result.iter().any(|t: &String| t.eq_ignore_ascii_case(trimmed))
+                {
+                    result.push(trimmed.to_string());
+                }
+            }
+            i = j;
+        }
+    }
+
+    result
 }
 
 // `[[...]]` 추출. 한 줄 안에서만 인정. 중첩 `[[` 거부.
