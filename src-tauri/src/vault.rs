@@ -47,6 +47,54 @@ pub fn scan_links(vault_path: String) -> Result<Vec<LinkInfo>, String> {
     Ok(out)
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct NoteContent {
+    pub path: String,
+    pub name: String,
+    pub body: String,
+}
+
+#[tauri::command]
+pub fn read_all_notes(vault_path: String) -> Result<Vec<NoteContent>, String> {
+    let root = PathBuf::from(&vault_path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", vault_path));
+    }
+    let mut out = Vec::new();
+    walk_for_content(&root, &mut out).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+fn walk_for_content(current: &Path, out: &mut Vec<NoteContent>) -> std::io::Result<()> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        if SKIP_DIRS.iter().any(|d| *d == name) {
+            continue;
+        }
+        if path.is_dir() {
+            walk_for_content(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "md") {
+            if let Ok(body) = fs::read_to_string(&path) {
+                let stem = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                out.push(NoteContent {
+                    path: path.to_string_lossy().to_string(),
+                    name: stem,
+                    body,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 fn walk_for_links(current: &Path, out: &mut Vec<LinkInfo>) -> std::io::Result<()> {
     for entry in fs::read_dir(current)? {
         let entry = entry?;

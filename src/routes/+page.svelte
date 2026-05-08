@@ -3,7 +3,9 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
+  import SearchModal from "$lib/SearchModal.svelte";
   import { parseNote } from "$lib/markdown";
+  import { openSearch, searchOpen } from "$lib/stores/search";
   import {
     vaultPath,
     currentNotePath,
@@ -265,16 +267,37 @@ tags: [phase-1, vault-reader]
     };
   });
 
+  // 전역 키보드 단축키
+  // - Cmd/Ctrl+P            : Quick Switcher (파일명/alias/title)
+  // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 검색
+  // 모달이 이미 열려 있을 때는 SearchModal 내부 핸들러가 ESC/화살표 등 처리
+  function handleGlobalKey(e: KeyboardEvent) {
+    const isMod = e.metaKey || e.ctrlKey;
+    if (!isMod) return;
+    const key = e.key.toLowerCase();
+    if (key === "p" && !e.shiftKey) {
+      e.preventDefault();
+      openSearch("files");
+    } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
+      e.preventDefault();
+      openSearch("fulltext");
+    }
+  }
+
   onMount(() => {
     restorePaneState();
     restoreLastVault();
   });
 </script>
 
+<svelte:window onkeydown={handleGlobalKey} />
+
+<SearchModal />
+
 <div class="app">
   <header class="topbar">
     <span class="brand">Lapis</span>
-    <span class="phase">Phase 1.1 — Vault Reader</span>
+    <span class="phase">Phase 1.3 — Search</span>
     <span class="meta">
       {#if $currentNotePath}
         {noteDisplayName($currentNotePath)}
