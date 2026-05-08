@@ -16,6 +16,10 @@ export function readNote(path: string): Promise<string> {
   return invoke<string>("read_note", { path });
 }
 
+export function writeNote(vaultPath: string, path: string, content: string): Promise<void> {
+  return invoke<void>("write_note", { vaultPath, path, content });
+}
+
 export interface LinkInfo {
   source_path: string;
   source_name: string;
