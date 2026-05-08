@@ -1,7 +1,14 @@
 import { writable, get } from "svelte/store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { listNotes, readNote, scanLinks, type NoteEntry } from "$lib/tauri/notes";
+import {
+  listNotes,
+  readNote,
+  scanLinks,
+  readAllNotes,
+  type NoteEntry,
+} from "$lib/tauri/notes";
 import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
+import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -43,13 +50,15 @@ export async function reloadNotes(): Promise<void> {
     notes.set([]);
   }
 
-  // 링크 인덱스는 트리와 독립적으로 백그라운드 갱신 — 트리 표시는 막지 않음
+  // 링크 인덱스 + 검색 인덱스 백그라운드 갱신 — 트리 표시는 막지 않음
   try {
-    const links = await scanLinks(root);
+    const [links, contents] = await Promise.all([scanLinks(root), readAllNotes(root)]);
     linkIndex.set(buildIndex(links));
+    rebuildIndexes(links, contents);
   } catch (e) {
-    console.error("scan_links failed", e);
+    console.error("link/search index build failed", e);
     linkIndex.set(null);
+    clearIndexes();
   }
 }
 
