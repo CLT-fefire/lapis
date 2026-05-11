@@ -14,6 +14,11 @@ pub fn run() {
             vault::scan_links,
             vault::scan_link_single,
             vault::read_all_notes,
+            vault::create_note,
+            vault::create_folder,
+            vault::delete_note,
+            vault::rename_note,
+            vault::move_note,
             watcher::watch_vault,
             watcher::unwatch_vault,
         ])
