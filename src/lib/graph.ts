@@ -12,7 +12,7 @@ export interface GraphElement {
     label?: string;
     parentDir?: string;
     kind?: "note" | "tag";
-    edgeKind?: "link" | "tag";
+    edgeKind?: "link" | "tag" | "related";
     tagKey?: string;
   };
 }
@@ -50,7 +50,7 @@ export function buildGraphData(index: LinkIndex, options?: BuildGraphOptions): G
   const connected = new Set<string>();
   const tagNodeIds = new Set<string>();
 
-  // 1) Link 엣지 (links / both 모드)
+  // 1) Link 엣지 (links / both 모드) — wikilink + md link 통합
   if (mode === "links" || mode === "both") {
     for (const [path, info] of index.byPath) {
       for (const raw of info.targets) {
@@ -66,6 +66,26 @@ export function buildGraphData(index: LinkIndex, options?: BuildGraphOptions): G
             source: path,
             target: targetPath,
             edgeKind: "link",
+          },
+        });
+        connected.add(path);
+        connected.add(targetPath);
+      }
+
+      // 1b) Related 엣지 — SharedDocs 4키 스키마 §2.4의 cross-ref
+      // related는 stem 배열이므로 linkIndex의 stem resolver로 해결.
+      for (const stem of info.related) {
+        const targetPath = resolveTarget(stem, index);
+        if (!targetPath || targetPath === path) continue;
+        const key = `related|${path}|${targetPath}`;
+        if (edgeKeys.has(key)) continue;
+        edgeKeys.add(key);
+        edges.push({
+          data: {
+            id: `re:${edges.length}`,
+            source: path,
+            target: targetPath,
+            edgeKind: "related",
           },
         });
         connected.add(path);
@@ -139,16 +159,22 @@ export function buildGraphData(index: LinkIndex, options?: BuildGraphOptions): G
 
 /**
  * 현재 노트로부터 1-hop 이웃(아웃·인 모두) path 집합.
+ * link(`[[]]`, `[](.md)`)와 related(frontmatter cross-ref) 모두 포함.
  */
 export function getNeighbors(currentPath: string, index: LinkIndex): Set<string> {
   const neighbors = new Set<string>();
 
-  // outgoing
   const info = index.byPath.get(currentPath);
   if (info) {
+    // outgoing — wikilink/md link
     for (const raw of info.targets) {
       const name = targetName(raw);
       const t = resolveTarget(name, index);
+      if (t && t !== currentPath) neighbors.add(t);
+    }
+    // outgoing — related
+    for (const stem of info.related) {
+      const t = resolveTarget(stem, index);
       if (t && t !== currentPath) neighbors.add(t);
     }
   }

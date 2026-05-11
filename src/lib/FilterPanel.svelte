@@ -1,0 +1,343 @@
+<script lang="ts">
+  import {
+    DOC_KIND_ENUM,
+    docKindCounts,
+    topicCounts,
+    selectedDocKinds,
+    selectedTopics,
+    toggleDocKind,
+    toggleTopic,
+    clearFilters,
+    applyFilters,
+  } from "$lib/stores/filters";
+  import {
+    selectNote,
+    currentNotePath,
+    linkIndex,
+  } from "$lib/stores/vault";
+  import type { LinkInfo } from "$lib/tauri/notes";
+
+  // doc_kind 표시 순서 — enum 순서 (사용자가 추가한 신규 doc_kind도 뒤에 붙임)
+  const sortedDocKinds = $derived.by<string[]>(() => {
+    const known = new Set(DOC_KIND_ENUM);
+    const counts = $docKindCounts;
+    const extra = [...counts.keys()].filter((k) => !known.has(k)).sort();
+    return [...DOC_KIND_ENUM.filter((k) => counts.has(k)), ...extra];
+  });
+
+  const sortedTopics = $derived.by<string[]>(() => {
+    return [...$topicCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([k]) => k);
+  });
+
+  const filteredNotes = $derived.by<{ path: string; label: string; topic: string | null; doc_kind: string | null }[]>(() => {
+    const idx = $linkIndex;
+    if (!idx) return [];
+    const matched: LinkInfo[] = applyFilters(
+      idx.byPath.values(),
+      $selectedDocKinds,
+      $selectedTopics,
+    );
+    return matched
+      .map((info) => ({
+        path: info.source_path,
+        label: info.title ?? info.source_name,
+        topic: info.topic,
+        doc_kind: info.doc_kind,
+      }))
+      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  });
+
+  const hasAnySelection = $derived($selectedDocKinds.size + $selectedTopics.size > 0);
+</script>
+
+{#if $docKindCounts.size === 0 && $topicCounts.size === 0}
+  <div class="empty">
+    <p>이 vault에 <code>doc_kind</code>/<code>topic</code> 메타가 있는 노트가 없습니다.</p>
+    <p class="hint">frontmatter 4키 스키마 적용 후 사용 가능합니다.</p>
+  </div>
+{:else}
+  <div class="facet-area">
+    <!-- doc_kind facet -->
+    {#if $docKindCounts.size > 0}
+      <section class="facet">
+        <header class="facet-header">
+          <span>Kind</span>
+          <span class="facet-meta">{$docKindCounts.size}</span>
+        </header>
+        <div class="chip-row">
+          {#each sortedDocKinds as kind (kind)}
+            {@const count = $docKindCounts.get(kind) ?? 0}
+            {@const active = $selectedDocKinds.has(kind)}
+            <button
+              class="facet-chip kind-chip"
+              class:active
+              onclick={() => toggleDocKind(kind)}
+              title={`${kind} (${count})`}
+            >
+              <span class="name">{kind}</span>
+              <span class="count">{count}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    <!-- topic facet -->
+    {#if $topicCounts.size > 0}
+      <section class="facet">
+        <header class="facet-header">
+          <span>Topic</span>
+          <span class="facet-meta">{$topicCounts.size}</span>
+        </header>
+        <div class="chip-row">
+          {#each sortedTopics as topic (topic)}
+            {@const count = $topicCounts.get(topic) ?? 0}
+            {@const active = $selectedTopics.has(topic)}
+            <button
+              class="facet-chip topic-chip"
+              class:active
+              onclick={() => toggleTopic(topic)}
+              title={`${topic} (${count})`}
+            >
+              <span class="name">{topic}</span>
+              <span class="count">{count}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    {#if hasAnySelection}
+      <div class="action-bar">
+        <span class="match-count">{filteredNotes.length} matched</span>
+        <button class="clear-btn" onclick={clearFilters}>필터 해제</button>
+      </div>
+    {/if}
+  </div>
+
+  {#if hasAnySelection}
+    {#if filteredNotes.length === 0}
+      <div class="empty small">조건을 만족하는 노트가 없습니다.</div>
+    {:else}
+      <ul class="note-list">
+        {#each filteredNotes as item (item.path)}
+          <li>
+            <button
+              class="note-row"
+              class:active={$currentNotePath === item.path}
+              title={item.path}
+              onclick={() => selectNote(item.path)}
+            >
+              <span class="name">{item.label}</span>
+              <span class="meta-line">
+                {#if item.doc_kind}<span class="meta kind">{item.doc_kind}</span>{/if}
+                {#if item.topic}<span class="meta topic">{item.topic}</span>{/if}
+              </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {:else}
+    <div class="empty small">필터를 선택하면 매칭 노트가 표시됩니다.</div>
+  {/if}
+{/if}
+
+<style>
+  .empty {
+    padding: 30px 16px;
+    color: #666;
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .empty.small {
+    padding: 16px 14px;
+    font-size: 11px;
+  }
+
+  .empty code {
+    background: #2a2a2a;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #aaa;
+  }
+
+  .empty .hint {
+    margin-top: 8px;
+    color: #555;
+  }
+
+  .facet-area {
+    border-bottom: 1px solid #2a2a2a;
+    padding: 6px 0 4px 0;
+  }
+
+  .facet {
+    padding: 6px 10px;
+  }
+
+  .facet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    padding: 0 2px 4px 2px;
+  }
+
+  .facet-meta {
+    color: #555;
+  }
+
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .facet-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid #3a3a3a;
+    color: #aaa;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+
+  .facet-chip:hover {
+    border-color: #555;
+    color: #ddd;
+  }
+
+  .facet-chip .count {
+    color: #666;
+    font-size: 10px;
+  }
+
+  /* doc_kind 활성 — 청록 */
+  .kind-chip.active {
+    background: #2d4a5a;
+    border-color: #6dd6ff;
+    color: #fff;
+  }
+  .kind-chip.active .count {
+    color: #9adff7;
+  }
+
+  /* topic 활성 — 보라 (graph related와 같은 톤) */
+  .topic-chip.active {
+    background: #3d2d5a;
+    border-color: #9b6dd6;
+    color: #fff;
+  }
+  .topic-chip.active .count {
+    color: #c5a3ed;
+  }
+
+  .action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px 2px 12px;
+    font-size: 11px;
+  }
+
+  .match-count {
+    color: #aaa;
+  }
+
+  .clear-btn {
+    background: transparent;
+    border: none;
+    color: #6dd6ff;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    text-decoration: underline;
+    padding: 0;
+  }
+
+  .clear-btn:hover {
+    color: #fff;
+  }
+
+  .note-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px 6px;
+  }
+
+  .note-list li {
+    margin: 1px 0;
+  }
+
+  .note-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 5px 10px;
+    background: transparent;
+    border: none;
+    color: #ccc;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+
+  .note-row:hover {
+    background: #2f2f2f;
+  }
+
+  .note-row.active {
+    background: #2d4a5a;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 #6dd6ff;
+  }
+
+  .name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .meta-line {
+    display: inline-flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .meta {
+    font-size: 10px;
+    padding: 0 5px;
+    border-radius: 8px;
+    line-height: 1.5;
+  }
+
+  .meta.kind {
+    background: rgba(109, 214, 255, 0.15);
+    color: #9adff7;
+  }
+
+  .meta.topic {
+    background: rgba(155, 109, 214, 0.15);
+    color: #c5a3ed;
+  }
+</style>
