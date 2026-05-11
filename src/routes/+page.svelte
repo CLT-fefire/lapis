@@ -5,10 +5,13 @@
   import Sidebar from "$lib/Sidebar.svelte";
   import SearchModal from "$lib/SearchModal.svelte";
   import GraphModal from "$lib/GraphModal.svelte";
+  import ContextMenu from "$lib/ContextMenu.svelte";
+  import NewNoteModal from "$lib/NewNoteModal.svelte";
   import { parseNote } from "$lib/markdown";
   import { openSearch, searchOpen } from "$lib/stores/search";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
   import { openGraph } from "$lib/stores/graph";
+  import { openNewNote } from "$lib/stores/tree-ui";
   import {
     vaultPath,
     currentNotePath,
@@ -79,15 +82,28 @@ tags: [phase-1, vault-reader]
 `;
 
   // vault 미선택 상태에서만 SAMPLE 사용. 노트 선택 후엔 editor store가 진실의 원천.
+  // vault 있고 노트 미선택 (예: 삭제 후 / 초기 상태) → 빈 placeholder
+  const EMPTY_NOTE_PLACEHOLDER = `# 노트를 선택하세요\n\n좌측 사이드바에서 노트를 클릭하거나, **Cmd+N**으로 새 노트를 만드세요.`;
+
   let raw = $state(SAMPLE);
 
   $effect(() => {
     if ($currentNotePath) {
       // editor store가 노트 콘텐츠를 보유 — 노트 변경 시 markSaved로 갱신됨
-      raw = $editorContent;
-    } else if (!$vaultPath) {
-      raw = SAMPLE;
-      markSaved(SAMPLE);
+      const content = $editorContent;
+      if (raw !== content) raw = content;
+    } else if ($vaultPath) {
+      // vault 있음 + 노트 미선택 → placeholder
+      if (raw !== EMPTY_NOTE_PLACEHOLDER) {
+        raw = EMPTY_NOTE_PLACEHOLDER;
+        markSaved(EMPTY_NOTE_PLACEHOLDER);
+      }
+    } else {
+      // vault 미선택 → welcome
+      if (raw !== SAMPLE) {
+        raw = SAMPLE;
+        markSaved(SAMPLE);
+      }
     }
   });
 
@@ -345,6 +361,18 @@ tags: [phase-1, vault-reader]
     } else if (key === "s" && !e.shiftKey) {
       e.preventDefault();
       void saveCurrentNote();
+    } else if (key === "n" && !e.shiftKey) {
+      // Cmd+N — 새 노트. 현재 노트의 부모 폴더 또는 vault root에 생성.
+      e.preventDefault();
+      if (!$vaultPath) return;
+      const cur = $currentNotePath;
+      const parentDir = cur
+        ? cur.split("/").slice(0, -1).join("/")
+        : $vaultPath;
+      const parentLabel = cur
+        ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
+        : "(vault root)";
+      openNewNote(parentDir, parentLabel);
     }
   }
 
@@ -358,6 +386,8 @@ tags: [phase-1, vault-reader]
 
 <SearchModal />
 <GraphModal />
+<ContextMenu />
+<NewNoteModal />
 
 {#if $externalConflict}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -826,17 +856,17 @@ tags: [phase-1, vault-reader]
   .workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: 240px 1fr 1fr;
+    grid-template-columns: 260px 1fr 1fr;
     overflow: hidden;
     transition: grid-template-columns 0.18s ease;
   }
 
   .workspace.editor-collapsed {
-    grid-template-columns: 240px 36px 1fr;
+    grid-template-columns: 260px 36px 1fr;
   }
 
   .workspace.preview-collapsed {
-    grid-template-columns: 240px 1fr 36px;
+    grid-template-columns: 260px 1fr 36px;
   }
 
   .pane {

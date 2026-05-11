@@ -20,6 +20,48 @@ export function writeNote(vaultPath: string, path: string, content: string): Pro
   return invoke<void>("write_note", { vaultPath, path, content });
 }
 
+/** parent_dir(vault 상대 또는 절대) 안에 새 .md 노트 생성. 생성된 절대 경로 반환. */
+export function createNote(
+  vaultPath: string,
+  parentDir: string,
+  fileName: string,
+  content: string,
+): Promise<string> {
+  return invoke<string>("create_note", { vaultPath, parentDir, fileName, content });
+}
+
+/** parent_dir 안에 새 폴더 생성. 절대 경로 반환. */
+export function createFolder(
+  vaultPath: string,
+  parentDir: string,
+  folderName: string,
+): Promise<string> {
+  return invoke<string>("create_folder", { vaultPath, parentDir, folderName });
+}
+
+/** 시스템 휴지통으로 이동. 파일·폴더 모두 가능. */
+export function deleteNote(vaultPath: string, path: string): Promise<void> {
+  return invoke<void>("delete_note", { vaultPath, path });
+}
+
+/** 같은 디렉토리 안에서 이름 변경. 새 절대 경로 반환. */
+export function renameNote(
+  vaultPath: string,
+  oldPath: string,
+  newName: string,
+): Promise<string> {
+  return invoke<string>("rename_note", { vaultPath, oldPath, newName });
+}
+
+/** 다른 폴더로 이동. 새 절대 경로 반환. */
+export function moveNote(
+  vaultPath: string,
+  path: string,
+  newParentDir: string,
+): Promise<string> {
+  return invoke<string>("move_note", { vaultPath, path, newParentDir });
+}
+
 export interface LinkInfo {
   source_path: string;
   source_name: string;

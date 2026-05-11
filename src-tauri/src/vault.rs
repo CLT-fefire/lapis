@@ -34,34 +34,220 @@ pub fn read_note(path: String) -> Result<String, String> {
 /// 3) 같은 디렉토리에 임시 파일로 쓴 후 rename (POSIX atomic)
 #[tauri::command]
 pub fn write_note(vault_path: String, path: String, content: String) -> Result<(), String> {
-    let target = PathBuf::from(&path);
-    let vault = PathBuf::from(&vault_path)
-        .canonicalize()
-        .map_err(|e| format!("vault canonicalize failed: {e}"))?;
-
-    let target_canon = target
+    let vault = canonicalize_vault(&vault_path)?;
+    let target_canon = PathBuf::from(&path)
         .canonicalize()
         .map_err(|e| format!("target canonicalize failed: {e}"))?;
+    ensure_in_vault(&target_canon, &vault)?;
+    ensure_md_extension(&target_canon)?;
+    atomic_write(&target_canon, &content)
+}
 
-    if !target_canon.starts_with(&vault) {
+/// 새 노트 생성 — parent_dir(vault 상대 또는 절대) 안에 file_name(.md)로 빈/템플릿 노트.
+/// 이미 같은 경로에 파일이 있으면 에러. 부모 디렉토리는 미리 존재해야 함.
+#[tauri::command]
+pub fn create_note(
+    vault_path: String,
+    parent_dir: String,
+    file_name: String,
+    content: String,
+) -> Result<String, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let parent = resolve_dir(&parent_dir, &vault)?;
+
+    let name = if file_name.to_lowercase().ends_with(".md") {
+        file_name.clone()
+    } else {
+        format!("{file_name}.md")
+    };
+    sanitize_file_name(&name)?;
+
+    let target = parent.join(&name);
+    if target.exists() {
+        return Err(format!("already exists: {}", target.display()));
+    }
+    ensure_md_extension(&target)?;
+
+    // 부모 자체가 vault 하위인지는 resolve_dir에서 보장. 그러나 target은 아직 존재 안 함 → 부모 기준 확인.
+    if !parent.starts_with(&vault) {
+        return Err("parent outside vault".to_string());
+    }
+
+    atomic_write(&target, &content)?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+/// 새 폴더 생성. 이미 있으면 에러.
+#[tauri::command]
+pub fn create_folder(
+    vault_path: String,
+    parent_dir: String,
+    folder_name: String,
+) -> Result<String, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let parent = resolve_dir(&parent_dir, &vault)?;
+    sanitize_file_name(&folder_name)?;
+    let target = parent.join(&folder_name);
+    if target.exists() {
+        return Err(format!("already exists: {}", target.display()));
+    }
+    if !parent.starts_with(&vault) {
+        return Err("parent outside vault".to_string());
+    }
+    fs::create_dir(&target).map_err(|e| format!("create_dir failed: {e}"))?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+/// 노트(또는 폴더) 휴지통 이동. .md 강제 + vault confine.
+#[tauri::command]
+pub fn delete_note(vault_path: String, path: String) -> Result<(), String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let target = PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| format!("canonicalize failed: {e}"))?;
+    ensure_in_vault(&target, &vault)?;
+    // 파일이면 .md 강제, 디렉토리는 OK
+    if target.is_file() {
+        ensure_md_extension(&target)?;
+    }
+    trash::delete(&target).map_err(|e| format!("trash failed: {e}"))
+}
+
+/// 노트 이름 변경. 같은 디렉토리 안에서. new_name은 확장자 포함 가능.
+#[tauri::command]
+pub fn rename_note(
+    vault_path: String,
+    old_path: String,
+    new_name: String,
+) -> Result<String, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let old_canon = PathBuf::from(&old_path)
+        .canonicalize()
+        .map_err(|e| format!("canonicalize failed: {e}"))?;
+    ensure_in_vault(&old_canon, &vault)?;
+
+    let name = if new_name.to_lowercase().ends_with(".md") || !old_canon.is_file() {
+        new_name.clone()
+    } else {
+        format!("{new_name}.md")
+    };
+    sanitize_file_name(&name)?;
+
+    let parent = old_canon
+        .parent()
+        .ok_or_else(|| "no parent".to_string())?;
+    let new_path = parent.join(&name);
+
+    if new_path == old_canon {
+        return Ok(new_path.to_string_lossy().to_string());
+    }
+    if new_path.exists() {
+        return Err(format!("target already exists: {}", new_path.display()));
+    }
+    if old_canon.is_file() {
+        ensure_md_extension(&new_path)?;
+    }
+
+    fs::rename(&old_canon, &new_path).map_err(|e| format!("rename failed: {e}"))?;
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/// 노트(또는 폴더) 이동 — 같은 vault 내 다른 폴더로.
+#[tauri::command]
+pub fn move_note(
+    vault_path: String,
+    path: String,
+    new_parent_dir: String,
+) -> Result<String, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let source = PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| format!("source canonicalize failed: {e}"))?;
+    ensure_in_vault(&source, &vault)?;
+    let new_parent = resolve_dir(&new_parent_dir, &vault)?;
+
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| "no file name".to_string())?;
+    let new_path = new_parent.join(file_name);
+
+    if new_path == source {
+        return Ok(new_path.to_string_lossy().to_string());
+    }
+    if new_path.exists() {
+        return Err(format!("target already exists: {}", new_path.display()));
+    }
+
+    fs::rename(&source, &new_path).map_err(|e| format!("move failed: {e}"))?;
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+// === 공통 헬퍼 ===
+
+fn canonicalize_vault(vault_path: &str) -> Result<PathBuf, String> {
+    PathBuf::from(vault_path)
+        .canonicalize()
+        .map_err(|e| format!("vault canonicalize failed: {e}"))
+}
+
+/// parent_dir 입력 — vault 상대 경로 또는 절대 경로 모두 허용.
+fn resolve_dir(input: &str, vault: &Path) -> Result<PathBuf, String> {
+    let candidate = if PathBuf::from(input).is_absolute() {
+        PathBuf::from(input)
+    } else {
+        vault.join(input)
+    };
+    let canon = candidate
+        .canonicalize()
+        .map_err(|e| format!("dir canonicalize failed ({input}): {e}"))?;
+    if !canon.is_dir() {
+        return Err(format!("not a directory: {}", canon.display()));
+    }
+    ensure_in_vault(&canon, vault)?;
+    Ok(canon)
+}
+
+fn ensure_in_vault(path: &Path, vault: &Path) -> Result<(), String> {
+    if !path.starts_with(vault) {
         return Err(format!(
-            "path traversal detected: {} is outside {}",
-            target_canon.display(),
+            "path outside vault: {} not under {}",
+            path.display(),
             vault.display()
         ));
     }
+    Ok(())
+}
 
-    if target_canon
+fn ensure_md_extension(path: &Path) -> Result<(), String> {
+    if path
         .extension()
         .is_none_or(|e| !e.eq_ignore_ascii_case("md"))
     {
         return Err("only .md files allowed".to_string());
     }
+    Ok(())
+}
 
-    let dir = target_canon
+/// 파일/폴더 이름 검증 — 경로 구분자, ".." 등 거부.
+fn sanitize_file_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("name empty".to_string());
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("name must not contain path separators".to_string());
+    }
+    if name == "." || name == ".." {
+        return Err("invalid name".to_string());
+    }
+    Ok(())
+}
+
+/// 같은 디렉토리에 temp file 쓴 후 rename — atomic write.
+fn atomic_write(target: &Path, content: &str) -> Result<(), String> {
+    let dir = target
         .parent()
         .ok_or_else(|| "no parent directory".to_string())?;
-    let file_name = target_canon
+    let file_name = target
         .file_name()
         .ok_or_else(|| "no file name".to_string())?
         .to_string_lossy()
@@ -72,19 +258,16 @@ pub fn write_note(vault_path: String, path: String, content: String) -> Result<(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
-    let temp_name = format!(".{file_name}.tmp.lapis-{pid}-{nanos}");
-    let temp_path = dir.join(temp_name);
+    let temp_path = dir.join(format!(".{file_name}.tmp.lapis-{pid}-{nanos}"));
 
-    if let Err(e) = fs::write(&temp_path, &content) {
+    if let Err(e) = fs::write(&temp_path, content) {
         let _ = fs::remove_file(&temp_path);
         return Err(format!("temp write failed: {e}"));
     }
-
-    if let Err(e) = fs::rename(&temp_path, &target_canon) {
+    if let Err(e) = fs::rename(&temp_path, target) {
         let _ = fs::remove_file(&temp_path);
         return Err(format!("rename failed: {e}"));
     }
-
     Ok(())
 }
 
