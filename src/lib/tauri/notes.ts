@@ -37,6 +37,11 @@ export function scanLinks(vaultPath: string): Promise<LinkInfo[]> {
   return invoke<LinkInfo[]>("scan_links", { vaultPath });
 }
 
+/** 단일 노트의 LinkInfo만 추출 — file watcher 증분 갱신용 */
+export function scanLinkSingle(vaultPath: string, path: string): Promise<LinkInfo> {
+  return invoke<LinkInfo>("scan_link_single", { vaultPath, path });
+}
+
 export interface NoteContent {
   path: string;
   name: string;

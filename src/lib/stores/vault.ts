@@ -45,6 +45,14 @@ export async function openVault(path: string): Promise<void> {
   currentNotePath.set(null);
   currentNoteContent.set("");
   await reloadNotes();
+
+  // 파일 watcher 시작 — circular import 회피 위해 lazy import
+  try {
+    const { startWatching } = await import("./watcher");
+    await startWatching();
+  } catch (e) {
+    console.warn("[vault] startWatching failed", e);
+  }
 }
 
 export async function reloadNotes(): Promise<void> {
