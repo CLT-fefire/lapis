@@ -146,6 +146,20 @@
           },
         },
         {
+          // SharedDocs 가이드 §2.4 — `related` cross-ref (frontmatter 명시적 연관)
+          selector: "edge[edgeKind = 'related']",
+          style: {
+            width: 1.2,
+            "line-color": "#9b6dd6",
+            "line-style": "dashed",
+            "target-arrow-shape": "triangle",
+            "target-arrow-color": "#9b6dd6",
+            "arrow-scale": 0.6,
+            "curve-style": "bezier",
+            opacity: 0.6,
+          },
+        },
+        {
           selector: "edge.touching",
           style: {
             "line-color": "#6dd6ff",

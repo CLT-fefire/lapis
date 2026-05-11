@@ -48,21 +48,29 @@ export function buildIndex(infos: LinkInfo[]): LinkIndex {
     if (!resolver.has(key)) resolver.set(key, info.source_path);
   }
 
-  // backlinks 계산
+  // backlinks 계산 — wikilink/md link + related 모두 포함
+  // SharedDocs 가이드 §4.3: related는 source→target 단방향이지만 그래프 탐색은 양방향이 자연스러움
   const backlinks = new Map<string, Set<string>>();
+  function addBacklink(targetPath: string, sourcePath: string) {
+    if (targetPath === sourcePath) return;
+    let set = backlinks.get(targetPath);
+    if (!set) {
+      set = new Set();
+      backlinks.set(targetPath, set);
+    }
+    set.add(sourcePath);
+  }
   for (const info of infos) {
     for (const raw of info.targets) {
       const name = targetName(raw);
       const resolvedPath = resolver.get(name.toLowerCase());
       if (!resolvedPath) continue;
-      // 자기 자신 제외
-      if (resolvedPath === info.source_path) continue;
-      let set = backlinks.get(resolvedPath);
-      if (!set) {
-        set = new Set();
-        backlinks.set(resolvedPath, set);
-      }
-      set.add(info.source_path);
+      addBacklink(resolvedPath, info.source_path);
+    }
+    for (const stem of info.related) {
+      const resolvedPath = resolver.get(stem.toLowerCase());
+      if (!resolvedPath) continue;
+      addBacklink(resolvedPath, info.source_path);
     }
   }
 
