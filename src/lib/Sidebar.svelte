@@ -1,8 +1,19 @@
 <script lang="ts">
   import FileTree from "./FileTree.svelte";
   import TagPanel from "./TagPanel.svelte";
+  import FilterPanel from "./FilterPanel.svelte";
   import { vaultPath, notes, pickAndOpenVault, reloadNotes } from "$lib/stores/vault";
   import { sidebarTab, showFilesTab, showTagsTab, tagIndex } from "$lib/stores/tags";
+  import {
+    docKindCounts,
+    topicCounts,
+    selectedDocKinds,
+    selectedTopics,
+  } from "$lib/stores/filters";
+
+  function showFiltersTab() {
+    sidebarTab.set("filters");
+  }
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
@@ -41,6 +52,18 @@
           <span class="badge">{$tagIndex.sortedTags.length}</span>
         {/if}
       </button>
+      <button
+        class="tab"
+        class:active={$sidebarTab === "filters"}
+        onclick={showFiltersTab}
+      >
+        Filters
+        {#if $selectedDocKinds.size + $selectedTopics.size > 0}
+          <span class="badge active">{$selectedDocKinds.size + $selectedTopics.size}</span>
+        {:else if $docKindCounts.size + $topicCounts.size > 0}
+          <span class="badge">{$docKindCounts.size + $topicCounts.size}</span>
+        {/if}
+      </button>
     </nav>
   {/if}
 
@@ -58,8 +81,10 @@
           <button class="link-btn" onclick={pickAndOpenVault}>다른 vault 선택</button>
         </div>
       {/if}
-    {:else}
+    {:else if $sidebarTab === "tags"}
       <TagPanel />
+    {:else}
+      <FilterPanel />
     {/if}
   </div>
 </aside>
@@ -183,6 +208,12 @@
     text-transform: none;
     letter-spacing: normal;
     font-weight: 500;
+  }
+
+  .badge.active {
+    background: #6dd6ff;
+    color: #1a1a1a;
+    font-weight: 600;
   }
 
   .sidebar-body {
