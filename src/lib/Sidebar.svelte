@@ -118,7 +118,8 @@
     border-right: 1px solid #333;
     height: 100%;
     overflow: hidden;
-    min-width: 220px;
+    /* 폭 제어는 +page.svelte의 .workspace grid가 담당 (드래그 가능). */
+    min-width: 0;
   }
 
   .sidebar-header {

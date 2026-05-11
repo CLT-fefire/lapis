@@ -38,10 +38,14 @@
   import {
     editorCollapsed,
     previewCollapsed,
+    sidebarWidth,
+    setSidebarWidth,
+    resetSidebarWidth,
     toggleEditor,
     togglePreview,
     restorePaneState,
   } from "$lib/stores/layout";
+  import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import type { LinkInfo } from "$lib/tauri/notes";
 
@@ -341,6 +345,28 @@ tags: [phase-1, vault-reader]
     };
   });
 
+  // 사이드바 폭 리사이저 — mousedown → 전역 mousemove/mouseup으로 드래그.
+  // 더블클릭은 기본값(260) 복원.
+  function startSidebarResize(e: MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = get(sidebarWidth);
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      setSidebarWidth(startW + (ev.clientX - startX));
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   // 전역 키보드 단축키
   // - Cmd/Ctrl+P            : Quick Switcher (파일명/alias/title)
   // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 검색
@@ -465,8 +491,20 @@ tags: [phase-1, vault-reader]
     class="workspace"
     class:editor-collapsed={$editorCollapsed}
     class:preview-collapsed={$previewCollapsed}
+    style="--sidebar-w: {$sidebarWidth}px"
   >
     <Sidebar />
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="sidebar-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="사이드바 폭 조절 (더블클릭으로 기본값 복원)"
+      title="드래그로 폭 조절 · 더블클릭으로 복원"
+      onmousedown={startSidebarResize}
+      ondblclick={resetSidebarWidth}
+    ></div>
 
     <section class="pane editor-pane" class:collapsed={$editorCollapsed}>
       {#if $editorCollapsed}
@@ -856,17 +894,30 @@ tags: [phase-1, vault-reader]
   .workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: 260px 1fr 1fr;
+    grid-template-columns: var(--sidebar-w, 260px) 4px 1fr 1fr;
     overflow: hidden;
     transition: grid-template-columns 0.18s ease;
   }
 
   .workspace.editor-collapsed {
-    grid-template-columns: 260px 36px 1fr;
+    grid-template-columns: var(--sidebar-w, 260px) 4px 36px 1fr;
   }
 
   .workspace.preview-collapsed {
-    grid-template-columns: 260px 1fr 36px;
+    grid-template-columns: var(--sidebar-w, 260px) 4px 1fr 36px;
+  }
+
+  .sidebar-resizer {
+    background: transparent;
+    cursor: ew-resize;
+    position: relative;
+    z-index: 5;
+    transition: background 0.12s;
+  }
+
+  .sidebar-resizer:hover,
+  .sidebar-resizer:active {
+    background: #6dd6ff;
   }
 
   .pane {
