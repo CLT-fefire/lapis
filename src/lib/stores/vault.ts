@@ -10,6 +10,13 @@ import {
 import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
 import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
+import {
+  buildFacetCounts,
+  docKindCounts,
+  topicCounts,
+  clearFacetCounts,
+  clearFilters,
+} from "$lib/stores/filters";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -51,17 +58,22 @@ export async function reloadNotes(): Promise<void> {
     notes.set([]);
   }
 
-  // 링크 인덱스 + 검색 인덱스 백그라운드 갱신 — 트리 표시는 막지 않음
+  // 링크 인덱스 + 검색 인덱스 + facet 카운트 백그라운드 갱신 — 트리 표시는 막지 않음
   try {
     const [links, contents] = await Promise.all([scanLinks(root), readAllNotes(root)]);
     linkIndex.set(buildIndex(links));
     tagIndex.set(buildTagIndex(links));
+    const facets = buildFacetCounts(links);
+    docKindCounts.set(facets.docKindCounts);
+    topicCounts.set(facets.topicCounts);
     rebuildIndexes(links, contents);
   } catch (e) {
     console.error("link/search index build failed", e);
     linkIndex.set(null);
     clearTagIndex();
     clearIndexes();
+    clearFacetCounts();
+    clearFilters();
   }
 }
 

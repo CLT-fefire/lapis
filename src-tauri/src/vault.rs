@@ -96,6 +96,10 @@ pub struct LinkInfo {
     pub aliases: Vec<String>,
     pub targets: Vec<String>,
     pub tags: Vec<String>,
+    // SharedDocs 4키 스키마 (Markdown-Tag-Management-Guide.md §2)
+    pub doc_kind: Option<String>, // requirements | spec | plan | solution | analysis | brainstorm | howto | reference | meeting-notes
+    pub topic: Option<String>,    // kebab-case 단일
+    pub related: Vec<String>,     // 파일 stem 배열 (cross-ref)
 }
 
 #[tauri::command]
@@ -189,8 +193,19 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
     let mut title: Option<String> = None;
     let mut aliases: Vec<String> = Vec::new();
     let mut tags: Vec<String> = Vec::new();
+    let mut doc_kind: Option<String> = None;
+    let mut topic: Option<String> = None;
+    let mut related: Vec<String> = Vec::new();
     if let Some(yaml) = yaml_opt {
-        parse_simple_frontmatter(yaml, &mut title, &mut aliases, &mut tags);
+        parse_simple_frontmatter(
+            yaml,
+            &mut title,
+            &mut aliases,
+            &mut tags,
+            &mut doc_kind,
+            &mut topic,
+            &mut related,
+        );
     }
 
     let mut targets = extract_wikilinks(body);
@@ -199,12 +214,9 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
             targets.push(t);
         }
     }
-    let inline_tags = extract_inline_tags(body);
-    for t in inline_tags {
-        if !tags.iter().any(|existing| existing.eq_ignore_ascii_case(&t)) {
-            tags.push(t);
-        }
-    }
+    // 본문 inline `#tag` 추출은 폐기 — SharedDocs 4키 스키마(Markdown-Tag-Management-Guide.md)에서
+    // "본문 내 inline 해시태그(#tag)는 사용하지 않는다"고 명시. frontmatter `tags`만 사용.
+    // extract_inline_tags / is_heading_line 함수는 향후 복원 여지를 위해 dead code로 유지.
 
     LinkInfo {
         source_path: path.to_string_lossy().to_string(),
@@ -213,6 +225,9 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
         aliases,
         targets,
         tags,
+        doc_kind,
+        topic,
+        related,
     }
 }
 
@@ -240,11 +255,15 @@ fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
     (None, content)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_simple_frontmatter(
     yaml: &str,
     title: &mut Option<String>,
     aliases: &mut Vec<String>,
     tags: &mut Vec<String>,
+    doc_kind: &mut Option<String>,
+    topic: &mut Option<String>,
+    related: &mut Vec<String>,
 ) {
     let lines: Vec<&str> = yaml.lines().collect();
     let mut i = 0;
@@ -252,6 +271,18 @@ fn parse_simple_frontmatter(
         let line = lines[i];
         if let Some(rest) = line.strip_prefix("title:") {
             *title = Some(strip_quotes(rest.trim()).to_string());
+        } else if let Some(rest) = line.strip_prefix("doc_kind:") {
+            // SharedDocs 4키 스키마 §2.1 — 단일 enum 값
+            let v = strip_quotes(rest.trim());
+            if !v.is_empty() {
+                *doc_kind = Some(v.to_string());
+            }
+        } else if let Some(rest) = line.strip_prefix("topic:") {
+            // §2.2 — kebab-case 단일 값
+            let v = strip_quotes(rest.trim());
+            if !v.is_empty() {
+                *topic = Some(v.to_string());
+            }
         } else if let Some(rest) = line.strip_prefix("aliases:") {
             if let Some(consumed) = parse_yaml_list(rest, &lines, i, aliases) {
                 i = consumed;
@@ -259,6 +290,12 @@ fn parse_simple_frontmatter(
             }
         } else if let Some(rest) = line.strip_prefix("tags:") {
             if let Some(consumed) = parse_yaml_list(rest, &lines, i, tags) {
+                i = consumed;
+                continue;
+            }
+        } else if let Some(rest) = line.strip_prefix("related:") {
+            // §2.4 — 파일 stem 배열
+            if let Some(consumed) = parse_yaml_list(rest, &lines, i, related) {
                 i = consumed;
                 continue;
             }
@@ -315,9 +352,14 @@ fn strip_quotes(s: &str) -> &str {
     }
 }
 
-// 본문에서 `#tag` 추출. 코드 펜스(``` 라인)와 인라인 코드(`...`) 안은 무시.
-// 단어 경계: 직전 글자가 영숫자/_가 아닌 경우만 인정 (URL fragment 제외).
-// 태그 본문: 영숫자, _, -, /, 비ASCII(한글 등)
+// 본문에서 `#tag` 추출. 다음은 모두 무시:
+// - 코드 펜스(``` 라인)와 인라인 코드(`...`) 안
+// - 마크다운 헤딩 라인 (`# `, `## `, ... `###### ` 시작) — 글 구조이지 태그 추출 대상 아님
+// 단어 경계: 직전 글자가 영숫자/_가 아닌 경우만 인정.
+// 태그 인정 조건: 첫 글자가 알파벳(영문/한글/Unicode letter) — 숫자/구분자 시작 거름.
+//
+// NOTE: SharedDocs 4키 스키마 도입(Phase 3.0)으로 호출 중단. 향후 복원 여지를 위해 보존.
+#[allow(dead_code)]
 fn extract_inline_tags(body: &str) -> Vec<String> {
     let mut result: Vec<String> = Vec::new();
     let mut in_fence = false;
@@ -329,6 +371,10 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
             continue;
         }
         if in_fence {
+            continue;
+        }
+        // 마크다운 헤딩 라인 skip — 헤딩의 #ifdef, #F-XX, 한글 조사 패턴(#4의) 등 자동 제거
+        if is_heading_line(trimmed) {
             continue;
         }
 
@@ -372,8 +418,17 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
             if j > i + 1 {
                 let raw: String = chars[i + 1..j].iter().collect();
                 let trimmed = raw.trim_end_matches(|c: char| c == '-' || c == '/');
-                // 순수 숫자(예: #2026)는 태그가 아닐 가능성 높지만 일단 허용 — 사용자가 의도한 #2026 같은 연도 태그도 흔함
-                if !trimmed.is_empty()
+                // 첫 글자가 알파벳(영문/한글/Unicode letter)이어야 태그로 인정.
+                // 다음 패턴 모두 거름:
+                // - #1, #2026, #404 (PR/연도/이슈 번호)
+                // - #1-chatroom, #4-image-loading (숫자 prefix — 의도적이라면 #chatroom-v2 식으로 재작성 권장)
+                // - #4의, #3의, #10에 (한국어 조사 패턴)
+                // - #/path, #-foo (구분자 시작)
+                let starts_with_letter = trimmed
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_alphabetic());
+                if starts_with_letter
                     && !result.iter().any(|t: &String| t.eq_ignore_ascii_case(trimmed))
                 {
                     result.push(trimmed.to_string());
@@ -384,6 +439,28 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
     }
 
     result
+}
+
+// ATX 마크다운 헤딩 라인인지 — `#{1,6}` + 공백/탭 시작.
+// `# Title`, `## Sub`, ..., `###### Deep` 모두 헤딩.
+// `#noSpace`, `####### too-many` 는 헤딩 아님.
+//
+// NOTE: extract_inline_tags가 dead code가 되면서 이 헬퍼도 미사용. 같이 보존.
+#[allow(dead_code)]
+fn is_heading_line(trimmed: &str) -> bool {
+    let bytes = trimmed.as_bytes();
+    let mut hash_count = 0;
+    while hash_count < bytes.len() && bytes[hash_count] == b'#' {
+        hash_count += 1;
+    }
+    if hash_count == 0 || hash_count > 6 {
+        return false;
+    }
+    if hash_count >= bytes.len() {
+        return false; // `#` 만 있는 라인
+    }
+    let next = bytes[hash_count];
+    next == b' ' || next == b'\t'
 }
 
 // 한 줄에서 인라인 코드(`...`) 부분을 제거.
