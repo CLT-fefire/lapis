@@ -27,6 +27,12 @@
     markSaved,
   } from "$lib/stores/editor";
   import {
+    watcherStatus,
+    externalConflict,
+    resolveConflictAcceptExternal,
+    resolveConflictKeepLocal,
+  } from "$lib/stores/watcher";
+  import {
     editorCollapsed,
     previewCollapsed,
     toggleEditor,
@@ -353,6 +359,34 @@ tags: [phase-1, vault-reader]
 <SearchModal />
 <GraphModal />
 
+{#if $externalConflict}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="conflict-backdrop" onclick={(e) => e.target === e.currentTarget && resolveConflictKeepLocal()}>
+    <div class="conflict-modal" role="dialog" aria-modal="true">
+      <header class="conflict-head">
+        <span class="conflict-icon">⚠</span>
+        <span>외부에서 노트가 변경되었습니다</span>
+      </header>
+      <div class="conflict-body">
+        <p>이 노트를 다른 도구에서 수정한 것 같습니다. 동시에 Lapis에서도 편집 중입니다 (저장되지 않은 변경 있음).</p>
+        <p class="path">{$externalConflict.path}</p>
+        <p class="hint">어떻게 처리할까요?</p>
+      </div>
+      <footer class="conflict-foot">
+        <button class="btn keep" onclick={resolveConflictKeepLocal}>
+          내 변경 유지
+          <span class="hint">다음 저장 시 외부 변경을 덮어씁니다</span>
+        </button>
+        <button class="btn accept" onclick={resolveConflictAcceptExternal}>
+          외부 변경 사용
+          <span class="hint">현재 편집 중인 내용을 폐기하고 외부 버전 로드</span>
+        </button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
 <div class="app">
   <header class="topbar">
     <span class="brand">Lapis</span>
@@ -374,6 +408,16 @@ tags: [phase-1, vault-reader]
       {/if}
     </span>
     <div class="topbar-actions">
+      <span
+        class="watcher-dot"
+        class:watching={$watcherStatus === "watching"}
+        class:error={$watcherStatus === "error"}
+        title={$watcherStatus === "watching"
+          ? "외부 변경 감시 중"
+          : $watcherStatus === "error"
+            ? "Watcher 오류 — 외부 변경 자동 감지 불가"
+            : "Watcher 대기"}
+      ></span>
       <button
         class="topbar-btn"
         title="Quick Switcher (Cmd+P)"
@@ -617,10 +661,143 @@ tags: [phase-1, vault-reader]
     border: 1px solid rgba(244, 113, 116, 0.4);
   }
 
+  /* 외부 변경 충돌 다이얼로그 */
+  .conflict-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 32px;
+  }
+
+  .conflict-modal {
+    width: min(520px, 92vw);
+    background: #1f1f1f;
+    border: 1px solid #4a3a3a;
+    border-radius: 10px;
+    overflow: hidden;
+    color: #e8e8e8;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  }
+
+  .conflict-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: #2d1f1f;
+    border-bottom: 1px solid #4a3a3a;
+    font-weight: 600;
+    color: #f7c8c8;
+  }
+
+  .conflict-icon {
+    font-size: 18px;
+    color: #f47174;
+  }
+
+  .conflict-body {
+    padding: 16px 18px;
+    line-height: 1.6;
+    font-size: 14px;
+    color: #ddd;
+  }
+
+  .conflict-body .path {
+    margin: 8px 0;
+    padding: 6px 10px;
+    background: #2a2a2a;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: #aaa;
+    word-break: break-all;
+  }
+
+  .conflict-body .hint {
+    color: #aaa;
+    margin-top: 12px;
+  }
+
+  .conflict-foot {
+    display: flex;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #252526;
+    border-top: 1px solid #4a3a3a;
+  }
+
+  .conflict-foot .btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 12px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+
+  .conflict-foot .btn:hover {
+    background: #333;
+  }
+
+  .conflict-foot .btn.keep {
+    border-color: #f7c947;
+    color: #f7c947;
+  }
+  .conflict-foot .btn.keep:hover {
+    background: rgba(247, 201, 71, 0.1);
+  }
+
+  .conflict-foot .btn.accept {
+    border-color: #6dd6ff;
+    color: #6dd6ff;
+  }
+  .conflict-foot .btn.accept:hover {
+    background: rgba(109, 214, 255, 0.1);
+  }
+
+  .conflict-foot .btn .hint {
+    font-size: 10px;
+    font-weight: 400;
+    color: #777;
+  }
+
   .topbar-actions {
     display: flex;
     gap: 4px;
     margin-left: 8px;
+    align-items: center;
+  }
+
+  .watcher-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #555;
+    margin-right: 4px;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+
+  .watcher-dot.watching {
+    background: #6dd6a4;
+    box-shadow: 0 0 6px rgba(109, 214, 164, 0.5);
+  }
+
+  .watcher-dot.error {
+    background: #f47174;
+    box-shadow: 0 0 6px rgba(244, 113, 116, 0.5);
   }
 
   .topbar-btn {
