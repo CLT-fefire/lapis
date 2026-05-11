@@ -120,6 +120,29 @@ pub struct NoteContent {
     pub body: String,
 }
 
+/// 단일 노트의 LinkInfo만 추출 — file watcher의 증분 인덱싱용.
+/// vault confine 검증 포함.
+#[tauri::command]
+pub fn scan_link_single(vault_path: String, path: String) -> Result<LinkInfo, String> {
+    let vault = PathBuf::from(&vault_path)
+        .canonicalize()
+        .map_err(|e| format!("vault canonicalize failed: {e}"))?;
+    let target = PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| format!("target canonicalize failed: {e}"))?;
+    if !target.starts_with(&vault) {
+        return Err("path outside vault".to_string());
+    }
+    if target
+        .extension()
+        .is_none_or(|e| !e.eq_ignore_ascii_case("md"))
+    {
+        return Err("only .md files".to_string());
+    }
+    let content = fs::read_to_string(&target).map_err(|e| e.to_string())?;
+    Ok(extract_link_info(&target, &content))
+}
+
 #[tauri::command]
 pub fn read_all_notes(vault_path: String) -> Result<Vec<NoteContent>, String> {
     let root = PathBuf::from(&vault_path);
