@@ -30,7 +30,7 @@ export interface TagIndex {
   sortedTags: string[];
 }
 
-export type SidebarTab = "files" | "tags";
+export type SidebarTab = "files" | "tags" | "filters";
 export type SelectedTagKind = "leaf" | "prefix";
 
 export const tagIndex = writable<TagIndex | null>(null);
