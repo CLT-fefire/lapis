@@ -25,8 +25,12 @@ export interface LinkInfo {
   source_name: string;
   title: string | null;
   aliases: string[];
-  targets: string[]; // raw [[...]] inner text — `target` 또는 `target|alias` 그대로
-  tags: string[];    // frontmatter `tags` + 본문 `#tag` 통합 (대소문자 보존, 중복 제거됨)
+  targets: string[]; // wikilink `[[...]]` + md link `[text](file.md)` 통합. last segment + .md 제거된 형태
+  tags: string[];    // frontmatter `tags` 만 (Phase 3.0부터 본문 #tag 폐기). kebab-case + nested(`/`) 허용
+  // SharedDocs 4키 스키마 (Markdown-Tag-Management-Guide.md §2)
+  doc_kind: string | null; // requirements | spec | plan | solution | analysis | brainstorm | howto | reference | meeting-notes
+  topic: string | null;    // kebab-case 단일 도메인
+  related: string[];       // 파일 stem 배열 (cross-ref)
 }
 
 export function scanLinks(vaultPath: string): Promise<LinkInfo[]> {
