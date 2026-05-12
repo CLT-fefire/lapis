@@ -9,6 +9,7 @@
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import Backlinks from "$lib/Backlinks.svelte";
   import Properties from "$lib/Properties.svelte";
+  import PublishedAssets from "$lib/PublishedAssets.svelte";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
@@ -50,6 +51,7 @@
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { renderMermaidIn } from "$lib/mermaid-runtime";
+  import { rewriteImageSources } from "$lib/assetPath";
   import type { LinkInfo } from "$lib/tauri/notes";
 
   const SAMPLE = `---
@@ -252,6 +254,17 @@ tags: [phase-1, vault-reader]
     tick().then(() => {
       if (!previewBodyEl) return;
       renderMermaidIn(previewBodyEl);
+    });
+  });
+
+  // Preview 갱신 시 이미지 src 재작성 (상대 경로 → asset 프로토콜) — Phase 4.4.b
+  $effect(() => {
+    const _html = parsed.html;
+    const path = $currentNotePath;
+    if (!previewBodyEl || !path) return;
+    tick().then(() => {
+      if (!previewBodyEl) return;
+      rewriteImageSources(previewBodyEl, path);
     });
   });
 
@@ -623,6 +636,7 @@ tags: [phase-1, vault-reader]
 
         {#if $currentNotePath}
           <Backlinks targetNote={currentNoteInfo} backlinks={currentBacklinks} />
+          <PublishedAssets notePath={$currentNotePath} />
         {/if}
       </div>
       {/if}
