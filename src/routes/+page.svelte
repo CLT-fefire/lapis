@@ -8,10 +8,10 @@
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import Backlinks from "$lib/Backlinks.svelte";
+  import Properties from "$lib/Properties.svelte";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
-  import { selectTag, showTagsTab } from "$lib/stores/tags";
   import { openGraph } from "$lib/stores/graph";
   import { openNewNote } from "$lib/stores/tree-ui";
   import {
@@ -605,41 +605,7 @@ tags: [phase-1, vault-reader]
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick}>
-        {#if Object.keys(effectiveProperties).length > 0}
-          <details class="properties" open>
-            <summary>
-              Properties ({Object.keys(effectiveProperties).length}){#if propertiesAuto}<span class="auto-tag">· auto</span>{/if}
-            </summary>
-            <table>
-              <tbody>
-                {#each Object.entries(effectiveProperties) as [key, value]}
-                  <tr>
-                    <th>{key}</th>
-                    <td>
-                      {#if Array.isArray(value)}
-                        {#each value as v}
-                          {#if key === "tags"}
-                            <button
-                              class="chip chip-tag"
-                              title="이 태그로 사이드바 필터"
-                              onclick={() => { selectTag(String(v)); showTagsTab(); }}
-                            >#{v}</button>
-                          {:else}
-                            <span class="chip">{v}</span>
-                          {/if}
-                        {/each}
-                      {:else if typeof value === "object" && value !== null}
-                        <code>{JSON.stringify(value)}</code>
-                      {:else}
-                        {value}
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </details>
-        {/if}
+        <Properties data={effectiveProperties} isAuto={propertiesAuto} rawNote={raw} />
         <article class="rendered">
           {@html parsed.html}
         </article>
@@ -1063,74 +1029,7 @@ tags: [phase-1, vault-reader]
     padding: 20px 28px;
   }
 
-  .properties {
-    background: #252526;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    padding: 8px 12px;
-    margin-bottom: 24px;
-  }
-
-  .properties summary {
-    cursor: pointer;
-    color: #6dd6ff;
-    font-weight: 600;
-    font-size: 13px;
-    user-select: none;
-  }
-
-  .auto-tag {
-    margin-left: 6px;
-    color: #888;
-    font-weight: 400;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .properties table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-    font-size: 13px;
-  }
-
-  .properties th {
-    text-align: left;
-    color: #888;
-    padding: 4px 12px 4px 0;
-    font-weight: 500;
-    width: 110px;
-    vertical-align: top;
-  }
-
-  .properties td {
-    padding: 4px 0;
-    color: #ddd;
-  }
-
-  .chip {
-    display: inline-block;
-    padding: 1px 8px;
-    margin: 2px 4px 2px 0;
-    background: #2d4a5a;
-    border-radius: 10px;
-    font-size: 12px;
-    color: #9adff7;
-  }
-
-  .chip-tag {
-    border: 1px solid transparent;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.1s, border-color 0.1s, color 0.1s;
-  }
-
-  .chip-tag:hover {
-    background: #355a6e;
-    color: #fff;
-    border-color: #6dd6ff;
-  }
+  /* Properties 패널 CSS는 src/lib/Properties.svelte로 이전 (Phase 4.3.a) */
 
   .rendered {
     line-height: 1.65;
