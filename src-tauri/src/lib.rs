@@ -1,3 +1,4 @@
+mod memory;
 mod vault;
 mod watcher;
 
@@ -22,6 +23,9 @@ pub fn run() {
             vault::find_assets_for_note,
             watcher::watch_vault,
             watcher::unwatch_vault,
+            memory::memory_list_summaries,
+            memory::memory_preview_export,
+            memory::memory_export_to_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
