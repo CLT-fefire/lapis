@@ -53,6 +53,7 @@
   // ↑/↓ 탐색이 자연스럽게 동작한다. results(점수 순)와 다름에 주의.
   const displayList = $derived.by<PaletteResult[]>(() => {
     const out: PaletteResult[] = [];
+    if (showRecents) out.push(...groups.recents);
     if (showNotes) out.push(...groups.notes);
     if (showContent) out.push(...groups.content);
     if (showTagsGroup) out.push(...groups.tags);
@@ -77,13 +78,31 @@
     if (activeIndex >= len) activeIndex = Math.max(0, len - 1);
   });
 
-  // active 항목 가시 영역 유지
+  // active 항목 가시 영역 유지 + sticky 그룹 헤더 뒤에 가려지지 않도록 보정
   $effect(() => {
     const _ = activeIndex;
     if (!listEl) return;
     tick().then(() => {
-      const el = listEl?.querySelector<HTMLElement>(`[data-idx="${activeIndex}"]`);
-      el?.scrollIntoView({ block: "nearest" });
+      if (!listEl) return;
+      const el = listEl.querySelector<HTMLElement>(`[data-idx="${activeIndex}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: "nearest" });
+
+      // sticky 헤더(.group-header)들 중 활성 항목 위에 있는 헤더의 최하단보다 항목 top이
+      // 위라면 그만큼 추가로 위로 스크롤 — 그래야 헤더에 가려지지 않는다.
+      const elRect = el.getBoundingClientRect();
+      const headers = listEl.querySelectorAll<HTMLElement>(".group-header");
+      let coverBottom = listEl.getBoundingClientRect().top;
+      for (const h of headers) {
+        const hRect = h.getBoundingClientRect();
+        // 활성 항목 영역까지 sticky로 머물러 있는 헤더만 후보
+        if (hRect.top <= elRect.top && hRect.bottom > coverBottom) {
+          coverBottom = hRect.bottom;
+        }
+      }
+      if (elRect.top < coverBottom) {
+        listEl.scrollTop -= coverBottom - elRect.top;
+      }
     });
   });
 
@@ -105,6 +124,7 @@
     switch (entry.kind) {
       case "note":
       case "content":
+      case "recent":
         await selectNote(entry.path);
         closePalette();
         break;
@@ -160,6 +180,7 @@
     switch (entry.kind) {
       case "note":
       case "content":
+      case "recent":
         return `${entry.kind}:${entry.path}`;
       case "tag":
         return `tag:${entry.mode}:${entry.key}`;
@@ -171,6 +192,7 @@
   }
 
   // hint 모드별 표시할 그룹 결정 (Cmd+P/Cmd+Shift+F는 단일 그룹)
+  const showRecents = $derived(groups.recents.length > 0);
   const showNotes = $derived($paletteHintMode !== "fulltext" && groups.notes.length > 0);
   const showContent = $derived($paletteHintMode !== "files" && groups.content.length > 0);
   const showTagsGroup = $derived(
@@ -182,6 +204,9 @@
   const showCommands = $derived(
     ($paletteHintMode === "all" || $paletteHintMode === "command") && groups.commands.length > 0,
   );
+
+  // 빈 입력 시 COMMANDS 그룹은 "QUICK ACTIONS"로 라벨
+  const commandsHeaderLabel = $derived(query.trim() ? "COMMANDS" : "QUICK ACTIONS");
 
   const showContentBuildingHint = $derived(
     ($paletteHintMode === "fulltext" || $paletteHintMode === "all") &&
@@ -218,6 +243,27 @@
       {/if}
 
       <div class="results" bind:this={listEl}>
+        {#if showRecents}
+          <div class="group-header">RECENT</div>
+          {#each groups.recents as r (entryKey(r.entry))}
+            {@const e = r.entry}
+            {#if e.kind === "recent"}
+              {@const gi = displayIndexOf(e)}
+              <button
+                type="button"
+                class="result"
+                class:active={gi === activeIndex}
+                data-idx={gi}
+                onclick={() => execute(gi)}
+                onmouseenter={() => { if (!keyboardNavMode) activeIndex = gi; }}
+              >
+                <div class="title">{e.label}</div>
+                {#if e.subtitle}<div class="sub">{e.subtitle}</div>{/if}
+              </button>
+            {/if}
+          {/each}
+        {/if}
+
         {#if showNotes}
           <div class="group-header">NOTES</div>
           {#each groups.notes as r (entryKey(r.entry))}
@@ -308,7 +354,7 @@
         {/if}
 
         {#if showCommands}
-          <div class="group-header">COMMANDS</div>
+          <div class="group-header">{commandsHeaderLabel}</div>
           {#each groups.commands as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "command"}
