@@ -7,6 +7,7 @@
   import GraphModal from "$lib/GraphModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
+  import Backlinks from "$lib/Backlinks.svelte";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
@@ -134,6 +135,14 @@ tags: [phase-1, vault-reader]
     const path = $currentNotePath;
     if (!idx || !path) return [];
     return getBacklinks(path, idx);
+  });
+
+  // 현재 노트 자체의 LinkInfo — Backlinks 컴포넌트가 stem/title/alias 매칭용으로 사용
+  const currentNoteInfo = $derived.by<LinkInfo | null>(() => {
+    const idx = $linkIndex;
+    const path = $currentNotePath;
+    if (!idx || !path) return null;
+    return idx.byPath.get(path) ?? null;
   });
 
   // Properties: frontmatter 있으면 그대로, 없으면 합성 정보(file/path/tags/backlinks).
@@ -635,23 +644,8 @@ tags: [phase-1, vault-reader]
           {@html parsed.html}
         </article>
 
-        {#if $currentNotePath && currentBacklinks.length > 0}
-          <section class="backlinks">
-            <h3>↰ Backlinks · {currentBacklinks.length}</h3>
-            <ul>
-              {#each currentBacklinks as bl (bl.source_path)}
-                <li>
-                  <button
-                    class="backlink"
-                    title={bl.source_path}
-                    onclick={() => selectNote(bl.source_path)}
-                  >
-                    {bl.title ?? bl.source_name}
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          </section>
+        {#if $currentNotePath}
+          <Backlinks targetNote={currentNoteInfo} backlinks={currentBacklinks} />
         {/if}
       </div>
       {/if}
@@ -1248,50 +1242,5 @@ tags: [phase-1, vault-reader]
     background: rgba(244, 113, 116, 0.12);
   }
 
-  /* 백링크 패널 */
-  .backlinks {
-    margin-top: 36px;
-    padding-top: 18px;
-    border-top: 1px solid #333;
-  }
-
-  .backlinks h3 {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #888;
-    margin: 0 0 10px 0;
-    font-weight: 600;
-  }
-
-  .backlinks ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .backlinks li {
-    margin: 0;
-  }
-
-  .backlink {
-    background: transparent;
-    border: 1px solid #2d4a5a;
-    color: #6dd6ff;
-    padding: 4px 12px;
-    border-radius: 14px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 12px;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-  }
-
-  .backlink:hover {
-    background: #2d4a5a;
-    color: #fff;
-    border-color: #6dd6ff;
-  }
+  /* 백링크 패널 CSS는 src/lib/Backlinks.svelte로 이전 (Phase 4.5.c) */
 </style>
