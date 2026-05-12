@@ -182,6 +182,92 @@ pub fn move_note(
     Ok(new_path.to_string_lossy().to_string())
 }
 
+/// 노트와 같은 폴더에서 같은 stem으로 시작하는 이미지 파일들을 찾는다.
+/// Phase 4.4.b — `topic.md` 옆 `topic_style1.svg`, `topic_style2.png` 같은 발행물 자동 매칭.
+///
+/// 매칭 규칙:
+/// - 같은 stem 정확 일치 (예: `topic.svg`) OR
+/// - `{stem}{separator}...` 형태 — separator는 `_`, `-`, `.` 중 하나
+///   (그래야 `a.md`가 `another.png`에 잘못 매칭되지 않음)
+/// - 확장자 화이트리스트: svg, png, jpg, jpeg, gif, webp
+#[derive(Debug, Serialize, Clone)]
+pub struct AssetInfo {
+    pub name: String,
+    pub abs_path: String,
+    pub kind: String, // 소문자 확장자
+}
+
+const ASSET_EXTS: &[&str] = &["svg", "png", "jpg", "jpeg", "gif", "webp"];
+
+#[tauri::command]
+pub fn find_assets_for_note(
+    vault_path: String,
+    note_path: String,
+) -> Result<Vec<AssetInfo>, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let note = PathBuf::from(&note_path)
+        .canonicalize()
+        .map_err(|e| format!("note canonicalize failed: {e}"))?;
+    ensure_in_vault(&note, &vault)?;
+
+    let parent = note.parent().ok_or_else(|| "no parent".to_string())?;
+    let stem = note
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "no stem".to_string())?
+        .to_string();
+
+    let mut out: Vec<AssetInfo> = Vec::new();
+    for entry in fs::read_dir(parent).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let ext_lower = match path.extension().and_then(|e| e.to_str()) {
+            Some(e) => e.to_ascii_lowercase(),
+            None => continue,
+        };
+        if !ASSET_EXTS.contains(&ext_lower.as_str()) {
+            continue;
+        }
+
+        let Some(fstem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !name_belongs_to(fstem, &stem) {
+            continue;
+        }
+
+        let Some(fname) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        out.push(AssetInfo {
+            name: fname.to_string(),
+            abs_path: path.to_string_lossy().to_string(),
+            kind: ext_lower,
+        });
+    }
+
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+
+/// stem 매칭. `a.md` ↔ `another.png` 잘못 매칭을 막기 위해 stem 직후에 separator만 허용.
+fn name_belongs_to(fstem: &str, stem: &str) -> bool {
+    if fstem == stem {
+        return true;
+    }
+    if !fstem.starts_with(stem) {
+        return false;
+    }
+    matches!(
+        fstem.as_bytes().get(stem.len()),
+        Some(b'_') | Some(b'-') | Some(b'.')
+    )
+}
+
 // === 공통 헬퍼 ===
 
 fn canonicalize_vault(vault_path: &str) -> Result<PathBuf, String> {

@@ -19,6 +19,7 @@ pub fn run() {
             vault::delete_note,
             vault::rename_note,
             vault::move_note,
+            vault::find_assets_for_note,
             watcher::watch_vault,
             watcher::unwatch_vault,
         ])
