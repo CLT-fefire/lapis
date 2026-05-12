@@ -8,27 +8,14 @@ import {
 } from "$lib/searchIndex";
 import type { LinkInfo, NoteContent } from "$lib/tauri/notes";
 
-export type SearchMode = "files" | "fulltext";
-
-export const searchOpen = writable<boolean>(false);
-export const searchMode = writable<SearchMode>("files");
+/**
+ * 검색 인덱스 store. 모달 open/mode 상태는 Phase 4.5에서 `stores/palette.ts`로 이관.
+ * 여기엔 vault.ts가 빌드·갱신하는 인덱스만 남긴다.
+ */
 
 export const quickEntries = writable<QuickEntry[]>([]);
 export const fullTextIndex = writable<MiniSearch<FullTextDoc> | null>(null);
 export const indexBuilding = writable<boolean>(false);
-
-export function openSearch(mode: SearchMode): void {
-  searchMode.set(mode);
-  searchOpen.set(true);
-}
-
-export function closeSearch(): void {
-  searchOpen.set(false);
-}
-
-export function toggleSearchMode(): void {
-  searchMode.update((m) => (m === "files" ? "fulltext" : "files"));
-}
 
 /** vault 로딩 시 호출. 두 인덱스를 모두 빌드. 백그라운드 실행. */
 export function rebuildIndexes(linkInfos: LinkInfo[], contents: NoteContent[]): void {
