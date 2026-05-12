@@ -46,3 +46,4 @@ logs/
 #   본인 로컬에서만 작업·관리. GitHub에는 README.md만 노출.
 /CLAUDE.md
 /docs/
+/.claude/
