@@ -1,6 +1,6 @@
 [package]
 name = "lapis"
-version = "0.1.0"
+version = "0.2.0"
 description = "Personal Markdown Knowledge Workbench"
 authors = ["정철화 <eren@kakao.com>"]
 edition = "2021"
