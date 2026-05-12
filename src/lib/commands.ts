@@ -9,6 +9,7 @@ import {
 import { openNewNote } from "$lib/stores/tree-ui";
 import { openGraph } from "$lib/stores/graph";
 import { toggleEditor, togglePreview } from "$lib/stores/layout";
+import { openMemorySync } from "$lib/stores/memorySync";
 
 export interface Command {
   id: string;
@@ -80,6 +81,14 @@ export const BUILTIN_COMMANDS: Command[] = [
     label: "Toggle Preview Pane",
     run() {
       togglePreview();
+    },
+  },
+  {
+    id: "memory-sync",
+    label: "Memory: Sync from claude-mem",
+    disabled: () => !get(vaultPath),
+    run() {
+      openMemorySync();
     },
   },
 ];
