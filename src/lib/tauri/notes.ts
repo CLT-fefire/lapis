@@ -93,3 +93,17 @@ export interface NoteContent {
 export function readAllNotes(vaultPath: string): Promise<NoteContent[]> {
   return invoke<NoteContent[]>("read_all_notes", { vaultPath });
 }
+
+/** 노트와 같은 폴더에서 같은 stem으로 시작하는 이미지(svg/png/jpg/jpeg/gif/webp) — Phase 4.4.b */
+export interface AssetInfo {
+  name: string;
+  abs_path: string;
+  kind: string;
+}
+
+export function findAssetsForNote(
+  vaultPath: string,
+  notePath: string,
+): Promise<AssetInfo[]> {
+  return invoke<AssetInfo[]>("find_assets_for_note", { vaultPath, notePath });
+}
