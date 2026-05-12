@@ -1,13 +1,16 @@
 import MarkdownIt from "markdown-it";
 import yaml from "js-yaml";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
+import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
 
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   breaks: false,
   typographer: true,
-}).use(wikilinkPlugin);
+})
+  .use(wikilinkPlugin)
+  .use(mermaidPlugin);
 
 export interface ParsedNote {
   data: Record<string, unknown>;

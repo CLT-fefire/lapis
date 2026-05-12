@@ -49,6 +49,7 @@
   } from "$lib/stores/layout";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
+  import { renderMermaidIn } from "$lib/mermaid-runtime";
   import type { LinkInfo } from "$lib/tauri/notes";
 
   const SAMPLE = `---
@@ -242,6 +243,16 @@ tags: [phase-1, vault-reader]
         a.classList.toggle("unresolved", !resolved);
       }
     })();
+  });
+
+  // Preview 갱신 시 mermaid 코드블록 렌더 (lazy + dynamic import) — Phase 4.4.a
+  $effect(() => {
+    const _html = parsed.html;
+    if (!previewBodyEl) return;
+    tick().then(() => {
+      if (!previewBodyEl) return;
+      renderMermaidIn(previewBodyEl);
+    });
   });
 
   let editorCopied = $state(false);
@@ -1078,6 +1089,35 @@ tags: [phase-1, vault-reader]
     background: transparent;
     color: #e8e8e8;
     padding: 0;
+  }
+
+  /* Mermaid 다이어그램 호스트 (Phase 4.4.a) */
+  .rendered :global(.mermaid-host) {
+    margin: 1em 0;
+    text-align: center;
+  }
+
+  .rendered :global(.mermaid-host[data-rendered="pending"]) {
+    min-height: 80px;
+    background: #1a1a1a;
+    border-radius: 4px;
+  }
+
+  .rendered :global(.mermaid-host svg) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .rendered :global(.mermaid-error) {
+    background: rgba(244, 113, 116, 0.08);
+    border: 1px solid rgba(244, 113, 116, 0.4);
+    color: #f47174;
+    padding: 12px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.5;
   }
 
   .rendered :global(blockquote) {
