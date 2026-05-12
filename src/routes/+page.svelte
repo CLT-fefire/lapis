@@ -10,6 +10,7 @@
   import Backlinks from "$lib/Backlinks.svelte";
   import Properties from "$lib/Properties.svelte";
   import PublishedAssets from "$lib/PublishedAssets.svelte";
+  import MemorySyncModal from "$lib/MemorySyncModal.svelte";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
@@ -591,6 +592,7 @@ tags: [phase-1, vault-reader]
 <GraphModal />
 <ContextMenu />
 <NewNoteModal />
+<MemorySyncModal />
 
 {#if $externalConflict}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
