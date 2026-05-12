@@ -24,6 +24,7 @@ import {
   clearFacetCounts,
   clearFilters,
 } from "$lib/stores/filters";
+import { pushRecent, rememberLastClosed } from "$lib/stores/recent";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -301,12 +302,20 @@ export async function selectNote(path: string): Promise<void> {
     }
   }
 
+  // 새 노트 열기 직전, 직전 노트 path를 lastClosed로 기록 (Cmd+Shift+T 대상).
+  // 같은 노트 재선택은 의미 없으므로 다를 때만.
+  const prevPath = get(currentNotePath);
+  if (prevPath && prevPath !== path) {
+    rememberLastClosed(prevPath);
+  }
+
   try {
     const content = await readNote(path);
     currentNotePath.set(path);
     currentNoteContent.set(content);
     // editor 상태 동기화 — 새 노트 기준으로 dirty 해제
     if (editor) editor.markSaved(content);
+    pushRecent(path);
   } catch (e) {
     console.error("read_note failed", e);
     currentNoteContent.set("");

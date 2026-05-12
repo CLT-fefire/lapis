@@ -10,7 +10,8 @@ import {
 import { quickEntries, fullTextIndex } from "$lib/stores/search";
 import { tagIndex, type TagIndex } from "$lib/stores/tags";
 import { docKindCounts, topicCounts } from "$lib/stores/filters";
-import { matchCommands, type Command } from "$lib/commands";
+import { matchCommands, BUILTIN_COMMANDS, type Command } from "$lib/commands";
+import { recentNotePaths, RECENT_DISPLAY } from "$lib/stores/recent";
 
 /**
  * 팔레트 모드.
@@ -28,7 +29,8 @@ export type PaletteEntry =
   | { kind: "content"; path: string; name: string; snippet: string }
   | { kind: "tag"; key: string; display: string; mode: "leaf" | "prefix"; count: number }
   | { kind: "facet"; field: "doc_kind" | "topic"; value: string; count: number }
-  | { kind: "command"; command: Command };
+  | { kind: "command"; command: Command }
+  | { kind: "recent"; path: string; label: string; subtitle?: string };
 
 export interface PaletteResult {
   entry: PaletteEntry;
@@ -72,6 +74,9 @@ export function normalizedScore(kind: PaletteEntry["kind"], raw: number): number
       return 700;
     case "content":
       return raw * 60;
+    case "recent":
+      // Recent는 항상 빈 입력 흐름에서만 등장 — 그룹 안에서의 정렬만 유지하면 됨
+      return raw;
   }
 }
 
@@ -202,6 +207,42 @@ function commandsAsResults(query: string, limit = 20): PaletteResult[] {
 }
 
 /**
+ * Recent 노트 결과. 현재 vault에 존재하지 않는 path는 자동 필터.
+ * 점수는 단순 역순 인덱스 — 최근일수록 큰 값. 그룹 안에서 정렬을 유지한다.
+ */
+function recentAsResults(limit: number = RECENT_DISPLAY): PaletteResult[] {
+  const paths = get(recentNotePaths);
+  if (paths.length === 0) return [];
+  const entries = get(quickEntries);
+  const byPath = new Map(entries.map((e) => [e.path, e]));
+
+  const out: PaletteResult[] = [];
+  for (const path of paths) {
+    if (out.length >= limit) break;
+    const qe = byPath.get(path);
+    if (!qe) continue; // vault에 없는 path는 표시 안 함
+    out.push({
+      entry: {
+        kind: "recent",
+        path: qe.path,
+        label: qe.primaryLabel,
+        subtitle: qe.parentPath || undefined,
+      },
+      score: normalizedScore("recent", paths.length - paths.indexOf(path)),
+    });
+  }
+  return out;
+}
+
+/** 빌트인 명령 전체 (빈 입력 시 QUICK ACTIONS 그룹용) — 비활성 명령은 제외. */
+function quickActionsAsResults(): PaletteResult[] {
+  return BUILTIN_COMMANDS.filter((c) => !c.disabled?.()).map((command, i) => ({
+    entry: { kind: "command", command },
+    score: normalizedScore("command", BUILTIN_COMMANDS.length - i),
+  }));
+}
+
+/**
  * 통합 검색. mode에 따라 어떤 그룹을 채울지 결정.
  * - 같은 path를 가진 note와 content 결과는 점수 높은 쪽만 유지 (dedupe).
  */
@@ -211,11 +252,16 @@ export function unifiedSearch(input: string, hint: PaletteMode = "all"): Palette
   if (mode === "command") return commandsAsResults(query);
   if (mode === "tag") return matchTags(query, get(tagIndex));
   if (mode === "facet") return matchFacets(query);
-  if (mode === "files") return matchFiles(query, get(quickEntries));
-  if (mode === "fulltext") return matchContent(query, get(fullTextIndex));
+  if (mode === "files") {
+    // 호환 모드: 빈 입력에선 Recent 노출, 입력 있으면 file fuzzy
+    return query ? matchFiles(query, get(quickEntries)) : recentAsResults();
+  }
+  if (mode === "fulltext") {
+    return query ? matchContent(query, get(fullTextIndex)) : recentAsResults();
+  }
 
-  // all 모드 — 빈 query는 빈 결과 (Recent는 4.5.b)
-  if (!query) return [];
+  // all 모드 — 빈 query면 Recent + Quick Actions
+  if (!query) return [...recentAsResults(), ...quickActionsAsResults()];
 
   const files = matchFiles(query, get(quickEntries));
   const content = matchContent(query, get(fullTextIndex));
@@ -243,6 +289,7 @@ export function unifiedSearch(input: string, hint: PaletteMode = "all"): Palette
 
 /** 그룹별로 결과 분할 — UI 렌더링용. 빈 그룹은 제외하지 않음(헤더 결정은 UI에서). */
 export interface ResultGroups {
+  recents: PaletteResult[];
   notes: PaletteResult[];
   content: PaletteResult[];
   tags: PaletteResult[];
@@ -252,6 +299,7 @@ export interface ResultGroups {
 
 export function groupResults(results: PaletteResult[]): ResultGroups {
   const groups: ResultGroups = {
+    recents: [],
     notes: [],
     content: [],
     tags: [],
@@ -260,6 +308,9 @@ export function groupResults(results: PaletteResult[]): ResultGroups {
   };
   for (const r of results) {
     switch (r.entry.kind) {
+      case "recent":
+        groups.recents.push(r);
+        break;
       case "note":
         groups.notes.push(r);
         break;

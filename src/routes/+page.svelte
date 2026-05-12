@@ -8,7 +8,8 @@
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import { parseNote } from "$lib/markdown";
-  import { openPalette } from "$lib/stores/palette";
+  import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
+  import { peekLastClosed } from "$lib/stores/recent";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
   import { openGraph } from "$lib/stores/graph";
   import { openNewNote } from "$lib/stores/tree-ui";
@@ -368,9 +369,10 @@ tags: [phase-1, vault-reader]
   }
 
   // 전역 키보드 단축키
-  // - Cmd/Ctrl+K            : 통합 명령 팔레트 (Phase 4.5)
+  // - Cmd/Ctrl+K            : 통합 명령 팔레트 (toggle) — Phase 4.5
   // - Cmd/Ctrl+P            : Quick Switcher (파일 그룹만 — 호환)
   // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 (Content 그룹만 — 호환)
+  // - Cmd/Ctrl+Shift+T      : 직전 노트 다시 열기 (Phase 4.5.b)
   // 모달이 이미 열려 있을 때는 CommandPalette 내부 핸들러가 ESC/화살표 등 처리
   function handleGlobalKey(e: KeyboardEvent) {
     const isMod = e.metaKey || e.ctrlKey;
@@ -378,13 +380,18 @@ tags: [phase-1, vault-reader]
     const key = e.key.toLowerCase();
     if (key === "k" && !e.shiftKey) {
       e.preventDefault();
-      openPalette("all");
+      if ($paletteOpen) closePalette();
+      else openPalette("all");
     } else if (key === "p" && !e.shiftKey) {
       e.preventDefault();
       openPalette("files");
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
       openPalette("fulltext");
+    } else if (key === "t" && e.shiftKey) {
+      e.preventDefault();
+      const path = peekLastClosed();
+      if (path && path !== $currentNotePath) void selectNote(path);
     } else if (key === "g" && !e.shiftKey) {
       e.preventDefault();
       openGraph();
