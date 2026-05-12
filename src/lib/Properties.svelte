@@ -1,29 +1,39 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { patchFrontmatter } from "$lib/frontmatter";
-  import { DOC_KIND_ENUM } from "$lib/stores/filters";
-  import { selectTag, showTagsTab } from "$lib/stores/tags";
+  import { get } from "svelte/store";
+  import { patchFrontmatter, isKebab } from "$lib/frontmatter";
+  import { DOC_KIND_ENUM, topicCounts } from "$lib/stores/filters";
+  import { selectTag, showTagsTab, tagIndex } from "$lib/stores/tags";
+  import { linkIndex } from "$lib/stores/vault";
   import { noteContentChanged } from "$lib/stores/editor";
+  import Autocomplete from "$lib/Autocomplete.svelte";
+  import ChipEditor from "$lib/ChipEditor.svelte";
+  import type { ValidationResult } from "$lib/Autocomplete.svelte";
 
   interface Props {
     data: Record<string, unknown>;
-    isAuto: boolean;     // true면 합성 데이터 — 편집 불가
-    rawNote: string;     // 현재 노트의 raw (patch 기준)
+    isAuto: boolean; // true면 합성 데이터 — 편집 불가
+    rawNote: string; // 현재 노트의 raw (patch 기준)
   }
   let { data, isAuto, rawNote }: Props = $props();
 
-  // 어떤 키를 편집 중인지 — 한 번에 한 행만
+  // 단일 값 필드의 편집 상태 (title / doc_kind / topic). 칩 필드는 ChipEditor가 자체 관리.
   let editingKey = $state<string | null>(null);
-  // 편집 중인 임시 값
   let editingValue = $state<string>("");
 
   let titleInputEl: HTMLInputElement | null = $state(null);
   let docKindSelectEl: HTMLSelectElement | null = $state(null);
 
-  const EDITABLE_FIELDS = ["title", "doc_kind"] as const;
-  type EditableField = (typeof EDITABLE_FIELDS)[number];
-  function isEditable(key: string): key is EditableField {
-    return !isAuto && (EDITABLE_FIELDS as readonly string[]).includes(key);
+  const SINGLE_FIELDS = ["title", "doc_kind", "topic"] as const;
+  const CHIP_FIELDS = ["tags", "aliases", "related"] as const;
+  type SingleField = (typeof SINGLE_FIELDS)[number];
+  type ChipField = (typeof CHIP_FIELDS)[number];
+
+  function isSingleEditable(key: string): key is SingleField {
+    return !isAuto && (SINGLE_FIELDS as readonly string[]).includes(key);
+  }
+  function isChipEditable(key: string): key is ChipField {
+    return !isAuto && (CHIP_FIELDS as readonly string[]).includes(key);
   }
 
   // 다른 노트로 이동하면 편집 모드 해제
@@ -32,13 +42,14 @@
     editingKey = null;
   });
 
-  async function enterEdit(key: EditableField) {
+  async function enterEdit(key: SingleField) {
     editingKey = key;
     editingValue = stringOf(data[key]);
     showNoticeIfFirst();
     await tick();
     if (key === "title") titleInputEl?.focus();
     if (key === "doc_kind") docKindSelectEl?.focus();
+    // topic은 Autocomplete가 autofocus prop으로 직접 focus
   }
 
   function cancelEdit() {
@@ -46,7 +57,8 @@
     editingValue = "";
   }
 
-  function commitEdit() {
+  // title / doc_kind 용 — input/select bind:value에 연결된 editingValue 사용
+  function commitSimple() {
     if (!editingKey) return;
     const key = editingKey;
     const next = editingValue.trim();
@@ -57,10 +69,27 @@
     noteContentChanged(newRaw);
   }
 
+  // Autocomplete 용 — 명시적 value 전달
+  function commitAutocomplete(key: SingleField, value: string) {
+    editingKey = null;
+    const current = stringOf(data[key]);
+    if (value === current) return;
+    const newRaw = patchFrontmatter(rawNote, { [key]: value === "" ? null : value });
+    noteContentChanged(newRaw);
+  }
+
+  function commitChips(key: ChipField, next: string[]) {
+    const current = arrayOf(data[key]);
+    if (sameArray(current, next)) return;
+    showNoticeIfFirst();
+    const newRaw = patchFrontmatter(rawNote, { [key]: next });
+    noteContentChanged(newRaw);
+  }
+
   function onInputKey(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
-      commitEdit();
+      commitSimple();
     } else if (e.key === "Escape") {
       e.preventDefault();
       cancelEdit();
@@ -71,6 +100,80 @@
     if (v === null || v === undefined) return "";
     if (typeof v === "string") return v;
     return String(v);
+  }
+
+  function arrayOf(v: unknown): string[] {
+    if (!Array.isArray(v)) return [];
+    return v.map((x) => String(x));
+  }
+
+  function sameArray(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  // === 자동완성 함수 ===
+  function suggestTopics(q: string): string[] {
+    return rankSuggest(q, [...get(topicCounts).keys()]);
+  }
+
+  function suggestTags(q: string): string[] {
+    const idx = get(tagIndex);
+    if (!idx) return [];
+    // leaf + root prefix (끝에 `/` 보존)
+    const leaves = idx.sortedTags;
+    const prefixes = idx.rootPrefixes.map((p) => `${p}/`);
+    return rankSuggest(q, [...leaves, ...prefixes]);
+  }
+
+  function suggestStems(q: string): string[] {
+    const idx = get(linkIndex);
+    if (!idx) return [];
+    const stems = [...idx.byPath.values()].map((info) => info.source_name);
+    return rankSuggest(q, stems);
+  }
+
+  function rankSuggest(q: string, source: string[], max = 10): string[] {
+    const qLower = q.toLowerCase();
+    const seen = new Set<string>();
+    const uniq = source.filter((s) => {
+      const k = s.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (!qLower) return uniq.slice(0, max);
+    return uniq
+      .filter((s) => s.toLowerCase().includes(qLower))
+      .sort((a, b) => {
+        const aStarts = a.toLowerCase().startsWith(qLower);
+        const bStarts = b.toLowerCase().startsWith(qLower);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, max);
+  }
+
+  // === 검증 ===
+  function validateTopic(v: string): ValidationResult {
+    if (!v.trim()) return { ok: false, reason: "비어 있음" };
+    if (v.includes("/")) return { ok: false, reason: "topic은 nested 금지 — 단일 kebab" };
+    if (!isKebab(v)) return { ok: false, reason: "kebab-case (소문자 + 하이픈)" };
+    return { ok: true };
+  }
+  function validateTag(v: string): ValidationResult {
+    if (!v.trim()) return { ok: false, reason: "비어 있음" };
+    if (!isKebab(v)) return { ok: false, reason: "kebab-case + 옵션 `/` nested" };
+    return { ok: true };
+  }
+  function validateStem(v: string): ValidationResult {
+    if (!v.trim()) return { ok: false, reason: "비어 있음" };
+    return { ok: true };
+  }
+  function validateNonEmpty(v: string): ValidationResult {
+    if (!v.trim()) return { ok: false, reason: "비어 있음" };
+    return { ok: true };
   }
 
   // 첫 인라인 편집 시 1회 안내 토스트
@@ -109,7 +212,7 @@
     <table>
       <tbody>
         {#each Object.entries(data) as [key, value]}
-          <tr class:editable={isEditable(key)}>
+          <tr class:editable={isSingleEditable(key) || isChipEditable(key)}>
             <th>{key}</th>
             <td>
               {#if !isAuto && editingKey === key && key === "title"}
@@ -119,7 +222,7 @@
                   type="text"
                   bind:value={editingValue}
                   onkeydown={onInputKey}
-                  onblur={commitEdit}
+                  onblur={commitSimple}
                   autocomplete="off"
                   spellcheck="false"
                 />
@@ -128,23 +231,58 @@
                   bind:this={docKindSelectEl}
                   class="inline-edit"
                   bind:value={editingValue}
-                  onchange={commitEdit}
+                  onchange={commitSimple}
                   onkeydown={onInputKey}
-                  onblur={commitEdit}
+                  onblur={commitSimple}
                 >
                   {#each docKindOptions as opt}
                     <option value={opt}>{opt}</option>
                   {/each}
                   <option value="">— 비움 —</option>
                 </select>
-              {:else if isEditable(key)}
+              {:else if !isAuto && editingKey === key && key === "topic"}
+                <Autocomplete
+                  autofocus
+                  value={editingValue}
+                  placeholder="topic (kebab-case)"
+                  suggest={suggestTopics}
+                  validate={validateTopic}
+                  oncommit={(v) => commitAutocomplete("topic", v)}
+                  oncancel={cancelEdit}
+                />
+              {:else if isSingleEditable(key)}
                 <button class="edit-trigger" onclick={() => enterEdit(key)}>
                   {#if value === "" || value === null || value === undefined}
                     <span class="empty">— 비어 있음 — (클릭하여 편집)</span>
                   {:else}
                     {value}
                   {/if}
+                  <span class="edit-icon" aria-hidden="true">✎</span>
                 </button>
+              {:else if isChipEditable(key) && key === "tags"}
+                <ChipEditor
+                  values={arrayOf(value)}
+                  displayPrefix="#"
+                  placeholder="태그 (kebab-case)"
+                  suggest={suggestTags}
+                  validate={validateTag}
+                  onchange={(next) => commitChips("tags", next)}
+                />
+              {:else if isChipEditable(key) && key === "aliases"}
+                <ChipEditor
+                  values={arrayOf(value)}
+                  placeholder="alias"
+                  validate={validateNonEmpty}
+                  onchange={(next) => commitChips("aliases", next)}
+                />
+              {:else if isChipEditable(key) && key === "related"}
+                <ChipEditor
+                  values={arrayOf(value)}
+                  placeholder="related note stem"
+                  suggest={suggestStems}
+                  validate={validateStem}
+                  onchange={(next) => commitChips("related", next)}
+                />
               {:else if Array.isArray(value)}
                 {#each value as v}
                   {#if key === "tags"}
@@ -239,12 +377,27 @@
     border-radius: 3px;
     cursor: text;
     width: 100%;
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
   }
 
   .edit-trigger:hover {
     border-color: #3a4a5a;
     background: #1a2a33;
+  }
+
+  .edit-icon {
+    opacity: 0;
+    color: #888;
+    font-size: 11px;
+    transition: opacity 0.1s;
+    flex-shrink: 0;
+  }
+
+  .edit-trigger:hover .edit-icon {
+    opacity: 1;
   }
 
   .empty {
