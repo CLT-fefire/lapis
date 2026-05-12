@@ -3,12 +3,12 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
-  import SearchModal from "$lib/SearchModal.svelte";
+  import CommandPalette from "$lib/CommandPalette.svelte";
   import GraphModal from "$lib/GraphModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import { parseNote } from "$lib/markdown";
-  import { openSearch, searchOpen } from "$lib/stores/search";
+  import { openPalette } from "$lib/stores/palette";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
   import { openGraph } from "$lib/stores/graph";
   import { openNewNote } from "$lib/stores/tree-ui";
@@ -368,19 +368,23 @@ tags: [phase-1, vault-reader]
   }
 
   // 전역 키보드 단축키
-  // - Cmd/Ctrl+P            : Quick Switcher (파일명/alias/title)
-  // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 검색
-  // 모달이 이미 열려 있을 때는 SearchModal 내부 핸들러가 ESC/화살표 등 처리
+  // - Cmd/Ctrl+K            : 통합 명령 팔레트 (Phase 4.5)
+  // - Cmd/Ctrl+P            : Quick Switcher (파일 그룹만 — 호환)
+  // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 (Content 그룹만 — 호환)
+  // 모달이 이미 열려 있을 때는 CommandPalette 내부 핸들러가 ESC/화살표 등 처리
   function handleGlobalKey(e: KeyboardEvent) {
     const isMod = e.metaKey || e.ctrlKey;
     if (!isMod) return;
     const key = e.key.toLowerCase();
-    if (key === "p" && !e.shiftKey) {
+    if (key === "k" && !e.shiftKey) {
       e.preventDefault();
-      openSearch("files");
+      openPalette("all");
+    } else if (key === "p" && !e.shiftKey) {
+      e.preventDefault();
+      openPalette("files");
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
-      openSearch("fulltext");
+      openPalette("fulltext");
     } else if (key === "g" && !e.shiftKey) {
       e.preventDefault();
       openGraph();
@@ -410,7 +414,7 @@ tags: [phase-1, vault-reader]
 
 <svelte:window onkeydown={handleGlobalKey} />
 
-<SearchModal />
+<CommandPalette />
 <GraphModal />
 <ContextMenu />
 <NewNoteModal />
@@ -476,8 +480,8 @@ tags: [phase-1, vault-reader]
       ></span>
       <button
         class="topbar-btn"
-        title="Quick Switcher (Cmd+P)"
-        onclick={() => openSearch("files")}
+        title="Command palette (Cmd+K)"
+        onclick={() => openPalette("all")}
       >🔎</button>
       <button
         class="topbar-btn"
