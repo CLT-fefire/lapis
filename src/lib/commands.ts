@@ -10,6 +10,7 @@ import { openNewNote } from "$lib/stores/tree-ui";
 import { openGraph } from "$lib/stores/graph";
 import { toggleEditor, togglePreview } from "$lib/stores/layout";
 import { openMemorySync } from "$lib/stores/memorySync";
+import { openMemorySearch } from "$lib/stores/memorySearch";
 
 export interface Command {
   id: string;
@@ -89,6 +90,15 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       openMemorySync();
+    },
+  },
+  {
+    id: "memory-search",
+    label: "Memory: Search",
+    shortcut: "⌘⇧M",
+    disabled: () => !get(vaultPath),
+    run() {
+      openMemorySearch();
     },
   },
 ];

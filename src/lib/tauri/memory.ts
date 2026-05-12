@@ -29,6 +29,21 @@ export interface ExportReport {
   total_candidates: number;
 }
 
+export interface SearchHit {
+  id: number;
+  project: string;
+  created_at: string;
+  created_at_epoch: number;
+  /** request 첫 줄 또는 fallback (최대 120자) */
+  title_hint: string;
+  /** FTS5 snippet — `<mark>...</mark>` 포함, UI에서 sanitized 본인 데이터라 그대로 렌더 가능 */
+  snippet_html: string;
+  /** bm25 score (lower = better relevance) */
+  score: number;
+  /** "fts" 또는 (향후) "semantic" — 결과 병합 시 dedup 키와 함께 사용 */
+  channel: "fts" | "semantic";
+}
+
 /**
  * claude-mem.db `session_summaries` 테이블에서 filter에 매칭되는 row 목록 반환.
  * filter:
@@ -58,4 +73,51 @@ export function memoryExportToVault(
   filter: string[],
 ): Promise<ExportReport> {
   return invoke<ExportReport>("memory_export_to_vault", { vaultPath, filter });
+}
+
+/**
+ * SQLite FTS5(`session_summaries_fts`) 풀텍스트 검색.
+ * - 입력은 안전 sanitize 후 phrase token AND 매칭.
+ * - 한국어는 어절 단위만 매치(FTS5 기본 토크나이저 한계).
+ * - bm25 score 오름차순 정렬 (낮을수록 관련도 ↑).
+ */
+export function memoryFtsSearch(
+  query: string,
+  filter: string[],
+  limit = 20,
+): Promise<SearchHit[]> {
+  return invoke<SearchHit[]>("memory_fts_search", { query, filter, limit });
+}
+
+/**
+ * mem_id로 vault 안 export된 노트의 절대 경로 찾기 (없으면 null).
+ * 검색 결과 클릭 시 점프용.
+ */
+export function memoryFindExportedNote(
+  vaultPath: string,
+  memId: number,
+): Promise<string | null> {
+  return invoke<string | null>("memory_find_exported_note", { vaultPath, memId });
+}
+
+export interface RelatedMemory {
+  mem_id: number;
+  abs_path: string;
+  title_hint: string;
+  project: string;
+  date: string;
+  /** "files_read" | "files_edited" | "both" — 매치 출처 */
+  matched_in: string;
+}
+
+/**
+ * 현재 노트의 basename과 매칭되는 메모리 노트 목록.
+ * vault `_memories/**` 안의 메모리 노트 frontmatter `files_read`/`files_edited` 검사.
+ * 단순 substring 매칭 (false positive 가능, MVP).
+ */
+export function memoryRelatedToNote(
+  vaultPath: string,
+  noteAbsPath: string,
+): Promise<RelatedMemory[]> {
+  return invoke<RelatedMemory[]>("memory_related_to_note", { vaultPath, noteAbsPath });
 }

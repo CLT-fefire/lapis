@@ -26,6 +26,9 @@ pub fn run() {
             memory::memory_list_summaries,
             memory::memory_preview_export,
             memory::memory_export_to_vault,
+            memory::memory_fts_search,
+            memory::memory_find_exported_note,
+            memory::memory_related_to_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

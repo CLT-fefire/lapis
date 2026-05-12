@@ -11,6 +11,10 @@
   import Properties from "$lib/Properties.svelte";
   import PublishedAssets from "$lib/PublishedAssets.svelte";
   import MemorySyncModal from "$lib/MemorySyncModal.svelte";
+  import MemorySearchModal from "$lib/MemorySearchModal.svelte";
+  import RelatedMemoriesPanel from "$lib/RelatedMemoriesPanel.svelte";
+  import MemoryFilesPanel from "$lib/MemoryFilesPanel.svelte";
+  import { openMemorySearch } from "$lib/stores/memorySearch";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
@@ -544,6 +548,10 @@ tags: [phase-1, vault-reader]
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
       openPalette("fulltext");
+    } else if (key === "m" && e.shiftKey) {
+      // Cmd+Shift+M — 메모리 검색 모달 (Phase 5.1.b)
+      e.preventDefault();
+      if ($vaultPath) openMemorySearch();
     } else if (key === "t" && e.shiftKey) {
       e.preventDefault();
       const path = peekLastClosed();
@@ -593,6 +601,7 @@ tags: [phase-1, vault-reader]
 <ContextMenu />
 <NewNoteModal />
 <MemorySyncModal />
+<MemorySearchModal />
 
 {#if $externalConflict}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -794,7 +803,14 @@ tags: [phase-1, vault-reader]
         </article>
 
         {#if $currentNotePath}
+          {#if parsed.data.doc_kind === "memory" && parsed.data.source === "claude-mem"}
+            <MemoryFilesPanel
+              filesRead={parsed.data.files_read}
+              filesEdited={parsed.data.files_edited}
+            />
+          {/if}
           <Backlinks targetNote={currentNoteInfo} backlinks={currentBacklinks} />
+          <RelatedMemoriesPanel />
           <PublishedAssets notePath={$currentNotePath} />
         {/if}
       </div>
