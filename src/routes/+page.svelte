@@ -53,6 +53,22 @@
   import { renderMermaidIn } from "$lib/mermaid-runtime";
   import { rewriteImageSources } from "$lib/assetPath";
   import type { LinkInfo } from "$lib/tauri/notes";
+  import InDocSearchBar from "$lib/InDocSearchBar.svelte";
+  import {
+    inDocSearch,
+    lastFocused,
+    openSearch,
+    closeSearch,
+    setMatchInfo,
+    resetSearch,
+  } from "$lib/stores/inDocSearch";
+  import {
+    findMatches,
+    applyHighlights,
+    clearHighlights,
+    scrollCurrentMarkIntoView,
+  } from "$lib/previewHighlight";
+  import type { EditorApi } from "$lib/Editor.svelte";
 
   const SAMPLE = `---
 title: Lapis Phase 1.1 Welcome
@@ -268,6 +284,112 @@ tags: [phase-1, vault-reader]
     });
   });
 
+  // --- in-document search (Phase 5.0) ---
+  let editorApi: EditorApi | undefined = $state();
+  // Preview 측은 Range가 surroundContents 후 무효화되므로 매치를 캐시하지 않고
+  // 매번 query 기반으로 재계산. query/total/currentIdx만 추적.
+  let previewQuery = $state("");
+  let previewTotal = $state(0);
+  let previewCurrentIdx = $state(-1);
+
+  function editorOnQuery(q: string) {
+    if (!editorApi) return;
+    const info = editorApi.setQuery(q);
+    setMatchInfo(info.total, info.current);
+  }
+  function editorOnNext() {
+    if (!editorApi) return;
+    const info = editorApi.findNext();
+    setMatchInfo(info.total, info.current);
+  }
+  function editorOnPrev() {
+    if (!editorApi) return;
+    const info = editorApi.findPrev();
+    setMatchInfo(info.total, info.current);
+  }
+  function editorOnClosed() {
+    editorApi?.clearQuery();
+    editorApi?.focus();
+  }
+
+  function previewApply(query: string, currentIdx: number) {
+    if (!previewBodyEl) return;
+    clearHighlights(previewBodyEl);
+    if (!query) {
+      previewTotal = 0;
+      previewCurrentIdx = -1;
+      setMatchInfo(0, 0);
+      return;
+    }
+    const matches = findMatches(previewBodyEl, query);
+    previewTotal = matches.length;
+    if (matches.length === 0) {
+      previewCurrentIdx = -1;
+      setMatchInfo(0, 0);
+      return;
+    }
+    // currentIdx 범위 보정 (wrap)
+    const idx = ((currentIdx % matches.length) + matches.length) % matches.length;
+    previewCurrentIdx = idx;
+    applyHighlights(previewBodyEl, matches, idx);
+    setMatchInfo(matches.length, idx + 1);
+    scrollCurrentMarkIntoView(previewBodyEl, previewBodyEl);
+  }
+  function previewRecompute(query: string) {
+    previewQuery = query;
+    previewApply(query, 0);
+  }
+  function previewOnNext() {
+    if (previewTotal === 0) return;
+    previewApply(previewQuery, previewCurrentIdx + 1);
+  }
+  function previewOnPrev() {
+    if (previewTotal === 0) return;
+    previewApply(previewQuery, previewCurrentIdx - 1);
+  }
+  function previewOnClosed() {
+    previewQuery = "";
+    previewTotal = 0;
+    previewCurrentIdx = -1;
+    if (previewBodyEl) clearHighlights(previewBodyEl);
+  }
+
+  // 노트 전환 시 검색 상태 리셋
+  let lastNotePath: string | null = null;
+  $effect(() => {
+    const path = $currentNotePath;
+    if (path !== lastNotePath) {
+      lastNotePath = path;
+      if (get(inDocSearch).open) {
+        resetSearch();
+      }
+      editorApi?.clearQuery();
+      previewQuery = "";
+      previewTotal = 0;
+      previewCurrentIdx = -1;
+      if (previewBodyEl) clearHighlights(previewBodyEl);
+    }
+  });
+
+  // Preview 재렌더 시 mark가 다음 markdown 출력으로 덮어쓰여짐 → 검색 활성이면 재적용
+  $effect(() => {
+    const _html = parsed.html;
+    if (!previewBodyEl) return;
+    const s = get(inDocSearch);
+    if (s.open && s.target === "preview" && s.query) {
+      void tick().then(() => {
+        if (!previewBodyEl) return;
+        // 새 DOM 기준으로 mark 다시 적용. currentIdx는 0으로 리셋(노트 내용 자체가 바뀜).
+        previewQuery = s.query;
+        previewApply(s.query, 0);
+      });
+    } else {
+      previewQuery = "";
+      previewTotal = 0;
+      previewCurrentIdx = -1;
+    }
+  });
+
   let editorCopied = $state(false);
   let previewCopied = $state(false);
   let editorCopyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -431,6 +553,17 @@ tags: [phase-1, vault-reader]
     } else if (key === "s" && !e.shiftKey) {
       e.preventDefault();
       void saveCurrentNote();
+    } else if (key === "f" && !e.shiftKey) {
+      // Cmd+F — 현재 문서 내 검색. 마지막 포커스 영역에서 열기.
+      e.preventDefault();
+      const target = get(lastFocused);
+      // collapsed 상태면 펼친 쪽으로 fallback
+      const safeTarget =
+        (target === "editor" && get(editorCollapsed)) ||
+        (target === "preview" && get(previewCollapsed))
+          ? target === "editor" ? "preview" : "editor"
+          : target;
+      openSearch(safeTarget);
     } else if (key === "n" && !e.shiftKey) {
       // Cmd+N — 새 노트. 현재 노트의 부모 폴더 또는 vault root에 생성.
       e.preventDefault();
@@ -550,7 +683,12 @@ tags: [phase-1, vault-reader]
       ondblclick={resetSidebarWidth}
     ></div>
 
-    <section class="pane editor-pane" class:collapsed={$editorCollapsed}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <section
+      class="pane editor-pane"
+      class:collapsed={$editorCollapsed}
+      onmousedown={() => lastFocused.set("editor")}
+    >
       {#if $editorCollapsed}
         <button
           class="collapsed-strip"
@@ -585,13 +723,25 @@ tags: [phase-1, vault-reader]
             {/if}
           </div>
         </div>
+        <InDocSearchBar
+          target="editor"
+          onQuery={editorOnQuery}
+          onNext={editorOnNext}
+          onPrev={editorOnPrev}
+          onClosed={editorOnClosed}
+        />
         <div class="pane-body">
-          <Editor bind:value={raw} onChange={handleEditorChange} />
+          <Editor bind:value={raw} bind:api={editorApi} onChange={handleEditorChange} />
         </div>
       {/if}
     </section>
 
-    <section class="pane preview-pane" class:collapsed={$previewCollapsed}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <section
+      class="pane preview-pane"
+      class:collapsed={$previewCollapsed}
+      onmousedown={() => lastFocused.set("preview")}
+    >
       {#if $previewCollapsed}
         <button
           class="collapsed-strip"
@@ -626,6 +776,13 @@ tags: [phase-1, vault-reader]
             {/if}
           </div>
         </div>
+        <InDocSearchBar
+          target="preview"
+          onQuery={previewRecompute}
+          onNext={previewOnNext}
+          onPrev={previewOnPrev}
+          onClosed={previewOnClosed}
+        />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick}>
@@ -655,6 +812,23 @@ tags: [phase-1, vault-reader]
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Apple SD Gothic Neo", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* in-document search Preview 하이라이트 (Phase 5.0) — <mark> 삽입 방식 */
+  :global(.preview-pane mark.lapis-search-match) {
+    background-color: rgba(255, 200, 0, 0.35);
+    color: inherit;
+    padding: 0;
+    border-radius: 2px;
+  }
+
+  :global(.preview-pane mark.lapis-search-current) {
+    background-color: rgba(255, 140, 0, 0.75);
+    color: inherit;
+    padding: 0;
+    border-radius: 2px;
+  }
+
+  /* Editor 측 cm-searchMatch는 Editor.svelte의 EditorView.theme()에서 override (specificity 문제로 일반 CSS는 안 통함) */
 
   :global(*, *::before, *::after) {
     box-sizing: border-box;
