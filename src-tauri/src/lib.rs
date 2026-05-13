@@ -1,4 +1,5 @@
 mod memory;
+mod mirror;
 mod vault;
 mod watcher;
 
@@ -29,6 +30,10 @@ pub fn run() {
             memory::memory_fts_search,
             memory::memory_find_exported_note,
             memory::memory_related_to_note,
+            mirror::mirror_sync_now,
+            mirror::mirror_sync_status,
+            mirror::mirror_query_memories,
+            mirror::mirror_query_related_to_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
