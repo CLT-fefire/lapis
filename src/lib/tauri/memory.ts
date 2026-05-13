@@ -63,6 +63,26 @@ export interface ExportReport {
   observations: ExportBreakdown;
 }
 
+/**
+ * `memory_export_to_vault` 진행 중 Tauri event로 발행되는 progress payload.
+ * 이벤트 이름: `"memory-export-progress"` (`EXPORT_PROGRESS_EVENT` in Rust)
+ *
+ * Rust 측이 매 50 row마다 + 각 phase 마지막 row에 emit. UI는 listen으로 받아
+ * progress bar에 반영. summary phase 끝난 후 observation phase 시작.
+ */
+export interface ExportProgressPayload {
+  phase: "summary" | "observation";
+  current: number;
+  total: number;
+  created: number;
+  skipped: number;
+  /** 에러 카운트만 — 메시지는 export 완료 시 ExportReport.errors에서 surface */
+  errors: number;
+}
+
+/** progress event 이름 상수 — listen에서 사용. */
+export const MEMORY_EXPORT_PROGRESS_EVENT = "memory-export-progress";
+
 export interface SearchHit {
   id: number;
   /** "summary" | "observation" — UI 배지 + memoryFindExportedNote 호출 시 kind 인자 */

@@ -4,6 +4,50 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter};
+
+/// 모달 progress 이벤트 이름.
+const EXPORT_PROGRESS_EVENT: &str = "memory-export-progress";
+
+/// 매 N row마다 emit. 너무 잦으면 IPC + Svelte re-render 비용, 너무 드물면 progress 안 부드러움.
+/// 50은 10277개 기준 ~200번 발화 — 부드럽고 부담 없음.
+const EMIT_EVERY: usize = 50;
+
+/// export 중 모달에 발행하는 progress payload.
+#[derive(Debug, Serialize, Clone)]
+pub struct ExportProgress {
+    /// "summary" | "observation" — 어느 phase 진행 중인지
+    pub phase: String,
+    pub current: usize,
+    pub total: usize,
+    pub created: usize,
+    pub skipped: usize,
+    /// 에러 카운트만 (메시지는 done 단계 ExportReport.errors에서)
+    pub errors: usize,
+}
+
+/// 한 phase 안에서 처리 중 일정 주기마다 progress emit. 실패는 무시 (UI 보조용).
+fn emit_progress(
+    app: &AppHandle,
+    phase: &str,
+    current: usize,
+    total: usize,
+    created: usize,
+    skipped: usize,
+    errors: usize,
+) {
+    let _ = app.emit(
+        EXPORT_PROGRESS_EVENT,
+        ExportProgress {
+            phase: phase.to_string(),
+            current,
+            total,
+            created,
+            skipped,
+            errors,
+        },
+    );
+}
 
 /// claude-mem DB 위치 — 고정 경로.
 fn db_path() -> Result<PathBuf, String> {
@@ -638,7 +682,10 @@ fn peek_related(path: &Path, basename: &str) -> Option<RelatedMemory> {
     let f = fs::File::open(path).ok()?;
     let mut buf = vec![0u8; 32 * 1024];
     let n = f.take(32 * 1024).read(&mut buf).ok()?;
-    let head = std::str::from_utf8(&buf[..n]).ok()?;
+    // 32KB 경계에서 한국어 multi-byte 잘림 가능 — lossy로 안전 변환.
+    // peek_mem_id와 동일 처리 (PR3 에러 259건 원인 fix).
+    let head_owned = String::from_utf8_lossy(&buf[..n]).into_owned();
+    let head = head_owned.as_str();
     let mut iter = head.splitn(3, "---\n");
     let _prefix = iter.next()?;
     let fm = iter.next()?;
@@ -733,12 +780,15 @@ fn peek_related(path: &Path, basename: &str) -> Option<RelatedMemory> {
     })
 }
 
+/// 노트 frontmatter에서 `mem_id` 추출.
+/// - buffer 4KB (1KB는 한국어 본문 + yaml block scalar 케이스에서 부족했음, PR3 에러 259건 원인)
+/// - `from_utf8_lossy`로 multi-byte 경계 잘림 안전 처리 (`std::str::from_utf8`는 invalid 시 None 반환)
 fn peek_mem_id(path: &Path) -> Option<i64> {
     let f = fs::File::open(path).ok()?;
-    let mut buf = vec![0u8; 1024];
-    let n = f.take(1024).read(&mut buf).ok()?;
-    let head = std::str::from_utf8(&buf[..n]).ok()?;
-    // frontmatter 안의 `mem_id: <num>` 추출. 매우 단순한 정규식 회피 — 줄 단위 검사.
+    let mut buf = vec![0u8; 4 * 1024];
+    let n = f.take(4 * 1024).read(&mut buf).ok()?;
+    // UTF-8 multi-byte 경계 잘림 대응 — invalid sequence는 U+FFFD로 대체. mem_id 라인 자체는 ASCII라 영향 X.
+    let head = String::from_utf8_lossy(&buf[..n]);
     for line in head.lines() {
         let trimmed = line.trim_start();
         if let Some(rest) = trimmed.strip_prefix("mem_id:") {
@@ -837,78 +887,106 @@ pub struct ExportReport {
     pub observations: ExportBreakdown,
 }
 
+/// Sync I/O + emit 작업을 main IPC thread 밖으로 격리.
+/// 격리하지 않으면 sync `#[tauri::command]` 내부의 emit이 webview에 즉시 도달하지 못하고
+/// invoke 응답 큐에 막혀 export 완료 후 한꺼번에 도착 → progress UI가 안 보임.
 #[tauri::command]
-pub fn memory_export_to_vault(
+pub async fn memory_export_to_vault(
+    app: AppHandle,
     vault_path: String,
     filter: Vec<String>,
     include_summaries: bool,
     include_observations: bool,
 ) -> Result<ExportReport, String> {
-    let vault_root = PathBuf::from(&vault_path);
-    if !vault_root.is_dir() {
-        return Err(format!("vault not a directory: {vault_path}"));
-    }
-    // exported_at 한 번만 계산 (sync 한 회 = 동일 timestamp, summary/observation 공유)
-    let exported_at = current_iso8601();
+    tauri::async_runtime::spawn_blocking(move || -> Result<ExportReport, String> {
+        let vault_root = PathBuf::from(&vault_path);
+        if !vault_root.is_dir() {
+            return Err(format!("vault not a directory: {vault_path}"));
+        }
+        // exported_at 한 번만 계산 (sync 한 회 = 동일 timestamp, summary/observation 공유)
+        let exported_at = current_iso8601();
 
-    let summaries = if include_summaries {
-        let rows = list_summaries_inner(&filter)?;
-        let existing = scan_existing_summary_ids(&vault_root)?;
-        let total = rows.len();
-        let mut created = 0usize;
-        let mut skipped = 0usize;
-        let mut errors: Vec<String> = Vec::new();
-        for s in &rows {
-            if existing.contains(&s.id) {
-                skipped += 1;
-                continue;
+        let summaries = if include_summaries {
+            let rows = list_summaries_inner(&filter)?;
+            let existing = scan_existing_summary_ids(&vault_root)?;
+            let total = rows.len();
+            let mut created = 0usize;
+            let mut skipped = 0usize;
+            let mut errors: Vec<String> = Vec::new();
+            // 시작 알림 (total 노출 + UI를 0% 상태로 표시)
+            emit_progress(&app, "summary", 0, total, 0, 0, 0);
+            for (i, s) in rows.iter().enumerate() {
+                if existing.contains(&s.id) {
+                    skipped += 1;
+                } else {
+                    match write_summary_to_vault(&vault_root, s, &exported_at) {
+                        Ok(_) => created += 1,
+                        Err(e) => errors.push(format!("mem_id={}: {e}", s.id)),
+                    }
+                }
+                let next = i + 1;
+                // EMIT_EVERY 주기 + 마지막 row 보장
+                if next % EMIT_EVERY == 0 || next == total {
+                    emit_progress(&app, "summary", next, total, created, skipped, errors.len());
+                }
             }
-            match write_summary_to_vault(&vault_root, s, &exported_at) {
-                Ok(_) => created += 1,
-                Err(e) => errors.push(format!("mem_id={}: {e}", s.id)),
+            ExportBreakdown {
+                created,
+                skipped,
+                errors,
+                total_candidates: total,
             }
-        }
-        ExportBreakdown {
-            created,
-            skipped,
-            errors,
-            total_candidates: total,
-        }
-    } else {
-        ExportBreakdown::empty()
-    };
+        } else {
+            ExportBreakdown::empty()
+        };
 
-    let observations = if include_observations {
-        let rows = list_observations_inner(&filter)?;
-        let existing = scan_existing_observation_ids(&vault_root)?;
-        let total = rows.len();
-        let mut created = 0usize;
-        let mut skipped = 0usize;
-        let mut errors: Vec<String> = Vec::new();
-        for o in &rows {
-            if existing.contains(&o.id) {
-                skipped += 1;
-                continue;
+        let observations = if include_observations {
+            let rows = list_observations_inner(&filter)?;
+            let existing = scan_existing_observation_ids(&vault_root)?;
+            let total = rows.len();
+            let mut created = 0usize;
+            let mut skipped = 0usize;
+            let mut errors: Vec<String> = Vec::new();
+            emit_progress(&app, "observation", 0, total, 0, 0, 0);
+            for (i, o) in rows.iter().enumerate() {
+                if existing.contains(&o.id) {
+                    skipped += 1;
+                } else {
+                    match write_observation_to_vault(&vault_root, o, &exported_at) {
+                        Ok(_) => created += 1,
+                        Err(e) => errors.push(format!("obs_id={}: {e}", o.id)),
+                    }
+                }
+                let next = i + 1;
+                if next % EMIT_EVERY == 0 || next == total {
+                    emit_progress(
+                        &app,
+                        "observation",
+                        next,
+                        total,
+                        created,
+                        skipped,
+                        errors.len(),
+                    );
+                }
             }
-            match write_observation_to_vault(&vault_root, o, &exported_at) {
-                Ok(_) => created += 1,
-                Err(e) => errors.push(format!("obs_id={}: {e}", o.id)),
+            ExportBreakdown {
+                created,
+                skipped,
+                errors,
+                total_candidates: total,
             }
-        }
-        ExportBreakdown {
-            created,
-            skipped,
-            errors,
-            total_candidates: total,
-        }
-    } else {
-        ExportBreakdown::empty()
-    };
+        } else {
+            ExportBreakdown::empty()
+        };
 
-    Ok(ExportReport {
-        summaries,
-        observations,
+        Ok(ExportReport {
+            summaries,
+            observations,
+        })
     })
+    .await
+    .map_err(|e| format!("spawn_blocking join: {e}"))?
 }
 
 /// observation 한 row를 `_memories/observations/{YYYY-MM}/{date}-{project}-{obs_id}.md`로 작성.

@@ -2,7 +2,7 @@ import { writable, get } from "svelte/store";
 import type MiniSearch from "minisearch";
 import {
   buildQuickEntries,
-  buildFullTextIndex,
+  buildFullTextIndexChunked,
   type QuickEntry,
   type FullTextDoc,
 } from "$lib/searchIndex";
@@ -17,21 +17,29 @@ export const quickEntries = writable<QuickEntry[]>([]);
 export const fullTextIndex = writable<MiniSearch<FullTextDoc> | null>(null);
 export const indexBuilding = writable<boolean>(false);
 
-/** vault 로딩 시 호출. 두 인덱스를 모두 빌드. 백그라운드 실행. */
-export function rebuildIndexes(linkInfos: LinkInfo[], contents: NoteContent[]): void {
+/**
+ * vault 로딩 시 호출. 두 인덱스를 모두 빌드.
+ *
+ * 5.1.d 변경: queueMicrotask + sync addAll → async + chunked yield.
+ * 큰 vault(10000+ 노트, 메모리 export 직후)에서 MiniSearch 빌드가 JS main thread를
+ * 수 초간 점유 → 다른 앱 응답성 저하. CHUNK 단위로 yield하면 JS event loop가
+ * OS/UI 메시지 처리 시간 확보.
+ */
+export async function rebuildIndexes(
+  linkInfos: LinkInfo[],
+  contents: NoteContent[],
+): Promise<void> {
   quickEntries.set(buildQuickEntries(linkInfos));
   indexBuilding.set(true);
-  // 큰 vault에서 동기 빌드도 1초 미만이지만 UI 차단 막으려고 마이크로태스크 양보
-  queueMicrotask(() => {
-    try {
-      fullTextIndex.set(buildFullTextIndex(contents));
-    } catch (e) {
-      console.error("buildFullTextIndex failed", e);
-      fullTextIndex.set(null);
-    } finally {
-      indexBuilding.set(false);
-    }
-  });
+  try {
+    const idx = await buildFullTextIndexChunked(contents);
+    fullTextIndex.set(idx);
+  } catch (e) {
+    console.error("buildFullTextIndex failed", e);
+    fullTextIndex.set(null);
+  } finally {
+    indexBuilding.set(false);
+  }
 }
 
 export function clearIndexes(): void {

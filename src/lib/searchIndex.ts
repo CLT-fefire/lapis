@@ -121,6 +121,42 @@ export function buildFullTextIndex(notes: NoteContent[]): MiniSearch<FullTextDoc
   return index;
 }
 
+/**
+ * 대규모 vault(>1000노트) 대응 chunked 빌드.
+ * MiniSearch.addAll은 fields 토크나이즈 비용이 크고 sync라 JS main thread를 길게 점유 →
+ * 다른 앱 응답성/UI 인터랙션 영향. CHUNK 단위로 끊고 `await Promise(setTimeout 0)`로
+ * event loop yield → UI/OS 메시지 처리 시간 확보.
+ *
+ * 1000노트 미만은 buildFullTextIndex 사용해도 충분. 10000+ 노트 export 직후엔 이쪽 호출.
+ */
+export async function buildFullTextIndexChunked(
+  notes: NoteContent[],
+  chunkSize = 200,
+): Promise<MiniSearch<FullTextDoc>> {
+  const index = new MiniSearch<FullTextDoc>({
+    fields: ["name", "body"],
+    storeFields: ["name", "body"],
+    idField: "id",
+    searchOptions: {
+      boost: { name: 3 },
+      prefix: true,
+      fuzzy: 0.15,
+    },
+  });
+  for (let i = 0; i < notes.length; i += chunkSize) {
+    const chunk = notes.slice(i, i + chunkSize);
+    // MiniSearch.addAll은 내부 루프 — chunk size만큼만 한 번에 처리
+    index.addAll(
+      chunk.map((n) => ({ id: n.path, name: n.name, body: n.body })),
+    );
+    // event loop yield — 다음 chunk 전에 macro task로 양보
+    if (i + chunkSize < notes.length) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+  }
+  return index;
+}
+
 export function searchFullText(
   query: string,
   index: MiniSearch<FullTextDoc>,
