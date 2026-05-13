@@ -3,16 +3,13 @@
   import { memorySearchOpen, closeMemorySearch } from "$lib/stores/memorySearch";
   import { vaultPath, selectNote } from "$lib/stores/vault";
   import { loadVaultConfig } from "$lib/vaultConfig";
-  import {
-    memoryFtsSearch,
-    memoryFindExportedNote,
-    type SearchHit,
-  } from "$lib/tauri/memory";
+  import { memoryFindExportedNote } from "$lib/tauri/memory";
+  import { mirrorQueryMemories, type MirrorSearchHit } from "$lib/tauri/mirror";
 
   let inputEl: HTMLInputElement | undefined = $state();
   let resultsEl: HTMLDivElement | undefined = $state();
   let query = $state("");
-  let hits: SearchHit[] = $state([]);
+  let hits: MirrorSearchHit[] = $state([]);
   let activeIndex = $state(0);
   let loading = $state(false);
   let errorMsg = $state("");
@@ -86,7 +83,7 @@
       try {
         const vault = $vaultPath;
         const filter = vault ? (await loadVaultConfig(vault)).mem_projects : ["*"];
-        const result = await memoryFtsSearch(q, filter, 30, incS, incO);
+        const result = await mirrorQueryMemories(q, filter, 30, incS, incO);
         if (q !== query) return; // 이후 입력이 오면 결과 폐기
         hits = result;
         activeIndex = 0;
@@ -100,16 +97,17 @@
     }, 300);
   });
 
-  async function jumpTo(hit: SearchHit) {
+  async function jumpTo(hit: MirrorSearchHit) {
     const vault = $vaultPath;
     if (!vault) {
       errorMsg = "vault가 닫혔습니다.";
       return;
     }
     try {
-      const path = await memoryFindExportedNote(vault, hit.id, hit.type);
+      // memoryFindExportedNote는 claude-mem 원본 id 기대 → mirror의 source_id 전달
+      const path = await memoryFindExportedNote(vault, hit.source_id, hit.type);
       if (!path) {
-        errorMsg = `메모리 노트를 찾을 수 없습니다 (${hit.type} mem_id=${hit.id}). Memory: Sync를 먼저 실행해 export 했는지 확인하세요.`;
+        errorMsg = `메모리 노트를 찾을 수 없습니다 (${hit.type} mem_id=${hit.source_id}). Memory: Sync를 먼저 실행해 export 했는지 확인하세요.`;
         return;
       }
       closeMemorySearch();
@@ -200,7 +198,7 @@
       {/if}
 
       <div class="results" bind:this={resultsEl}>
-        {#each hits as hit, i (`${hit.type}-${hit.id}`)}
+        {#each hits as hit, i (`${hit.type}-${hit.source_id}`)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div

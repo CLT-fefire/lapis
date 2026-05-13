@@ -59,9 +59,9 @@ export interface MirrorRelatedHit {
   source_id: number;
   project: string;
   title: string;
-  /** "read" | "edited" | "modified" */
-  matched_role: string;
-  /** 매치된 file_path 원본 (절대 경로 또는 basename) */
+  /** 같은 메모리가 다룬 role 합집합 — 예: `["read"]`, `["modified"]`, `["read","modified"]` */
+  matched_roles: ("read" | "edited" | "modified")[];
+  /** 매치된 file_path 대표 1개 */
   matched_file: string;
   obs_type: string | null;
   created_at: string;
@@ -73,11 +73,14 @@ export interface MirrorRelatedHit {
  *
  * - `full=true`: `last_incremental_sync_at`을 0으로 잡고 전체 훑음 (ON CONFLICT DO UPDATE라 멱등).
  * - `full=false`: 증분 — 마지막 sync 이후 row만.
+ * - `vaultPath`(선택): 삭제된 메모리의 .md를 vault에서 자동 정리.
+ *   - frontmatter `content_hash`가 mirror와 일치 → 안전 삭제
+ *   - mismatch/legacy(hash 없음) → `.lapis/orphans.json`에 mark + .md 보존
  *
  * 삭제는 항상 셋 diff로 처리. Rust 측 spawn_blocking 격리이라 main thread를 막지 않는다.
  */
-export function mirrorSyncNow(full: boolean): Promise<SyncReport> {
-  return invoke<SyncReport>("mirror_sync_now", { full });
+export function mirrorSyncNow(full: boolean, vaultPath?: string | null): Promise<SyncReport> {
+  return invoke<SyncReport>("mirror_sync_now", { full, vaultPath: vaultPath ?? null });
 }
 
 /** sync 상태 조회. 사이드바 status indicator + 디버깅. */
@@ -89,13 +92,22 @@ export function mirrorSyncStatus(): Promise<SyncStatus> {
  * mirror DB FTS5 풀텍스트 검색.
  * - `query`는 Rust 측에서 안전 sanitize.
  * - `filter`: `["*"]` / `[]` → 전체, 그 외 정확 매칭 + worktree 슬래시 prefix.
+ * - `includeSummaries`/`includeObservations`: kind 필터. 둘 다 false면 빈 결과.
  */
 export function mirrorQueryMemories(
   query: string,
   filter: string[],
   limit = 20,
+  includeSummaries = true,
+  includeObservations = true,
 ): Promise<MirrorSearchHit[]> {
-  return invoke<MirrorSearchHit[]>("mirror_query_memories", { query, filter, limit });
+  return invoke<MirrorSearchHit[]>("mirror_query_memories", {
+    query,
+    filter,
+    limit,
+    includeSummaries,
+    includeObservations,
+  });
 }
 
 /**

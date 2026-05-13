@@ -1,3 +1,4 @@
+use crate::mirror;
 use rusqlite::{Connection, OpenFlags};
 use serde::Serialize;
 use std::collections::HashSet;
@@ -162,6 +163,8 @@ pub struct Observation {
     pub concepts: Option<String>,
     pub files_read: Option<String>,
     pub files_modified: Option<String>,
+    /// claude-mem이 박제한 hash. 없을 수 있어 Option. Lapis export 시 fallback으로 자체 계산.
+    pub content_hash: Option<String>,
     pub created_at: String,
     pub created_at_epoch: i64,
 }
@@ -173,7 +176,7 @@ pub fn list_observations_inner(filter: &[String]) -> Result<Vec<Observation>, St
     let (where_sql, params) = build_project_where(filter);
     let sql = format!(
         "SELECT id, memory_session_id, project, type, title, subtitle, text, narrative, \
-         facts, concepts, files_read, files_modified, created_at, created_at_epoch \
+         facts, concepts, files_read, files_modified, content_hash, created_at, created_at_epoch \
          FROM observations{} ORDER BY created_at_epoch DESC",
         where_sql
     );
@@ -193,8 +196,9 @@ pub fn list_observations_inner(filter: &[String]) -> Result<Vec<Observation>, St
                 concepts: r.get(9)?,
                 files_read: r.get(10)?,
                 files_modified: r.get(11)?,
-                created_at: r.get(12)?,
-                created_at_epoch: r.get(13)?,
+                content_hash: r.get(12)?,
+                created_at: r.get(13)?,
+                created_at_epoch: r.get(14)?,
             })
         })
         .map_err(|e| format!("query_map: {e}"))?
@@ -580,6 +584,47 @@ fn find_note_by_mem_id(dir: &Path, target: i64) -> Result<Option<String>, String
         }
     }
     Ok(None)
+}
+
+/// `vault_root/_memories/{YYYY-MM}/*.md` 안에서 mem_id 매칭 노트 절대 경로 (observations/ 제외).
+/// mirror.rs PR2 #12 `cleanup_md_after_delete`에서 사용.
+pub fn find_summary_md_by_mem_id(vault_root: &Path, target: i64) -> Result<Option<String>, String> {
+    let mem_root = vault_root.join("_memories");
+    if !mem_root.exists() {
+        return Ok(None);
+    }
+    find_summary_by_mem_id(&mem_root, target)
+}
+
+/// `vault_root/_memories/observations/{YYYY-MM}/*.md` 안에서 mem_id 매칭 노트.
+pub fn find_observation_md_by_mem_id(
+    vault_root: &Path,
+    target: i64,
+) -> Result<Option<String>, String> {
+    let obs_root = vault_root.join("_memories").join("observations");
+    if !obs_root.exists() {
+        return Ok(None);
+    }
+    find_note_by_mem_id(&obs_root, target)
+}
+
+/// 노트 frontmatter에서 `content_hash` 추출. peek_mem_id와 동일 패턴 (head 4KB).
+pub fn peek_content_hash(path: &Path) -> Option<String> {
+    let f = fs::File::open(path).ok()?;
+    let mut buf = vec![0u8; 4 * 1024];
+    let n = f.take(4 * 1024).read(&mut buf).ok()?;
+    // UTF-8 multi-byte 경계 잘림 대응 — 5.1.d 학습 적용.
+    let head = String::from_utf8_lossy(&buf[..n]);
+    for line in head.lines() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("content_hash:") {
+            let value = rest.trim().trim_matches('"').trim_matches('\'');
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// 메모리 노트 메타 — 사이드 패널 "관련 메모리"용.
@@ -1019,6 +1064,14 @@ fn write_observation_to_vault(
 /// frontmatter `type: observation` + `obs_type` (observations.type 컬럼 값).
 fn render_observation_md(o: &Observation, exported_at: &str) -> String {
     let mut out = String::with_capacity(4096);
+    // content_hash: claude-mem 측 값이 있으면 그대로, 없으면 Lapis 계산 — mirror sync와 일관.
+    let hash = o
+        .content_hash
+        .clone()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            mirror::hash_observation(&o.text, &o.subtitle, &o.facts, &o.narrative, &o.concepts)
+        });
     // frontmatter
     out.push_str("---\n");
     out.push_str("doc_kind: memory\n");
@@ -1041,8 +1094,9 @@ fn render_observation_md(o: &Observation, exported_at: &str) -> String {
     if let Some(fm) = &o.files_modified {
         out.push_str(&format!("files_modified: {}\n", yaml_block_scalar(fm)));
     }
+    out.push_str(&format!("content_hash: \"{hash}\"\n"));
     out.push_str(&format!("exported_at: \"{exported_at}\"\n"));
-    out.push_str("exported_by: lapis-phase-5.1.d\n");
+    out.push_str("exported_by: lapis-phase-5.2.b\n");
     out.push_str("---\n\n");
 
     // 본문 — title fallback "Observation {id}"
@@ -1092,6 +1146,15 @@ fn write_summary_to_vault(
 
 fn render_summary_md(s: &SessionSummary, exported_at: &str) -> String {
     let mut out = String::with_capacity(4096);
+    // content_hash: summary는 claude-mem 측에 컬럼 없음 → 항상 Lapis 계산 (mirror sync와 동일 함수).
+    let hash = mirror::hash_summary(
+        &s.request,
+        &s.investigated,
+        &s.learned,
+        &s.completed,
+        &s.next_steps,
+        &s.notes,
+    );
     // frontmatter
     out.push_str("---\n");
     out.push_str("doc_kind: memory\n");
@@ -1111,8 +1174,9 @@ fn render_summary_md(s: &SessionSummary, exported_at: &str) -> String {
     if let Some(fe) = &s.files_edited {
         out.push_str(&format!("files_edited: {}\n", yaml_block_scalar(fe)));
     }
+    out.push_str(&format!("content_hash: \"{hash}\"\n"));
     out.push_str(&format!("exported_at: \"{exported_at}\"\n"));
-    out.push_str("exported_by: lapis-phase-5.1.a\n");
+    out.push_str("exported_by: lapis-phase-5.2.b\n");
     out.push_str("---\n\n");
     // 본문
     out.push_str(&format!(
