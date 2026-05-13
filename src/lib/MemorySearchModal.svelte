@@ -58,7 +58,17 @@
     return () => window.removeEventListener("mousemove", onMove);
   });
 
-  // 입력 변경 OR 토글 변경 → debounce 300ms 후 검색
+  /**
+   * FTS5 검색의 최소 query 길이.
+   * 1자: 매치 doc 수천 → bm25 채점 수 초 ("a" = 6.3s, "m" = 3s 측정).
+   * 2자: 여전히 prefix 매치 doc 많음 ("at", "wa", "mi"). 3자부터 의미 있는 토큰.
+   */
+  const MIN_QUERY_LEN = 3;
+
+  /** debounce 시간 — 사용자 타이핑 갭. 300ms가 빠른 타이핑 중 발화 안 되는 적정값. */
+  const SEARCH_DEBOUNCE_MS = 300;
+
+  // 입력 변경 OR 토글 변경 → debounce 후 검색
   $effect(() => {
     if (!$memorySearchOpen) return;
     const q = query;
@@ -66,10 +76,17 @@
     const incS = includeSummaries;
     const incO = includeObservations;
     if (debounceTimer) clearTimeout(debounceTimer);
-    if (!q.trim()) {
+    const trimmed = q.trim();
+    if (!trimmed) {
       hits = [];
       loading = false;
       errorMsg = "";
+      return;
+    }
+    if (trimmed.length < MIN_QUERY_LEN) {
+      hits = [];
+      loading = false;
+      errorMsg = `최소 ${MIN_QUERY_LEN}자 이상 입력해주세요.`;
       return;
     }
     if (!incS && !incO) {
@@ -78,6 +95,9 @@
       errorMsg = "검색 type을 하나 이상 선택해주세요.";
       return;
     }
+    // 검색 진입 OK — stale hint(이전 1-2자에서 set된 "최소 N자..." 등) 즉시 clear.
+    // debounce 콜백에서 clear하면 발화 전까지 stale hint가 보임 → 빠른 타이핑 UX 깨짐.
+    errorMsg = "";
     loading = true;
     debounceTimer = setTimeout(async () => {
       try {
@@ -94,7 +114,7 @@
       } finally {
         loading = false;
       }
-    }, 300);
+    }, SEARCH_DEBOUNCE_MS);
   });
 
   async function jumpTo(hit: MirrorSearchHit) {
