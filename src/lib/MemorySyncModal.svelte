@@ -44,17 +44,42 @@
   let elapsedSec = $state(0);
   let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 
+  // Search 인덱스 reindex progress — Phase Search #7.
+  // mirror sync 후 백그라운드로 tantivy reindex 진행 시 event listen.
+  // 첫 빌드는 ~수십 초 가능 (11000+ row), 이후 incremental은 ~수 초.
+  let reindexProgress: { current: number; total: number; added: number } | null = $state(null);
+  let reindexUnlisten: UnlistenFn | null = null;
+
   // Lapis mirror DB sync — .md export와 독립 영역. PR1 단위 #6.
   let mirrorStatus: SyncStatus | null = $state(null);
   let mirrorReport: SyncReport | null = $state(null);
   let mirrorBusy = $state(false);
   let mirrorError = $state("");
 
-  // 모달 열릴 때마다 preview + mirror 상태 동시 로드
+  // 모달 열릴 때마다 preview + mirror 상태 동시 로드 + reindex progress listen
   $effect(() => {
     if (!$memorySyncOpen) return;
     void runPreview();
     void refreshMirrorStatus();
+
+    // search reindex progress — 모달 열린 동안 listen. 완료 시 null로.
+    void listen<{ current: number; total: number; added: number }>(
+      "search-reindex-progress",
+      (event) => {
+        reindexProgress = event.payload;
+        // current == total → 완료. 1초 후 자동 hide.
+        if (event.payload.current >= event.payload.total) {
+          setTimeout(() => {
+            reindexProgress = null;
+          }, 1500);
+        }
+      },
+    ).then((u) => (reindexUnlisten = u));
+
+    return () => {
+      reindexUnlisten?.();
+      reindexUnlisten = null;
+    };
   });
 
   async function refreshMirrorStatus() {
@@ -328,6 +353,24 @@
                   {mirrorBusy ? "동기화 중…" : "풀 sync"}
                 </button>
               </div>
+              {#if reindexProgress}
+                <div class="reindex-row">
+                  <span class="hint">
+                    검색 인덱스 빌드 중 · {reindexProgress.current.toLocaleString()} / {reindexProgress.total.toLocaleString()}
+                    {#if reindexProgress.added > 0}
+                      · +{reindexProgress.added.toLocaleString()}
+                    {/if}
+                  </span>
+                  <div class="prog-bar">
+                    <div
+                      class="prog-fill"
+                      style="width: {reindexProgress.total > 0
+                        ? Math.min(100, (reindexProgress.current / reindexProgress.total) * 100)
+                        : 0}%"
+                    ></div>
+                  </div>
+                </div>
+              {/if}
             </div>
           {/if}
         {:else if stage === "exporting"}
@@ -762,5 +805,27 @@
     display: flex;
     gap: 8px;
     margin-top: 4px;
+  }
+
+  .reindex-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #2a2a2a;
+  }
+
+  .reindex-row .prog-bar {
+    height: 4px;
+    background: #2a2a2a;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .reindex-row .prog-fill {
+    height: 100%;
+    background: #7be4cf;
+    transition: width 0.2s ease-out;
   }
 </style>

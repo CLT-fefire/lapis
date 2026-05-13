@@ -89,10 +89,14 @@ export function mirrorSyncStatus(): Promise<SyncStatus> {
 }
 
 /**
- * mirror DB FTS5 풀텍스트 검색.
- * - `query`는 Rust 측에서 안전 sanitize.
- * - `filter`: `["*"]` / `[]` → 전체, 그 외 정확 매칭 + worktree 슬래시 prefix.
- * - `includeSummaries`/`includeObservations`: kind 필터. 둘 다 false면 빈 결과.
+ * 검색 엔진 쿼리 — Phase Search에서 tantivy + lindera 한국어 형태소로 전환.
+ *
+ * - `query`는 Rust 측에서 안전 sanitize + prefix `token*` 변환
+ * - `filter`: `["*"]` / `[]` → 전체, 그 외 정확 매칭 (tantivy STRING 필드)
+ * - `includeSummaries`/`includeObservations`: kind 필터. 둘 다 false면 빈 결과
+ *
+ * 호환성: 함수명 + 시그니처 + 반환 타입 모두 기존 mirror FTS5와 동일 → UI 무변경.
+ * 내부적으로 `search_query` Tauri 명령 호출 (tantivy 인덱스). channel="tantivy".
  */
 export function mirrorQueryMemories(
   query: string,
@@ -101,7 +105,7 @@ export function mirrorQueryMemories(
   includeSummaries = true,
   includeObservations = true,
 ): Promise<MirrorSearchHit[]> {
-  return invoke<MirrorSearchHit[]>("mirror_query_memories", {
+  return invoke<MirrorSearchHit[]>("search_query", {
     query,
     filter,
     limit,
