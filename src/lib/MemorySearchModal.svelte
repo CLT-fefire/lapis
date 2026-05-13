@@ -17,6 +17,10 @@
   let loading = $state(false);
   let errorMsg = $state("");
 
+  // type 필터 토글 — 둘 다 기본 true. 사용자가 한 쪽만 보고 싶을 때 끔.
+  let includeSummaries = $state(true);
+  let includeObservations = $state(true);
+
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 키보드 네비 모드 — true면 mouseenter는 activeIndex를 변경하지 않는다.
@@ -57,10 +61,13 @@
     return () => window.removeEventListener("mousemove", onMove);
   });
 
-  // 입력 변경 → debounce 300ms 후 검색
+  // 입력 변경 OR 토글 변경 → debounce 300ms 후 검색
   $effect(() => {
     if (!$memorySearchOpen) return;
     const q = query;
+    // 토글 reactive 추적 — 토글 변경 시도 검색 재실행
+    const incS = includeSummaries;
+    const incO = includeObservations;
     if (debounceTimer) clearTimeout(debounceTimer);
     if (!q.trim()) {
       hits = [];
@@ -68,12 +75,18 @@
       errorMsg = "";
       return;
     }
+    if (!incS && !incO) {
+      hits = [];
+      loading = false;
+      errorMsg = "검색 type을 하나 이상 선택해주세요.";
+      return;
+    }
     loading = true;
     debounceTimer = setTimeout(async () => {
       try {
         const vault = $vaultPath;
         const filter = vault ? (await loadVaultConfig(vault)).mem_projects : ["*"];
-        const result = await memoryFtsSearch(q, filter, 30);
+        const result = await memoryFtsSearch(q, filter, 30, incS, incO);
         if (q !== query) return; // 이후 입력이 오면 결과 폐기
         hits = result;
         activeIndex = 0;
@@ -94,9 +107,9 @@
       return;
     }
     try {
-      const path = await memoryFindExportedNote(vault, hit.id);
+      const path = await memoryFindExportedNote(vault, hit.id, hit.type);
       if (!path) {
-        errorMsg = `메모리 노트를 찾을 수 없습니다 (mem_id=${hit.id}). Memory: Sync를 먼저 실행해 export 했는지 확인하세요.`;
+        errorMsg = `메모리 노트를 찾을 수 없습니다 (${hit.type} mem_id=${hit.id}). Memory: Sync를 먼저 실행해 export 했는지 확인하세요.`;
         return;
       }
       closeMemorySearch();
@@ -171,12 +184,23 @@
         </span>
       </header>
 
+      <div class="filters">
+        <label>
+          <input type="checkbox" bind:checked={includeSummaries} />
+          <span class="kind summary">summary</span>
+        </label>
+        <label>
+          <input type="checkbox" bind:checked={includeObservations} />
+          <span class="kind obs">obs</span>
+        </label>
+      </div>
+
       {#if errorMsg}
         <div class="err">{errorMsg}</div>
       {/if}
 
       <div class="results" bind:this={resultsEl}>
-        {#each hits as hit, i (hit.id)}
+        {#each hits as hit, i (`${hit.type}-${hit.id}`)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -188,6 +212,9 @@
             onclick={() => jumpTo(hit)}
           >
             <div class="hit-head">
+              <span class="kind {hit.type === 'observation' ? 'obs' : 'summary'}">
+                {hit.type === "observation" ? "obs" : "summary"}
+              </span>
               <span class="title">{hit.title_hint}</span>
               <span class="meta">{hit.project} · {shortDate(hit.created_at)}</span>
             </div>
@@ -286,6 +313,53 @@
     align-items: baseline;
     gap: 8px;
     margin-bottom: 4px;
+  }
+
+  /* kind 배지 — MemorySyncModal과 톤 통일 */
+  .kind {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .kind.summary {
+    background: rgba(168, 119, 232, 0.18);
+    color: #c4a3ff;
+    border: 1px solid rgba(168, 119, 232, 0.35);
+  }
+
+  .kind.obs {
+    background: rgba(73, 216, 196, 0.16);
+    color: #7be4cf;
+    border: 1px solid rgba(73, 216, 196, 0.35);
+  }
+
+  .filters {
+    display: flex;
+    gap: 14px;
+    padding: 6px 12px;
+    border-bottom: 1px solid #2a2a2a;
+    font-size: 11px;
+    background: #181818;
+  }
+
+  .filters label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .filters input[type="checkbox"] {
+    accent-color: #6dd6ff;
+    cursor: pointer;
+    margin: 0;
   }
 
   .title {

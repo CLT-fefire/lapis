@@ -67,7 +67,29 @@ export async function openVault(path: string): Promise<void> {
   }
 }
 
+/** 다음 macro task로 양보 — JS event loop가 OS/UI 메시지 처리 시간 확보. */
+function nextTick(): Promise<void> {
+  return new Promise<void>((r) => setTimeout(r, 0));
+}
+
+/**
+ * 진행 중 reloadNotes 중복 호출 guard.
+ * 예: MemorySyncModal이 직접 await reloadNotes를 부르는 동안 file watcher의
+ * scheduleFullReload(500ms 디바운스)도 같은 burst 끝에 한 번 부른다 → guard로 중복 차단.
+ */
+let reloadInFlight = false;
+
 export async function reloadNotes(): Promise<void> {
+  if (reloadInFlight) return;
+  reloadInFlight = true;
+  try {
+    await reloadNotesInner();
+  } finally {
+    reloadInFlight = false;
+  }
+}
+
+async function reloadNotesInner(): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
   treeLoading.set(true);
@@ -81,16 +103,28 @@ export async function reloadNotes(): Promise<void> {
     treeLoading.set(false);
   }
 
-  // 링크 인덱스 + 검색 인덱스 + facet 카운트 백그라운드 갱신 — 트리 표시는 막지 않음
+  // 링크 인덱스 + 검색 인덱스 + facet 카운트 갱신.
+  // 5.1.d 변경: 큰 vault(10000+ 노트, 메모리 export 직후) 빌드 비용이 JS main thread를 수 초간
+  // 점유 → 다른 앱/macOS WindowServer 응답성 저하. 각 단계 사이 `nextTick`으로 양보하고
+  // rebuildIndexes는 chunked async로 처리. dim overlay (Sidebar)가 사용자에게 명확히 표시.
   indexBuilding.set(true);
   try {
     const [links, contents] = await Promise.all([scanLinks(root), readAllNotes(root)]);
+    await nextTick();
+
     linkIndex.set(buildIndex(links));
+    await nextTick();
+
     tagIndex.set(buildTagIndex(links));
+    await nextTick();
+
     const facets = buildFacetCounts(links);
     docKindCounts.set(facets.docKindCounts);
     topicCounts.set(facets.topicCounts);
-    rebuildIndexes(links, contents);
+    await nextTick();
+
+    // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
+    await rebuildIndexes(links, contents);
   } catch (e) {
     console.error("link/search index build failed", e);
     linkIndex.set(null);

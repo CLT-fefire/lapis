@@ -46,6 +46,7 @@
 
   function badgeText(matched_in: string): string {
     if (matched_in === "files_edited") return "edited";
+    if (matched_in === "files_modified") return "modified";
     if (matched_in === "files_read") return "read";
     if (matched_in === "body") return "mentioned";
     return "both";
@@ -72,12 +73,15 @@
         <div class="empty">매칭되는 메모리 없음</div>
       {:else}
         <ul>
-          {#each items as item (item.mem_id)}
+          {#each items as item (`${item.type}-${item.mem_id}`)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
             <li onclick={() => open(item)}>
               <div class="li-head">
+                <span class="kind {item.type === 'observation' ? 'obs' : 'summary'}">
+                  {item.type === "observation" ? "obs" : "summary"}
+                </span>
                 <span class="li-title">{item.title_hint}</span>
                 <span class="badge {item.matched_in}">{badgeText(item.matched_in)}</span>
               </div>
@@ -186,6 +190,13 @@
     border-color: rgba(247, 201, 71, 0.3);
   }
 
+  /* observation의 files_modified — files_edited와 동일 톤 (의미적으로 같은 "수정") */
+  .badge.files_modified {
+    background: rgba(255, 200, 0, 0.12);
+    color: #f7c947;
+    border-color: rgba(247, 201, 71, 0.3);
+  }
+
   .badge.both {
     background: rgba(109, 214, 255, 0.12);
     color: #6dd6ff;
@@ -197,6 +208,29 @@
     background: rgba(170, 170, 170, 0.08);
     color: #aaa;
     border-color: rgba(170, 170, 170, 0.25);
+  }
+
+  /* kind 배지 — MemorySyncModal / SearchModal과 톤 통일 */
+  .kind {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .kind.summary {
+    background: rgba(168, 119, 232, 0.18);
+    color: #c4a3ff;
+    border: 1px solid rgba(168, 119, 232, 0.35);
+  }
+
+  .kind.obs {
+    background: rgba(73, 216, 196, 0.16);
+    color: #7be4cf;
+    border: 1px solid rgba(73, 216, 196, 0.35);
   }
 
   .li-meta {
