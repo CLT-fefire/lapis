@@ -70,7 +70,8 @@
     mirrorError = "";
     mirrorReport = null;
     try {
-      mirrorReport = await mirrorSyncNow(full);
+      // vault path 전달 → mirror 삭제 시 .md 자동 정리 + orphans.json 박제 (PR2 #12)
+      mirrorReport = await mirrorSyncNow(full, $vaultPath || null);
       await refreshMirrorStatus();
     } catch (e) {
       mirrorError = `mirror sync 실패: ${e}`;

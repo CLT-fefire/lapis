@@ -17,6 +17,9 @@
     selectedDocKinds,
     selectedTopics,
   } from "$lib/stores/filters";
+  import { mirrorSyncStatus, type SyncStatus } from "$lib/tauri/mirror";
+  import { openMemorySync } from "$lib/stores/memorySync";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
   function showFiltersTab() {
     sidebarTab.set("filters");
@@ -30,6 +33,52 @@
   function compactCount(n: number): string {
     return n > 99 ? "99+" : String(n);
   }
+
+  // Mirror status indicator (PR2 #11) ────────────────────────────────────────
+  let mirrorStatus: SyncStatus | null = $state(null);
+
+  // 초기 로드 + 이벤트 listen으로 갱신
+  $effect(() => {
+    void refreshMirrorStatus();
+    let u1: UnlistenFn | null = null;
+    let u2: UnlistenFn | null = null;
+    void listen("mirror-sync-done", () => void refreshMirrorStatus()).then((u) => (u1 = u));
+    void listen("mirror-sync-error", () => void refreshMirrorStatus()).then((u) => (u2 = u));
+    return () => {
+      u1?.();
+      u2?.();
+    };
+  });
+
+  async function refreshMirrorStatus() {
+    try {
+      mirrorStatus = await mirrorSyncStatus();
+    } catch {
+      mirrorStatus = null;
+    }
+  }
+
+  /** green: 정상, yellow: 비어있음(sync 안 됨), red: 마지막 sync 실패 / 상태 조회 실패 */
+  function mirrorColor(s: SyncStatus | null): "green" | "yellow" | "red" {
+    if (!s) return "red";
+    if (s.last_failure) return "red";
+    if (s.memory_count === 0) return "yellow";
+    return "green";
+  }
+
+  function mirrorTooltip(s: SyncStatus | null): string {
+    if (!s) return "Mirror: 상태 조회 실패 (mirror DB 미초기화)";
+    if (s.last_failure) return `Mirror: 마지막 sync 실패 — ${s.last_failure}`;
+    if (s.memory_count === 0) return "Mirror: 비어있음. Memory: Sync에서 동기화하세요.";
+    return `Mirror: ${s.memory_count.toLocaleString()} memories · 최근 sync ${formatEpoch(s.last_incremental_sync_at)}`;
+  }
+
+  function formatEpoch(epoch: number): string {
+    if (!epoch) return "—";
+    const d = new Date(epoch * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 </script>
 
 <aside class="sidebar">
@@ -40,6 +89,12 @@
         <span class="loading-spinner" title="트리 로드 중"></span>
       {/if}
       <div class="actions">
+        <button
+          class="mirror-dot mirror-{mirrorColor(mirrorStatus)}"
+          title={mirrorTooltip(mirrorStatus)}
+          aria-label="메모리 mirror 상태"
+          onclick={openMemorySync}
+        ></button>
         <button class="icon-btn" title="새로고침" onclick={reloadNotes}>↻</button>
         <button class="icon-btn" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
       </div>
@@ -220,6 +275,31 @@
   .icon-btn:hover {
     border-color: #6dd6ff;
     background: #333;
+  }
+
+  /* Mirror status indicator — 점만 노출, 클릭 시 MemorySyncModal 오픈 */
+  .mirror-dot {
+    width: 10px;
+    height: 10px;
+    align-self: center;
+    border-radius: 50%;
+    border: none;
+    padding: 0;
+    margin: 0 4px 0 0;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px #1a1a1a;
+  }
+  .mirror-dot:hover {
+    box-shadow: 0 0 0 2px #6dd6ff;
+  }
+  .mirror-green {
+    background: #5ad469;
+  }
+  .mirror-yellow {
+    background: #f7c947;
+  }
+  .mirror-red {
+    background: #f47174;
   }
 
   .open-btn {

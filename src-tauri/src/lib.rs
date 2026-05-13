@@ -9,6 +9,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(watcher::WatcherState::default())
+        .setup(|app| {
+            // Phase 5.2 PR2 #9 — claude-mem.db WAL watch 시작. 실패는 silent (claude-mem 미설치 등).
+            let handle = app.handle().clone();
+            if let Err(e) = mirror::start_wal_watch(handle) {
+                eprintln!("[mirror] WAL watch 시작 실패: {e}");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             vault::list_notes,
             vault::read_note,
