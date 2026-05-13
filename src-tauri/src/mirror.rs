@@ -278,7 +278,7 @@ pub fn sync_now(
     if let Some(vp) = vault_path.as_deref() {
         let vault_root = std::path::Path::new(vp);
         if vault_root.exists() {
-            for (kind, sid, hash) in &pending_deletions {
+            for (kind, sid, hash, _mid) in &pending_deletions {
                 match cleanup_md_after_delete(vault_root, kind, *sid, hash) {
                     Ok(Some(orphan)) => orphans.push(orphan),
                     Ok(None) => {} // 정상 삭제 또는 .md 부재
@@ -336,8 +336,55 @@ pub fn sync_now(
         }
     }
 
+    // Phase Search #4 — tantivy 인덱스 reindex (이번 sync의 변경 row만).
+    // 변경된 row는 last_synced_at_epoch = now_epoch. 삭제된 row의 mirror_id는 pending_deletions에 박제.
+    let changed_for_search = match collect_changed_for_search(app, now_epoch) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[search] changed 박제 실패: {e}");
+            Vec::new()
+        }
+    };
+    let deleted_mirror_ids: Vec<i64> = pending_deletions
+        .iter()
+        .map(|(_, _, _, mid)| *mid)
+        .collect();
+    if !changed_for_search.is_empty() || !deleted_mirror_ids.is_empty() {
+        match crate::search::reindex(app, &changed_for_search, &deleted_mirror_ids) {
+            Ok(r) => {
+                if r.added + r.deleted > 0 {
+                    eprintln!(
+                        "[search] reindex: +{} -{} · {}ms",
+                        r.added, r.deleted, r.duration_ms
+                    );
+                }
+            }
+            Err(e) => eprintln!("[search] reindex 실패: {e}"),
+        }
+    }
+
     report.duration_ms = start.elapsed().as_millis();
     Ok(report)
+}
+
+/// 이번 sync에서 변경된 (kind, source_id) 박제 — tantivy reindex 대상.
+/// `last_synced_at_epoch = now_epoch`인 row가 UPSERT WHERE 조건 통과한 변경 row 셋.
+fn collect_changed_for_search(
+    app: &AppHandle,
+    now_epoch: i64,
+) -> Result<Vec<(String, i64)>, String> {
+    let conn = open_rw(app)?;
+    let mut stmt = conn
+        .prepare("SELECT kind, source_id FROM memories WHERE last_synced_at_epoch = ?")
+        .map_err(|e| format!("changed prepare: {e}"))?;
+    let rows = stmt
+        .query_map(params![now_epoch], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })
+        .map_err(|e| format!("changed query_map: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("changed collect: {e}"))?;
+    Ok(rows)
 }
 
 fn sync_summaries(
@@ -612,12 +659,13 @@ fn insert_file_mention(
     .map_err(|e| format!("files_mentioned insert 실패: {e}"))
 }
 
-/// claude-mem 활성 셋과 mirror 셋의 diff → 삭제 예정 (kind, source_id, mirror_content_hash) 리스트.
+/// claude-mem 활성 셋과 mirror 셋의 diff → 삭제 예정 (kind, source_id, mirror_content_hash, mirror_id) 리스트.
 /// hash는 `cleanup_md_after_delete`가 vault .md frontmatter와 비교하기 위해 박제.
+/// mirror_id는 search 인덱스에서 doc 삭제하기 위해 박제 (DELETE 후엔 알 수 없으므로 사전 박제).
 fn collect_deletions(
     src: &Connection,
     tx: &Transaction,
-) -> Result<Vec<(String, i64, String)>, String> {
+) -> Result<Vec<(String, i64, String, i64)>, String> {
     let mut alive: HashSet<(String, i64)> = HashSet::new();
 
     {
@@ -653,15 +701,16 @@ fn collect_deletions(
 
     let mut to_delete = Vec::new();
     let mut stmt = tx
-        .prepare("SELECT kind, source_id, content_hash FROM memories")
+        .prepare("SELECT id, kind, source_id, content_hash FROM memories")
         .map_err(|e| format!("mirror id prepare: {e}"))?;
     let mut rows = stmt.query([]).map_err(|e| format!("mirror id query: {e}"))?;
     while let Some(r) = rows.next().map_err(|e| format!("mirror id next: {e}"))? {
-        let kind: String = r.get(0).map_err(|e| format!("kind: {e}"))?;
-        let sid: i64 = r.get(1).map_err(|e| format!("sid: {e}"))?;
-        let hash: String = r.get(2).map_err(|e| format!("hash: {e}"))?;
+        let mirror_id: i64 = r.get(0).map_err(|e| format!("mirror_id: {e}"))?;
+        let kind: String = r.get(1).map_err(|e| format!("kind: {e}"))?;
+        let sid: i64 = r.get(2).map_err(|e| format!("sid: {e}"))?;
+        let hash: String = r.get(3).map_err(|e| format!("hash: {e}"))?;
         if !alive.contains(&(kind.clone(), sid)) {
-            to_delete.push((kind, sid, hash));
+            to_delete.push((kind, sid, hash, mirror_id));
         }
     }
     Ok(to_delete)
@@ -670,10 +719,10 @@ fn collect_deletions(
 /// DELETE 실행 (FK CASCADE + FTS5 trigger로 자동 정리). 반환: 삭제 row 수.
 fn apply_deletions(
     tx: &Transaction,
-    deletions: &[(String, i64, String)],
+    deletions: &[(String, i64, String, i64)],
 ) -> Result<usize, String> {
     let mut deleted = 0usize;
-    for (kind, sid, _hash) in deletions {
+    for (kind, sid, _hash, _mid) in deletions {
         let n = tx
             .execute(
                 "DELETE FROM memories WHERE kind = ? AND source_id = ?",
