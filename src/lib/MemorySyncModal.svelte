@@ -11,6 +11,12 @@
     type ExportReport,
     type ExportProgressPayload,
   } from "$lib/tauri/memory";
+  import {
+    mirrorSyncNow,
+    mirrorSyncStatus,
+    type SyncReport,
+    type SyncStatus,
+  } from "$lib/tauri/mirror";
 
   type Stage =
     | "preview-loading"
@@ -38,11 +44,48 @@
   let elapsedSec = $state(0);
   let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 
-  // 모달 열릴 때마다 preview 자동 로드
+  // Lapis mirror DB sync — .md export와 독립 영역. PR1 단위 #6.
+  let mirrorStatus: SyncStatus | null = $state(null);
+  let mirrorReport: SyncReport | null = $state(null);
+  let mirrorBusy = $state(false);
+  let mirrorError = $state("");
+
+  // 모달 열릴 때마다 preview + mirror 상태 동시 로드
   $effect(() => {
     if (!$memorySyncOpen) return;
     void runPreview();
+    void refreshMirrorStatus();
   });
+
+  async function refreshMirrorStatus() {
+    try {
+      mirrorStatus = await mirrorSyncStatus();
+    } catch {
+      mirrorStatus = null;
+    }
+  }
+
+  async function runMirrorSync(full: boolean) {
+    mirrorBusy = true;
+    mirrorError = "";
+    mirrorReport = null;
+    try {
+      mirrorReport = await mirrorSyncNow(full);
+      await refreshMirrorStatus();
+    } catch (e) {
+      mirrorError = `mirror sync 실패: ${e}`;
+    } finally {
+      mirrorBusy = false;
+    }
+  }
+
+  /** epoch(s) → "YYYY-MM-DD HH:mm" 로컬 표시. 0이면 "—". */
+  function formatEpoch(epoch: number): string {
+    if (!epoch) return "—";
+    const d = new Date(epoch * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 
   async function runPreview() {
     const vault = $vaultPath;
@@ -253,6 +296,38 @@
               Summaries → <code>_memories/YYYY-MM/</code>,
               observations → <code>_memories/observations/YYYY-MM/</code>. 기존 노트 보존.
             </p>
+          {/if}
+
+          {#if mirrorStatus}
+            <hr class="mirror-sep" />
+            <div class="mirror">
+              <div class="mirror-head">
+                <span class="mirror-title">Lapis mirror</span>
+                <span class="hint">
+                  {mirrorStatus.memory_count.toLocaleString()} memories ·
+                  최근 {formatEpoch(mirrorStatus.last_incremental_sync_at)}
+                </span>
+              </div>
+              {#if mirrorReport}
+                <p class="mirror-result">
+                  ✓ {mirrorReport.full ? "풀" : "증분"} sync —
+                  summaries {mirrorReport.summaries_upserted} ·
+                  observations {mirrorReport.observations_upserted} ·
+                  deleted {mirrorReport.deleted} · {mirrorReport.duration_ms}ms
+                </p>
+              {/if}
+              {#if mirrorError}
+                <p class="err">{mirrorError}</p>
+              {/if}
+              <div class="mirror-actions">
+                <button class="btn small" disabled={mirrorBusy} onclick={() => runMirrorSync(false)}>
+                  {mirrorBusy ? "동기화 중…" : "증분 sync"}
+                </button>
+                <button class="btn small" disabled={mirrorBusy} onclick={() => runMirrorSync(true)}>
+                  {mirrorBusy ? "동기화 중…" : "풀 sync"}
+                </button>
+              </div>
+            </div>
           {/if}
         {:else if stage === "exporting"}
           <p>Export 중… <span class="hint">({elapsedSec}s 경과)</span></p>
@@ -645,5 +720,46 @@
   .btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .btn.small {
+    padding: 4px 10px;
+    font-size: 0.85em;
+  }
+
+  .mirror-sep {
+    border: 0;
+    border-top: 1px solid #333;
+    margin: 14px 0 10px;
+  }
+
+  .mirror {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .mirror-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .mirror-title {
+    font-weight: 600;
+    color: #cfcfcf;
+  }
+
+  .mirror-result {
+    color: #9ad3ff;
+    font-size: 0.85em;
+    margin: 2px 0 0;
+  }
+
+  .mirror-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
   }
 </style>
