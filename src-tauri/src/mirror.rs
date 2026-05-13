@@ -14,9 +14,10 @@
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -327,6 +328,13 @@ pub fn sync_now(
 
     tx.commit()
         .map_err(|e| format!("mirror tx commit 실패: {e}"))?;
+
+    // 데이터 변경 있었으면 검색 LRU 캐시 무효화 — stale 결과 회피.
+    if report.summaries_upserted + report.observations_upserted + report.deleted > 0 {
+        if let Ok(mut cache) = search_cache().lock() {
+            cache.clear();
+        }
+    }
 
     report.duration_ms = start.elapsed().as_millis();
     Ok(report)
@@ -1169,6 +1177,61 @@ fn event_matches_claude_mem(event: &notify::Event) -> bool {
     })
 }
 
+// ─── 검색 LRU 캐시 (검색 응답성 chore) ───────────────────────────────────────
+
+/// 검색 결과 LRU 캐시 키 — query + filter + limit + 두 토글.
+type SearchCacheKey = (String, Vec<String>, u32, bool, bool);
+
+/// 단순 LRU 캐시 — 외부 crate 없이. cap을 넘으면 가장 오래 미접근 entry 제거.
+struct SearchLru {
+    map: HashMap<SearchCacheKey, Vec<MirrorSearchHit>>,
+    order: VecDeque<SearchCacheKey>,
+    cap: usize,
+}
+
+impl SearchLru {
+    fn new(cap: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            cap,
+        }
+    }
+
+    fn get(&mut self, key: &SearchCacheKey) -> Option<Vec<MirrorSearchHit>> {
+        if !self.map.contains_key(key) {
+            return None;
+        }
+        // MRU 갱신 — 제거 후 끝에 다시 push.
+        self.order.retain(|k| k != key);
+        self.order.push_back(key.clone());
+        self.map.get(key).cloned()
+    }
+
+    fn put(&mut self, key: SearchCacheKey, value: Vec<MirrorSearchHit>) {
+        if self.map.contains_key(&key) {
+            self.order.retain(|k| k != &key);
+        } else if self.map.len() >= self.cap {
+            if let Some(oldest) = self.order.pop_front() {
+                self.map.remove(&oldest);
+            }
+        }
+        self.order.push_back(key.clone());
+        self.map.insert(key, value);
+    }
+
+    fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+    }
+}
+
+static SEARCH_CACHE: OnceLock<Mutex<SearchLru>> = OnceLock::new();
+
+fn search_cache() -> &'static Mutex<SearchLru> {
+    SEARCH_CACHE.get_or_init(|| Mutex::new(SearchLru::new(50)))
+}
+
 // ─── Tauri commands ─────────────────────────────────────────────────────────
 
 /// 풀/증분 sync 1회 실행.
@@ -1223,7 +1286,7 @@ pub fn mirror_sync_status(app: AppHandle) -> Result<SyncStatus, String> {
 }
 
 /// FTS5 hit — `memory::SearchHit`와 호환되는 형태 (UI에서 둘 다 받도록).
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct MirrorSearchHit {
     pub id: i64,
     /// "summary" | "observation"
@@ -1245,8 +1308,12 @@ pub struct MirrorSearchHit {
 ///
 /// `include_summaries`/`include_observations`는 kind 필터.
 /// 둘 다 false면 빈 결과 반환 (UI 측에서 type 필터 OFF 시 호출 회피용 short-circuit).
+///
+/// 5.1.d 학습 적용: 매치 doc이 많을 때 bm25 채점 비용으로 수 초까지 걸리는 케이스가
+/// 있어 `spawn_blocking`으로 worker thread에 격리. main IPC handler thread를 막지 않아
+/// 검색 중에도 다른 UI는 응답성 유지.
 #[tauri::command]
-pub fn mirror_query_memories(
+pub async fn mirror_query_memories(
     app: AppHandle,
     query: String,
     filter: Vec<String>,
@@ -1254,6 +1321,35 @@ pub fn mirror_query_memories(
     include_summaries: bool,
     include_observations: bool,
 ) -> Result<Vec<MirrorSearchHit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        mirror_query_memories_inner(&app, query, filter, limit, include_summaries, include_observations)
+    })
+    .await
+    .map_err(|e| format!("mirror_query_memories join 실패: {e}"))?
+}
+
+fn mirror_query_memories_inner(
+    app: &AppHandle,
+    query: String,
+    filter: Vec<String>,
+    limit: u32,
+    include_summaries: bool,
+    include_observations: bool,
+) -> Result<Vec<MirrorSearchHit>, String> {
+    // LRU cache hit 확인 — 같은 query 반복 시 즉시 반환 (sync 후 자동 무효화).
+    let cache_key: SearchCacheKey = (
+        query.clone(),
+        filter.clone(),
+        limit,
+        include_summaries,
+        include_observations,
+    );
+    if let Ok(mut cache) = search_cache().lock() {
+        if let Some(cached) = cache.get(&cache_key) {
+            return Ok(cached);
+        }
+    }
+
     let q = sanitize_fts_query(&query);
     if q.is_empty() {
         return Ok(Vec::new());
@@ -1272,7 +1368,7 @@ pub fn mirror_query_memories(
     }
     let kind_and = format!(" AND m.kind IN ({})", kind_literals.join(","));
 
-    let conn = open_rw(&app)?;
+    let conn = open_rw(app)?;
 
     let (proj_where, proj_params) = build_project_where(&filter);
     let proj_and = if proj_where.is_empty() {
@@ -1327,6 +1423,11 @@ pub fn mirror_query_memories(
         .map_err(|e| format!("mirror_query_memories query_map: {e}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("mirror_query_memories collect: {e}"))?;
+
+    // LRU cache 박제 — 다음 호출 즉시 반환. sync 시 자동 invalidate.
+    if let Ok(mut cache) = search_cache().lock() {
+        cache.put(cache_key, hits.clone());
+    }
     Ok(hits)
 }
 
@@ -1463,7 +1564,14 @@ pub fn mirror_list_memory_links(app: AppHandle) -> Result<Vec<MemoryLink>, Strin
 
 // ─── 격리된 FTS5 helper (memory.rs와 동일 정책 복사 — 모듈 자기 완결) ───────
 
-/// FTS5 안전 쿼리. 토큰별 double-quoted phrase로 묵시적 AND.
+/// FTS5 안전 쿼리. 모든 토큰을 prefix 매치(`token*`)로.
+///
+/// 일반 검색 UX 일관성: "atomic" 입력 시 "atomicity"도 매치 (prefix). cutoff 도입은
+/// "atomic" → "atomicity" 미매치를 만들어 UX 위반이라 채택 안 함. 매치 doc 수가 많은
+/// 케이스의 응답성은 spawn_blocking + LRU cache + debounce로 보완.
+///
+/// `atomic-purring`은 `unicode61` 토크나이저로 `["atomic", "purring"]` 분리됨.
+/// `atomic pur` 쿼리 → `atomic* AND pur*` → 정확히 매치.
 fn sanitize_fts_query(q: &str) -> String {
     q.split_whitespace()
         .map(|w| {
@@ -1474,7 +1582,7 @@ fn sanitize_fts_query(q: &str) -> String {
             if cleaned.is_empty() {
                 String::new()
             } else {
-                format!("\"{}\"", cleaned)
+                format!("{}*", cleaned)
             }
         })
         .filter(|s| !s.is_empty())
