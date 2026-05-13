@@ -1,15 +1,16 @@
 <script lang="ts">
   import { selectNote, vaultPath, currentNotePath } from "$lib/stores/vault";
-  import { memoryRelatedToNote, type RelatedMemory } from "$lib/tauri/memory";
+  import { memoryFindExportedNote } from "$lib/tauri/memory";
+  import { mirrorQueryRelatedToNote, type MirrorRelatedHit } from "$lib/tauri/mirror";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-  let items: RelatedMemory[] = $state([]);
+  let items: MirrorRelatedHit[] = $state([]);
   let loading = $state(false);
   let errorMsg = $state("");
-  // 0건일 때도 위치가 보이도록 기본 표시. 매치가 많으면 사용자가 접을 수 있게 토글.
   let collapsed = $state(true);
   let hidden = $state(true);
 
-  // 현재 노트 변경 시 자동 fetch. _memories 안의 노트면 표시 안 함 (메모리↔메모리는 본 phase 범위 밖).
+  // 현재 노트 변경 시 자동 fetch. _memories 안의 노트면 표시 안 함.
   $effect(() => {
     const path = $currentNotePath;
     const vault = $vaultPath;
@@ -19,37 +20,74 @@
       hidden = true;
       return;
     }
-    // memories 폴더 내부 노트면 hidden
     if (path.includes("/_memories/")) {
       hidden = true;
       return;
     }
     hidden = false;
-    loading = true;
-    void memoryRelatedToNote(vault, path)
-      .then((result) => {
-        items = result;
-        // 매치가 있으면 자동으로 펼침, 없으면 접힌 상태로 위치만 보이게
-        collapsed = result.length === 0;
-      })
-      .catch((e) => {
-        errorMsg = `${e}`;
-      })
-      .finally(() => {
-        loading = false;
-      });
+    void refresh(path);
   });
 
-  function open(item: RelatedMemory) {
-    void selectNote(item.abs_path);
+  // WAL watch가 mirror sync를 끝낸 후 패널도 새로 고침 — 같은 노트에 새 메모리가 매치될 수 있음.
+  $effect(() => {
+    let unlisten: UnlistenFn | null = null;
+    void listen("mirror-sync-done", () => {
+      const path = $currentNotePath;
+      if (path && !path.includes("/_memories/")) {
+        void refresh(path);
+      }
+    }).then((u) => (unlisten = u));
+    return () => unlisten?.();
+  });
+
+  async function refresh(path: string) {
+    loading = true;
+    try {
+      const result = await mirrorQueryRelatedToNote(path);
+      items = result;
+      collapsed = result.length === 0;
+      errorMsg = "";
+    } catch (e) {
+      errorMsg = `${e}`;
+    } finally {
+      loading = false;
+    }
   }
 
-  function badgeText(matched_in: string): string {
-    if (matched_in === "files_edited") return "edited";
-    if (matched_in === "files_modified") return "modified";
-    if (matched_in === "files_read") return "read";
-    if (matched_in === "body") return "mentioned";
-    return "both";
+  async function open(item: MirrorRelatedHit) {
+    const vault = $vaultPath;
+    if (!vault) return;
+    try {
+      const abs = await memoryFindExportedNote(vault, item.source_id, item.type);
+      if (abs) {
+        void selectNote(abs);
+      } else {
+        errorMsg = `vault에 export된 노트가 없습니다 (${item.type} mem_id=${item.source_id}). Memory: Sync 먼저 실행.`;
+      }
+    } catch (e) {
+      errorMsg = `점프 실패: ${e}`;
+    }
+  }
+
+  /** 합집합 role → 표시 라벨. 2개 이상이면 "both". */
+  function rolesLabel(roles: readonly string[]): string {
+    if (roles.length === 0) return "both";
+    if (roles.length > 1) return "both";
+    const r = roles[0];
+    if (r === "edited") return "edited";
+    if (r === "modified") return "modified";
+    if (r === "read") return "read";
+    return r;
+  }
+
+  /** 배지 CSS class — 기존 RelatedMemoriesPanel 톤 유지. */
+  function rolesClass(roles: readonly string[]): string {
+    if (roles.length > 1) return "both";
+    const r = roles[0];
+    if (r === "edited") return "files_edited";
+    if (r === "modified") return "files_modified";
+    if (r === "read") return "files_read";
+    return "";
   }
 </script>
 
@@ -73,7 +111,7 @@
         <div class="empty">매칭되는 메모리 없음</div>
       {:else}
         <ul>
-          {#each items as item (`${item.type}-${item.mem_id}`)}
+          {#each items as item (`${item.type}-${item.source_id}`)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -82,10 +120,10 @@
                 <span class="kind {item.type === 'observation' ? 'obs' : 'summary'}">
                   {item.type === "observation" ? "obs" : "summary"}
                 </span>
-                <span class="li-title">{item.title_hint}</span>
-                <span class="badge {item.matched_in}">{badgeText(item.matched_in)}</span>
+                <span class="li-title">{item.title}</span>
+                <span class="badge {rolesClass(item.matched_roles)}">{rolesLabel(item.matched_roles)}</span>
               </div>
-              <div class="li-meta">{item.project} · {item.date.slice(0, 10)}</div>
+              <div class="li-meta">{item.project} · {item.created_at.slice(0, 10)}</div>
             </li>
           {/each}
         </ul>

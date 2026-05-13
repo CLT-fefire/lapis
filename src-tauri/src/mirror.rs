@@ -17,8 +17,8 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager};
 
 // ─── schema / open ──────────────────────────────────────────────────────────
 
@@ -39,6 +39,12 @@ pub fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// mirror DB 연결 (read-write) + schema 보장.
+///
+/// 동시 sync 가능성을 고려해 `busy_timeout`을 설정한다.
+/// 시나리오: `openVault` IIFE의 첫 sync(~4s)가 진행 중인 동안 WAL watch가
+/// `claude-mem.db-wal` 변경을 감지하면 두 번째 sync 시도가 일어나며 두 RW
+/// connection이 같은 lapis-mem.db에 경합 → SQLITE_BUSY. busy_timeout이
+/// 있으면 SQLite가 내부적으로 ~ms 단위로 retry해 일시 락은 자연스럽게 풀린다.
 pub fn open_rw(app: &AppHandle) -> Result<Connection, String> {
     let path = db_path(app)?;
     let conn = Connection::open(&path).map_err(|e| format!("mirror DB open 실패: {e}"))?;
@@ -47,6 +53,8 @@ pub fn open_rw(app: &AppHandle) -> Result<Connection, String> {
         .map_err(|e| format!("PRAGMA journal_mode 실패: {e}"))?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| format!("PRAGMA foreign_keys 실패: {e}"))?;
+    conn.busy_timeout(Duration::from_secs(5))
+        .map_err(|e| format!("busy_timeout 설정 실패: {e}"))?;
 
     ensure_schema(&conn)?;
     Ok(conn)
@@ -201,8 +209,14 @@ pub struct SyncReport {
 /// - `full=true`: `last=0`부터 다시 훑음 (memories는 ON CONFLICT DO UPDATE이라 멱등).
 /// - `full=false`: `sync_meta['last_incremental_sync_at']` 이후만.
 ///
-/// 삭제는 항상 셋 diff로 감지 (`sync_deletions`). 비용은 ID 셋 2× 스캔 + diff — 11500 row면 ~수백 ms.
-pub fn sync_now(app: &AppHandle, full: bool) -> Result<SyncReport, String> {
+/// 삭제는 항상 셋 diff로 감지. `vault_path`가 주어지면 vault 측 .md도 정리 (#12):
+/// - frontmatter `content_hash`가 mirror와 일치 → 자동 삭제
+/// - 다르거나 frontmatter에 hash 없음 → `.lapis/orphans.json`에 mark + .md 보존
+pub fn sync_now(
+    app: &AppHandle,
+    full: bool,
+    vault_path: Option<String>,
+) -> Result<SyncReport, String> {
     let start = Instant::now();
     let mut report = SyncReport {
         full,
@@ -225,7 +239,37 @@ pub fn sync_now(app: &AppHandle, full: bool) -> Result<SyncReport, String> {
 
     report.summaries_upserted = sync_summaries(&src, &tx, last_epoch, now_epoch)?;
     report.observations_upserted = sync_observations(&src, &tx, last_epoch, now_epoch)?;
-    report.deleted = sync_deletions(&src, &tx)?;
+
+    // 삭제 — DELETE 직전 mirror 측 (kind, source_id, hash) 박제 후 vault .md 정리
+    let pending_deletions = collect_deletions(&src, &tx)?;
+    let mut orphans = Vec::new();
+    if let Some(vp) = vault_path.as_deref() {
+        let vault_root = std::path::Path::new(vp);
+        if vault_root.exists() {
+            for (kind, sid, hash) in &pending_deletions {
+                match cleanup_md_after_delete(vault_root, kind, *sid, hash) {
+                    Ok(Some(orphan)) => orphans.push(orphan),
+                    Ok(None) => {} // 정상 삭제 또는 .md 부재
+                    Err(e) => {
+                        eprintln!("[mirror] cleanup_md_after_delete({kind}, {sid}) 실패: {e}");
+                    }
+                }
+            }
+            if !orphans.is_empty() {
+                if let Err(e) = append_orphans(vault_root, &orphans) {
+                    eprintln!("[mirror] orphans.json append 실패: {e}");
+                }
+            }
+        }
+    }
+    report.deleted = apply_deletions(&tx, &pending_deletions)?;
+
+    // sync 성공이면 last_failure 클리어 (#11 status indicator green 복귀)
+    tx.execute(
+        "DELETE FROM sync_meta WHERE key = 'last_failure'",
+        [],
+    )
+    .map_err(|e| format!("sync_meta last_failure clear: {e}"))?;
 
     write_meta(&tx, "last_incremental_sync_at", &now_epoch.to_string())?;
     if full {
@@ -492,10 +536,12 @@ fn insert_file_mention(
     .map_err(|e| format!("files_mentioned insert 실패: {e}"))
 }
 
-/// claude-mem 활성 셋과 mirror 셋의 diff → mirror에서 DELETE.
-/// FK ON DELETE CASCADE로 files_mentioned/tags/links_to_vault_notes 자동 정리.
-/// FTS5 trigger `memories_ad`로 FTS5 인덱스도 자동 정리.
-fn sync_deletions(src: &Connection, tx: &Transaction) -> Result<usize, String> {
+/// claude-mem 활성 셋과 mirror 셋의 diff → 삭제 예정 (kind, source_id, mirror_content_hash) 리스트.
+/// hash는 `cleanup_md_after_delete`가 vault .md frontmatter와 비교하기 위해 박제.
+fn collect_deletions(
+    src: &Connection,
+    tx: &Transaction,
+) -> Result<Vec<(String, i64, String)>, String> {
     let mut alive: HashSet<(String, i64)> = HashSet::new();
 
     {
@@ -529,23 +575,29 @@ fn sync_deletions(src: &Connection, tx: &Transaction) -> Result<usize, String> {
         }
     }
 
-    let mut to_delete: Vec<(String, i64)> = Vec::new();
-    {
-        let mut stmt = tx
-            .prepare("SELECT kind, source_id FROM memories")
-            .map_err(|e| format!("mirror id prepare: {e}"))?;
-        let mut rows = stmt.query([]).map_err(|e| format!("mirror id query: {e}"))?;
-        while let Some(r) = rows.next().map_err(|e| format!("mirror id next: {e}"))? {
-            let kind: String = r.get(0).map_err(|e| format!("kind: {e}"))?;
-            let sid: i64 = r.get(1).map_err(|e| format!("sid: {e}"))?;
-            if !alive.contains(&(kind.clone(), sid)) {
-                to_delete.push((kind, sid));
-            }
+    let mut to_delete = Vec::new();
+    let mut stmt = tx
+        .prepare("SELECT kind, source_id, content_hash FROM memories")
+        .map_err(|e| format!("mirror id prepare: {e}"))?;
+    let mut rows = stmt.query([]).map_err(|e| format!("mirror id query: {e}"))?;
+    while let Some(r) = rows.next().map_err(|e| format!("mirror id next: {e}"))? {
+        let kind: String = r.get(0).map_err(|e| format!("kind: {e}"))?;
+        let sid: i64 = r.get(1).map_err(|e| format!("sid: {e}"))?;
+        let hash: String = r.get(2).map_err(|e| format!("hash: {e}"))?;
+        if !alive.contains(&(kind.clone(), sid)) {
+            to_delete.push((kind, sid, hash));
         }
     }
+    Ok(to_delete)
+}
 
+/// DELETE 실행 (FK CASCADE + FTS5 trigger로 자동 정리). 반환: 삭제 row 수.
+fn apply_deletions(
+    tx: &Transaction,
+    deletions: &[(String, i64, String)],
+) -> Result<usize, String> {
     let mut deleted = 0usize;
-    for (kind, sid) in &to_delete {
+    for (kind, sid, _hash) in deletions {
         let n = tx
             .execute(
                 "DELETE FROM memories WHERE kind = ? AND source_id = ?",
@@ -555,6 +607,115 @@ fn sync_deletions(src: &Connection, tx: &Transaction) -> Result<usize, String> {
         deleted += n;
     }
     Ok(deleted)
+}
+
+// ─── .md 자동 삭제 + orphan 박제 (PR2 #12) ─────────────────────────────────
+
+/// vault `_memories/`에서 (kind, source_id) → .md 찾고 mirror hash와 비교 후 정리.
+///
+/// 반환:
+/// - `Ok(None)`: 정상 삭제 또는 .md 부재 (정리 불필요)
+/// - `Ok(Some(OrphanRecord))`: 사용자 편집 흔적/legacy hash 없음 → .md 보존 + orphans.json 기록 대상
+fn cleanup_md_after_delete(
+    vault_root: &std::path::Path,
+    kind: &str,
+    source_id: i64,
+    mirror_hash: &str,
+) -> Result<Option<OrphanRecord>, String> {
+    let md_path_opt = match kind {
+        "summary" => crate::memory::find_summary_md_by_mem_id(vault_root, source_id)?,
+        "observation" => crate::memory::find_observation_md_by_mem_id(vault_root, source_id)?,
+        _ => return Ok(None),
+    };
+    let Some(md_path) = md_path_opt else {
+        return Ok(None);
+    };
+    let md_path_buf = PathBuf::from(&md_path);
+
+    let file_hash = crate::memory::peek_content_hash(&md_path_buf);
+    let now = now_epoch_s();
+    match file_hash {
+        Some(h) if h == mirror_hash => {
+            // 사용자 편집 흔적 없음 → 안전 삭제
+            std::fs::remove_file(&md_path_buf)
+                .map_err(|e| format!("remove_file {}: {e}", md_path_buf.display()))?;
+            Ok(None)
+        }
+        Some(_) => Ok(Some(OrphanRecord {
+            path: md_path,
+            kind: kind.to_string(),
+            source_id,
+            reason: "user-edited".to_string(),
+            detected_at_epoch: now,
+        })),
+        None => Ok(Some(OrphanRecord {
+            path: md_path,
+            kind: kind.to_string(),
+            source_id,
+            reason: "legacy-no-hash".to_string(),
+            detected_at_epoch: now,
+        })),
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct OrphanRecord {
+    pub path: String,
+    pub kind: String,
+    pub source_id: i64,
+    pub reason: String,
+    pub detected_at_epoch: i64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct OrphansFile {
+    orphans: Vec<OrphanRecord>,
+}
+
+/// `.lapis/orphans.json` append (atomic write — 5.1.d 학습 적용).
+/// 같은 (kind, source_id)가 이미 있으면 최신 record로 교체.
+fn append_orphans(
+    vault_root: &std::path::Path,
+    new_records: &[OrphanRecord],
+) -> Result<(), String> {
+    if new_records.is_empty() {
+        return Ok(());
+    }
+    let lapis_dir = vault_root.join(".lapis");
+    std::fs::create_dir_all(&lapis_dir).map_err(|e| format!(".lapis dir 생성: {e}"))?;
+    let path = lapis_dir.join("orphans.json");
+
+    // 기존 read (없거나 파싱 실패면 빈 array로 시작)
+    let mut existing: Vec<OrphanRecord> = if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<OrphansFile>(&raw).ok())
+            .map(|f| f.orphans)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    // dedup: 같은 (kind, source_id) 키면 새 record로 교체
+    for r in new_records {
+        existing.retain(|e| !(e.kind == r.kind && e.source_id == r.source_id));
+        existing.push(r.clone());
+    }
+
+    let serialized = serde_json::to_string_pretty(&OrphansFile { orphans: existing })
+        .map_err(|e| format!("orphans serialize: {e}"))?;
+
+    // atomic write — 같은 디렉토리에 temp 후 rename
+    let tmp = lapis_dir.join(format!(
+        ".orphans.json.tmp.lapis-{}-{}",
+        std::process::id(),
+        now_epoch_s()
+    ));
+    std::fs::write(&tmp, serialized)
+        .map_err(|e| format!("orphans tmp write({}): {e}", tmp.display()))?;
+    std::fs::rename(&tmp, &path)
+        .map_err(|e| format!("orphans rename {} → {}: {e}", tmp.display(), path.display()))?;
+    Ok(())
 }
 
 // ─── 보조 함수 ──────────────────────────────────────────────────────────────
@@ -664,8 +825,8 @@ fn join_body_sections(parts: &[(&str, &Option<String>)]) -> String {
 }
 
 /// SHA-256은 외부 crate 의존이라 회피. `DefaultHasher`(SipHash, deterministic seed)로 64bit hex 충분.
-/// .md 편집 검출용 — 충돌 가능성 무시 가능.
-fn hash_summary(
+/// .md 편집 검출용 — 충돌 가능성 무시 가능. pub로 노출되어 memory.rs export 흐름이 동일 hash를 박제.
+pub fn hash_summary(
     request: &Option<String>,
     investigated: &Option<String>,
     learned: &Option<String>,
@@ -676,7 +837,7 @@ fn hash_summary(
     hash_fields(&[request, investigated, learned, completed, next_steps, notes])
 }
 
-fn hash_observation(
+pub fn hash_observation(
     text: &Option<String>,
     subtitle: &Option<String>,
     facts: &Option<String>,
@@ -696,6 +857,107 @@ fn hash_fields(fields: &[&Option<String>]) -> String {
     format!("{:016x}", h.finish())
 }
 
+// ─── WAL watch (PR2 단위 #9) ────────────────────────────────────────────────
+
+/// WAL 이벤트 burst를 모으는 디바운스 (ms).
+/// SQLite WAL은 write마다 mtime이 갱신되므로 1s 내 다발 write는 한 번에 묶음.
+const WAL_DEBOUNCE_MS: u64 = 1000;
+
+/// 백그라운드에서 `~/.claude-mem/`을 watch하고 `claude-mem.db*` 파일 변경 시 증분 sync.
+///
+/// 설계:
+/// - `~/.claude-mem/` 디렉토리 watch (NonRecursive). `claude-mem.db-wal`이 checkpoint로
+///   삭제됐다 재생성되어도 같은 watcher가 유지되도록 디렉토리 단위.
+/// - 디렉토리 안 다른 파일(logs 등)은 filename prefix로 무시.
+/// - `Box::leak`으로 watcher를 앱 lifetime에 묶음 — vault watcher와 달리 unwatch 불필요.
+pub fn start_wal_watch(app: AppHandle) -> Result<(), String> {
+    use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+
+    let dir = claude_mem_db_path()?
+        .parent()
+        .ok_or_else(|| "claude-mem.db 부모 디렉토리 조회 실패".to_string())?
+        .to_path_buf();
+    if !dir.exists() {
+        return Err(format!("claude-mem 디렉토리 없음: {}", dir.display()));
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+    let mut watcher: RecommendedWatcher = notify::recommended_watcher(tx)
+        .map_err(|e| format!("WAL watch 생성 실패: {e}"))?;
+    watcher
+        .watch(&dir, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("WAL watch 등록 실패: {e}"))?;
+
+    let app_for_loop = app.clone();
+    std::thread::spawn(move || wal_debounce_loop(rx, app_for_loop));
+
+    // 앱 lifetime 동안 watcher 유지. Drop되면 watch 끊김.
+    Box::leak(Box::new(watcher));
+    Ok(())
+}
+
+fn wal_debounce_loop(
+    rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>,
+    app: AppHandle,
+) {
+    let mut last_event_at: Option<Instant> = None;
+
+    loop {
+        let timeout = match last_event_at {
+            None => Duration::from_secs(60 * 60),
+            Some(t) => {
+                let elapsed = t.elapsed();
+                Duration::from_millis(WAL_DEBOUNCE_MS).saturating_sub(elapsed)
+            }
+        };
+
+        match rx.recv_timeout(timeout) {
+            Ok(Ok(event)) => {
+                if event_matches_claude_mem(&event) {
+                    last_event_at = Some(Instant::now());
+                }
+            }
+            Ok(Err(_)) => {
+                // notify 내부 에러는 무시 — 다음 이벤트로 회복 시도
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                if last_event_at.take().is_some() {
+                    // debounce 윈도우 종료 — sync 실행.
+                    // WAL watch에선 vault_path를 모름. .md 정리는 vault가 열려 있을 때만
+                    // (사용자 수동 mirror sync / openVault IIFE)에서 수행.
+                    match sync_now(&app, false, None) {
+                        Ok(report) => {
+                            let _ = app.emit("mirror-sync-done", &report);
+                        }
+                        Err(e) => {
+                            // sync_meta에 last_failure 박제 — status indicator(#11)에서 surface
+                            if let Ok(conn) = open_rw(&app) {
+                                let _ = conn.execute(
+                                    "INSERT INTO sync_meta(key, value) VALUES('last_failure', ?) \
+                                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                                    params![&e],
+                                );
+                            }
+                            let _ = app.emit("mirror-sync-error", &e);
+                        }
+                    }
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+}
+
+/// 이벤트 경로 중 하나라도 `claude-mem.db*`이면 관심.
+/// `claude-mem.db` / `claude-mem.db-wal` / `claude-mem.db-shm` 모두 catch.
+fn event_matches_claude_mem(event: &notify::Event) -> bool {
+    event.paths.iter().any(|p| {
+        p.file_name()
+            .and_then(|s| s.to_str())
+            .is_some_and(|name| name.starts_with("claude-mem.db"))
+    })
+}
+
 // ─── Tauri commands ─────────────────────────────────────────────────────────
 
 /// 풀/증분 sync 1회 실행.
@@ -703,9 +965,15 @@ fn hash_fields(fields: &[&Option<String>]) -> String {
 /// 5.1.d 학습 적용: sync command가 main IPC handler thread를 점유하면 progress emit이
 /// webview에 즉시 도달하지 못함. PR1엔 emit이 없지만 main thread 점유 방지를 위해
 /// `spawn_blocking`으로 격리. PR2에서 progress UI 도입 시 그대로 활용 가능.
+///
+/// `vault_path`가 주어지면 sync 안에서 .md 자동 정리(편집 보존 + orphans.json)도 함께.
 #[tauri::command]
-pub async fn mirror_sync_now(app: AppHandle, full: bool) -> Result<SyncReport, String> {
-    tauri::async_runtime::spawn_blocking(move || sync_now(&app, full))
+pub async fn mirror_sync_now(
+    app: AppHandle,
+    full: bool,
+    vault_path: Option<String>,
+) -> Result<SyncReport, String> {
+    tauri::async_runtime::spawn_blocking(move || sync_now(&app, full, vault_path))
         .await
         .map_err(|e| format!("mirror_sync_now join 실패: {e}"))?
 }
@@ -763,17 +1031,36 @@ pub struct MirrorSearchHit {
 }
 
 /// mirror DB FTS5 검색 (`memory_fts_search` 대체 — PR2에서 UI 전환).
+///
+/// `include_summaries`/`include_observations`는 kind 필터.
+/// 둘 다 false면 빈 결과 반환 (UI 측에서 type 필터 OFF 시 호출 회피용 short-circuit).
 #[tauri::command]
 pub fn mirror_query_memories(
     app: AppHandle,
     query: String,
     filter: Vec<String>,
     limit: u32,
+    include_summaries: bool,
+    include_observations: bool,
 ) -> Result<Vec<MirrorSearchHit>, String> {
     let q = sanitize_fts_query(&query);
     if q.is_empty() {
         return Ok(Vec::new());
     }
+
+    // kind 필터 — hardcoded literal이라 SQL injection 무관.
+    let mut kind_literals: Vec<&'static str> = Vec::new();
+    if include_summaries {
+        kind_literals.push("'summary'");
+    }
+    if include_observations {
+        kind_literals.push("'observation'");
+    }
+    if kind_literals.is_empty() {
+        return Ok(Vec::new());
+    }
+    let kind_and = format!(" AND m.kind IN ({})", kind_literals.join(","));
+
     let conn = open_rw(&app)?;
 
     let (proj_where, proj_params) = build_project_where(&filter);
@@ -790,10 +1077,10 @@ pub fn mirror_query_memories(
                 bm25(memories_fts) AS score \
          FROM memories_fts \
          JOIN memories m ON m.id = memories_fts.rowid \
-         WHERE memories_fts MATCH ?{} \
+         WHERE memories_fts MATCH ?{}{} \
          ORDER BY score \
          LIMIT ?",
-        proj_and
+        kind_and, proj_and
     );
 
     let mut bound: Vec<rusqlite::types::Value> = Vec::with_capacity(proj_params.len() + 2);
@@ -833,6 +1120,9 @@ pub fn mirror_query_memories(
 }
 
 /// files_mentioned 정확 매치 → `memory_related_to_note` 대체 (PR2 UI 전환).
+///
+/// 한 메모리가 같은 노트를 `read` + `modified` 등 여러 role로 갖고 있어도 row 1건으로 GROUP BY.
+/// `matched_roles`는 합집합 (예: `["read", "modified"]`).
 #[derive(Debug, Serialize)]
 pub struct MirrorRelatedHit {
     pub id: i64,
@@ -841,7 +1131,9 @@ pub struct MirrorRelatedHit {
     pub source_id: i64,
     pub project: String,
     pub title: String,
-    pub matched_role: String,
+    /// 해당 메모리가 이 노트를 다룬 role 합집합. "read" | "edited" | "modified" 중 1개 이상.
+    pub matched_roles: Vec<String>,
+    /// 매치된 file_path 대표 1개 (절대 경로 또는 basename).
     pub matched_file: String,
     pub obs_type: Option<String>,
     pub created_at: String,
@@ -860,19 +1152,30 @@ pub fn mirror_query_related_to_note(
         .unwrap_or("")
         .to_string();
 
+    // GROUP BY m.id — 같은 메모리가 read+modified 두 role로 갖고 있어도 row 1건.
+    // GROUP_CONCAT은 DISTINCT 지원, separator는 기본 ','.
     let mut stmt = conn
         .prepare(
             "SELECT m.id, m.kind, m.source_id, m.project, m.title, m.obs_type, \
-                    fm.role, fm.file_path, m.created_at, m.created_at_epoch \
+                    GROUP_CONCAT(DISTINCT fm.role) AS roles, \
+                    MIN(fm.file_path) AS matched_file, \
+                    m.created_at, m.created_at_epoch \
              FROM files_mentioned fm \
              JOIN memories m ON m.id = fm.memory_id \
              WHERE fm.file_path = ? OR fm.file_path = ? \
+             GROUP BY m.id \
              ORDER BY m.created_at_epoch DESC \
              LIMIT 100",
         )
         .map_err(|e| format!("mirror_query_related prepare: {e}"))?;
     let hits = stmt
         .query_map(params![&note_abs_path, &basename], |r| {
+            let roles_csv: String = r.get(6)?;
+            let matched_roles: Vec<String> = roles_csv
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect();
             Ok(MirrorRelatedHit {
                 id: r.get(0)?,
                 kind: r.get(1)?,
@@ -883,7 +1186,7 @@ pub fn mirror_query_related_to_note(
                     .filter(|s| !s.trim().is_empty())
                     .unwrap_or_else(|| "(no title)".to_string()),
                 obs_type: r.get(5)?,
-                matched_role: r.get(6)?,
+                matched_roles,
                 matched_file: r.get(7)?,
                 created_at: r.get(8)?,
                 created_at_epoch: r.get(9)?,
