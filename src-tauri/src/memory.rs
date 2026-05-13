@@ -99,9 +99,73 @@ pub fn memory_list_summaries(filter: Vec<String>) -> Result<Vec<SessionSummary>,
     list_summaries_inner(&filter)
 }
 
+/// claude-mem `observations` 테이블의 한 row.
+/// session_summaries보다 작은 단위(prompt-level)의 학습/관찰/결정. PR3에서 vault export 대상.
+/// 핵심 차이: `files_read`(6911건) / `files_modified`(3060건)이 실제로 채워져 있어
+/// RelatedMemoriesPanel의 정확 매치 신호 source가 됨. (session_summaries.files_*는 전부 NULL)
+#[derive(Debug, Serialize, Clone)]
+pub struct Observation {
+    pub id: i64,
+    pub memory_session_id: String,
+    pub project: String,
+    /// observations.type 컬럼 — 학습/관찰/결정 등 분류 라벨. Rust 예약어 회피용 raw identifier.
+    pub r#type: String,
+    pub title: Option<String>,
+    pub subtitle: Option<String>,
+    pub text: Option<String>,
+    pub narrative: Option<String>,
+    pub facts: Option<String>,
+    pub concepts: Option<String>,
+    pub files_read: Option<String>,
+    pub files_modified: Option<String>,
+    pub created_at: String,
+    pub created_at_epoch: i64,
+}
+
+/// observations 테이블에서 project filter 적용 후 최신순으로 전체 row 조회.
+/// SessionSummary 패턴과 동일 — `build_project_where` 재사용.
+pub fn list_observations_inner(filter: &[String]) -> Result<Vec<Observation>, String> {
+    let conn = open_ro()?;
+    let (where_sql, params) = build_project_where(filter);
+    let sql = format!(
+        "SELECT id, memory_session_id, project, type, title, subtitle, text, narrative, \
+         facts, concepts, files_read, files_modified, created_at, created_at_epoch \
+         FROM observations{} ORDER BY created_at_epoch DESC",
+        where_sql
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| format!("prepare: {e}"))?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(params.iter()), |r| {
+            Ok(Observation {
+                id: r.get(0)?,
+                memory_session_id: r.get(1)?,
+                project: r.get(2)?,
+                r#type: r.get(3)?,
+                title: r.get(4)?,
+                subtitle: r.get(5)?,
+                text: r.get(6)?,
+                narrative: r.get(7)?,
+                facts: r.get(8)?,
+                concepts: r.get(9)?,
+                files_read: r.get(10)?,
+                files_modified: r.get(11)?,
+                created_at: r.get(12)?,
+                created_at_epoch: r.get(13)?,
+            })
+        })
+        .map_err(|e| format!("query_map: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("collect: {e}"))?;
+    Ok(rows)
+}
+
 #[derive(Debug, Serialize)]
 pub struct SearchHit {
     pub id: i64,
+    /// "summary" | "observation" — UI 배지 + memory_find_exported_note 호출 시 kind 인자.
+    /// session_summaries.id와 observations.id는 별 PK space라 (kind, id) 페어로 식별.
+    #[serde(rename = "type")]
+    pub kind: String,
     pub project: String,
     pub created_at: String,
     pub created_at_epoch: i64,
@@ -147,25 +211,57 @@ fn first_nonempty_line(opts: &[&Option<String>]) -> String {
     String::from("(no title)")
 }
 
+/// 통합 FTS5 풀텍스트 검색.
+/// - `include_summaries`: session_summaries_fts 결과 포함
+/// - `include_observations`: observations_fts 결과 포함
+/// 두 결과는 bm25 score 오름차순으로 병합 정렬 후 `limit`개 take.
 #[tauri::command]
 pub fn memory_fts_search(
     query: String,
     filter: Vec<String>,
     limit: u32,
+    include_summaries: bool,
+    include_observations: bool,
 ) -> Result<Vec<SearchHit>, String> {
     let q = sanitize_fts_query(&query);
     if q.is_empty() {
         return Ok(Vec::new());
     }
     let conn = open_ro()?;
-    let (proj_where, proj_params) = build_project_where(&filter);
-    // proj_where는 " WHERE (...)" 또는 빈 문자열. 우리는 MATCH 뒤에 AND로 붙여야 하므로 변환.
+    let cap = limit.clamp(1, 200) as usize;
+    let mut all: Vec<SearchHit> = Vec::new();
+
+    if include_summaries {
+        let hits = fts_search_summaries(&conn, &q, &filter, limit)?;
+        all.extend(hits);
+    }
+    if include_observations {
+        let hits = fts_search_observations(&conn, &q, &filter, limit)?;
+        all.extend(hits);
+    }
+
+    // bm25 score 오름차순 — partial_cmp NaN은 Ordering::Equal로 안전 처리
+    all.sort_by(|a, b| {
+        a.score
+            .partial_cmp(&b.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    all.truncate(cap);
+    Ok(all)
+}
+
+fn fts_search_summaries(
+    conn: &Connection,
+    q: &str,
+    filter: &[String],
+    limit: u32,
+) -> Result<Vec<SearchHit>, String> {
+    let (proj_where, proj_params) = build_project_where(filter);
     let proj_and = if proj_where.is_empty() {
         String::new()
     } else {
         format!(" AND {}", &proj_where[" WHERE ".len()..])
     };
-    // 모든 placeholder는 unnumbered `?` — rusqlite는 위치 기반으로 바인딩.
     let sql = format!(
         "SELECT s.id, s.project, s.request, s.investigated, s.learned, s.completed, \
          s.next_steps, s.notes, s.created_at, s.created_at_epoch, \
@@ -179,9 +275,8 @@ pub fn memory_fts_search(
         proj_and
     );
 
-    // 파라미터: query, project_params..., limit
     let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(proj_params.len() + 2);
-    params.push(q.into());
+    params.push(q.to_string().into());
     for p in &proj_params {
         params.push(p.clone().into());
     }
@@ -212,6 +307,76 @@ pub fn memory_fts_search(
             ]);
             Ok(SearchHit {
                 id,
+                kind: "summary".to_string(),
+                project,
+                created_at,
+                created_at_epoch,
+                title_hint,
+                snippet_html: snip,
+                score,
+                channel: "fts".to_string(),
+            })
+        })
+        .map_err(|e| format!("query_map: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("collect: {e}"))?;
+    Ok(hits)
+}
+
+fn fts_search_observations(
+    conn: &Connection,
+    q: &str,
+    filter: &[String],
+    limit: u32,
+) -> Result<Vec<SearchHit>, String> {
+    let (proj_where, proj_params) = build_project_where(filter);
+    let proj_and = if proj_where.is_empty() {
+        String::new()
+    } else {
+        format!(" AND {}", &proj_where[" WHERE ".len()..])
+    };
+    // observations_fts 컬럼: title, subtitle, narrative, text, facts, concepts
+    let sql = format!(
+        "SELECT o.id, o.project, o.title, o.subtitle, o.narrative, o.text, o.facts, o.concepts, \
+         o.created_at, o.created_at_epoch, \
+         snippet(observations_fts, -1, '<mark>', '</mark>', '…', 24) AS snip, \
+         bm25(observations_fts) AS score \
+         FROM observations_fts \
+         JOIN observations o ON o.id = observations_fts.rowid \
+         WHERE observations_fts MATCH ?{} \
+         ORDER BY score \
+         LIMIT ?",
+        proj_and
+    );
+
+    let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(proj_params.len() + 2);
+    params.push(q.to_string().into());
+    for p in &proj_params {
+        params.push(p.clone().into());
+    }
+    params.push(rusqlite::types::Value::Integer(limit.clamp(1, 200) as i64));
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| format!("prepare: {e}"))?;
+    let hits = stmt
+        .query_map(rusqlite::params_from_iter(params.iter()), |r| {
+            let id: i64 = r.get(0)?;
+            let project: String = r.get(1)?;
+            let title: Option<String> = r.get(2)?;
+            let subtitle: Option<String> = r.get(3)?;
+            let narrative: Option<String> = r.get(4)?;
+            let text: Option<String> = r.get(5)?;
+            let facts: Option<String> = r.get(6)?;
+            let concepts: Option<String> = r.get(7)?;
+            let created_at: String = r.get(8)?;
+            let created_at_epoch: i64 = r.get(9)?;
+            let snip: String = r.get(10)?;
+            let score: f64 = r.get(11)?;
+            let title_hint = first_nonempty_line(&[
+                &title, &subtitle, &narrative, &text, &facts, &concepts,
+            ]);
+            Ok(SearchHit {
+                id,
+                kind: "observation".to_string(),
                 project,
                 created_at,
                 created_at_epoch,
@@ -228,20 +393,56 @@ pub fn memory_fts_search(
 }
 
 #[derive(Debug, Serialize)]
-pub struct PreviewReport {
+pub struct PreviewBreakdown {
     pub total_candidates: usize,
     pub already_exported: usize,
     pub new_count: usize,
 }
 
-/// `_memories/**/*.md`를 재귀 스캔해 frontmatter에서 mem_id 추출. 첫 ~1KB만 읽어 빠르게.
-fn scan_existing_mem_ids(vault_root: &Path) -> Result<HashSet<i64>, String> {
+/// summary / observation 별로 분리된 preview 결과.
+/// `include_*=false`인 쪽은 모두 0으로 채워 반환 (UI 일관 처리용).
+#[derive(Debug, Serialize)]
+pub struct PreviewReport {
+    pub summaries: PreviewBreakdown,
+    pub observations: PreviewBreakdown,
+}
+
+/// `_memories/{YYYY-MM}/**/*.md`만 스캔 (observations/ 디렉토리 제외).
+/// session_summary 노트의 mem_id 집합 반환. summary export 시 skip 판정용.
+fn scan_existing_summary_ids(vault_root: &Path) -> Result<HashSet<i64>, String> {
     let mut ids: HashSet<i64> = HashSet::new();
     let mem_root = vault_root.join("_memories");
     if !mem_root.is_dir() {
         return Ok(ids);
     }
-    walk_collect_mem_ids(&mem_root, &mut ids)?;
+    let rd = fs::read_dir(&mem_root).map_err(|e| format!("read_dir {}: {e}", mem_root.display()))?;
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            // observations/ 디렉토리는 별 PK space — summary scan에서 제외.
+            let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if name == "observations" {
+                continue;
+            }
+            walk_collect_mem_ids(&p, &mut ids)?;
+        } else if p.extension().and_then(|s| s.to_str()) == Some("md") {
+            // _memories/ 직속 .md (예외 케이스) 도 포함.
+            if let Some(id) = peek_mem_id(&p) {
+                ids.insert(id);
+            }
+        }
+    }
+    Ok(ids)
+}
+
+/// `_memories/observations/**/*.md`만 스캔. observation 노트의 mem_id 집합 반환.
+fn scan_existing_observation_ids(vault_root: &Path) -> Result<HashSet<i64>, String> {
+    let mut ids: HashSet<i64> = HashSet::new();
+    let obs_root = vault_root.join("_memories").join("observations");
+    if !obs_root.is_dir() {
+        return Ok(ids);
+    }
+    walk_collect_mem_ids(&obs_root, &mut ids)?;
     Ok(ids)
 }
 
@@ -260,12 +461,19 @@ fn walk_collect_mem_ids(dir: &Path, ids: &mut HashSet<i64>) -> Result<(), String
     Ok(())
 }
 
-/// 주어진 mem_id에 해당하는 export된 노트의 절대 경로를 vault에서 찾는다.
+/// 주어진 (mem_id, kind) 페어에 해당하는 export된 노트의 절대 경로를 vault에서 찾는다.
 /// 검색 결과 클릭 시 점프용. 없으면 Ok(None).
+///
+/// `kind`:
+/// - `"summary"` → `_memories/{YYYY-MM}/**` walk (observations/ 디렉토리 제외)
+/// - `"observation"` → `_memories/observations/{YYYY-MM}/**` walk
+///
+/// session_summaries.id와 observations.id는 별 PK space라 kind 인자로 분기 필수.
 #[tauri::command]
 pub fn memory_find_exported_note(
     vault_path: String,
     mem_id: i64,
+    kind: String,
 ) -> Result<Option<String>, String> {
     let vault_root = PathBuf::from(&vault_path);
     if !vault_root.is_dir() {
@@ -275,7 +483,42 @@ pub fn memory_find_exported_note(
     if !mem_root.is_dir() {
         return Ok(None);
     }
-    find_note_by_mem_id(&mem_root, mem_id)
+    match kind.as_str() {
+        "summary" => find_summary_by_mem_id(&mem_root, mem_id),
+        "observation" => {
+            let obs_root = mem_root.join("observations");
+            if !obs_root.is_dir() {
+                return Ok(None);
+            }
+            find_note_by_mem_id(&obs_root, mem_id)
+        }
+        other => Err(format!(
+            "invalid kind: {other} (expected 'summary' | 'observation')"
+        )),
+    }
+}
+
+/// `_memories/` 직속 자식 디렉토리에서 observations/는 제외하고 mem_id 매칭 .md 검색.
+fn find_summary_by_mem_id(mem_root: &Path, target: i64) -> Result<Option<String>, String> {
+    let rd =
+        fs::read_dir(mem_root).map_err(|e| format!("read_dir {}: {e}", mem_root.display()))?;
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            if name == "observations" {
+                continue;
+            }
+            if let Some(found) = find_note_by_mem_id(&p, target)? {
+                return Ok(Some(found));
+            }
+        } else if p.extension().and_then(|s| s.to_str()) == Some("md") {
+            if peek_mem_id(&p) == Some(target) {
+                return Ok(Some(p.to_string_lossy().to_string()));
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn find_note_by_mem_id(dir: &Path, target: i64) -> Result<Option<String>, String> {
@@ -299,11 +542,16 @@ fn find_note_by_mem_id(dir: &Path, target: i64) -> Result<Option<String>, String
 #[derive(Debug, Serialize, Clone)]
 pub struct RelatedMemory {
     pub mem_id: i64,
+    /// "summary" | "observation" — UI 배지 분기용.
+    /// Rust 예약어 회피로 필드명은 kind, JSON 측엔 `type`으로 노출.
+    #[serde(rename = "type")]
+    pub kind: String,
     pub abs_path: String,
     pub title_hint: String,
     pub project: String,
     pub date: String,
-    pub matched_in: String, // "files_read" / "files_edited" / "both"
+    /// "files_read" / "files_edited" / "files_modified" / "both" / "body"
+    pub matched_in: String,
 }
 
 /// 현재 노트와 관련된 메모리 노트를 vault `_memories/**`에서 찾는다.
@@ -337,9 +585,25 @@ pub fn memory_related_to_note(
     }
     let mut hits = Vec::new();
     walk_related(&mem_root, &basename, &mut hits)?;
-    // 최신순 정렬
-    hits.sort_by(|a, b| b.date.cmp(&a.date));
+    // 1차: matched_in 강도 (정확 매치 우선) — 2차: date desc.
+    // 정확 매치(read/edited/modified/both)가 약한 매치(body)보다 위로.
+    hits.sort_by(|a, b| {
+        matched_in_rank(&a.matched_in)
+            .cmp(&matched_in_rank(&b.matched_in))
+            .then_with(|| b.date.cmp(&a.date))
+    });
     Ok(hits)
+}
+
+/// matched_in 강도 점수 — 낮을수록 강한 신호.
+fn matched_in_rank(s: &str) -> u8 {
+    match s {
+        "both" => 0,
+        "files_modified" | "files_edited" => 1,
+        "files_read" => 2,
+        "body" => 3,
+        _ => 4,
+    }
 }
 
 fn walk_related(
@@ -362,10 +626,10 @@ fn walk_related(
 }
 
 /// 메모리 노트의 frontmatter + 본문에서 basename 매칭 검사.
-/// - frontmatter의 `files_read` / `files_edited` 값 (정확 매칭, 강한 신호)
-/// - 본문 (request/investigated/learned/completed/next_steps/notes) — 약한 신호이나
-///   session_summaries는 files_* 컬럼이 거의 NULL이라 본문 매칭이 사실상 주요 채널.
-/// 너무 짧은 basename(<3자)은 false positive가 너무 많아 매치 안 함.
+/// - frontmatter의 `files_read` / `files_edited` / `files_modified` 값 (정확 매칭, 강한 신호)
+/// - 본문 — 약한 신호. session_summaries.files_*가 NULL이라 본문 매칭이 주요 채널이었음 (PR2).
+///   PR3부터 observations export로 정확 매치(files_read 6911건/files_modified 3060건)가 surface됨.
+/// 너무 짧은 basename(<3자)은 false positive 다수 → 매치 안 함.
 /// 첫 ~32KB만 읽어 비용 제한.
 fn peek_related(path: &Path, basename: &str) -> Option<RelatedMemory> {
     if basename.len() < 3 {
@@ -381,14 +645,18 @@ fn peek_related(path: &Path, basename: &str) -> Option<RelatedMemory> {
     let body = iter.next().unwrap_or("");
 
     let mut mem_id: Option<i64> = None;
+    let mut fm_type = String::new();
     let mut project = String::new();
     let mut date = String::new();
     let mut files_read = String::new();
     let mut files_edited = String::new();
+    let mut files_modified = String::new();
     for line in fm.lines() {
         let trimmed = line.trim_start();
         if let Some(rest) = trimmed.strip_prefix("mem_id:") {
             mem_id = rest.trim().trim_matches('"').parse::<i64>().ok();
+        } else if let Some(rest) = trimmed.strip_prefix("type:") {
+            fm_type = rest.trim().trim_matches('"').to_string();
         } else if let Some(rest) = trimmed.strip_prefix("project:") {
             project = rest.trim().trim_matches('"').to_string();
         } else if let Some(rest) = trimmed.strip_prefix("date:") {
@@ -397,25 +665,48 @@ fn peek_related(path: &Path, basename: &str) -> Option<RelatedMemory> {
             files_read = rest.trim().trim_matches('"').to_string();
         } else if let Some(rest) = trimmed.strip_prefix("files_edited:") {
             files_edited = rest.trim().trim_matches('"').to_string();
+        } else if let Some(rest) = trimmed.strip_prefix("files_modified:") {
+            files_modified = rest.trim().trim_matches('"').to_string();
         }
     }
 
     let in_read = files_read.contains(basename);
     let in_edited = files_edited.contains(basename);
+    let in_modified = files_modified.contains(basename);
     let in_body = body.contains(basename);
-    if !in_read && !in_edited && !in_body {
+    if !in_read && !in_edited && !in_modified && !in_body {
         return None;
     }
 
-    // 우선순위: both > files_edited > files_read > body
-    let matched_in = if in_read && in_edited {
+    // 우선순위:
+    //   read AND (edited OR modified) → "both"   (정확 매치 양쪽)
+    //   modified                       → "files_modified"  (observation 우대)
+    //   edited                         → "files_edited"    (summary 우대)
+    //   read                           → "files_read"
+    //   body                           → "body"            (약한 신호)
+    let matched_in = if in_read && (in_edited || in_modified) {
         "both"
+    } else if in_modified {
+        "files_modified"
     } else if in_edited {
         "files_edited"
     } else if in_read {
         "files_read"
     } else {
         "body"
+    };
+
+    // kind 결정: frontmatter `type` 우선, 없으면 path 추론 (PR1 노트 호환).
+    //   frontmatter "session_summary" → "summary", "observation" → "observation"
+    //   path에 components "observations" 포함 → "observation", 아니면 "summary"
+    let kind = if fm_type == "observation" {
+        "observation".to_string()
+    } else if fm_type == "session_summary" || !fm_type.is_empty() {
+        "summary".to_string()
+    } else if path.components().any(|c| c.as_os_str() == "observations") {
+        "observation".to_string()
+    } else {
+        "summary".to_string()
     };
 
     // title hint: 본문의 첫 "# " 줄
@@ -429,6 +720,7 @@ fn peek_related(path: &Path, basename: &str) -> Option<RelatedMemory> {
     }
     Some(RelatedMemory {
         mem_id: mem_id?,
+        kind,
         abs_path: path.to_string_lossy().to_string(),
         title_hint: title.unwrap_or_else(|| format!("Memory {}", mem_id.unwrap_or(0))),
         project,
@@ -459,73 +751,243 @@ fn peek_mem_id(path: &Path) -> Option<i64> {
     None
 }
 
+/// summary / observation 각각의 preview 카운트를 분리해 반환.
+/// `include_*=false`인 쪽은 0으로 채움 — UI는 항상 양쪽 카운트를 표시.
 #[tauri::command]
 pub fn memory_preview_export(
     vault_path: String,
     filter: Vec<String>,
+    include_summaries: bool,
+    include_observations: bool,
 ) -> Result<PreviewReport, String> {
     let vault_root = PathBuf::from(&vault_path);
     if !vault_root.is_dir() {
         return Err(format!("vault not a directory: {vault_path}"));
     }
-    let candidates = list_summaries_inner(&filter)?;
-    let existing = scan_existing_mem_ids(&vault_root)?;
-    let already = candidates
-        .iter()
-        .filter(|s| existing.contains(&s.id))
-        .count();
+
+    let summaries = if include_summaries {
+        let candidates = list_summaries_inner(&filter)?;
+        let existing = scan_existing_summary_ids(&vault_root)?;
+        let already = candidates
+            .iter()
+            .filter(|s| existing.contains(&s.id))
+            .count();
+        PreviewBreakdown {
+            total_candidates: candidates.len(),
+            already_exported: already,
+            new_count: candidates.len() - already,
+        }
+    } else {
+        PreviewBreakdown {
+            total_candidates: 0,
+            already_exported: 0,
+            new_count: 0,
+        }
+    };
+
+    let observations = if include_observations {
+        let candidates = list_observations_inner(&filter)?;
+        let existing = scan_existing_observation_ids(&vault_root)?;
+        let already = candidates
+            .iter()
+            .filter(|o| existing.contains(&o.id))
+            .count();
+        PreviewBreakdown {
+            total_candidates: candidates.len(),
+            already_exported: already,
+            new_count: candidates.len() - already,
+        }
+    } else {
+        PreviewBreakdown {
+            total_candidates: 0,
+            already_exported: 0,
+            new_count: 0,
+        }
+    };
+
     Ok(PreviewReport {
-        total_candidates: candidates.len(),
-        already_exported: already,
-        new_count: candidates.len() - already,
+        summaries,
+        observations,
     })
 }
 
 #[derive(Debug, Serialize)]
-pub struct ExportReport {
+pub struct ExportBreakdown {
     pub created: usize,
     pub skipped: usize,
     pub errors: Vec<String>,
     pub total_candidates: usize,
 }
 
+impl ExportBreakdown {
+    fn empty() -> Self {
+        Self {
+            created: 0,
+            skipped: 0,
+            errors: Vec::new(),
+            total_candidates: 0,
+        }
+    }
+}
+
+/// summary / observation 각각의 export 결과 분리.
+#[derive(Debug, Serialize)]
+pub struct ExportReport {
+    pub summaries: ExportBreakdown,
+    pub observations: ExportBreakdown,
+}
+
 #[tauri::command]
 pub fn memory_export_to_vault(
     vault_path: String,
     filter: Vec<String>,
+    include_summaries: bool,
+    include_observations: bool,
 ) -> Result<ExportReport, String> {
     let vault_root = PathBuf::from(&vault_path);
     if !vault_root.is_dir() {
         return Err(format!("vault not a directory: {vault_path}"));
     }
-    let summaries = list_summaries_inner(&filter)?;
-    let existing = scan_existing_mem_ids(&vault_root)?;
-
-    let total = summaries.len();
-    let mut created = 0usize;
-    let mut skipped = 0usize;
-    let mut errors: Vec<String> = Vec::new();
-
-    // exported_at 한 번만 계산 (sync 한 회 = 동일 timestamp)
+    // exported_at 한 번만 계산 (sync 한 회 = 동일 timestamp, summary/observation 공유)
     let exported_at = current_iso8601();
 
-    for s in &summaries {
-        if existing.contains(&s.id) {
-            skipped += 1;
-            continue;
+    let summaries = if include_summaries {
+        let rows = list_summaries_inner(&filter)?;
+        let existing = scan_existing_summary_ids(&vault_root)?;
+        let total = rows.len();
+        let mut created = 0usize;
+        let mut skipped = 0usize;
+        let mut errors: Vec<String> = Vec::new();
+        for s in &rows {
+            if existing.contains(&s.id) {
+                skipped += 1;
+                continue;
+            }
+            match write_summary_to_vault(&vault_root, s, &exported_at) {
+                Ok(_) => created += 1,
+                Err(e) => errors.push(format!("mem_id={}: {e}", s.id)),
+            }
         }
-        match write_summary_to_vault(&vault_root, s, &exported_at) {
-            Ok(_) => created += 1,
-            Err(e) => errors.push(format!("mem_id={}: {e}", s.id)),
+        ExportBreakdown {
+            created,
+            skipped,
+            errors,
+            total_candidates: total,
         }
-    }
+    } else {
+        ExportBreakdown::empty()
+    };
+
+    let observations = if include_observations {
+        let rows = list_observations_inner(&filter)?;
+        let existing = scan_existing_observation_ids(&vault_root)?;
+        let total = rows.len();
+        let mut created = 0usize;
+        let mut skipped = 0usize;
+        let mut errors: Vec<String> = Vec::new();
+        for o in &rows {
+            if existing.contains(&o.id) {
+                skipped += 1;
+                continue;
+            }
+            match write_observation_to_vault(&vault_root, o, &exported_at) {
+                Ok(_) => created += 1,
+                Err(e) => errors.push(format!("obs_id={}: {e}", o.id)),
+            }
+        }
+        ExportBreakdown {
+            created,
+            skipped,
+            errors,
+            total_candidates: total,
+        }
+    } else {
+        ExportBreakdown::empty()
+    };
 
     Ok(ExportReport {
-        created,
-        skipped,
-        errors,
-        total_candidates: total,
+        summaries,
+        observations,
     })
+}
+
+/// observation 한 row를 `_memories/observations/{YYYY-MM}/{date}-{project}-{obs_id}.md`로 작성.
+/// session_summary와 동일 패턴(같은 헬퍼 재사용)이지만 폴더가 분리되어 mem_id 충돌 회피.
+fn write_observation_to_vault(
+    vault_root: &Path,
+    o: &Observation,
+    exported_at: &str,
+) -> Result<(), String> {
+    let yyyy_mm = month_folder(&o.created_at, o.created_at_epoch);
+    let safe_project = sanitize_project_for_path(&o.project);
+    let date_part = date_only(&o.created_at, o.created_at_epoch);
+    let filename = format!("{date_part}-{safe_project}-{}.md", o.id);
+
+    let dir = vault_root
+        .join("_memories")
+        .join("observations")
+        .join(&yyyy_mm);
+    fs::create_dir_all(&dir).map_err(|e| format!("create_dir_all {}: {e}", dir.display()))?;
+    let target = dir.join(&filename);
+    if target.exists() {
+        return Err(format!("target already exists: {}", target.display()));
+    }
+    let body = render_observation_md(o, exported_at);
+    fs::write(&target, body).map_err(|e| format!("write {}: {e}", target.display()))?;
+    Ok(())
+}
+
+/// observation 노트 본문(frontmatter + body).
+/// frontmatter `type: observation` + `obs_type` (observations.type 컬럼 값).
+fn render_observation_md(o: &Observation, exported_at: &str) -> String {
+    let mut out = String::with_capacity(4096);
+    // frontmatter
+    out.push_str("---\n");
+    out.push_str("doc_kind: memory\n");
+    out.push_str("type: observation\n");
+    out.push_str("source: claude-mem\n");
+    out.push_str(&format!("mem_id: {}\n", o.id));
+    out.push_str(&format!(
+        "mem_session_id: \"{}\"\n",
+        o.memory_session_id.replace('"', "\\\"")
+    ));
+    out.push_str(&format!("project: \"{}\"\n", o.project.replace('"', "\\\"")));
+    out.push_str(&format!(
+        "obs_type: \"{}\"\n",
+        o.r#type.replace('"', "\\\"")
+    ));
+    out.push_str(&format!("date: \"{}\"\n", o.created_at));
+    if let Some(fr) = &o.files_read {
+        out.push_str(&format!("files_read: {}\n", yaml_block_scalar(fr)));
+    }
+    if let Some(fm) = &o.files_modified {
+        out.push_str(&format!("files_modified: {}\n", yaml_block_scalar(fm)));
+    }
+    out.push_str(&format!("exported_at: \"{exported_at}\"\n"));
+    out.push_str("exported_by: lapis-phase-5.1.d\n");
+    out.push_str("---\n\n");
+
+    // 본문 — title fallback "Observation {id}"
+    let default_title = format!("Observation {}", o.id);
+    let title = o
+        .title
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&default_title);
+    out.push_str(&format!("# {title}\n\n"));
+    if let Some(sub) = &o.subtitle {
+        let t = sub.trim();
+        if !t.is_empty() {
+            out.push_str(t);
+            out.push_str("\n\n");
+        }
+    }
+    push_section(&mut out, "Text", &o.text);
+    push_section(&mut out, "Narrative", &o.narrative);
+    push_section(&mut out, "Facts", &o.facts);
+    push_section(&mut out, "Concepts", &o.concepts);
+    out
 }
 
 fn write_summary_to_vault(
@@ -555,6 +1017,8 @@ fn render_summary_md(s: &SessionSummary, exported_at: &str) -> String {
     // frontmatter
     out.push_str("---\n");
     out.push_str("doc_kind: memory\n");
+    // type 필드: PR3에서 observation과 분기 — PR1 시점에 export된 노트는 이 필드 없음(default 추론으로 호환).
+    out.push_str("type: session_summary\n");
     out.push_str("source: claude-mem\n");
     out.push_str(&format!("mem_id: {}\n", s.id));
     out.push_str(&format!(

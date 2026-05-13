@@ -17,6 +17,10 @@
   let projectsFilter: string[] = $state([]);
   let errorMessage = $state("");
 
+  // 체크박스 — vault config의 default를 초기값으로 두고 사용자가 모달 안에서 일회성 override 가능.
+  let includeSummaries = $state(true);
+  let includeObservations = $state(false);
+
   // 모달 열릴 때마다 preview 자동 로드
   $effect(() => {
     if (!$memorySyncOpen) return;
@@ -37,11 +41,35 @@
     try {
       const config = await loadVaultConfig(vault);
       projectsFilter = config.mem_projects;
-      preview = await memoryPreviewExport(vault, projectsFilter);
+      includeSummaries = config.mem_session_summaries;
+      includeObservations = config.mem_observations;
+      preview = await memoryPreviewExport(
+        vault,
+        projectsFilter,
+        includeSummaries,
+        includeObservations,
+      );
       stage = "confirm";
     } catch (e) {
       stage = "error";
       errorMessage = `미리보기 실패: ${e}`;
+    }
+  }
+
+  /** 체크박스 토글 시 preview 카운트 재계산 (vault 스캔 비용은 ~수십ms). */
+  async function refreshPreview() {
+    const vault = $vaultPath;
+    if (!vault || stage !== "confirm") return;
+    try {
+      preview = await memoryPreviewExport(
+        vault,
+        projectsFilter,
+        includeSummaries,
+        includeObservations,
+      );
+    } catch (e) {
+      stage = "error";
+      errorMessage = `미리보기 갱신 실패: ${e}`;
     }
   }
 
@@ -54,7 +82,12 @@
     }
     stage = "exporting";
     try {
-      report = await memoryExportToVault(vault, projectsFilter);
+      report = await memoryExportToVault(
+        vault,
+        projectsFilter,
+        includeSummaries,
+        includeObservations,
+      );
       stage = "done";
       // vault 트리 갱신 (새 _memories/ 폴더 surface)
       void reloadNotes();
@@ -82,6 +115,13 @@
     if (filter.length === 0 || filter.includes("*")) return "전체 프로젝트";
     return filter.join(", ");
   }
+
+  /** preview 단계 — 둘 다 신규 0이거나 둘 다 비활성이면 export 버튼 disable */
+  function nothingToExport(p: PreviewReport | null): boolean {
+    if (!p) return true;
+    const total = p.summaries.new_count + p.observations.new_count;
+    return total === 0;
+  }
 </script>
 
 {#if $memorySyncOpen}
@@ -101,36 +141,78 @@
           <p>claude-mem DB 조회 중…</p>
           <p class="hint">vault 매핑: {projectsLabel(projectsFilter)}</p>
         {:else if stage === "confirm" && preview}
-          <p>
-            대상 <strong>{preview.total_candidates}</strong>개 (vault 매핑: {projectsLabel(projectsFilter)})
-          </p>
+          <p class="hint">vault 매핑: {projectsLabel(projectsFilter)}</p>
           <ul class="counts">
-            <li>신규 생성 예정: <strong class="new">{preview.new_count}</strong>개</li>
-            <li>이미 export됨 (skip): {preview.already_exported}개</li>
+            <li>
+              <span class="kind summary">Session summaries</span>
+              대상 <strong>{preview.summaries.total_candidates}</strong> ·
+              신규 <strong class="new">{preview.summaries.new_count}</strong> ·
+              skip {preview.summaries.already_exported}
+            </li>
+            <li>
+              <span class="kind obs">Observations</span>
+              대상 <strong>{preview.observations.total_candidates}</strong> ·
+              신규 <strong class="new">{preview.observations.new_count}</strong> ·
+              skip {preview.observations.already_exported}
+            </li>
           </ul>
-          {#if preview.new_count === 0}
+          <div class="toggles">
+            <label>
+              <input
+                type="checkbox"
+                bind:checked={includeSummaries}
+                onchange={refreshPreview}
+              />
+              session_summaries 포함
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                bind:checked={includeObservations}
+                onchange={refreshPreview}
+              />
+              observations 포함
+            </label>
+          </div>
+          {#if nothingToExport(preview)}
             <p class="info">신규 export 대상이 없습니다.</p>
           {:else}
             <p class="hint">
-              새 노트는 <code>_memories/YYYY-MM/</code> 폴더에 생성됩니다. 기존 노트는 보존(skip).
+              Summaries → <code>_memories/YYYY-MM/</code>,
+              observations → <code>_memories/observations/YYYY-MM/</code>. 기존 노트 보존.
             </p>
           {/if}
         {:else if stage === "exporting"}
           <p>Export 중… (DB → vault 파일 쓰기)</p>
-          <p class="hint">대량의 메모리는 수 초~수십 초 걸릴 수 있습니다.</p>
+          <p class="hint">10000+ observations는 수십 초 걸릴 수 있습니다.</p>
         {:else if stage === "done" && report}
           <p>완료.</p>
           <ul class="counts">
-            <li>신규 생성: <strong class="new">{report.created}</strong>개</li>
-            <li>Skip: {report.skipped}개</li>
-            {#if report.errors.length > 0}
-              <li class="err">에러: {report.errors.length}건</li>
-            {/if}
+            <li>
+              <span class="kind summary">Session summaries</span>
+              신규 <strong class="new">{report.summaries.created}</strong> ·
+              skip {report.summaries.skipped}
+              {#if report.summaries.errors.length > 0}
+                · <span class="err">에러 {report.summaries.errors.length}</span>
+              {/if}
+            </li>
+            <li>
+              <span class="kind obs">Observations</span>
+              신규 <strong class="new">{report.observations.created}</strong> ·
+              skip {report.observations.skipped}
+              {#if report.observations.errors.length > 0}
+                · <span class="err">에러 {report.observations.errors.length}</span>
+              {/if}
+            </li>
           </ul>
-          {#if report.errors.length > 0}
+          {#if report.summaries.errors.length + report.observations.errors.length > 0}
             <details>
               <summary>에러 상세</summary>
-              <pre>{report.errors.slice(0, 20).join("\n")}{report.errors.length > 20 ? "\n…" : ""}</pre>
+              <pre>{[...report.summaries.errors, ...report.observations.errors]
+                .slice(0, 20)
+                .join("\n")}{report.summaries.errors.length + report.observations.errors.length > 20
+                ? "\n…"
+                : ""}</pre>
             </details>
           {/if}
         {:else if stage === "error"}
@@ -144,7 +226,7 @@
           <button
             class="btn primary"
             onclick={runExport}
-            disabled={preview ? preview.new_count === 0 : true}
+            disabled={nothingToExport(preview)}
           >
             Sync 시작
           </button>
@@ -243,6 +325,52 @@
 
   .counts .new {
     color: #6dd6ff;
+  }
+
+  /* kind 배지 — summary는 보라, obs는 청록 (RelatedMemoriesPanel/SearchModal 색 톤 통일) */
+  .kind {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-right: 8px;
+    vertical-align: 1px;
+  }
+
+  .kind.summary {
+    background: rgba(168, 119, 232, 0.18);
+    color: #c4a3ff;
+    border: 1px solid rgba(168, 119, 232, 0.35);
+  }
+
+  .kind.obs {
+    background: rgba(73, 216, 196, 0.16);
+    color: #7be4cf;
+    border: 1px solid rgba(73, 216, 196, 0.35);
+  }
+
+  .toggles {
+    display: flex;
+    gap: 16px;
+    margin: 10px 0 4px;
+    font-size: 12px;
+    color: #d0d0d0;
+  }
+
+  .toggles label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggles input[type="checkbox"] {
+    accent-color: #6dd6ff;
+    cursor: pointer;
   }
 
   details {
