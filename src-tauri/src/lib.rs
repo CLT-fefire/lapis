@@ -1,5 +1,6 @@
 mod memory;
 mod mirror;
+mod search;
 mod vault;
 mod watcher;
 
@@ -12,9 +13,25 @@ pub fn run() {
         .setup(|app| {
             // Phase 5.2 PR2 #9 — claude-mem.db WAL watch 시작. 실패는 silent (claude-mem 미설치 등).
             let handle = app.handle().clone();
-            if let Err(e) = mirror::start_wal_watch(handle) {
+            if let Err(e) = mirror::start_wal_watch(handle.clone()) {
                 eprintln!("[mirror] WAL watch 시작 실패: {e}");
             }
+
+            // Phase Search #7 — 첫 시작 시 search index가 비어 있고 mirror에 데이터 있으면
+            // 백그라운드에서 통째 빌드. mirror sync 후속 호출에서는 changed row만 incremental.
+            let handle_for_index = handle.clone();
+            std::thread::spawn(move || match search::ensure_index_built(&handle_for_index) {
+                Ok(r) => {
+                    if r.added > 0 {
+                        eprintln!(
+                            "[search] 첫 인덱스 빌드 완료: +{} · {}ms",
+                            r.added, r.duration_ms
+                        );
+                    }
+                }
+                Err(e) => eprintln!("[search] ensure_index_built 실패: {e}"),
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -43,6 +60,7 @@ pub fn run() {
             mirror::mirror_query_memories,
             mirror::mirror_query_related_to_note,
             mirror::mirror_list_memory_links,
+            search::search_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
