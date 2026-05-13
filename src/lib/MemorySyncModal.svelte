@@ -1,15 +1,24 @@
 <script lang="ts">
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { memorySyncOpen, closeMemorySync } from "$lib/stores/memorySync";
   import { vaultPath, reloadNotes } from "$lib/stores/vault";
   import { loadVaultConfig } from "$lib/vaultConfig";
   import {
     memoryPreviewExport,
     memoryExportToVault,
+    MEMORY_EXPORT_PROGRESS_EVENT,
     type PreviewReport,
     type ExportReport,
+    type ExportProgressPayload,
   } from "$lib/tauri/memory";
 
-  type Stage = "preview-loading" | "confirm" | "exporting" | "done" | "error";
+  type Stage =
+    | "preview-loading"
+    | "confirm"
+    | "exporting"
+    | "indexing"
+    | "done"
+    | "error";
 
   let stage: Stage = $state("preview-loading");
   let preview: PreviewReport | null = $state(null);
@@ -20,6 +29,14 @@
   // 체크박스 — vault config의 default를 초기값으로 두고 사용자가 모달 안에서 일회성 override 가능.
   let includeSummaries = $state(true);
   let includeObservations = $state(false);
+
+  // exporting stage progress — Rust 측 emit으로 갱신.
+  let summaryProgress: ExportProgressPayload | null = $state(null);
+  let obsProgress: ExportProgressPayload | null = $state(null);
+  let unlistenProgress: UnlistenFn | null = null;
+  let exportStartedAt = 0; // 경과 시간 표시용 (ms epoch)
+  let elapsedSec = $state(0);
+  let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 
   // 모달 열릴 때마다 preview 자동 로드
   $effect(() => {
@@ -81,6 +98,30 @@
       return;
     }
     stage = "exporting";
+    summaryProgress = null;
+    obsProgress = null;
+    exportStartedAt = Date.now();
+    elapsedSec = 0;
+
+    // 경과 시간 1초마다 갱신
+    elapsedTimer = setInterval(() => {
+      elapsedSec = Math.floor((Date.now() - exportStartedAt) / 1000);
+    }, 1000);
+
+    // Rust 측 progress emit 수신 등록 (await 후에 export 호출해야 첫 emit 놓치지 않음)
+    try {
+      unlistenProgress = await listen<ExportProgressPayload>(
+        MEMORY_EXPORT_PROGRESS_EVENT,
+        (e) => {
+          if (e.payload.phase === "summary") summaryProgress = e.payload;
+          else if (e.payload.phase === "observation") obsProgress = e.payload;
+        },
+      );
+    } catch (e) {
+      // listen 등록 실패해도 export 자체는 진행 (progress UI만 비활성)
+      console.warn("progress listen 등록 실패:", e);
+    }
+
     try {
       report = await memoryExportToVault(
         vault,
@@ -88,16 +129,38 @@
         includeSummaries,
         includeObservations,
       );
+      // progress emit 정리는 이미 끝났지만 listen은 indexing 동안 유지 가능 — 안전하게 일찍 해제
+      cleanupProgress();
+      // 인덱스 갱신 단계로 전환 — file watcher의 scheduleFullReload(500ms 디바운스)와
+      // 중복되지 않도록 reloadNotes 내부 reloadInFlight guard가 처리.
+      // 이 phase가 끝나야 사이드바 트리/검색 인덱스가 새 노트 반영 — 사용자에게 명시적으로 보여줌.
+      stage = "indexing";
+      try {
+        await reloadNotes();
+      } catch (e) {
+        console.warn("[memory-sync] reloadNotes after export failed:", e);
+      }
       stage = "done";
-      // vault 트리 갱신 (새 _memories/ 폴더 surface)
-      void reloadNotes();
     } catch (e) {
       stage = "error";
       errorMessage = `export 실패: ${e}`;
+      cleanupProgress();
+    }
+  }
+
+  function cleanupProgress() {
+    if (unlistenProgress) {
+      unlistenProgress();
+      unlistenProgress = null;
+    }
+    if (elapsedTimer) {
+      clearInterval(elapsedTimer);
+      elapsedTimer = null;
     }
   }
 
   function close() {
+    cleanupProgress();
     closeMemorySync();
     // 다음 열릴 때 초기 상태로 — $effect가 새로 preview 호출하니 stage 등은 자동 리셋되지만
     // 모달 닫힐 때 명시적으로 정리.
@@ -105,10 +168,19 @@
     preview = null;
     report = null;
     errorMessage = "";
+    summaryProgress = null;
+    obsProgress = null;
   }
 
   function onBackdrop(e: MouseEvent) {
-    if (e.target === e.currentTarget && stage !== "exporting") close();
+    // exporting / indexing 동안엔 backdrop 클릭 닫기 차단 (진행 중)
+    if (
+      e.target === e.currentTarget &&
+      stage !== "exporting" &&
+      stage !== "indexing"
+    ) {
+      close();
+    }
   }
 
   function projectsLabel(filter: string[]): string {
@@ -131,7 +203,7 @@
     <div class="modal" role="dialog" aria-modal="true">
       <header>
         <span class="title">Memory · Sync</span>
-        {#if stage !== "exporting"}
+        {#if stage !== "exporting" && stage !== "indexing"}
           <button class="close" onclick={close} aria-label="닫기">✕</button>
         {/if}
       </header>
@@ -183,8 +255,62 @@
             </p>
           {/if}
         {:else if stage === "exporting"}
-          <p>Export 중… (DB → vault 파일 쓰기)</p>
-          <p class="hint">10000+ observations는 수십 초 걸릴 수 있습니다.</p>
+          <p>Export 중… <span class="hint">({elapsedSec}s 경과)</span></p>
+          {#if summaryProgress}
+            <div class="prog-row">
+              <div class="prog-head">
+                <span class="kind summary">Session summaries</span>
+                <span class="prog-text">
+                  {summaryProgress.current} / {summaryProgress.total}
+                  · 생성 {summaryProgress.created} · skip {summaryProgress.skipped}
+                  {#if summaryProgress.errors > 0}
+                    · <span class="err">에러 {summaryProgress.errors}</span>
+                  {/if}
+                </span>
+              </div>
+              <div class="prog-bar">
+                <div
+                  class="prog-fill summary"
+                  style="width: {summaryProgress.total > 0
+                    ? Math.min(100, (summaryProgress.current / summaryProgress.total) * 100)
+                    : 0}%"
+                ></div>
+              </div>
+            </div>
+          {/if}
+          {#if obsProgress}
+            <div class="prog-row">
+              <div class="prog-head">
+                <span class="kind obs">Observations</span>
+                <span class="prog-text">
+                  {obsProgress.current} / {obsProgress.total}
+                  · 생성 {obsProgress.created} · skip {obsProgress.skipped}
+                  {#if obsProgress.errors > 0}
+                    · <span class="err">에러 {obsProgress.errors}</span>
+                  {/if}
+                </span>
+              </div>
+              <div class="prog-bar">
+                <div
+                  class="prog-fill obs"
+                  style="width: {obsProgress.total > 0
+                    ? Math.min(100, (obsProgress.current / obsProgress.total) * 100)
+                    : 0}%"
+                ></div>
+              </div>
+            </div>
+          {/if}
+          {#if !summaryProgress && !obsProgress}
+            <p class="hint">시작 중…</p>
+          {/if}
+        {:else if stage === "indexing"}
+          <div class="indexing-row">
+            <div class="spinner" aria-hidden="true"></div>
+            <div class="indexing-text">
+              <div class="primary">인덱스 갱신 중…</div>
+              <div class="secondary">백링크 · 태그 · 풀텍스트 검색 재구성 (사이드바 트리/검색 반영)</div>
+            </div>
+          </div>
         {:else if stage === "done" && report}
           <p>완료.</p>
           <ul class="counts">
@@ -371,6 +497,88 @@
   .toggles input[type="checkbox"] {
     accent-color: #6dd6ff;
     cursor: pointer;
+  }
+
+  /* exporting stage progress bar */
+  .prog-row {
+    margin: 12px 0;
+  }
+
+  .prog-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .prog-text {
+    color: #ccc;
+    font-size: 11px;
+  }
+
+  .prog-bar {
+    width: 100%;
+    height: 6px;
+    background: #2a2a2a;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .prog-fill {
+    height: 100%;
+    transition: width 0.15s ease-out;
+    border-radius: 3px;
+  }
+
+  .prog-fill.summary {
+    background: linear-gradient(90deg, #a877e8, #c4a3ff);
+  }
+
+  .prog-fill.obs {
+    background: linear-gradient(90deg, #49d8c4, #7be4cf);
+  }
+
+  /* indexing stage — 사이드바 dim overlay와 톤 통일 (spinner + 2줄 텍스트) */
+  .indexing-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 4px;
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #2a2a2a;
+    border-top-color: #6dd6ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .indexing-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .indexing-text .primary {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8e8e8;
+  }
+
+  .indexing-text .secondary {
+    font-size: 11px;
+    color: #999;
   }
 
   details {

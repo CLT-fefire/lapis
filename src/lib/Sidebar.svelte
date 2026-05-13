@@ -107,6 +107,19 @@
     {:else}
       <FilterPanel />
     {/if}
+
+    {#if $indexBuilding}
+      <!-- 인덱스 빌드 중 dim overlay — 진행 중임을 명확히 + 트리 클릭 race condition 차단 -->
+      <div class="index-overlay" role="status" aria-live="polite">
+        <div class="index-overlay-card">
+          <div class="spinner" aria-hidden="true"></div>
+          <div class="index-overlay-text">
+            <div class="primary">인덱스 빌드 중…</div>
+            <div class="secondary">백링크 · 태그 · 풀텍스트 검색 재구성</div>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 </aside>
 
@@ -280,6 +293,66 @@
   .sidebar-body {
     flex: 1;
     overflow-y: auto;
+    position: relative;
+  }
+
+  /* 인덱스 빌드 중 dim overlay — 트리 영역 cover */
+  .index-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(20, 20, 20, 0.78);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 40px;
+    z-index: 30;
+    /* 트리 클릭 차단 (overlay가 포인터 받음) */
+  }
+
+  .index-overlay-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #232323;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 14px 18px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    max-width: calc(100% - 32px);
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #2a2a2a;
+    border-top-color: #6dd6ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .index-overlay-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .index-overlay-text .primary {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8e8e8;
+  }
+
+  .index-overlay-text .secondary {
+    font-size: 11px;
+    color: #999;
   }
 
   .empty {
