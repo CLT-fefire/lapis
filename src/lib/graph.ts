@@ -1,6 +1,7 @@
 import type { LinkIndex } from "$lib/linkIndex";
 import { resolveTarget, targetName } from "$lib/linkIndex";
 import type { TagIndex } from "$lib/stores/tags";
+import type { MemoryLink } from "$lib/tauri/mirror";
 
 export type GraphMode = "links" | "tags" | "both";
 
@@ -11,9 +12,15 @@ export interface GraphElement {
     target?: string;
     label?: string;
     parentDir?: string;
-    kind?: "note" | "tag";
-    edgeKind?: "link" | "tag" | "related";
+    kind?: "note" | "tag" | "memory";
+    edgeKind?: "link" | "tag" | "related" | "memory-link";
     tagKey?: string;
+    /** kind="memory" 전용 — 메모리 노드 클릭 시 vault `_memories/**` lookup에 사용 */
+    sourceId?: number;
+    /** kind="memory" 전용 — "summary" | "observation" */
+    memoryKind?: "summary" | "observation";
+    /** kind="memory" 전용 — match_role 라벨 (UI 디버깅용) */
+    matchRole?: string;
   };
 }
 
@@ -32,6 +39,10 @@ export interface BuildGraphOptions {
   mode?: GraphMode;
   /** mode === 'tags' or 'both' 시 필수 */
   tagIndex?: TagIndex | null;
+  /** Phase C.4 — 메모리 노드 + 엣지 포함 여부. 기본 false. */
+  showMemory?: boolean;
+  /** Phase C.4 — `mirrorListMemoryLinks` 결과. showMemory=true일 때만 사용. */
+  memoryLinks?: MemoryLink[];
 }
 
 /**
@@ -44,11 +55,17 @@ export function buildGraphData(index: LinkIndex, options?: BuildGraphOptions): G
   const showIsolated = options?.showIsolated ?? false;
   const alwaysInclude = options?.alwaysInclude;
   const tagIndex = options?.tagIndex;
+  const showMemory = options?.showMemory ?? false;
+  const memoryLinks = options?.memoryLinks ?? [];
 
   const edges: GraphElement[] = [];
   const edgeKeys = new Set<string>();
   const connected = new Set<string>();
   const tagNodeIds = new Set<string>();
+  const memoryNodeMap = new Map<
+    string,
+    { sourceId: number; memoryKind: "summary" | "observation"; title: string }
+  >();
 
   // 1) Link 엣지 (links / both 모드) — wikilink + md link 통합
   if (mode === "links" || mode === "both") {
@@ -117,6 +134,34 @@ export function buildGraphData(index: LinkIndex, options?: BuildGraphOptions): G
     }
   }
 
+  // 3') Memory 엣지 + 노드 (Phase C.4) — 노트(linkIndex)에 있는 vault_note_path만 매칭
+  if (showMemory) {
+    for (const link of memoryLinks) {
+      const notePath = link.vault_note_path;
+      if (!index.byPath.has(notePath)) continue; // 인덱스에 없는 경로는 skip (stale 또는 외부)
+      const memoryId = `mem:${link.type}:${link.source_id}`;
+      const key = `mem|${notePath}|${memoryId}`;
+      if (edgeKeys.has(key)) continue;
+      edgeKeys.add(key);
+      edges.push({
+        data: {
+          id: `me:${edges.length}`,
+          source: memoryId,
+          target: notePath,
+          edgeKind: "memory-link",
+          matchRole: link.match_role,
+        },
+      });
+      connected.add(notePath);
+      connected.add(memoryId);
+      memoryNodeMap.set(memoryId, {
+        sourceId: link.source_id,
+        memoryKind: link.type,
+        title: link.title,
+      });
+    }
+  }
+
   if (alwaysInclude) connected.add(alwaysInclude);
 
   // 3) Note 노드
@@ -152,6 +197,19 @@ export function buildGraphData(index: LinkIndex, options?: BuildGraphOptions): G
         },
       });
     }
+  }
+
+  // 5) Memory 노드 (Phase C.4)
+  for (const [memoryId, meta] of memoryNodeMap) {
+    nodes.push({
+      data: {
+        id: memoryId,
+        label: meta.title,
+        kind: "memory",
+        memoryKind: meta.memoryKind,
+        sourceId: meta.sourceId,
+      },
+    });
   }
 
   return { nodes, edges, isolatedCount };

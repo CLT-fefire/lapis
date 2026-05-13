@@ -8,9 +8,11 @@
   // @ts-expect-error - cytoscape-fcose 패키지에 타입 정의 미제공
   import cytoscapeFcose from "cytoscape-fcose";
   import { graphOpen, closeGraph } from "$lib/stores/graph";
-  import { linkIndex, currentNotePath, selectNote } from "$lib/stores/vault";
+  import { linkIndex, currentNotePath, selectNote, vaultPath } from "$lib/stores/vault";
   import { tagIndex, selectTag, showTagsTab } from "$lib/stores/tags";
   import { buildGraphData, getNeighbors, type GraphMode } from "$lib/graph";
+  import { mirrorListMemoryLinks, type MemoryLink } from "$lib/tauri/mirror";
+  import { memoryFindExportedNote } from "$lib/tauri/memory";
 
   // ESM/CJS interop 안전 처리 — Vite가 default export를 wrapping할 수 있음
   const fcoseRegister =
@@ -32,6 +34,9 @@
   let stats = $state({ nodes: 0, edges: 0, isolated: 0 });
   let showIsolated = $state(false);
   let mode: GraphMode = $state("both");
+  let showMemory = $state(false); // Phase C.4 — 기본 OFF (그래프 폭증 회피)
+  let memoryLinks: MemoryLink[] = $state([]);
+  let memoryLoading = $state(false);
 
   // 모달 open + container 마운트 + 인덱스 준비되면 cytoscape 인스턴스 생성/갱신
   $effect(() => {
@@ -46,6 +51,8 @@
       showIsolated,
       mode,
       tagIndex: $tagIndex,
+      showMemory,
+      memoryLinks,
     });
     stats = {
       nodes: data.nodes.length,
@@ -187,6 +194,56 @@
             height: 14,
           },
         },
+        // Phase C.4 — Memory 노드 (observation = teal, summary = purple)
+        {
+          selector: "node[kind = 'memory'][memoryKind = 'observation']",
+          style: {
+            "background-color": "#7be4cf",
+            "border-color": "#aef0e0",
+            "border-width": 1,
+            shape: "diamond",
+            label: "data(label)",
+            color: "#7be4cf",
+            "font-size": "9px",
+            "text-valign": "bottom",
+            "text-margin-y": 3,
+            "text-wrap": "ellipsis",
+            "text-max-width": "100px",
+            "min-zoomed-font-size": 10,
+            width: 11,
+            height: 11,
+          },
+        },
+        {
+          selector: "node[kind = 'memory'][memoryKind = 'summary']",
+          style: {
+            "background-color": "#c4a3ff",
+            "border-color": "#d6c0ff",
+            "border-width": 1,
+            shape: "diamond",
+            label: "data(label)",
+            color: "#c4a3ff",
+            "font-size": "9px",
+            "text-valign": "bottom",
+            "text-margin-y": 3,
+            "text-wrap": "ellipsis",
+            "text-max-width": "100px",
+            "min-zoomed-font-size": 10,
+            width: 11,
+            height: 11,
+          },
+        },
+        {
+          selector: "edge[edgeKind = 'memory-link']",
+          style: {
+            width: 1,
+            "line-color": "#666",
+            "line-style": "dashed",
+            "target-arrow-shape": "none",
+            "curve-style": "bezier",
+            opacity: 0.45,
+          },
+        },
       ],
       // fcose 등록되어 있으면 그것을, 아니면 내장 cose (function 옵션 형식)
       layout: (fcoseRegistered
@@ -243,8 +300,8 @@
       }
     }
 
-    // 노드 클릭 분기 — note는 점프, tag는 사이드바 Tags 탭으로
-    cy.on("tap", "node", (evt) => {
+    // 노드 클릭 분기 — note는 점프, tag는 사이드바 Tags 탭, memory는 export된 .md lookup 후 점프
+    cy.on("tap", "node", async (evt) => {
       const node = evt.target;
       const kind = node.data("kind");
       if (kind === "tag") {
@@ -253,11 +310,55 @@
           selectTag(tagKey);
           showTagsTab();
         }
+        closeGraph();
+      } else if (kind === "memory") {
+        const sourceId: number | undefined = node.data("sourceId");
+        const memoryKind: "summary" | "observation" | undefined = node.data("memoryKind");
+        const vault = $vaultPath;
+        if (!vault || sourceId === undefined || !memoryKind) {
+          closeGraph();
+          return;
+        }
+        try {
+          const abs = await memoryFindExportedNote(vault, sourceId, memoryKind);
+          if (abs) {
+            closeGraph();
+            selectNote(abs);
+          } else {
+            console.warn(
+              `[Graph] memory ${memoryKind}/${sourceId} not exported yet — Memory: Sync 실행 필요`,
+            );
+          }
+        } catch (e) {
+          console.warn("[Graph] memory navigate failed:", e);
+        }
       } else {
         selectNote(node.id());
+        closeGraph();
       }
-      closeGraph();
     });
+  });
+
+  // showMemory 토글 시 lazy load. 그래프 폭증 회피 — 사용자 명시 동의 후 fetch.
+  $effect(() => {
+    if (!$graphOpen) return;
+    if (!showMemory) {
+      memoryLinks = [];
+      return;
+    }
+    if (memoryLinks.length > 0 || memoryLoading) return; // 이미 로드됨
+    memoryLoading = true;
+    void mirrorListMemoryLinks()
+      .then((result) => {
+        memoryLinks = result;
+      })
+      .catch((e) => {
+        console.warn("[Graph] mirrorListMemoryLinks failed:", e);
+        memoryLinks = [];
+      })
+      .finally(() => {
+        memoryLoading = false;
+      });
   });
 
   function destroyCy() {
@@ -319,6 +420,10 @@
         <label class="isolated-toggle" title="다른 노트와 연결 없는 노트도 표시">
           <input type="checkbox" bind:checked={showIsolated} />
           isolated 표시
+        </label>
+        <label class="isolated-toggle" title="claude-mem 메모리 노드 + 엣지 표시 (Phase C.4)">
+          <input type="checkbox" bind:checked={showMemory} />
+          memory {memoryLoading ? "…" : memoryLinks.length > 0 ? `(${memoryLinks.length})` : ""}
         </label>
         <button class="close-btn" title="닫기 (Esc)" onclick={closeGraph}>×</button>
       </header>
