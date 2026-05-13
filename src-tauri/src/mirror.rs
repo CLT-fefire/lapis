@@ -22,8 +22,10 @@ use tauri::{AppHandle, Emitter, Manager};
 
 // ─── schema / open ──────────────────────────────────────────────────────────
 
-/// mirror DB의 현재 schema 버전. v1 → v2 시 통째 재빌드 정책 (plan §2).
-const SCHEMA_VERSION: i32 = 1;
+/// mirror DB의 현재 schema 버전.
+/// v1 → v2: `memories_au` 트리거에 `WHEN OLD.content_hash IS NOT NEW.content_hash` 추가
+/// + UPSERT의 ON CONFLICT DO UPDATE에 WHERE 절 추가. 풀 sync 비용 대폭 감소 (Phase C.4 발견).
+const SCHEMA_VERSION: i32 = 2;
 
 /// claude-mem DB 파일명 (`~/.claude-mem/` 안 고정).
 const CLAUDE_MEM_DB_FILENAME: &str = "claude-mem.db";
@@ -53,14 +55,16 @@ pub fn open_rw(app: &AppHandle) -> Result<Connection, String> {
         .map_err(|e| format!("PRAGMA journal_mode 실패: {e}"))?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(|e| format!("PRAGMA foreign_keys 실패: {e}"))?;
-    conn.busy_timeout(Duration::from_secs(5))
+    // 30s — 풀 sync가 trigger 비용 등으로 5s를 넘는 경우(Phase C.4 발견)도 안전망.
+    // 진정한 root cause는 ON CONFLICT WHERE + trigger WHEN (schema v2)으로 해소.
+    conn.busy_timeout(Duration::from_secs(30))
         .map_err(|e| format!("busy_timeout 설정 실패: {e}"))?;
 
     ensure_schema(&conn)?;
     Ok(conn)
 }
 
-/// `PRAGMA user_version`을 보고 필요 시 schema를 빌드한다.
+/// `PRAGMA user_version`을 보고 필요 시 schema를 빌드/마이그레이션한다.
 fn ensure_schema(conn: &Connection) -> Result<(), String> {
     let current: i32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -70,14 +74,41 @@ fn ensure_schema(conn: &Connection) -> Result<(), String> {
         return Ok(());
     }
     if current == 0 {
+        // 새 DB — v2 형태로 한 번에 빌드 (build_schema_v1 + migrate)
         build_schema_v1(conn)?;
+        migrate_v1_to_v2(conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+            .map_err(|e| format!("PRAGMA user_version 설정 실패: {e}"))?;
+        return Ok(());
+    }
+    if current == 1 {
+        // 비파괴 마이그레이션 — 트리거만 drop + create. 데이터 보존.
+        migrate_v1_to_v2(conn)?;
+        conn.pragma_update(None, "user_version", 2)
             .map_err(|e| format!("PRAGMA user_version 설정 실패: {e}"))?;
         return Ok(());
     }
     Err(format!(
         "lapis-mem.db schema 버전 불일치: 디스크={current}, 기대={SCHEMA_VERSION}. 재빌드 필요."
     ))
+}
+
+/// v1 → v2 마이그레이션 — `memories_au` 트리거에 WHEN 조건 추가.
+/// content_hash 변경 없는 UPDATE는 trigger fire skip → 풀 sync 시 FTS5 재인덱스 비용 회피.
+fn migrate_v1_to_v2(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        r#"
+        DROP TRIGGER IF EXISTS memories_au;
+        CREATE TRIGGER memories_au AFTER UPDATE ON memories
+            WHEN OLD.content_hash IS NOT NEW.content_hash
+        BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, title, body)
+            VALUES('delete', old.id, old.title, old.body);
+            INSERT INTO memories_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+        END;
+        "#,
+    )
+    .map_err(|e| format!("v1→v2 트리거 마이그레이션 실패: {e}"))
 }
 
 /// schema v1 빌드. 모든 CREATE는 `IF NOT EXISTS` — 부분 상태에서도 안전 복구.
@@ -263,6 +294,24 @@ pub fn sync_now(
         }
     }
     report.deleted = apply_deletions(&tx, &pending_deletions)?;
+
+    // C.4 #2 — vault-aware sync에서 links_to_vault_notes 재계산 (cleanup_md 이후 DELETE도 끝난 상태).
+    // WAL watch sync는 vault_path=None이라 skip → 다음 vault-aware sync 시 catch-up.
+    if let Some(vp) = vault_path.as_deref() {
+        let vault_root = std::path::Path::new(vp);
+        if vault_root.exists() {
+            match recompute_links_to_vault_notes(&tx, vault_root) {
+                Ok(n) => {
+                    if n > 0 {
+                        eprintln!("[mirror] links_to_vault_notes: {n}건 재계산");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[mirror] links_to_vault_notes 재계산 실패: {e}");
+                }
+            }
+        }
+    }
 
     // sync 성공이면 last_failure 클리어 (#11 status indicator green 복귀)
     tx.execute(
@@ -454,37 +503,56 @@ fn upsert_memory(
     created_at_epoch: i64,
     now_epoch: i64,
 ) -> Result<i64, String> {
+    // ON CONFLICT DO UPDATE의 WHERE 절 — content_hash 변경 없으면 UPDATE 자체 skip (NOOP).
+    // RETURNING id는 매치된 row만 반환 — 변경 없으면 NoRows. 그 경우 별도 SELECT로 기존 id 회수.
+    // 풀 sync 시 11469 row 중 변경 없는 row는 NOOP → trigger fire 0 → 풀 sync 비용 대폭 감소.
+    let id_opt: Option<i64> = tx
+        .query_row(
+            "INSERT INTO memories(kind, source_id, session_id, project, title, body, obs_type, \
+                                  content_hash, created_at, created_at_epoch, last_synced_at_epoch) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(kind, source_id) DO UPDATE SET \
+                 session_id = excluded.session_id, \
+                 project = excluded.project, \
+                 title = excluded.title, \
+                 body = excluded.body, \
+                 obs_type = excluded.obs_type, \
+                 content_hash = excluded.content_hash, \
+                 created_at = excluded.created_at, \
+                 created_at_epoch = excluded.created_at_epoch, \
+                 last_synced_at_epoch = excluded.last_synced_at_epoch \
+             WHERE memories.content_hash IS NOT excluded.content_hash \
+             RETURNING id",
+            params![
+                kind,
+                source_id,
+                session_id,
+                project,
+                title,
+                body,
+                obs_type,
+                content_hash,
+                created_at,
+                created_at_epoch,
+                now_epoch
+            ],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("memories upsert (kind={kind}, source_id={source_id}): {e}"))?;
+
+    if let Some(id) = id_opt {
+        return Ok(id);
+    }
+    // 변경 없음 — 기존 id 회수
     tx.query_row(
-        "INSERT INTO memories(kind, source_id, session_id, project, title, body, obs_type, \
-                              content_hash, created_at, created_at_epoch, last_synced_at_epoch) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
-         ON CONFLICT(kind, source_id) DO UPDATE SET \
-             session_id = excluded.session_id, \
-             project = excluded.project, \
-             title = excluded.title, \
-             body = excluded.body, \
-             obs_type = excluded.obs_type, \
-             content_hash = excluded.content_hash, \
-             created_at = excluded.created_at, \
-             created_at_epoch = excluded.created_at_epoch, \
-             last_synced_at_epoch = excluded.last_synced_at_epoch \
-         RETURNING id",
-        params![
-            kind,
-            source_id,
-            session_id,
-            project,
-            title,
-            body,
-            obs_type,
-            content_hash,
-            created_at,
-            created_at_epoch,
-            now_epoch
-        ],
+        "SELECT id FROM memories WHERE kind = ? AND source_id = ?",
+        params![kind, source_id],
         |row| row.get(0),
     )
-    .map_err(|e| format!("memories upsert (kind={kind}, source_id={source_id}): {e}"))
+    .map_err(|e| {
+        format!("기존 memory_id 조회 실패 (kind={kind}, source_id={source_id}): {e}")
+    })
 }
 
 /// files_mentioned 재계산 — 첫 호출은 `memory_id`의 모든 row를 비우고 새 role을 박는다.
@@ -607,6 +675,149 @@ fn apply_deletions(
         deleted += n;
     }
     Ok(deleted)
+}
+
+// ─── vault 노트 cross-link 사전 계산 (Phase C.4 #1) ─────────────────────────
+
+/// `links_to_vault_notes`를 vault scan 결과로 재계산.
+///
+/// 매 vault-aware sync에서 전체 재계산 (DELETE all → INSERT). 매칭 로직은
+/// `mirror_query_related_to_note`와 일관 — `file_path == abs_path OR file_path == basename`.
+/// `_memories/` 하위는 vault scan에서 제외하여 메모리↔메모리 자기 매치 회피.
+///
+/// 같은 (memory_id, vault_note_path)에 role 합집합 → 2개 이상이면 'both', 단일이면 그 라벨.
+/// 반환: INSERT row 수.
+fn recompute_links_to_vault_notes(
+    tx: &Transaction,
+    vault_root: &std::path::Path,
+) -> Result<usize, String> {
+    // 1) vault scan — basename(lowercase) → Vec<abs_path>, abs_path 자체도 key로 박제(원본 경로 매치)
+    let mut index: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    walk_vault_md(vault_root, &mut index)?;
+
+    // 2) 기존 links 전체 비움
+    tx.execute("DELETE FROM links_to_vault_notes", [])
+        .map_err(|e| format!("links_to_vault_notes DELETE 실패: {e}"))?;
+
+    // 3) files_mentioned 스캔 + 매칭 + role 합집합
+    let mut buf: std::collections::HashMap<(i64, String), HashSet<String>> =
+        std::collections::HashMap::new();
+    {
+        let mut stmt = tx
+            .prepare("SELECT memory_id, file_path, role FROM files_mentioned")
+            .map_err(|e| format!("files_mentioned scan prepare: {e}"))?;
+        let mut rows = stmt
+            .query([])
+            .map_err(|e| format!("files_mentioned scan query: {e}"))?;
+        while let Some(r) = rows
+            .next()
+            .map_err(|e| format!("files_mentioned scan next: {e}"))?
+        {
+            let memory_id: i64 = r.get(0).map_err(|e| format!("memory_id: {e}"))?;
+            let file_path: String = r.get(1).map_err(|e| format!("file_path: {e}"))?;
+            let role: String = r.get(2).map_err(|e| format!("role: {e}"))?;
+
+            // (a) 원본 경로 매치 — claude-mem이 절대 경로로 저장한 경우
+            if let Some(candidates) = index.get(&file_path.to_lowercase()) {
+                for abs in candidates {
+                    buf.entry((memory_id, abs.clone()))
+                        .or_default()
+                        .insert(role.clone());
+                }
+            }
+            // (b) basename 매치 — claude-mem이 basename만 저장한 경우
+            let basename = std::path::Path::new(&file_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            if !basename.is_empty() && basename != file_path {
+                let lowered = basename.to_lowercase();
+                if let Some(candidates) = index.get(&lowered) {
+                    for abs in candidates {
+                        buf.entry((memory_id, abs.clone()))
+                            .or_default()
+                            .insert(role.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // 4) 합집합 → INSERT
+    let mut inserted = 0usize;
+    for ((memory_id, vault_note_path), roles) in buf {
+        let match_role = if roles.len() > 1 {
+            "both".to_string()
+        } else {
+            roles
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| "read".to_string())
+        };
+        let n = tx
+            .execute(
+                "INSERT OR IGNORE INTO links_to_vault_notes(memory_id, vault_note_path, match_role) VALUES(?,?,?)",
+                params![memory_id, vault_note_path, match_role],
+            )
+            .map_err(|e| format!("links_to_vault_notes INSERT 실패: {e}"))?;
+        inserted += n;
+    }
+    Ok(inserted)
+}
+
+/// vault 재귀 walk — `.md` 파일만 수집. `_memories/` + 흔한 무관 디렉토리는 skip.
+/// 결과는 lowercase(abs) + lowercase(basename) 두 키로 박제 (절대 경로 / basename 매치 양쪽 지원).
+fn walk_vault_md(
+    dir: &std::path::Path,
+    index: &mut std::collections::HashMap<String, Vec<String>>,
+) -> Result<(), String> {
+    const SKIP_DIRS: &[&str] = &[
+        "_memories",
+        ".git",
+        "node_modules",
+        ".obsidian",
+        ".lapis",
+        "target",
+        "dist",
+        "build",
+        ".svelte-kit",
+    ];
+
+    let rd =
+        std::fs::read_dir(dir).map_err(|e| format!("vault read_dir {}: {e}", dir.display()))?;
+    for entry in rd.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|s| s.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+
+        if path.is_dir() {
+            if name.starts_with('.') && name != "." {
+                continue;
+            }
+            if SKIP_DIRS.contains(&name) {
+                continue;
+            }
+            walk_vault_md(&path, index)?;
+            continue;
+        }
+
+        if path.extension().and_then(|s| s.to_str()) != Some("md") {
+            continue;
+        }
+        let abs = path.to_string_lossy().to_string();
+        index
+            .entry(abs.to_lowercase())
+            .or_default()
+            .push(abs.clone());
+        let lowered_name = name.to_lowercase();
+        if lowered_name != abs.to_lowercase() {
+            index.entry(lowered_name).or_default().push(abs.clone());
+        }
+    }
+    Ok(())
 }
 
 // ─── .md 자동 삭제 + orphan 박제 (PR2 #12) ─────────────────────────────────
@@ -1195,6 +1406,58 @@ pub fn mirror_query_related_to_note(
         .map_err(|e| format!("mirror_query_related query_map: {e}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("mirror_query_related collect: {e}"))?;
+    Ok(hits)
+}
+
+// ─── memory ↔ vault note links (Phase C.4 #3) ──────────────────────────────
+
+/// 그래프 노드 + 엣지 생성용. `links_to_vault_notes`를 memory 메타와 JOIN해 반환.
+#[derive(Debug, Serialize)]
+pub struct MemoryLink {
+    pub memory_id: i64,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub source_id: i64,
+    pub title: String,
+    pub project: String,
+    pub vault_note_path: String,
+    /// "read" | "edited" | "modified" | "both"
+    pub match_role: String,
+    pub obs_type: Option<String>,
+}
+
+/// 모든 memory ↔ vault note 링크 반환 (그래프 모달이 일괄 로드).
+/// 11469 memory × 평균 ~1 vault note 매칭 → 수천 row 예상. JSON 직렬화 비용은 있지만 매 그래프 open마다 1회.
+#[tauri::command]
+pub fn mirror_list_memory_links(app: AppHandle) -> Result<Vec<MemoryLink>, String> {
+    let conn = open_rw(&app)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT l.memory_id, m.kind, m.source_id, m.title, m.project, l.vault_note_path, \
+                    l.match_role, m.obs_type \
+             FROM links_to_vault_notes l \
+             JOIN memories m ON m.id = l.memory_id",
+        )
+        .map_err(|e| format!("mirror_list_memory_links prepare: {e}"))?;
+    let hits = stmt
+        .query_map([], |r| {
+            Ok(MemoryLink {
+                memory_id: r.get(0)?,
+                kind: r.get(1)?,
+                source_id: r.get(2)?,
+                title: r
+                    .get::<_, Option<String>>(3)?
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| "(no title)".to_string()),
+                project: r.get(4)?,
+                vault_note_path: r.get(5)?,
+                match_role: r.get(6)?,
+                obs_type: r.get(7)?,
+            })
+        })
+        .map_err(|e| format!("mirror_list_memory_links query_map: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("mirror_list_memory_links collect: {e}"))?;
     Ok(hits)
 }
 
