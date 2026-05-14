@@ -39,6 +39,15 @@
   let memoryLinks: MemoryLink[] = $state([]);
   let memoryLoading = $state(false);
 
+  // Phase v0.4 — Graph UX 패키지
+  // Focus mode: 클릭 시 navigate 대신 이웃만 강조 + 나머지 dim. 기본 OFF (기존 동작 보존).
+  let focusMode = $state(false);
+  let focusedId = $state<string | null>(null);
+
+  /** 애니메이션 / 레이아웃 quality는 노드 수 기준으로 적응. */
+  const ANIMATE_NODE_THRESHOLD = 300;
+  const DRAFT_QUALITY_THRESHOLD = 1000;
+
   // 모달 open + container 마운트 + 인덱스 준비되면 cytoscape 인스턴스 생성/갱신
   $effect(() => {
     if (!$graphOpen || !containerEl) {
@@ -245,14 +254,31 @@
             opacity: 0.45,
           },
         },
+        // Focus mode — 포커스된 노드의 이웃이 아닌 항목들을 흐리게.
+        // selector 우선순위상 마지막에 두어 다른 스타일 위로 덮어쓰도록.
+        {
+          selector: "node.dimmed",
+          style: {
+            opacity: 0.15,
+          },
+        },
+        {
+          selector: "edge.dimmed",
+          style: {
+            opacity: 0.08,
+          },
+        },
       ],
       // fcose 등록되어 있으면 그것을, 아니면 내장 cose (function 옵션 형식)
+      // 노드 수에 따라 애니메이션/quality 적응 — 대용량 그래프 응답성 보호.
       layout: (fcoseRegistered
         ? {
             name: "fcose",
-            animate: false,
+            animate: elements.length < ANIMATE_NODE_THRESHOLD,
+            animationDuration: 600,
+            animationEasing: "ease-out",
             randomize: true,
-            quality: "default",
+            quality: elements.length > DRAFT_QUALITY_THRESHOLD ? "draft" : "default",
             nodeRepulsion: 8000,
             idealEdgeLength: 80,
             edgeElasticity: 0.45,
@@ -262,7 +288,9 @@
           }
         : {
             name: "cose",
-            animate: false,
+            animate: elements.length < ANIMATE_NODE_THRESHOLD,
+            animationDuration: 600,
+            animationEasing: "ease-out",
             randomize: true,
             // cose는 number가 아닌 function 옵션을 받음
             nodeRepulsion: () => 400000,
@@ -270,7 +298,8 @@
             edgeElasticity: () => 100,
             nodeOverlap: 24,
             gravity: 80,
-            numIter: 1000,
+            // 대용량은 반복 횟수 감소로 빠르게 마침 (정확도 trade-off)
+            numIter: elements.length > DRAFT_QUALITY_THRESHOLD ? 400 : 1000,
             nestingFactor: 1.2,
             coolingFactor: 0.95,
             minTemp: 1.0,
@@ -301,9 +330,15 @@
       }
     }
 
-    // 노드 클릭 분기 — note는 점프, tag는 사이드바 Tags 탭, memory는 export된 .md lookup 후 점프
+    // 노드 클릭 분기 — Focus mode ON이면 강조만, OFF면 기존대로 navigate.
+    // (note → 점프, tag → 사이드바 Tags 탭, memory → export된 .md lookup 후 점프)
     cy.on("tap", "node", async (evt) => {
       const node = evt.target;
+      if (focusMode) {
+        focusedId = node.id();
+        applyFocus(node.id());
+        return;
+      }
       const kind = node.data("kind");
       if (kind === "tag") {
         const tagKey: string | undefined = node.data("tagKey");
@@ -338,6 +373,14 @@
         closeGraph();
       }
     });
+
+    // 빈 배경 클릭 — Focus mode일 때만 강조 해제.
+    cy.on("tap", (evt) => {
+      if (evt.target === cy && focusMode) {
+        focusedId = null;
+        clearFocus();
+      }
+    });
   });
 
   // showMemory 토글 시 lazy load. 그래프 폭증 회피 — 사용자 명시 동의 후 fetch.
@@ -360,6 +403,58 @@
       .finally(() => {
         memoryLoading = false;
       });
+  });
+
+  /** Focus mode에서 클릭한 노드의 이웃만 강조 + 나머지 dim. */
+  function applyFocus(nodeId: string) {
+    if (!cy) return;
+    const idx = $linkIndex;
+    if (!idx) return;
+    const neighbors = getNeighbors(nodeId, idx);
+    // 기존 강조 클래스 일괄 정리 후 재적용 (currentNotePath 기반 강조도 일시 override).
+    cy.nodes().removeClass("current neighbor dimmed");
+    cy.edges().removeClass("touching dimmed");
+    cy.nodes().forEach((n) => {
+      const nid = n.id();
+      if (nid === nodeId) n.addClass("current");
+      else if (neighbors.has(nid)) n.addClass("neighbor");
+      else n.addClass("dimmed");
+    });
+    cy.edges().forEach((e) => {
+      if (e.source().id() === nodeId || e.target().id() === nodeId) {
+        e.addClass("touching");
+      } else {
+        e.addClass("dimmed");
+      }
+    });
+  }
+
+  /** Focus 해제 — currentNotePath 기준 기본 강조로 복귀. */
+  function clearFocus() {
+    if (!cy) return;
+    cy.nodes().removeClass("current neighbor dimmed");
+    cy.edges().removeClass("touching dimmed");
+    // 기본 강조 (open 중인 노트) 복원
+    const cur = $currentNotePath;
+    const idx = $linkIndex;
+    if (cur && idx) {
+      const neighbors = getNeighbors(cur, idx);
+      cy.nodes().forEach((n) => {
+        if (n.id() === cur) n.addClass("current");
+        else if (neighbors.has(n.id())) n.addClass("neighbor");
+      });
+      cy.edges().forEach((e) => {
+        if (e.source().id() === cur || e.target().id() === cur) e.addClass("touching");
+      });
+    }
+  }
+
+  // focusMode가 OFF로 바뀌면 즉시 강조 복귀.
+  $effect(() => {
+    if (!focusMode) {
+      focusedId = null;
+      clearFocus();
+    }
   });
 
   function destroyCy() {
@@ -422,6 +517,10 @@
           <input type="checkbox" bind:checked={showIsolated} />
           isolated 표시
         </label>
+        <label class="isolated-toggle" title="ON: 노드 클릭 시 navigate 대신 이웃만 강조 + 나머지 흐리게. 배경 클릭으로 해제.">
+          <input type="checkbox" bind:checked={focusMode} />
+          focus 모드
+        </label>
         {#if $claudeMemEnabled}
           <label class="isolated-toggle" title="claude-mem 메모리 노드 + 엣지 표시 (Phase C.4)">
             <input type="checkbox" bind:checked={showMemory} />
@@ -437,7 +536,12 @@
         <div class="overlay-msg">표시할 노트가 없습니다.</div>
       {/if}
       <footer class="graph-foot">
-        <span>클릭 노트 점프</span>
+        {#if focusMode}
+          <span>클릭 이웃 강조</span>
+          <span>배경 클릭으로 해제</span>
+        {:else}
+          <span>클릭 노트 점프</span>
+        {/if}
         <span>휠 줌</span>
         <span>드래그 팬</span>
         <span>Esc 닫기</span>
