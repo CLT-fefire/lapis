@@ -40,26 +40,38 @@
 
   // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
   $effect(() => {
+    console.log(`[diag][Sidebar.effect] claudeMemEnabled=${$claudeMemEnabled}`);
     if (!$claudeMemEnabled) {
       mirrorStatus = null;
       return;
     }
-    void refreshMirrorStatus();
+    void refreshMirrorStatus("effect-init");
     let u1: UnlistenFn | null = null;
     let u2: UnlistenFn | null = null;
-    void listen("mirror-sync-done", () => void refreshMirrorStatus()).then((u) => (u1 = u));
-    void listen("mirror-sync-error", () => void refreshMirrorStatus()).then((u) => (u2 = u));
+    void listen("mirror-sync-done", (e) => {
+      console.log("[diag][Sidebar] mirror-sync-done 수신", e.payload);
+      void refreshMirrorStatus("mirror-sync-done");
+    }).then((u) => (u1 = u));
+    void listen("mirror-sync-error", (e) => {
+      console.warn("[diag][Sidebar] mirror-sync-error 수신", e.payload);
+      void refreshMirrorStatus("mirror-sync-error");
+    }).then((u) => (u2 = u));
     return () => {
       u1?.();
       u2?.();
     };
   });
 
-  async function refreshMirrorStatus() {
+  async function refreshMirrorStatus(reason = "manual") {
     try {
-      mirrorStatus = await mirrorSyncStatus();
-    } catch {
+      const s = await mirrorSyncStatus();
+      mirrorStatus = s;
+      console.log(
+        `[diag][Sidebar.refresh] reason=${reason} · count=${s.memory_count} · failure=${s.last_failure ?? "none"} · last_inc=${s.last_incremental_sync_at} → color=${mirrorColor(s)}`,
+      );
+    } catch (e) {
       mirrorStatus = null;
+      console.warn(`[diag][Sidebar.refresh] reason=${reason} · 실패 → status=null (RED) · ${e}`);
     }
   }
 

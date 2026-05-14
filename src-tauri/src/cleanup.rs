@@ -40,11 +40,13 @@ fn emit_error(app: &AppHandle, message: impl Into<String>) {
 /// 동적 OFF 토글 시 즉시 호출. mirror DB + search-index 삭제 후 done emit.
 /// pending_cleanup flag와 무관 — 호출자가 흐름을 주도한다.
 pub fn run_cleanup(app: &AppHandle) {
+    eprintln!("[diag][cleanup] 시작");
     emit(app, "starting", "정리를 시작합니다…");
 
     let app_data_dir = match app.path().app_data_dir() {
         Ok(d) => d,
         Err(e) => {
+            eprintln!("[diag][cleanup] app_data_dir 실패: {e}");
             emit_error(app, format!("app_data_dir 조회 실패: {e}"));
             return;
         }
@@ -54,19 +56,30 @@ pub fn run_cleanup(app: &AppHandle) {
     let mirror_files = ["lapis-mem.db", "lapis-mem.db-wal", "lapis-mem.db-shm"];
     for f in &mirror_files {
         let p = app_data_dir.join(f);
+        let existed = p.exists();
         if let Err(e) = remove_file_if_exists(&p) {
+            eprintln!("[diag][cleanup] {} 삭제 실패: {e}", p.display());
             emit_error(app, format!("{} 삭제 실패: {e}", p.display()));
             return;
+        }
+        if existed {
+            eprintln!("[diag][cleanup] 삭제 OK · {}", p.display());
         }
     }
 
     emit(app, "search-index", "검색 인덱스 삭제…");
     let idx_dir = app_data_dir.join("search-index");
+    let idx_existed = idx_dir.exists();
     if let Err(e) = remove_dir_if_exists(&idx_dir) {
+        eprintln!("[diag][cleanup] search-index 삭제 실패: {e}");
         emit_error(app, format!("{} 삭제 실패: {e}", idx_dir.display()));
         return;
     }
+    if idx_existed {
+        eprintln!("[diag][cleanup] 삭제 OK · {}", idx_dir.display());
+    }
 
+    eprintln!("[diag][cleanup] 완료");
     emit(app, "done", "정리 완료.");
 }
 

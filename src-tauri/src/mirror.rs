@@ -215,13 +215,21 @@ fn claude_mem_db_path() -> Result<PathBuf, String> {
 fn open_claude_mem_ro() -> Result<Connection, String> {
     let p = claude_mem_db_path()?;
     if !p.exists() {
+        eprintln!(
+            "[diag][open_claude_mem_ro] claude-mem DB 부재 — sync 실패 → last_failure 박제 → RED dot 가능 · path={}",
+            p.display()
+        );
         return Err(format!("claude-mem DB가 없습니다: {}", p.display()));
     }
     Connection::open_with_flags(
         &p,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
-    .map_err(|e| format!("claude-mem DB open 실패: {e}"))
+    .map_err(|e| {
+        let msg = format!("claude-mem DB open 실패: {e}");
+        eprintln!("[diag][open_claude_mem_ro] {msg}");
+        msg
+    })
 }
 
 // ─── sync 엔진 ──────────────────────────────────────────────────────────────
@@ -250,13 +258,30 @@ pub fn sync_now(
     vault_path: Option<String>,
 ) -> Result<SyncReport, String> {
     let start = Instant::now();
+    eprintln!(
+        "[diag][sync_now] 시작 — full={} · vault_path={:?}",
+        full,
+        vault_path.as_deref()
+    );
     let mut report = SyncReport {
         full,
         ..Default::default()
     };
 
-    let src = open_claude_mem_ro()?;
-    let mut dst = open_rw(app)?;
+    let src = match open_claude_mem_ro() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[diag][sync_now] open_claude_mem_ro 실패: {e}");
+            return Err(e);
+        }
+    };
+    let mut dst = match open_rw(app) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[diag][sync_now] open_rw(mirror) 실패: {e}");
+            return Err(e);
+        }
+    };
 
     let last_epoch: i64 = if full {
         0
@@ -364,6 +389,10 @@ pub fn sync_now(
     }
 
     report.duration_ms = start.elapsed().as_millis();
+    eprintln!(
+        "[diag][sync_now] 완료 — summaries +{} · observations +{} · deleted {} · {}ms",
+        report.summaries_upserted, report.observations_upserted, report.deleted, report.duration_ms
+    );
     Ok(report)
 }
 
@@ -1318,7 +1347,16 @@ pub struct SyncStatus {
 
 #[tauri::command]
 pub fn mirror_sync_status(app: AppHandle) -> Result<SyncStatus, String> {
-    let conn = open_rw(&app)?;
+    let t0 = Instant::now();
+    let conn = match open_rw(&app) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "[diag][mirror_sync_status] open_rw 실패 → frontend가 status=null 받아 RED dot 표시 가능 · {e}"
+            );
+            return Err(e);
+        }
+    };
     let last_full = read_meta_i64(&conn, "last_full_sync_at")?.unwrap_or(0);
     let last_inc = read_meta_i64(&conn, "last_incremental_sync_at")?.unwrap_or(0);
     let last_failure: Option<String> = conn
@@ -1332,6 +1370,14 @@ pub fn mirror_sync_status(app: AppHandle) -> Result<SyncStatus, String> {
     let memory_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))
         .map_err(|e| format!("memories COUNT: {e}"))?;
+    eprintln!(
+        "[diag][mirror_sync_status] count={} · last_inc={} · last_full={} · failure={:?} · {}ms",
+        memory_count,
+        last_inc,
+        last_full,
+        last_failure.as_deref(),
+        t0.elapsed().as_millis()
+    );
     Ok(SyncStatus {
         last_full_sync_at: last_full,
         last_incremental_sync_at: last_inc,
