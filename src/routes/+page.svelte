@@ -79,39 +79,44 @@
   import type { EditorApi } from "$lib/Editor.svelte";
 
   const SAMPLE = `---
-title: Lapis Phase 1.1 Welcome
-status: read-only
-tags: [phase-1, vault-reader]
+title: Lapis 시작하기
+status: welcome
+tags: [welcome, getting-started]
 ---
 
-# Lapis — Vault Reader
+# Lapis에 오신 것을 환영합니다
 
-좌측 상단의 **Vault 열기** 버튼으로 마크다운이 들어 있는 폴더를 지정하세요.
+**Lapis**는 로컬 마크다운 파일을 백링크 · 태그 · 그래프로 항해하는 개인용 워크벤치입니다.
+모든 노트는 로컬 파일시스템에만 저장되며, 외부 동기화는 일절 일어나지 않습니다.
 
-선택 후엔 트리에서 노트를 클릭하면 이 영역에 본문이, 우측에 렌더링이 표시됩니다.
+## 시작하기
 
-## 추천 vault
+좌측 사이드바 상단의 **Vault 열기…** 버튼으로 마크다운이 들어 있는 폴더를 선택하세요.
+선택 후 트리에서 노트를 클릭하면 이 영역에 본문이, 우측에 렌더링이 표시됩니다.
 
-- \`/Users/Shared/Source/SharedDocs/Lysn_Epic\` — 기존 306개+ 노트 vault
-- \`/Users/Shared/Source/Lapis/docs\` — 이 프로젝트 자체의 PLAN.md
+### 추천 vault 경로
 
-## Phase 1.1에서 가능한 것
+- 개인 노트: \`~/Documents/Notes\`
+- 프로젝트 문서: \`/Users/Shared/Source/<프로젝트>/docs\`
+- 빈 폴더를 새로 만들어도 됩니다 — 첫 노트는 사이드바의 "Welcome 샘플 만들기" 버튼으로 만들 수 있어요.
 
-- 폴더 트리 항해 (재귀, 폴더 우선 정렬)
-- 노트 클릭 → 본문 로드 + 실시간 렌더
-- 마지막 vault 자동 복원 (재시작 시)
+## 핵심 단축키
 
-## Phase 1.2에서 새로 가능한 것
+| 단축키 | 동작 |
+|---|---|
+| \`⌘K\` | Command Palette — 모든 명령 검색 |
+| \`⌘P\` | Quick File Open — 파일명 fuzzy 검색 |
+| \`⌘⇧F\` | Full-text 검색 (tantivy + 한국어 형태소) |
+| \`⌘F\` | 현재 노트 내 검색 |
+| \`⌘N\` | 새 노트 만들기 |
+| \`⌘G\` | Graph View |
+| \`⌘S\` | 즉시 저장 (편집 시 2초마다 자동 저장됨) |
 
-- Wikilink 인식 + 클릭 점프 — 예: \`[[STATE]]\`, \`[[PLAN]]\`
-  (실제 vault에 해당 이름 노트가 있으면 시안색, 없으면 빨간 점선)
-- 백링크 패널 — Preview 하단에 이 노트를 가리키는 노트 목록
+## 자세한 가이드
 
-## 아직 안 되는 것
+설치 · 사용 · FAQ는 [팀 Confluence 페이지](https://everysing.atlassian.net/wiki/spaces/IMA/pages/4435017752/Lapis)에 정리되어 있습니다.
 
-- 편집 후 저장 (Phase 2)
-- 외부 변경 자동 감지 (Phase 2)
-- 검색 / Quick Switcher (Phase 1.3)
+GitHub: <https://github.com/CLT-fefire/lapis>
 `;
 
   // vault 미선택 상태에서만 SAMPLE 사용. 노트 선택 후엔 editor store가 진실의 원천.
@@ -642,7 +647,7 @@ tags: [phase-1, vault-reader]
 <div class="app">
   <header class="topbar">
     <span class="brand">Lapis</span>
-    <span class="phase">Phase 2.0 — Editable Vault</span>
+    <span class="phase">v0.3.0</span>
     <span class="meta">
       {#if $currentNotePath}
         {noteDisplayName($currentNotePath)}
