@@ -141,26 +141,16 @@ pub fn settings_write(app: AppHandle, next: LapisSettings) -> Result<(), String>
 ///   WAL watch worker는 살아있지만 `CLAUDE_MEM_ACTIVE`가 false라 sync_now를 건너뜀.
 #[tauri::command]
 pub fn claude_mem_apply(app: AppHandle, enabled: bool) -> Result<(), String> {
-    eprintln!("[diag][claude_mem_apply] 진입 — enabled={enabled}");
     set_claude_mem_active(enabled);
 
     if enabled {
         // WAL watch는 한 번만 시작. 이후 토글 ON에서는 active flag만 갱신되면 됨.
-        let already_started = WAL_WATCH_STARTED.swap(true, Ordering::Relaxed);
-        eprintln!(
-            "[diag][claude_mem_apply] WAL watch already_started={} → {}",
-            already_started,
-            if already_started { "재시작 skip" } else { "lazy start" }
-        );
-        if !already_started {
+        if !WAL_WATCH_STARTED.swap(true, Ordering::Relaxed) {
             let handle = app.clone();
             if let Err(e) = crate::mirror::start_wal_watch(handle) {
-                eprintln!("[diag][claude_mem_apply] start_wal_watch 실패: {e}");
-                // watcher 시작 실패해도 active flag는 유지 — 다음 토글에서 재시도 가능하도록
-                // started flag는 다시 false로
+                eprintln!("[mirror] WAL watch 시작 실패: {e}");
+                // 시작 실패 시 다음 토글에서 재시도 가능하도록 flag 복원.
                 WAL_WATCH_STARTED.store(false, Ordering::Relaxed);
-            } else {
-                eprintln!("[diag][claude_mem_apply] start_wal_watch 성공");
             }
         }
         // 초기 mirror sync — cleanup 직후 ON이거나 첫 ON이면 mirror DB가 비어 있어
@@ -174,36 +164,22 @@ pub fn claude_mem_apply(app: AppHandle, enabled: bool) -> Result<(), String> {
         use tauri::Emitter;
         let handle_for_sync = app.clone();
         std::thread::spawn(move || {
-            eprintln!("[diag][claude_mem_apply] 초기 sync worker 시작");
             match crate::mirror::sync_now(&handle_for_sync, false, None) {
                 Ok(report) => {
-                    eprintln!(
-                        "[diag][claude_mem_apply] 초기 sync OK → mirror-sync-done emit — summaries +{} · observations +{} · {}ms",
-                        report.summaries_upserted, report.observations_upserted, report.duration_ms
-                    );
                     let _ = handle_for_sync.emit("mirror-sync-done", &report);
-                    // sync 끝난 뒤 인덱스 빌드 (mirror에 row가 있어야 인덱싱 의미)
-                    match crate::search::ensure_index_built(&handle_for_sync) {
-                        Ok(r) => {
-                            eprintln!(
-                                "[diag][claude_mem_apply] ensure_index_built OK — added={} · {}ms",
-                                r.added, r.duration_ms
-                            );
-                        }
-                        Err(e) => eprintln!("[diag][claude_mem_apply] ensure_index_built 실패: {e}"),
+                    // sync 끝난 뒤 인덱스 빌드 — mirror에 row가 있어야 인덱싱 의미.
+                    if let Err(e) = crate::search::ensure_index_built(&handle_for_sync) {
+                        eprintln!("[search] apply ON ensure_index_built 실패: {e}");
                     }
                 }
                 Err(e) => {
-                    // claude-mem 미설치 또는 race — last_failure는 WAL loop sync 분기에만 박제됨.
-                    // 여기서는 mirror-sync-error 이벤트로 frontend에 알리고, 별도로 last_failure 박제도 시도.
-                    eprintln!("[diag][claude_mem_apply] 초기 sync 실패 → mirror-sync-error emit · {e}");
+                    // claude-mem 미설치 등 → last_failure 박제 + error 이벤트.
                     if let Ok(conn) = crate::mirror::open_rw(&handle_for_sync) {
                         let _ = conn.execute(
                             "INSERT INTO sync_meta(key, value) VALUES('last_failure', ?) \
                              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                             rusqlite::params![&e],
                         );
-                        eprintln!("[diag][claude_mem_apply] last_failure 박제 → status indicator RED 예상");
                     }
                     let _ = handle_for_sync.emit("mirror-sync-error", &e);
                 }

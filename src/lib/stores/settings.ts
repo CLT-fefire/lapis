@@ -58,17 +58,12 @@ export async function restoreSettings(): Promise<void> {
  *   (백엔드가 정상 반영된 뒤에 UI를 갱신해 일관성 확보)
  */
 export async function applyClaudeMemToggle(enabled: boolean): Promise<void> {
-  console.log(`[diag][settings] applyClaudeMemToggle 시작 — enabled=${enabled}`);
-  const t0 = performance.now();
   await settingsWrite({ claude_mem_enabled: enabled, pending_cleanup: false });
-  console.log(`[diag][settings] settingsWrite 완료 · ${(performance.now() - t0).toFixed(0)}ms`);
   // 토글 ON 시 backend의 mirror-sync-start 이벤트가 frontend listener 등록(비동기)보다
   // 먼저 도착하는 race를 차단하기 위해 선제적으로 syncing=true. done/error로 자동 clear.
   if (enabled) markMirrorSyncStart();
   await claudeMemApply(enabled);
-  console.log(`[diag][settings] claudeMemApply 완료 · ${(performance.now() - t0).toFixed(0)}ms`);
   claudeMemEnabled.set(enabled);
-  console.log(`[diag][settings] store.set(${enabled}) 완료 — 총 ${(performance.now() - t0).toFixed(0)}ms`);
 }
 
 export function isClaudeMemEnabled(): boolean {

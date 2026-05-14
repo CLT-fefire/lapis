@@ -50,29 +50,27 @@
 
   // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
   $effect(() => {
-    console.log(`[diag][Sidebar.effect] claudeMemEnabled=${$claudeMemEnabled}`);
     if (!$claudeMemEnabled) {
       mirrorStatus = null;
       markMirrorSyncEnd();
       return;
     }
-    void refreshMirrorStatus("effect-init");
+    // sync_now가 schema build 중이면 mirror_sync_status도 동시 schema build 시도 →
+    // SQLITE_BUSY. mirror-sync-done 도착하면 어차피 refresh 다시 도니 effect-init은 skip.
+    if (!$mirrorSyncing) {
+      void refreshMirrorStatus();
+    }
     let u1: UnlistenFn | null = null;
     let u2: UnlistenFn | null = null;
     let u3: UnlistenFn | null = null;
-    void listen("mirror-sync-start", (e) => {
-      console.log("[diag][Sidebar] mirror-sync-start 수신", e.payload);
-      markMirrorSyncStart();
-    }).then((u) => (u3 = u));
-    void listen("mirror-sync-done", (e) => {
-      console.log("[diag][Sidebar] mirror-sync-done 수신", e.payload);
+    void listen("mirror-sync-start", () => markMirrorSyncStart()).then((u) => (u3 = u));
+    void listen("mirror-sync-done", () => {
       markMirrorSyncEnd();
-      void refreshMirrorStatus("mirror-sync-done");
+      void refreshMirrorStatus();
     }).then((u) => (u1 = u));
-    void listen("mirror-sync-error", (e) => {
-      console.warn("[diag][Sidebar] mirror-sync-error 수신", e.payload);
+    void listen("mirror-sync-error", () => {
       markMirrorSyncEnd();
-      void refreshMirrorStatus("mirror-sync-error");
+      void refreshMirrorStatus();
     }).then((u) => (u2 = u));
     return () => {
       u1?.();
@@ -104,16 +102,11 @@
     };
   });
 
-  async function refreshMirrorStatus(reason = "manual") {
+  async function refreshMirrorStatus() {
     try {
-      const s = await mirrorSyncStatus();
-      mirrorStatus = s;
-      console.log(
-        `[diag][Sidebar.refresh] reason=${reason} · count=${s.memory_count} · failure=${s.last_failure ?? "none"} · last_inc=${s.last_incremental_sync_at} → color=${mirrorColor(s, $mirrorSyncing)}`,
-      );
-    } catch (e) {
+      mirrorStatus = await mirrorSyncStatus();
+    } catch {
       mirrorStatus = null;
-      console.warn(`[diag][Sidebar.refresh] reason=${reason} · 실패 → status=null (RED) · ${e}`);
     }
   }
 
