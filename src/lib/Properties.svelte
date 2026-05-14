@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { get } from "svelte/store";
-  import { patchFrontmatter, isKebab } from "$lib/frontmatter";
+  import { patchFrontmatter, addFrontmatterKey, isKebab } from "$lib/frontmatter";
   import { DOC_KIND_ENUM, topicCounts } from "$lib/stores/filters";
   import { selectTag, showTagsTab, tagIndex } from "$lib/stores/tags";
   import { linkIndex } from "$lib/stores/vault";
@@ -28,6 +28,31 @@
   const CHIP_FIELDS = ["tags", "aliases", "related"] as const;
   type SingleField = (typeof SINGLE_FIELDS)[number];
   type ChipField = (typeof CHIP_FIELDS)[number];
+
+  /** 빈 frontmatter에서 보여줄 picker 상태. 사용자가 명시적으로 토글. */
+  let addPickerOpen = $state(false);
+
+  /** picker에서 노출할 키 + 기본값. chip 필드는 빈 배열로 시작. */
+  const ADDABLE_FIELDS: Array<{ key: string; defaultValue: unknown; label: string }> = [
+    { key: "title", defaultValue: "", label: "title" },
+    { key: "doc_kind", defaultValue: "", label: "doc_kind" },
+    { key: "topic", defaultValue: "", label: "topic" },
+    { key: "tags", defaultValue: [] as string[], label: "tags" },
+    { key: "aliases", defaultValue: [] as string[], label: "aliases" },
+    { key: "related", defaultValue: [] as string[], label: "related" },
+  ];
+
+  async function addField(key: string, defaultValue: unknown) {
+    const newRaw = addFrontmatterKey(rawNote, key, defaultValue);
+    if (newRaw === rawNote) return; // 이미 존재 — noop
+    noteContentChanged(newRaw);
+    addPickerOpen = false;
+    // 단일 필드는 추가 직후 편집 진입. chip 필드는 ChipEditor가 직접 chip 추가.
+    if ((SINGLE_FIELDS as readonly string[]).includes(key)) {
+      await tick();
+      enterEdit(key as SingleField);
+    }
+  }
 
   function isSingleEditable(key: string): key is SingleField {
     return !isAuto && (SINGLE_FIELDS as readonly string[]).includes(key);
@@ -204,6 +229,33 @@
   });
 </script>
 
+{#if Object.keys(data).length === 0 && !isAuto}
+  <div class="properties-empty">
+    {#if addPickerOpen}
+      <span class="picker-label">추가할 필드:</span>
+      {#each ADDABLE_FIELDS as field}
+        <button
+          type="button"
+          class="add-chip"
+          onclick={() => addField(field.key, field.defaultValue)}
+        >+ {field.label}</button>
+      {/each}
+      <button
+        type="button"
+        class="picker-cancel"
+        onclick={() => (addPickerOpen = false)}
+      >취소</button>
+    {:else}
+      <button
+        type="button"
+        class="add-properties-btn"
+        onclick={() => (addPickerOpen = true)}
+        title="이 노트에 frontmatter 필드를 추가합니다"
+      >＋ Properties 추가</button>
+    {/if}
+  </div>
+{/if}
+
 {#if Object.keys(data).length > 0}
   <details class="properties" open>
     <summary>
@@ -326,6 +378,69 @@
     border-radius: 6px;
     padding: 8px 12px;
     margin-bottom: 24px;
+  }
+
+  .properties-empty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    margin-bottom: 24px;
+    background: #1f1f1f;
+    border: 1px dashed #3a3a3a;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #888;
+  }
+
+  .add-properties-btn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #9adff7;
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .add-properties-btn:hover {
+    border-color: #6dd6ff;
+    background: #2a3a44;
+  }
+
+  .picker-label {
+    color: #888;
+    margin-right: 4px;
+  }
+
+  .add-chip {
+    background: #2a3a44;
+    border: 1px solid #3a4d58;
+    color: #9adff7;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .add-chip:hover {
+    border-color: #6dd6ff;
+    background: #34505e;
+  }
+
+  .picker-cancel {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 3px 8px;
+    margin-left: 4px;
+  }
+  .picker-cancel:hover {
+    color: #ccc;
   }
 
   .properties summary {

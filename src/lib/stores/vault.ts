@@ -15,6 +15,7 @@ import {
 } from "$lib/tauri/notes";
 import { rewriteLinksInNote } from "$lib/linkRewrite";
 import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
+import { clearBacklinkCache } from "$lib/backlinks";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
 import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
 import {
@@ -107,6 +108,8 @@ export async function reloadNotes(): Promise<void> {
 async function reloadNotesInner(): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
+  // 전체 인덱스 재빌드 시 백링크 snippet 캐시도 stale — 안전하게 전부 비움.
+  clearBacklinkCache();
   treeLoading.set(true);
   try {
     const list = await listNotes(root);
