@@ -1,5 +1,6 @@
 import MiniSearch from "minisearch";
 import type { NoteContent, LinkInfo } from "$lib/tauri/notes";
+import { extractSnippetAround } from "$lib/snippet";
 
 /* =========================================================
  * Quick Switcher (파일명 / alias / title fuzzy 매칭)
@@ -165,26 +166,20 @@ export function searchFullText(
   const q = query.trim();
   if (!q) return [];
   const results = index.search(q);
-  return results.slice(0, limit).map((r) => ({
-    path: r.id as string,
-    name: (r as unknown as { name: string }).name,
-    score: r.score,
-    snippet: makeSnippet((r as unknown as { body: string }).body, q),
-  }));
-}
-
-function makeSnippet(body: string, query: string, radius = 60): string {
-  const lower = body.toLowerCase();
-  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-  let bestIdx = -1;
-  for (const t of tokens) {
-    const i = lower.indexOf(t);
-    if (i !== -1 && (bestIdx === -1 || i < bestIdx)) bestIdx = i;
-  }
-  if (bestIdx === -1) return body.slice(0, radius * 2).replace(/\s+/g, " ").trim() + "…";
-  const start = Math.max(0, bestIdx - radius);
-  const end = Math.min(body.length, bestIdx + radius);
-  const prefix = start > 0 ? "…" : "";
-  const suffix = end < body.length ? "…" : "";
-  return prefix + body.slice(start, end).replace(/\s+/g, " ").trim() + suffix;
+  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const RADIUS = 60;
+  return results.slice(0, limit).map((r) => {
+    const body = (r as unknown as { body: string }).body;
+    // 백링크 컨텍스트와 동일한 발췌 로직 공유. 매칭 없으면 본문 앞자락으로 fallback.
+    const { snippet, matched } = extractSnippetAround(body, tokens, RADIUS);
+    const finalSnippet = matched
+      ? snippet
+      : body.slice(0, RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
+    return {
+      path: r.id as string,
+      name: (r as unknown as { name: string }).name,
+      score: r.score,
+      snippet: finalSnippet,
+    };
+  });
 }
