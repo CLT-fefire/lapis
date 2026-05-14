@@ -1,14 +1,39 @@
 //! Lapis 앱 전역 설정 (`lapis-settings.json`).
 //!
-//! Phase 6.0 — claude-mem 통합 옵션화. frontend localStorage가 source of truth지만
-//! Rust startup이 WAL watcher / search index 부팅 분기를 결정하려면 frontend 부팅 전에
-//! 옵션을 알아야 한다 → 별도 JSON 파일을 disk에 둔다. frontend가 토글 시 settings_write
-//! command로 둘 다 동시에 갱신.
+//! Phase 6.0 — claude-mem 통합 옵션화. 백엔드 JSON이 **단일 SOT**.
+//! frontend는 시동 시 `settings_read`로 한 번 읽고 store에 반영.
+//!
+//! 토글 흐름은 동적 — 재시작 없이 `claude_mem_apply` command로 즉시 반영.
+//! WAL watch는 idempotent하게 lazy start 후 `CLAUDE_MEM_ACTIVE` atomic으로 동작 여부 제어.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager};
+
+// claude-mem 동적 활성 플래그 ─────────────────────────────────────────────
+//
+// WAL debounce loop이 sync_now를 돌리기 전에 확인. OFF면 이벤트를 받아도 noop.
+// 토글 ON 직후 빠르게 반영되도록 Relaxed 충분 — strict ordering 불필요.
+static CLAUDE_MEM_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// WAL watch worker는 첫 ON에서 lazy 시작 후 앱 lifetime 동안 유지된다.
+/// 두 번째 ON 토글에서 중복 시작을 막기 위한 가드.
+static WAL_WATCH_STARTED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_claude_mem_active() -> bool {
+    CLAUDE_MEM_ACTIVE.load(Ordering::Relaxed)
+}
+
+pub fn set_claude_mem_active(v: bool) {
+    CLAUDE_MEM_ACTIVE.store(v, Ordering::Relaxed);
+}
+
+/// 시동 시 lib.rs에서 WAL watch를 시작한 경우 호출 — 이후 토글 ON 중복 시작을 방지.
+pub fn mark_wal_watch_started() {
+    WAL_WATCH_STARTED.store(true, Ordering::Relaxed);
+}
 
 const SETTINGS_FILENAME: &str = "lapis-settings.json";
 
@@ -109,7 +134,45 @@ pub fn settings_write(app: AppHandle, next: LapisSettings) -> Result<(), String>
     save(&app, &next)
 }
 
+/// claude-mem 통합 옵션을 런타임에 적용한다 (재시작 불필요).
+///
+/// - `enabled=true`: WAL watch lazy 시작 (첫 호출) + 검색 인덱스 빌드 worker spawn.
+/// - `enabled=false`: cleanup worker spawn (`lapis-mem.db` + `search-index/` 삭제).
+///   WAL watch worker는 살아있지만 `CLAUDE_MEM_ACTIVE`가 false라 sync_now를 건너뜀.
 #[tauri::command]
-pub fn app_restart(app: AppHandle) {
-    app.restart();
+pub fn claude_mem_apply(app: AppHandle, enabled: bool) -> Result<(), String> {
+    set_claude_mem_active(enabled);
+
+    if enabled {
+        // WAL watch는 한 번만 시작. 이후 토글 ON에서는 active flag만 갱신되면 됨.
+        if !WAL_WATCH_STARTED.swap(true, Ordering::Relaxed) {
+            let handle = app.clone();
+            if let Err(e) = crate::mirror::start_wal_watch(handle) {
+                eprintln!("[mirror] start_wal_watch on apply ON 실패: {e}");
+                // watcher 시작 실패해도 active flag는 유지 — 다음 토글에서 재시도 가능하도록
+                // started flag는 다시 false로
+                WAL_WATCH_STARTED.store(false, Ordering::Relaxed);
+            }
+        }
+        // 검색 인덱스 — 이미 빌드돼 있으면 no-op. 첫 ON 또는 cleanup 후 ON이면 새로 빌드.
+        let handle_for_index = app.clone();
+        std::thread::spawn(move || match crate::search::ensure_index_built(&handle_for_index) {
+            Ok(r) => {
+                if r.added > 0 {
+                    eprintln!(
+                        "[search] apply ON 인덱스 빌드: +{} · {}ms",
+                        r.added, r.duration_ms
+                    );
+                }
+            }
+            Err(e) => eprintln!("[search] apply ON ensure_index_built 실패: {e}"),
+        });
+    } else {
+        // 정리 worker — emit으로 progress 전달. 사용자는 CleanupOverlay에서 진행 상황 확인.
+        let handle_for_cleanup = app.clone();
+        std::thread::spawn(move || {
+            crate::cleanup::run_cleanup(&handle_for_cleanup);
+        });
+    }
+    Ok(())
 }

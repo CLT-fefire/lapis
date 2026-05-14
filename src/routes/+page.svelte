@@ -592,7 +592,7 @@ tags: [phase-1, vault-reader]
   }
 
   onMount(() => {
-    restoreSettings();
+    void restoreSettings();
     restorePaneState();
     restoreLastVault();
   });

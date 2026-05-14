@@ -13,6 +13,10 @@ export async function settingsWrite(next: LapisSettings): Promise<void> {
   await invoke("settings_write", { next });
 }
 
-export async function appRestart(): Promise<void> {
-  await invoke("app_restart");
+/**
+ * claude-mem 통합 옵션을 런타임에 적용한다 (재시작 불필요).
+ * 백엔드에서 WAL watch lazy start / cleanup worker spawn / 인덱스 빌드 등을 분기 수행.
+ */
+export async function claudeMemApply(enabled: boolean): Promise<void> {
+  await invoke("claude_mem_apply", { enabled });
 }

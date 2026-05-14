@@ -7,6 +7,10 @@
 //! **보존**: vault 안 `_memories/**` (사용자 데이터), `~/.claude-mem/*` (claude-mem 원본).
 //!
 //! frontend는 `cleanup-progress`, `cleanup-error` 이벤트를 listen해서 overlay 표시.
+//!
+//! 진입점은 두 개:
+//! - `run_cleanup`: 동적 토글 OFF 시 즉시 호출 (pending_cleanup flag 무관)
+//! - `run_pending_cleanup`: legacy backward-compat — 시동 시 flag가 켜져 있으면 한 번 처리
 
 use serde::Serialize;
 use std::fs;
@@ -33,10 +37,9 @@ fn emit_error(app: &AppHandle, message: impl Into<String>) {
     let _ = app.emit("cleanup-error", message.into());
 }
 
-/// pending_cleanup이 true면 한 번 실행. 성공 시 flag clear.
-/// 실패해도 flag는 그대로 둠 → 다음 시작에서 재시도.
-/// 시동 흐름의 다른 부팅을 막지 않도록 spawn된 worker에서 호출 권장.
-pub fn run_pending_cleanup(app: &AppHandle) {
+/// 동적 OFF 토글 시 즉시 호출. mirror DB + search-index 삭제 후 done emit.
+/// pending_cleanup flag와 무관 — 호출자가 흐름을 주도한다.
+pub fn run_cleanup(app: &AppHandle) {
     emit(app, "starting", "정리를 시작합니다…");
 
     let app_data_dir = match app.path().app_data_dir() {
@@ -47,7 +50,6 @@ pub fn run_pending_cleanup(app: &AppHandle) {
         }
     };
 
-    // 1) mirror DB + WAL/SHM 삭제
     emit(app, "mirror", "mirror DB 삭제…");
     let mirror_files = ["lapis-mem.db", "lapis-mem.db-wal", "lapis-mem.db-shm"];
     for f in &mirror_files {
@@ -58,7 +60,6 @@ pub fn run_pending_cleanup(app: &AppHandle) {
         }
     }
 
-    // 2) search-index 디렉토리 삭제
     emit(app, "search-index", "검색 인덱스 삭제…");
     let idx_dir = app_data_dir.join("search-index");
     if let Err(e) = remove_dir_if_exists(&idx_dir) {
@@ -66,13 +67,16 @@ pub fn run_pending_cleanup(app: &AppHandle) {
         return;
     }
 
-    // 3) flag clear
+    emit(app, "done", "정리 완료.");
+}
+
+/// 시동 시점 backward-compat 진입점 — legacy `pending_cleanup` flag가 켜져 있으면 정리 후 flag clear.
+/// 새 동적 토글 흐름에선 flag가 안 켜지지만, 이전 버전에서 마이그레이션 중인 설치엔 필요.
+pub fn run_pending_cleanup(app: &AppHandle) {
+    run_cleanup(app);
     if let Err(e) = crate::settings::clear_pending_cleanup(app) {
         emit_error(app, format!("flag clear 실패: {e}"));
-        return;
     }
-
-    emit(app, "done", "정리 완료.");
 }
 
 fn remove_file_if_exists(p: &Path) -> std::io::Result<()> {

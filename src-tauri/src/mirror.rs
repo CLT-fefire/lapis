@@ -1190,6 +1190,12 @@ fn wal_debounce_loop(
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 if last_event_at.take().is_some() {
+                    // claude-mem 토글 OFF 상태면 받은 이벤트를 무시한다 (Phase 6.0 동적 토글).
+                    // Box::leak된 watcher라 watcher 자체를 멈출 수 없지만, sync_now 호출만 건너뛰면
+                    // mirror DB가 삭제된 상태에서의 write 충돌을 막을 수 있다.
+                    if !crate::settings::is_claude_mem_active() {
+                        continue;
+                    }
                     // debounce 윈도우 종료 — sync 실행.
                     // WAL watch에선 vault_path를 모름. .md 정리는 vault가 열려 있을 때만
                     // (사용자 수동 mirror sync / openVault IIFE)에서 수행.

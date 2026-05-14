@@ -3,9 +3,8 @@
     settingsOpen,
     closeSettings,
     claudeMemEnabled,
-    setClaudeMemEnabled,
+    applyClaudeMemToggle,
   } from "$lib/stores/settings";
-  import { appRestart } from "$lib/tauri/settings";
 
   // 확인 다이얼로그 분기: null | "enable" | "disable"
   let confirmMode = $state<null | "enable" | "disable">(null);
@@ -19,14 +18,17 @@
     (e.target as HTMLInputElement).checked = $claudeMemEnabled;
   }
 
-  async function applyAndRestart() {
+  async function applyChange() {
     if (busy || !confirmMode) return;
     busy = true;
     try {
       const nextEnabled = confirmMode === "enable";
-      const pendingCleanup = confirmMode === "disable"; // OFF 전환만 cleanup 필요
-      await setClaudeMemEnabled(nextEnabled, pendingCleanup);
-      await appRestart();
+      // 백엔드 동적 적용 — WAL watch / cleanup / 인덱스 빌드를 즉시 처리.
+      // 재시작 불필요, 로그 연속 유지.
+      await applyClaudeMemToggle(nextEnabled);
+      busy = false;
+      confirmMode = null;
+      closeSettings();
     } catch (err) {
       console.error("[Settings] apply failed", err);
       busy = false;
@@ -109,7 +111,7 @@
         </header>
         <div class="confirm-body">
           {#if confirmMode === "enable"}
-            <p>재시작 후 다음 기능이 활성화됩니다:</p>
+            <p>적용 후 다음 기능이 활성화됩니다:</p>
             <ul>
               <li>사이드바 mirror 상태 점 (Memory: Sync 진입)</li>
               <li>Cmd+Shift+M 메모리 검색</li>
@@ -118,10 +120,10 @@
             </ul>
             <p class="hint">claude-mem이 설치되어 있어야 실제 데이터가 채워집니다. (<code>~/.claude-mem/claude-mem.db</code>)</p>
           {:else}
-            <p>재시작 후 다음 로컬 데이터가 <strong>삭제</strong>됩니다:</p>
+            <p>적용 즉시 다음 로컬 데이터가 <strong>삭제</strong>됩니다:</p>
             <ul>
               <li>mirror DB (<code>lapis-mem.db</code>)</li>
-              <li>검색 인덱스 — 다음 시작 시 vault만으로 재구축</li>
+              <li>검색 인덱스 — 다음에 다시 켤 때 vault만으로 재구축</li>
             </ul>
             <p>보존되는 항목:</p>
             <ul class="preserve">
@@ -129,12 +131,12 @@
               <li>claude-mem 원본 (<code>~/.claude-mem/claude-mem.db</code>)</li>
             </ul>
           {/if}
-          <p class="hint">변경은 재시작 후 적용됩니다.</p>
+          <p class="hint">변경은 즉시 적용됩니다 (재시작 불필요).</p>
         </div>
         <footer class="confirm-foot">
           <button class="btn ghost" onclick={cancelConfirm} disabled={busy}>취소</button>
-          <button class="btn primary" onclick={applyAndRestart} disabled={busy}>
-            {busy ? "재시작 중…" : "지금 재시작"}
+          <button class="btn primary" onclick={applyChange} disabled={busy}>
+            {busy ? "적용 중…" : "지금 적용"}
           </button>
         </footer>
       </div>
