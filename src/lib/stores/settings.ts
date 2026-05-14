@@ -9,6 +9,29 @@ export const settingsOpen = writable<boolean>(false);
 /** 설정 로드가 끝났는지 — 첫 프레임 flash 방지에 사용. */
 export const settingsLoaded = writable<boolean>(false);
 
+/**
+ * mirror sync_now 진행 중 여부 — 사이드바 파란 펄스 점 indicator에 사용.
+ *
+ * 백엔드 `mirror-sync-start` 이벤트로도 갱신되지만, 토글 ON 직후 effect가
+ * listener를 비동기 등록하는 사이 start 이벤트가 누락되는 race가 있어,
+ * `applyClaudeMemToggle(true)`에서 선제적으로 true를 set한다.
+ * `mirror-sync-done`/`mirror-sync-error` 이벤트가 다시 false로 clear.
+ */
+export const mirrorSyncing = writable<boolean>(false);
+
+/** sync 시작 시각 (epoch ms) — tooltip의 "약 N초 경과" 계산용. null이면 syncing 아님. */
+export const mirrorSyncStartedAt = writable<number | null>(null);
+
+export function markMirrorSyncStart(): void {
+  mirrorSyncing.set(true);
+  mirrorSyncStartedAt.set(Date.now());
+}
+
+export function markMirrorSyncEnd(): void {
+  mirrorSyncing.set(false);
+  mirrorSyncStartedAt.set(null);
+}
+
 export function openSettings(): void {
   settingsOpen.set(true);
 }
@@ -39,6 +62,9 @@ export async function applyClaudeMemToggle(enabled: boolean): Promise<void> {
   const t0 = performance.now();
   await settingsWrite({ claude_mem_enabled: enabled, pending_cleanup: false });
   console.log(`[diag][settings] settingsWrite 완료 · ${(performance.now() - t0).toFixed(0)}ms`);
+  // 토글 ON 시 backend의 mirror-sync-start 이벤트가 frontend listener 등록(비동기)보다
+  // 먼저 도착하는 race를 차단하기 위해 선제적으로 syncing=true. done/error로 자동 clear.
+  if (enabled) markMirrorSyncStart();
   await claudeMemApply(enabled);
   console.log(`[diag][settings] claudeMemApply 완료 · ${(performance.now() - t0).toFixed(0)}ms`);
   claudeMemEnabled.set(enabled);
