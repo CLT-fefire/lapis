@@ -737,11 +737,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         title="Command palette (Cmd+K)"
         onclick={() => openPalette("all")}
       >🔎</button>
-      <button
-        class="topbar-btn"
-        title="Graph view (Cmd+G)"
-        onclick={openGraph}
-      >🕸</button>
     </div>
   </header>
 
