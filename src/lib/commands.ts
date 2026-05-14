@@ -5,8 +5,9 @@ import {
   currentNotePath,
   pickAndOpenVault,
   reloadNotes,
+  deletePath,
 } from "$lib/stores/vault";
-import { openNewNote } from "$lib/stores/tree-ui";
+import { openNewNote, requestRename } from "$lib/stores/tree-ui";
 import { openGraph } from "$lib/stores/graph";
 import { toggleEditor, togglePreview } from "$lib/stores/layout";
 import { openMemorySync } from "$lib/stores/memorySync";
@@ -83,6 +84,29 @@ export const BUILTIN_COMMANDS: Command[] = [
     label: "Toggle Preview Pane",
     run() {
       togglePreview();
+    },
+  },
+  {
+    id: "rename-current-note",
+    label: "Rename Current Note",
+    shortcut: "F2",
+    disabled: () => !get(currentNotePath),
+    run() {
+      const cur = get(currentNotePath);
+      if (cur) requestRename(cur);
+    },
+  },
+  {
+    id: "delete-current-note",
+    label: "Delete Current Note (move to Trash)",
+    shortcut: "⌘⌫",
+    disabled: () => !get(currentNotePath),
+    async run() {
+      const cur = get(currentNotePath);
+      if (!cur) return;
+      const name = cur.split("/").pop() ?? cur;
+      if (!confirm(`노트 "${name}"을(를) 휴지통으로 이동할까요?`)) return;
+      await deletePath(cur);
     },
   },
   {
