@@ -19,6 +19,7 @@
   } from "$lib/stores/filters";
   import { mirrorSyncStatus, type SyncStatus } from "$lib/tauri/mirror";
   import { openMemorySync } from "$lib/stores/memorySync";
+  import { claudeMemEnabled, openSettings } from "$lib/stores/settings";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
   function showFiltersTab() {
@@ -37,8 +38,12 @@
   // Mirror status indicator (PR2 #11) ────────────────────────────────────────
   let mirrorStatus: SyncStatus | null = $state(null);
 
-  // 초기 로드 + 이벤트 listen으로 갱신
+  // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
   $effect(() => {
+    if (!$claudeMemEnabled) {
+      mirrorStatus = null;
+      return;
+    }
     void refreshMirrorStatus();
     let u1: UnlistenFn | null = null;
     let u2: UnlistenFn | null = null;
@@ -89,12 +94,14 @@
         <span class="loading-spinner" title="트리 로드 중"></span>
       {/if}
       <div class="actions">
-        <button
-          class="mirror-dot mirror-{mirrorColor(mirrorStatus)}"
-          title={mirrorTooltip(mirrorStatus)}
-          aria-label="메모리 mirror 상태"
-          onclick={openMemorySync}
-        ></button>
+        {#if $claudeMemEnabled}
+          <button
+            class="mirror-dot mirror-{mirrorColor(mirrorStatus)}"
+            title={mirrorTooltip(mirrorStatus)}
+            aria-label="메모리 mirror 상태"
+            onclick={openMemorySync}
+          ></button>
+        {/if}
         <button class="icon-btn" title="새로고침" onclick={reloadNotes}>↻</button>
         <button class="icon-btn" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
       </div>
@@ -176,6 +183,15 @@
       </div>
     {/if}
   </div>
+
+  <footer class="sidebar-foot">
+    <button
+      class="icon-btn settings-btn"
+      title="설정"
+      aria-label="설정 열기"
+      onclick={openSettings}
+    >⚙</button>
+  </footer>
 </aside>
 
 <style>
@@ -374,6 +390,28 @@
     flex: 1;
     overflow-y: auto;
     position: relative;
+  }
+
+  /* 하단 푸터 — 톱니바퀴 등 보조 액션. vault 미선택 상태에서도 노출. */
+  .sidebar-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 6px 10px;
+    border-top: 1px solid #2a2a2a;
+    background: #1c1c1c;
+    flex-shrink: 0;
+  }
+
+  .settings-btn {
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+    color: #999;
+  }
+  .settings-btn:hover {
+    color: #6dd6ff;
   }
 
   /* 인덱스 빌드 중 dim overlay — 트리 영역 cover */

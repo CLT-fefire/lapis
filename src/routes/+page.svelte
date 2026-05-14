@@ -14,7 +14,10 @@
   import MemorySearchModal from "$lib/MemorySearchModal.svelte";
   import RelatedMemoriesPanel from "$lib/RelatedMemoriesPanel.svelte";
   import MemoryFilesPanel from "$lib/MemoryFilesPanel.svelte";
+  import SettingsModal from "$lib/SettingsModal.svelte";
+  import CleanupOverlay from "$lib/CleanupOverlay.svelte";
   import { openMemorySearch } from "$lib/stores/memorySearch";
+  import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
@@ -549,9 +552,9 @@ tags: [phase-1, vault-reader]
       e.preventDefault();
       openPalette("fulltext");
     } else if (key === "m" && e.shiftKey) {
-      // Cmd+Shift+M — 메모리 검색 모달 (Phase 5.1.b)
+      // Cmd+Shift+M — 메모리 검색 모달 (Phase 5.1.b, Phase 6.0 OFF 시 무시)
       e.preventDefault();
-      if ($vaultPath) openMemorySearch();
+      if ($vaultPath && $claudeMemEnabled) openMemorySearch();
     } else if (key === "t" && e.shiftKey) {
       e.preventDefault();
       const path = peekLastClosed();
@@ -589,6 +592,7 @@ tags: [phase-1, vault-reader]
   }
 
   onMount(() => {
+    restoreSettings();
     restorePaneState();
     restoreLastVault();
   });
@@ -600,8 +604,12 @@ tags: [phase-1, vault-reader]
 <GraphModal />
 <ContextMenu />
 <NewNoteModal />
-<MemorySyncModal />
-<MemorySearchModal />
+<SettingsModal />
+<CleanupOverlay />
+{#if $claudeMemEnabled}
+  <MemorySyncModal />
+  <MemorySearchModal />
+{/if}
 
 {#if $externalConflict}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -803,14 +811,16 @@ tags: [phase-1, vault-reader]
         </article>
 
         {#if $currentNotePath}
-          {#if parsed.data.doc_kind === "memory" && parsed.data.source === "claude-mem"}
+          {#if $claudeMemEnabled && parsed.data.doc_kind === "memory" && parsed.data.source === "claude-mem"}
             <MemoryFilesPanel
               filesRead={parsed.data.files_read}
               filesEdited={parsed.data.files_edited}
             />
           {/if}
           <Backlinks targetNote={currentNoteInfo} backlinks={currentBacklinks} />
-          <RelatedMemoriesPanel />
+          {#if $claudeMemEnabled}
+            <RelatedMemoriesPanel />
+          {/if}
           <PublishedAssets notePath={$currentNotePath} />
         {/if}
       </div>
