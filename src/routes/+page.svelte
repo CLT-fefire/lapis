@@ -18,6 +18,7 @@
   import CleanupOverlay from "$lib/CleanupOverlay.svelte";
   import { openMemorySearch } from "$lib/stores/memorySearch";
   import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
+  import { requestRename } from "$lib/stores/tree-ui";
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
@@ -30,6 +31,7 @@
     restoreLastVault,
     selectNote,
     jumpToWikilink,
+    deletePath,
   } from "$lib/stores/vault";
   import {
     editorContent,
@@ -111,6 +113,8 @@ tags: [welcome, getting-started]
 | \`⌘N\` | 새 노트 만들기 |
 | \`⌘G\` | Graph View |
 | \`⌘S\` | 즉시 저장 (편집 시 2초마다 자동 저장됨) |
+| \`F2\` | 현재 노트 이름 변경 |
+| \`⌘⌫\` | 현재 노트 휴지통으로 |
 
 ## 자세한 가이드
 
@@ -536,13 +540,54 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     window.addEventListener("mouseup", onUp);
   }
 
+  async function confirmAndDeleteCurrent(path: string) {
+    const name = path.split("/").pop() ?? path;
+    if (!confirm(`노트 "${name}"을(를) 휴지통으로 이동할까요?`)) return;
+    await deletePath(path);
+  }
+
   // 전역 키보드 단축키
+  // - F2                     : 현재 노트 이름 변경
+  // - Cmd/Ctrl + Backspace/Delete : 현재 노트를 휴지통으로
   // - Cmd/Ctrl+K            : 통합 명령 팔레트 (toggle) — Phase 4.5
   // - Cmd/Ctrl+P            : Quick Switcher (파일 그룹만 — 호환)
   // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 (Content 그룹만 — 호환)
   // - Cmd/Ctrl+Shift+T      : 직전 노트 다시 열기 (Phase 4.5.b)
   // 모달이 이미 열려 있을 때는 CommandPalette 내부 핸들러가 ESC/화살표 등 처리
   function handleGlobalKey(e: KeyboardEvent) {
+    // 입력/편집 영역 안에서는 단축키를 가로채지 않음
+    // (CodeMirror는 contenteditable, FileTree 인라인 rename은 INPUT)
+    const target = e.target as HTMLElement | null;
+    const inEditing = !!target && (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable
+    );
+
+    // F2 — 현재 노트 이름 변경 (modifier 없음). 입력 중이면 패스.
+    if (e.key === "F2" && !e.metaKey && !e.ctrlKey && !inEditing) {
+      const cur = $currentNotePath;
+      if (cur) {
+        e.preventDefault();
+        requestRename(cur);
+      }
+      return;
+    }
+
+    // Cmd/Ctrl + Backspace/Delete — 현재 노트를 휴지통으로. 입력 중이면 패스.
+    if (
+      (e.key === "Backspace" || e.key === "Delete") &&
+      (e.metaKey || e.ctrlKey) &&
+      !inEditing
+    ) {
+      const cur = $currentNotePath;
+      if (cur) {
+        e.preventDefault();
+        void confirmAndDeleteCurrent(cur);
+      }
+      return;
+    }
+
     const isMod = e.metaKey || e.ctrlKey;
     if (!isMod) return;
     const key = e.key.toLowerCase();

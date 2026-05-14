@@ -1,6 +1,7 @@
 import { writable, get } from "svelte/store";
 import { watchVault, unwatchVault, onVaultChange, type VaultChange } from "$lib/tauri/watcher";
 import { scanLinkSingle, readNote } from "$lib/tauri/notes";
+import { invalidateCacheBySource } from "$lib/backlinks";
 import {
   vaultPath,
   currentNotePath,
@@ -99,6 +100,9 @@ async function onPathChanged(path: string, mtimeMs: number): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
 
+  // 본문이 바뀌었으니 이 path를 source로 하는 백링크 snippet 캐시는 stale.
+  invalidateCacheBySource(path);
+
   // 현재 노트가 영향 받으면 충돌 처리
   const cur = get(currentNotePath);
   if (cur === path) {
@@ -122,6 +126,10 @@ async function onPathChanged(path: string, mtimeMs: number): Promise<void> {
 }
 
 function onPathRemoved(path: string): void {
+  // 이 path를 source로 하는 백링크 snippet 캐시 정리. target으로 가리키는 항목들은
+  // linkIndex.byPath.delete 후 backlinks 패널이 더 이상 요청 안 함.
+  invalidateCacheBySource(path);
+
   linkIndex.update((idx) => {
     if (!idx) return idx;
     idx.byPath.delete(path);

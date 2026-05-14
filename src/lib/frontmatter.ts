@@ -73,6 +73,33 @@ const PREFERRED_KEY_ORDER: readonly string[] = [
  * 사용 예:
  *   const newRaw = patchFrontmatter(raw, { title: "새 제목", doc_kind: "plan" });
  */
+/**
+ * 빈 값도 보존하는 키 추가 — Properties UI에서 사용자가 명시적으로 "추가" 했을 때
+ * patchFrontmatter는 빈 값을 deletion으로 해석하므로 별도 helper.
+ *
+ * 사용 예: Properties 패널에서 "+ tags" 버튼 → addFrontmatterKey(raw, "tags", []).
+ */
+export function addFrontmatterKey(
+  raw: string,
+  key: string,
+  defaultValue: unknown,
+): string {
+  const { data, body } = parseFrontmatter(raw);
+  if (key in data) return raw; // 이미 존재 — noop
+  const originalKeys = Object.keys(data);
+  const merged: Record<string, unknown> = { ...data, [key]: defaultValue };
+  const orderedKeys = orderKeys(Object.keys(merged), originalKeys);
+  const ordered: Record<string, unknown> = {};
+  for (const k of orderedKeys) ordered[k] = merged[k];
+  const yamlText = yaml.dump(ordered, {
+    lineWidth: -1,
+    flowLevel: -1,
+    noRefs: true,
+  });
+  const fmText = yamlText.endsWith("\n") ? yamlText : yamlText + "\n";
+  return `---\n${fmText}---\n${body}`;
+}
+
 export function patchFrontmatter(
   raw: string,
   patch: Record<string, unknown>,
