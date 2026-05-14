@@ -9,6 +9,7 @@
     reloadNotes,
     treeLoading,
     indexBuilding,
+    createNewNote,
   } from "$lib/stores/vault";
   import { sidebarTab, showFilesTab, showTagsTab, tagIndex } from "$lib/stores/tags";
   import {
@@ -136,6 +137,75 @@
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
+
+  // 빈 vault 첫 진입 가이드용 Welcome 노트 콘텐츠. 사용자가 명시적으로 버튼을 눌렀을 때만 생성.
+  const WELCOME_NOTE_CONTENT = `---
+title: Welcome
+tags: [welcome, getting-started]
+---
+
+# Welcome to Lapis
+
+이 노트는 Lapis 사용법을 익히기 위한 샘플입니다. 자유롭게 편집하거나 삭제하세요.
+
+## Wikilink 예제
+
+다른 노트로의 링크는 \`[[노트이름]]\`으로 작성합니다. 별칭도 가능: \`[[Welcome|환영]]\`.
+대상 노트가 없으면 회색 점선으로 표시됩니다 (예: [[아직-없는-노트]]).
+
+## 태그
+
+본문에 \`#태그명\` 형식으로 작성하면 자동 수집됩니다. 예: #welcome #intro.
+사이드바 **Tags** 탭에서 모든 태그를 확인할 수 있습니다.
+
+## Mermaid 다이어그램
+
+코드 펜스에 \`mermaid\` 언어를 지정하면 미리보기에서 자동 렌더링됩니다.
+
+\`\`\`mermaid
+graph LR
+  A[노트 작성] --> B[wikilink 연결]
+  B --> C[그래프 탐색]
+  C --> D[지식 정리]
+\`\`\`
+
+## 단축키 모음
+
+| 단축키 | 동작 |
+|---|---|
+| \`⌘K\` | Command Palette |
+| \`⌘P\` | Quick File Open |
+| \`⌘⇧F\` | Full-text 검색 |
+| \`⌘F\` | 노트 내 검색 |
+| \`⌘N\` | 새 노트 |
+| \`⌘G\` | Graph View |
+| \`⌘S\` | 즉시 저장 |
+
+## 다음 단계
+
+1. \`⌘N\`으로 첫 노트를 만들어보세요
+2. 본문에 \`[[Welcome]]\`을 적어 이 노트를 가리키게 한 뒤, 사이드바 하단 **Backlinks**에서 역참조 확인
+3. \`⌘G\`로 그래프를 열어 노트 연결을 시각화
+
+자세한 사용 가이드는 [팀 Confluence 페이지](https://github.com/eren0315/lapis)를 참고하세요.
+`;
+
+  let welcomeCreating = $state(false);
+
+  async function createWelcomeNote() {
+    if (welcomeCreating) return;
+    const vault = $vaultPath;
+    if (!vault) return;
+    welcomeCreating = true;
+    try {
+      // parentDir에 vault root를 그대로 전달 — create_note Tauri command이 그 안에 파일 생성
+      await createNewNote(vault, "Welcome.md", WELCOME_NOTE_CONTENT);
+    } catch (e) {
+      console.error("[Sidebar] createWelcomeNote 실패", e);
+    } finally {
+      welcomeCreating = false;
+    }
+  }
 </script>
 
 <aside class="sidebar">
@@ -214,6 +284,14 @@
       {:else}
         <div class="empty">
           <p>이 폴더에 .md 파일이 없습니다.</p>
+          <p class="empty-hint">처음이신가요? 단축키와 wikilink 예제가 담긴 샘플 노트로 시작해보세요.</p>
+          <button
+            class="welcome-btn"
+            onclick={createWelcomeNote}
+            disabled={welcomeCreating}
+          >
+            {welcomeCreating ? "생성 중…" : "Welcome 샘플 만들기"}
+          </button>
           <button class="link-btn" onclick={pickAndOpenVault}>다른 vault 선택</button>
         </div>
       {/if}
@@ -548,6 +626,34 @@
 
   .empty p {
     margin: 0 0 12px 0;
+  }
+
+  .empty .empty-hint {
+    color: #888;
+    font-size: 11.5px;
+    line-height: 1.55;
+    margin: -4px 0 14px 0;
+  }
+
+  .welcome-btn {
+    background: #2d4a5a;
+    border: 1px solid #6dd6ff;
+    color: #6dd6ff;
+    border-radius: 5px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    margin-bottom: 10px;
+    display: inline-block;
+  }
+  .welcome-btn:hover:not(:disabled) {
+    background: #3a5d70;
+  }
+  .welcome-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .link-btn {
