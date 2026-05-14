@@ -13,6 +13,7 @@
   import { buildGraphData, getNeighbors, type GraphMode } from "$lib/graph";
   import { mirrorListMemoryLinks, type MemoryLink } from "$lib/tauri/mirror";
   import { memoryFindExportedNote } from "$lib/tauri/memory";
+  import { claudeMemEnabled } from "$lib/stores/settings";
 
   // ESM/CJS interop 안전 처리 — Vite가 default export를 wrapping할 수 있음
   const fcoseRegister =
@@ -421,10 +422,12 @@
           <input type="checkbox" bind:checked={showIsolated} />
           isolated 표시
         </label>
-        <label class="isolated-toggle" title="claude-mem 메모리 노드 + 엣지 표시 (Phase C.4)">
-          <input type="checkbox" bind:checked={showMemory} />
-          memory {memoryLoading ? "…" : memoryLinks.length > 0 ? `(${memoryLinks.length})` : ""}
-        </label>
+        {#if $claudeMemEnabled}
+          <label class="isolated-toggle" title="claude-mem 메모리 노드 + 엣지 표시 (Phase C.4)">
+            <input type="checkbox" bind:checked={showMemory} />
+            memory {memoryLoading ? "…" : memoryLinks.length > 0 ? `(${memoryLinks.length})` : ""}
+          </label>
+        {/if}
         <button class="close-btn" title="닫기 (Esc)" onclick={closeGraph}>×</button>
       </header>
       <div class="graph-body" bind:this={containerEl}></div>

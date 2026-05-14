@@ -98,6 +98,9 @@
       // vault path 전달 → mirror 삭제 시 .md 자동 정리 + orphans.json 박제 (PR2 #12)
       mirrorReport = await mirrorSyncNow(full, $vaultPath || null);
       await refreshMirrorStatus();
+      // mirror에 새 row가 들어왔으면 export preview 카운트도 stale → 자동 갱신.
+      // (모달 confirm 단계에서만 의미 — 다른 단계면 refreshPreview 자체가 noop)
+      await refreshPreview();
     } catch (e) {
       mirrorError = `mirror sync 실패: ${e}`;
     } finally {
@@ -471,9 +474,11 @@
           <button
             class="btn primary"
             onclick={runExport}
-            disabled={nothingToExport(preview)}
+            title={nothingToExport(preview)
+              ? "신규 export 대상이 없어도 export 함수를 다시 돌립니다 (모두 skip 처리)"
+              : "신규 메모리를 vault에 export"}
           >
-            Sync 시작
+            {nothingToExport(preview) ? "다시 동기화 (변경 없음)" : "Sync 시작"}
           </button>
         {:else if stage === "done"}
           <button class="btn primary" onclick={close}>닫기</button>

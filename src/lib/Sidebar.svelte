@@ -19,6 +19,14 @@
   } from "$lib/stores/filters";
   import { mirrorSyncStatus, type SyncStatus } from "$lib/tauri/mirror";
   import { openMemorySync } from "$lib/stores/memorySync";
+  import {
+    claudeMemEnabled,
+    openSettings,
+    mirrorSyncing,
+    mirrorSyncStartedAt,
+    markMirrorSyncStart,
+    markMirrorSyncEnd,
+  } from "$lib/stores/settings";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
   function showFiltersTab() {
@@ -36,17 +44,61 @@
 
   // Mirror status indicator (PR2 #11) ────────────────────────────────────────
   let mirrorStatus: SyncStatus | null = $state(null);
+  /** sync 진행 중 경과(초) — tooltip 표시용. 1초마다 갱신. */
+  let mirrorSyncElapsedSec = $state(0);
+  let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 
-  // 초기 로드 + 이벤트 listen으로 갱신
+  // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
   $effect(() => {
-    void refreshMirrorStatus();
+    if (!$claudeMemEnabled) {
+      mirrorStatus = null;
+      markMirrorSyncEnd();
+      return;
+    }
+    // sync_now가 schema build 중이면 mirror_sync_status도 동시 schema build 시도 →
+    // SQLITE_BUSY. mirror-sync-done 도착하면 어차피 refresh 다시 도니 effect-init은 skip.
+    if (!$mirrorSyncing) {
+      void refreshMirrorStatus();
+    }
     let u1: UnlistenFn | null = null;
     let u2: UnlistenFn | null = null;
-    void listen("mirror-sync-done", () => void refreshMirrorStatus()).then((u) => (u1 = u));
-    void listen("mirror-sync-error", () => void refreshMirrorStatus()).then((u) => (u2 = u));
+    let u3: UnlistenFn | null = null;
+    void listen("mirror-sync-start", () => markMirrorSyncStart()).then((u) => (u3 = u));
+    void listen("mirror-sync-done", () => {
+      markMirrorSyncEnd();
+      void refreshMirrorStatus();
+    }).then((u) => (u1 = u));
+    void listen("mirror-sync-error", () => {
+      markMirrorSyncEnd();
+      void refreshMirrorStatus();
+    }).then((u) => (u2 = u));
     return () => {
       u1?.();
       u2?.();
+      u3?.();
+    };
+  });
+
+  // 경과 초 카운터 — syncing 동안만 동작. mirrorSyncStartedAt이 null이면 정지.
+  $effect(() => {
+    const startedAt = $mirrorSyncStartedAt;
+    if (startedAt === null) {
+      mirrorSyncElapsedSec = 0;
+      if (elapsedTimer) {
+        clearInterval(elapsedTimer);
+        elapsedTimer = null;
+      }
+      return;
+    }
+    mirrorSyncElapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    elapsedTimer = setInterval(() => {
+      mirrorSyncElapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => {
+      if (elapsedTimer) {
+        clearInterval(elapsedTimer);
+        elapsedTimer = null;
+      }
     };
   });
 
@@ -58,15 +110,20 @@
     }
   }
 
-  /** green: 정상, yellow: 비어있음(sync 안 됨), red: 마지막 sync 실패 / 상태 조회 실패 */
-  function mirrorColor(s: SyncStatus | null): "green" | "yellow" | "red" {
+  /** blue: sync 진행 중, green: 정상, yellow: 비어있음, red: 실패. syncing이 다른 상태보다 우선. */
+  function mirrorColor(s: SyncStatus | null, syncing: boolean): "blue" | "green" | "yellow" | "red" {
+    if (syncing) return "blue";
     if (!s) return "red";
     if (s.last_failure) return "red";
     if (s.memory_count === 0) return "yellow";
     return "green";
   }
 
-  function mirrorTooltip(s: SyncStatus | null): string {
+  function mirrorTooltip(s: SyncStatus | null, syncing: boolean, elapsedSec: number): string {
+    if (syncing) {
+      const elapsed = elapsedSec > 0 ? ` · 약 ${elapsedSec}s 경과` : "";
+      return `Mirror: sync 진행 중…${elapsed}`;
+    }
     if (!s) return "Mirror: 상태 조회 실패 (mirror DB 미초기화)";
     if (s.last_failure) return `Mirror: 마지막 sync 실패 — ${s.last_failure}`;
     if (s.memory_count === 0) return "Mirror: 비어있음. Memory: Sync에서 동기화하세요.";
@@ -89,12 +146,15 @@
         <span class="loading-spinner" title="트리 로드 중"></span>
       {/if}
       <div class="actions">
-        <button
-          class="mirror-dot mirror-{mirrorColor(mirrorStatus)}"
-          title={mirrorTooltip(mirrorStatus)}
-          aria-label="메모리 mirror 상태"
-          onclick={openMemorySync}
-        ></button>
+        {#if $claudeMemEnabled}
+          <button
+            class="mirror-dot mirror-{mirrorColor(mirrorStatus, $mirrorSyncing)}"
+            class:syncing={$mirrorSyncing}
+            title={mirrorTooltip(mirrorStatus, $mirrorSyncing, mirrorSyncElapsedSec)}
+            aria-label="메모리 mirror 상태"
+            onclick={openMemorySync}
+          ></button>
+        {/if}
         <button class="icon-btn" title="새로고침" onclick={reloadNotes}>↻</button>
         <button class="icon-btn" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
       </div>
@@ -176,6 +236,15 @@
       </div>
     {/if}
   </div>
+
+  <footer class="sidebar-foot">
+    <button
+      class="icon-btn settings-btn"
+      title="설정"
+      aria-label="설정 열기"
+      onclick={openSettings}
+    >⚙</button>
+  </footer>
 </aside>
 
 <style>
@@ -301,6 +370,18 @@
   .mirror-red {
     background: #f47174;
   }
+  .mirror-blue {
+    background: #6dd6ff;
+  }
+
+  /* sync 진행 중 — 펄스로 활동 중임을 시각화 */
+  .mirror-dot.syncing {
+    animation: mirror-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes mirror-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.15); }
+  }
 
   .open-btn {
     width: 100%;
@@ -374,6 +455,28 @@
     flex: 1;
     overflow-y: auto;
     position: relative;
+  }
+
+  /* 하단 푸터 — 톱니바퀴 등 보조 액션. vault 미선택 상태에서도 노출. */
+  .sidebar-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 6px 10px;
+    border-top: 1px solid #2a2a2a;
+    background: #1c1c1c;
+    flex-shrink: 0;
+  }
+
+  .settings-btn {
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+    color: #999;
+  }
+  .settings-btn:hover {
+    color: #6dd6ff;
   }
 
   /* 인덱스 빌드 중 dim overlay — 트리 영역 cover */

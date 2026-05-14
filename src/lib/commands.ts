@@ -11,6 +11,7 @@ import { openGraph } from "$lib/stores/graph";
 import { toggleEditor, togglePreview } from "$lib/stores/layout";
 import { openMemorySync } from "$lib/stores/memorySync";
 import { openMemorySearch } from "$lib/stores/memorySearch";
+import { claudeMemEnabled } from "$lib/stores/settings";
 
 export interface Command {
   id: string;
@@ -87,7 +88,7 @@ export const BUILTIN_COMMANDS: Command[] = [
   {
     id: "memory-sync",
     label: "Memory: Sync from claude-mem",
-    disabled: () => !get(vaultPath),
+    disabled: () => !get(vaultPath) || !get(claudeMemEnabled),
     run() {
       openMemorySync();
     },
@@ -96,7 +97,7 @@ export const BUILTIN_COMMANDS: Command[] = [
     id: "memory-search",
     label: "Memory: Search",
     shortcut: "⌘⇧M",
-    disabled: () => !get(vaultPath),
+    disabled: () => !get(vaultPath) || !get(claudeMemEnabled),
     run() {
       openMemorySearch();
     },

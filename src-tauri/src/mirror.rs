@@ -17,9 +17,33 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
+
+// sync_now 실행 중 여부 — cleanup이 sync 완료를 기다리는 데 사용 (Phase 6.0 race 차단).
+static SYNC_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+pub fn is_sync_in_flight() -> bool {
+    SYNC_IN_FLIGHT.load(Ordering::Relaxed)
+}
+
+/// sync_now 진입/이탈 시 atomic flag를 set/clear. 에러 path에서도 자동 clear.
+struct SyncGuard;
+
+impl SyncGuard {
+    fn new() -> Self {
+        SYNC_IN_FLIGHT.store(true, Ordering::Relaxed);
+        Self
+    }
+}
+
+impl Drop for SyncGuard {
+    fn drop(&mut self) {
+        SYNC_IN_FLIGHT.store(false, Ordering::Relaxed);
+    }
+}
 
 // ─── schema / open ──────────────────────────────────────────────────────────
 
@@ -250,6 +274,9 @@ pub fn sync_now(
     vault_path: Option<String>,
 ) -> Result<SyncReport, String> {
     let start = Instant::now();
+    let _guard = SyncGuard::new();
+    // 프론트가 "syncing" 인디케이터(파란 점)를 표시할 수 있도록 시작 시점 통보.
+    let _ = app.emit("mirror-sync-start", &full);
     let mut report = SyncReport {
         full,
         ..Default::default()
@@ -1190,6 +1217,12 @@ fn wal_debounce_loop(
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 if last_event_at.take().is_some() {
+                    // claude-mem 토글 OFF 상태면 받은 이벤트를 무시한다 (Phase 6.0 동적 토글).
+                    // Box::leak된 watcher라 watcher 자체를 멈출 수 없지만, sync_now 호출만 건너뛰면
+                    // mirror DB가 삭제된 상태에서의 write 충돌을 막을 수 있다.
+                    if !crate::settings::is_claude_mem_active() {
+                        continue;
+                    }
                     // debounce 윈도우 종료 — sync 실행.
                     // WAL watch에선 vault_path를 모름. .md 정리는 vault가 열려 있을 때만
                     // (사용자 수동 mirror sync / openVault IIFE)에서 수행.
