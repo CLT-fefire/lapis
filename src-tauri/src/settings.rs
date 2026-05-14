@@ -154,18 +154,43 @@ pub fn claude_mem_apply(app: AppHandle, enabled: bool) -> Result<(), String> {
                 WAL_WATCH_STARTED.store(false, Ordering::Relaxed);
             }
         }
-        // 검색 인덱스 — 이미 빌드돼 있으면 no-op. 첫 ON 또는 cleanup 후 ON이면 새로 빌드.
-        let handle_for_index = app.clone();
-        std::thread::spawn(move || match crate::search::ensure_index_built(&handle_for_index) {
-            Ok(r) => {
-                if r.added > 0 {
+        // 초기 mirror sync — cleanup 직후 ON이거나 첫 ON이면 mirror DB가 비어 있어
+        // mirror-dot이 노란색(empty)으로 머무름. WAL watch는 이벤트가 와야 동작하므로
+        // 토글 직후 자동으로 한 번 incremental sync를 돌려준다.
+        // sync_now는 ensure_schema → claude-mem.db 읽기 → mirror upsert까지 한 번에.
+        // mirror DB가 이미 채워져 있고 변경 없으면 ms 단위로 끝남 — 항상 호출해도 비용 적음.
+        // vault_path는 None — 토글 시점에 vault context를 모르고, .md 정리는 사용자가
+        // 명시적으로 MemorySyncModal에서 실행할 때만 수행 (안전 측면).
+        // 인덱스 빌드는 sync 완료 후에 호출 — 빈 mirror에 인덱스 빌드는 무의미하므로.
+        use tauri::Emitter;
+        let handle_for_sync = app.clone();
+        std::thread::spawn(move || {
+            match crate::mirror::sync_now(&handle_for_sync, false, None) {
+                Ok(report) => {
+                    let _ = handle_for_sync.emit("mirror-sync-done", &report);
                     eprintln!(
-                        "[search] apply ON 인덱스 빌드: +{} · {}ms",
-                        r.added, r.duration_ms
+                        "[mirror] apply ON 초기 sync — summaries +{} · observations +{} · {}ms",
+                        report.summaries_upserted, report.observations_upserted, report.duration_ms
                     );
+                    // sync 끝난 뒤 인덱스 빌드 (mirror에 row가 있어야 인덱싱 의미)
+                    match crate::search::ensure_index_built(&handle_for_sync) {
+                        Ok(r) => {
+                            if r.added > 0 {
+                                eprintln!(
+                                    "[search] apply ON 인덱스 빌드: +{} · {}ms",
+                                    r.added, r.duration_ms
+                                );
+                            }
+                        }
+                        Err(e) => eprintln!("[search] apply ON ensure_index_built 실패: {e}"),
+                    }
+                }
+                Err(e) => {
+                    // claude-mem 미설치 등 — silent하게 로그만 남기고 진행
+                    eprintln!("[mirror] apply ON 초기 sync 실패 (claude-mem 미설치 가능): {e}");
+                    let _ = handle_for_sync.emit("mirror-sync-error", &e);
                 }
             }
-            Err(e) => eprintln!("[search] apply ON ensure_index_built 실패: {e}"),
         });
     } else {
         // 정리 worker — emit으로 progress 전달. 사용자는 CleanupOverlay에서 진행 상황 확인.
