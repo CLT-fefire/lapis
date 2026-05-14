@@ -4,8 +4,6 @@
  * - terms 배열의 각 항목을 indexOf로 검사, 가장 빠른 위치 사용
  * - 매칭 없으면 matched=false. 호출자가 fallback 메시지를 결정 (이 함수는 빈 스니펫 반환)
  * - 줄바꿈·중복 공백은 단일 스페이스로 정규화
- *
- * NOTE: searchIndex.ts의 makeSnippet도 같은 패턴. 향후 점진 통일 가능.
  */
 export interface SnippetResult {
   snippet: string;

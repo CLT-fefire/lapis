@@ -158,7 +158,19 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     noteContentChanged(next);
   }
 
-  const parsed = $derived(parseNote(raw));
+  /**
+   * `.mmd` 단일 mermaid 파일은 본문 전체를 mermaid 다이어그램으로 간주.
+   * Preview만 mermaid fence로 래핑 — Editor는 raw mermaid 소스 그대로 편집.
+   */
+  const previewRaw = $derived.by(() => {
+    const path = $currentNotePath;
+    if (path && path.toLowerCase().endsWith(".mmd")) {
+      return "```mermaid\n" + raw + "\n```\n";
+    }
+    return raw;
+  });
+
+  const parsed = $derived(parseNote(previewRaw));
 
   function noteDisplayName(path: string): string {
     const segments = path.split("/").filter(Boolean);

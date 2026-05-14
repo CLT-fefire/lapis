@@ -39,7 +39,7 @@ pub fn write_note(vault_path: String, path: String, content: String) -> Result<(
         .canonicalize()
         .map_err(|e| format!("target canonicalize failed: {e}"))?;
     ensure_in_vault(&target_canon, &vault)?;
-    ensure_md_extension(&target_canon)?;
+    ensure_supported_extension(&target_canon)?;
     atomic_write(&target_canon, &content)
 }
 
@@ -106,9 +106,9 @@ pub fn delete_note(vault_path: String, path: String) -> Result<(), String> {
         .canonicalize()
         .map_err(|e| format!("canonicalize failed: {e}"))?;
     ensure_in_vault(&target, &vault)?;
-    // 파일이면 .md 강제, 디렉토리는 OK
+    // 파일이면 지원 확장자(.md / .mmd) 강제, 디렉토리는 OK.
     if target.is_file() {
-        ensure_md_extension(&target)?;
+        ensure_supported_extension(&target)?;
     }
     trash::delete(&target).map_err(|e| format!("trash failed: {e}"))
 }
@@ -126,10 +126,24 @@ pub fn rename_note(
         .map_err(|e| format!("canonicalize failed: {e}"))?;
     ensure_in_vault(&old_canon, &vault)?;
 
-    let name = if new_name.to_lowercase().ends_with(".md") || !old_canon.is_file() {
+    // 새 이름에 확장자가 빠져 있고 원본이 파일이면 원본 확장자를 보존한다.
+    // 예: "diagram.mmd" → rename to "flowchart" → "flowchart.mmd" (강제 .md 변환 X).
+    let name = if !old_canon.is_file() {
         new_name.clone()
     } else {
-        format!("{new_name}.md")
+        let already_has_supported_ext = new_name
+            .rsplit_once('.')
+            .map(|(_, ext)| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("mmd"))
+            .unwrap_or(false);
+        if already_has_supported_ext {
+            new_name.clone()
+        } else {
+            let old_ext = old_canon
+                .extension()
+                .map(|e| e.to_string_lossy().to_string())
+                .unwrap_or_else(|| "md".to_string());
+            format!("{new_name}.{old_ext}")
+        }
     };
     sanitize_file_name(&name)?;
 
@@ -145,7 +159,7 @@ pub fn rename_note(
         return Err(format!("target already exists: {}", new_path.display()));
     }
     if old_canon.is_file() {
-        ensure_md_extension(&new_path)?;
+        ensure_supported_extension(&new_path)?;
     }
 
     fs::rename(&old_canon, &new_path).map_err(|e| format!("rename failed: {e}"))?;
@@ -304,12 +318,27 @@ fn ensure_in_vault(path: &Path, vault: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Lapis가 다루는 노트 확장자: `.md` (마크다운 본문) + `.mmd` (단일 mermaid 다이어그램).
+/// `.mmd`는 v0.4.0부터 읽기/저장/삭제/이름변경 가능. 생성(create_note)은 여전히 `.md`만.
+fn is_supported_note_ext(ext: &std::ffi::OsStr) -> bool {
+    let s = ext.to_string_lossy();
+    s.eq_ignore_ascii_case("md") || s.eq_ignore_ascii_case("mmd")
+}
+
+fn ensure_supported_extension(path: &Path) -> Result<(), String> {
+    if path.extension().is_none_or(|e| !is_supported_note_ext(e)) {
+        return Err("only .md or .mmd files allowed".to_string());
+    }
+    Ok(())
+}
+
+/// create_note 전용 — 신규 생성은 항상 `.md`만 (Lapis는 .mmd 신규 생성 UI 미제공).
 fn ensure_md_extension(path: &Path) -> Result<(), String> {
     if path
         .extension()
         .is_none_or(|e| !e.eq_ignore_ascii_case("md"))
     {
-        return Err("only .md files allowed".to_string());
+        return Err("only .md files allowed for create".to_string());
     }
     Ok(())
 }
@@ -771,11 +800,17 @@ fn strip_inline_code(line: &str) -> String {
     out
 }
 
-// "name.md" / "name.MD" → "name". ASCII 확장자라 byte slice 안전.
+// "name.md" / "name.MD" / "name.mmd" → "name". ASCII 확장자라 byte slice 안전.
 fn strip_md_extension(name: &str) -> &str {
+    if name.len() >= 4 {
+        let tail4 = &name[name.len() - 4..];
+        if tail4.eq_ignore_ascii_case(".mmd") {
+            return &name[..name.len() - 4];
+        }
+    }
     if name.len() >= 3 {
-        let tail = &name[name.len() - 3..];
-        if tail.eq_ignore_ascii_case(".md") {
+        let tail3 = &name[name.len() - 3..];
+        if tail3.eq_ignore_ascii_case(".md") {
             return &name[..name.len() - 3];
         }
     }
@@ -902,7 +937,7 @@ fn walk_dir(root: &Path, current: &Path) -> std::io::Result<Vec<NoteEntry>> {
                 is_dir: true,
                 children: Some(children),
             });
-        } else if path.extension().is_some_and(|ext| ext == "md") {
+        } else if path.extension().is_some_and(is_supported_note_ext) {
             let stem = path
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
