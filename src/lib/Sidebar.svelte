@@ -37,28 +37,39 @@
 
   // Mirror status indicator (PR2 #11) ────────────────────────────────────────
   let mirrorStatus: SyncStatus | null = $state(null);
+  /** sync_now 진행 중 여부 — UI에 파란 점(syncing) 표시. mirror-sync-start/done/error로 갱신. */
+  let mirrorSyncing = $state(false);
 
   // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
   $effect(() => {
     console.log(`[diag][Sidebar.effect] claudeMemEnabled=${$claudeMemEnabled}`);
     if (!$claudeMemEnabled) {
       mirrorStatus = null;
+      mirrorSyncing = false;
       return;
     }
     void refreshMirrorStatus("effect-init");
     let u1: UnlistenFn | null = null;
     let u2: UnlistenFn | null = null;
+    let u3: UnlistenFn | null = null;
+    void listen("mirror-sync-start", (e) => {
+      console.log("[diag][Sidebar] mirror-sync-start 수신", e.payload);
+      mirrorSyncing = true;
+    }).then((u) => (u3 = u));
     void listen("mirror-sync-done", (e) => {
       console.log("[diag][Sidebar] mirror-sync-done 수신", e.payload);
+      mirrorSyncing = false;
       void refreshMirrorStatus("mirror-sync-done");
     }).then((u) => (u1 = u));
     void listen("mirror-sync-error", (e) => {
       console.warn("[diag][Sidebar] mirror-sync-error 수신", e.payload);
+      mirrorSyncing = false;
       void refreshMirrorStatus("mirror-sync-error");
     }).then((u) => (u2 = u));
     return () => {
       u1?.();
       u2?.();
+      u3?.();
     };
   });
 
@@ -67,7 +78,7 @@
       const s = await mirrorSyncStatus();
       mirrorStatus = s;
       console.log(
-        `[diag][Sidebar.refresh] reason=${reason} · count=${s.memory_count} · failure=${s.last_failure ?? "none"} · last_inc=${s.last_incremental_sync_at} → color=${mirrorColor(s)}`,
+        `[diag][Sidebar.refresh] reason=${reason} · count=${s.memory_count} · failure=${s.last_failure ?? "none"} · last_inc=${s.last_incremental_sync_at} → color=${mirrorColor(s, mirrorSyncing)}`,
       );
     } catch (e) {
       mirrorStatus = null;
@@ -75,15 +86,17 @@
     }
   }
 
-  /** green: 정상, yellow: 비어있음(sync 안 됨), red: 마지막 sync 실패 / 상태 조회 실패 */
-  function mirrorColor(s: SyncStatus | null): "green" | "yellow" | "red" {
+  /** blue: sync 진행 중, green: 정상, yellow: 비어있음, red: 실패. syncing이 다른 상태보다 우선. */
+  function mirrorColor(s: SyncStatus | null, syncing: boolean): "blue" | "green" | "yellow" | "red" {
+    if (syncing) return "blue";
     if (!s) return "red";
     if (s.last_failure) return "red";
     if (s.memory_count === 0) return "yellow";
     return "green";
   }
 
-  function mirrorTooltip(s: SyncStatus | null): string {
+  function mirrorTooltip(s: SyncStatus | null, syncing: boolean): string {
+    if (syncing) return "Mirror: sync 진행 중…";
     if (!s) return "Mirror: 상태 조회 실패 (mirror DB 미초기화)";
     if (s.last_failure) return `Mirror: 마지막 sync 실패 — ${s.last_failure}`;
     if (s.memory_count === 0) return "Mirror: 비어있음. Memory: Sync에서 동기화하세요.";
@@ -108,8 +121,9 @@
       <div class="actions">
         {#if $claudeMemEnabled}
           <button
-            class="mirror-dot mirror-{mirrorColor(mirrorStatus)}"
-            title={mirrorTooltip(mirrorStatus)}
+            class="mirror-dot mirror-{mirrorColor(mirrorStatus, mirrorSyncing)}"
+            class:syncing={mirrorSyncing}
+            title={mirrorTooltip(mirrorStatus, mirrorSyncing)}
             aria-label="메모리 mirror 상태"
             onclick={openMemorySync}
           ></button>
@@ -328,6 +342,18 @@
   }
   .mirror-red {
     background: #f47174;
+  }
+  .mirror-blue {
+    background: #6dd6ff;
+  }
+
+  /* sync 진행 중 — 펄스로 활동 중임을 시각화 */
+  .mirror-dot.syncing {
+    animation: mirror-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes mirror-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.15); }
   }
 
   .open-btn {

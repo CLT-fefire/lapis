@@ -15,7 +15,21 @@
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+
+/// in-flight sync_now가 끝날 때까지 최대 `timeout`만큼 대기.
+/// 정상 sync는 1.7~5s, 첫 대량 sync도 ~15s 안쪽이라 30s timeout 안전 마진.
+fn wait_for_sync_to_finish(timeout: Duration) -> bool {
+    let started = Instant::now();
+    while crate::mirror::is_sync_in_flight() {
+        if started.elapsed() > timeout {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    true
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CleanupProgress {
@@ -42,6 +56,19 @@ fn emit_error(app: &AppHandle, message: impl Into<String>) {
 pub fn run_cleanup(app: &AppHandle) {
     eprintln!("[diag][cleanup] 시작");
     emit(app, "starting", "정리를 시작합니다…");
+
+    // sync_now가 진행 중이면 끝날 때까지 대기 — sync 도중 mirror DB / search-index 파일 unlink는
+    // SQLite와 tantivy 양쪽에 ghost FD를 남겨 결국 데이터 손실 + reindex 실패 유발.
+    if crate::mirror::is_sync_in_flight() {
+        eprintln!("[diag][cleanup] in-flight sync 감지 — 완료까지 최대 30s 대기");
+        emit(app, "starting", "진행 중인 sync 완료를 기다리는 중…");
+        let finished = wait_for_sync_to_finish(Duration::from_secs(30));
+        if !finished {
+            eprintln!("[diag][cleanup] sync 대기 timeout (30s) — 정리 강행");
+        } else {
+            eprintln!("[diag][cleanup] sync 완료 확인 — 정리 진행");
+        }
+    }
 
     let app_data_dir = match app.path().app_data_dir() {
         Ok(d) => d,
