@@ -282,6 +282,58 @@ fn name_belongs_to(fstem: &str, stem: &str) -> bool {
     )
 }
 
+/// 링크 자동 갱신 전 affected 노트의 원본을 백업.
+///
+/// vault 안의 `<backup_dir_rel>` (예: `.lapis/link-rewrite-backup/<ISO-ts>`)에
+/// 각 source 노트의 vault-relative 경로 구조를 유지하며 복사. 백업 위치는
+/// `.`로 시작하는 hidden 디렉토리 트리라 `walk_dir`이 자동 제외 → vault tree에 안 보임.
+///
+/// 인자:
+/// - `vault_path`: vault root (canonicalize됨)
+/// - `source_paths`: 백업할 노트의 절대 경로 리스트
+/// - `backup_dir_rel`: vault 상대 경로 (예: `.lapis/link-rewrite-backup/2026-05-18T15-40-00Z`)
+///
+/// 안전성:
+/// - source는 vault 안 + 지원 확장자 (`.md`/`.mmd`)만
+/// - backup_dir도 canonicalize 후 vault 안 확인 (`..` 등 traversal 방지)
+/// - 백업 디렉토리는 미존재 시 자동 생성
+///
+/// 반환: 백업 디렉토리 절대 경로 문자열.
+#[tauri::command]
+pub fn backup_notes(
+    vault_path: String,
+    source_paths: Vec<String>,
+    backup_dir_rel: String,
+) -> Result<String, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let backup_root = vault.join(&backup_dir_rel);
+    fs::create_dir_all(&backup_root)
+        .map_err(|e| format!("backup dir create failed: {e}"))?;
+    let backup_root_canon = backup_root
+        .canonicalize()
+        .map_err(|e| format!("backup dir canonicalize failed: {e}"))?;
+    ensure_in_vault(&backup_root_canon, &vault)?;
+
+    for src in &source_paths {
+        let src_canon = PathBuf::from(src)
+            .canonicalize()
+            .map_err(|e| format!("source canonicalize failed ({src}): {e}"))?;
+        ensure_in_vault(&src_canon, &vault)?;
+        ensure_supported_extension(&src_canon)?;
+        let rel = src_canon
+            .strip_prefix(&vault)
+            .map_err(|e| format!("strip_prefix failed ({src}): {e}"))?;
+        let dst = backup_root_canon.join(rel);
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("backup parent create failed: {e}"))?;
+        }
+        fs::copy(&src_canon, &dst).map_err(|e| format!("backup copy failed ({src}): {e}"))?;
+    }
+
+    Ok(backup_root_canon.to_string_lossy().to_string())
+}
+
 // === 공통 헬퍼 ===
 
 fn canonicalize_vault(vault_path: &str) -> Result<PathBuf, String> {

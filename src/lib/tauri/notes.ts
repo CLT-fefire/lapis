@@ -107,3 +107,18 @@ export function findAssetsForNote(
 ): Promise<AssetInfo[]> {
   return invoke<AssetInfo[]>("find_assets_for_note", { vaultPath, notePath });
 }
+
+/**
+ * 링크 자동 갱신 전 affected 노트의 원본을 vault 안의 hidden 디렉토리로 백업.
+ * 백업 디렉토리 절대 경로 반환.
+ *
+ * `backupDirRel`은 vault 상대 경로 — 관례상 `.lapis/link-rewrite-backup/<ISO-ts>`.
+ * `.`로 시작하므로 `list_notes`/트리에서 자동 제외.
+ */
+export function backupNotes(
+  vaultPath: string,
+  sourcePaths: string[],
+  backupDirRel: string,
+): Promise<string> {
+  return invoke<string>("backup_notes", { vaultPath, sourcePaths, backupDirRel });
+}

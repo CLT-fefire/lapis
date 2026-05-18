@@ -11,9 +11,15 @@ import {
   renameNote as renameNoteTauri,
   moveNote as moveNoteTauri,
   writeNote,
+  backupNotes,
   type NoteEntry,
 } from "$lib/tauri/notes";
-import { rewriteLinksInNote } from "$lib/linkRewrite";
+import {
+  computeLinkRewritePreview,
+  type LinkRewritePreview,
+  type LinkRewritePreviewItem,
+} from "$lib/linkRewrite";
+import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
 import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
@@ -264,9 +270,10 @@ export async function renamePath(oldPath: string, newName: string): Promise<stri
     }
     await refreshTreeOnly();
 
-    // 링크 자동 갱신 — 비동기 백그라운드, UI 차단 X
+    // 링크 자동 갱신 — preview 모달 → confirm → backup → write.
+    // 비동기 백그라운드: rename 자체는 UI 차단 X, 모달은 별도 흐름.
     if (get(autoUpdateLinks) && oldStem !== newStem) {
-      void rewriteAllLinks(vault, oldStem, newStem);
+      void rewriteAllLinksWithPreview(vault, oldStem, newStem);
     }
 
     return newPath;
@@ -299,27 +306,77 @@ function stemOfPath(p: string): string {
   return last.replace(/\.md$/i, "");
 }
 
-/** vault 내 모든 노트를 읽어 oldStem → newStem 치환 후 저장. */
-async function rewriteAllLinks(vault: string, oldStem: string, newStem: string): Promise<void> {
+/**
+ * vault 내 모든 노트를 읽어 oldStem → newStem 치환.
+ *
+ * 흐름 (옵션 1 — 안전망):
+ * 1. 모든 노트 read → in-memory map
+ * 2. `computeLinkRewritePreview`로 affected note 계산 (write 안 함)
+ * 3. affected 0건 → 즉시 종료 (모달 X)
+ * 4. affected ≥1건 → 모달로 사용자 confirm 대기
+ * 5. confirm → vault 안 `.lapis/link-rewrite-backup/<ISO-ts>/`에 affected 노트 원본 백업
+ * 6. 백업 성공 시 newContent를 write. 한 파일 write 실패 시 즉시 중단(이미 쓴 건 backup으로 수동 복구)
+ */
+async function rewriteAllLinksWithPreview(
+  vault: string,
+  oldStem: string,
+  newStem: string,
+): Promise<void> {
   const idx = get(linkIndex);
   if (!idx) return;
-  const tasks: Promise<void>[] = [];
-  for (const path of idx.byPath.keys()) {
-    tasks.push(
-      (async () => {
-        try {
-          const raw = await readNote(path);
-          const { changed, newContent } = rewriteLinksInNote(raw, oldStem, newStem);
-          if (changed) {
-            await writeNote(vault, path, newContent);
-          }
-        } catch (e) {
-          console.warn(`link rewrite failed for ${path}:`, e);
-        }
-      })(),
-    );
+
+  // 1) 모든 노트 read → map
+  const notesMap = new Map<string, string>();
+  await Promise.all(
+    Array.from(idx.byPath.keys()).map(async (path) => {
+      try {
+        notesMap.set(path, await readNote(path));
+      } catch (e) {
+        console.warn(`readNote failed for preview ${path}:`, e);
+      }
+    }),
+  );
+
+  // 2) preview 계산
+  const preview = computeLinkRewritePreview(notesMap, oldStem, newStem);
+  if (preview.items.length === 0) return;
+
+  // 3) 사용자 confirm 대기
+  const apply = await new Promise<boolean>((resolve) => {
+    linkRewritePreviewRequest.set({ preview, resolve });
+  });
+  if (!apply) return;
+
+  // 4) 백업 + write
+  await backupAndWrite(vault, preview);
+}
+
+async function backupAndWrite(
+  vault: string,
+  preview: LinkRewritePreview,
+): Promise<void> {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupDirRel = `.lapis/link-rewrite-backup/${ts}`;
+  const sources = preview.items.map((i: LinkRewritePreviewItem) => i.path);
+  try {
+    const backupAbs = await backupNotes(vault, sources, backupDirRel);
+    console.info(`[lapis] link rewrite backup → ${backupAbs}`);
+  } catch (e) {
+    console.error("link rewrite backup failed — write aborted:", e);
+    return;
   }
-  await Promise.all(tasks);
+
+  for (const item of preview.items) {
+    try {
+      await writeNote(vault, item.path, item.newContent);
+    } catch (e) {
+      console.error(`link rewrite write failed for ${item.path} — 중단:`, e);
+      console.info(
+        `[lapis] 이미 갱신된 파일은 .lapis/link-rewrite-backup/${ts}/에서 수동 복구 가능`,
+      );
+      return;
+    }
+  }
 }
 
 /**

@@ -67,6 +67,7 @@ pub fn run() {
             vault::rename_note,
             vault::move_note,
             vault::find_assets_for_note,
+            vault::backup_notes,
             watcher::watch_vault,
             watcher::unwatch_vault,
             memory::memory_list_summaries,

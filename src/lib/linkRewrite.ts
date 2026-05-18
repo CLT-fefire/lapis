@@ -17,6 +17,50 @@ export interface RewriteResult {
   occurrences: number;
 }
 
+/** dry-run 결과의 affected 노트 1건. */
+export interface LinkRewritePreviewItem {
+  path: string;
+  occurrences: number;
+  /** rewrite 적용 결과 본문 — confirm 시 이걸 그대로 쓸 수 있어 read를 두 번 안 함. */
+  newContent: string;
+}
+
+export interface LinkRewritePreview {
+  oldStem: string;
+  newStem: string;
+  items: LinkRewritePreviewItem[];
+  /** items 전체 occurrences 합. */
+  totalOccurrences: number;
+}
+
+/**
+ * 모든 노트(path → raw) 맵을 받아 affected 목록을 미리 계산.
+ *
+ * Pure function — vault IO나 Tauri 의존성 없음 → vitest로 단위 테스트 가능.
+ * 호출자는 사전에 모든 노트의 raw를 읽어 `notes` 맵으로 넘겨야 함.
+ */
+export function computeLinkRewritePreview(
+  notes: Map<string, string>,
+  oldStem: string,
+  newStem: string,
+): LinkRewritePreview {
+  const items: LinkRewritePreviewItem[] = [];
+  let total = 0;
+  if (oldStem === newStem) {
+    return { oldStem, newStem, items, totalOccurrences: 0 };
+  }
+  for (const [path, raw] of notes) {
+    const r = rewriteLinksInNote(raw, oldStem, newStem);
+    if (r.changed) {
+      items.push({ path, occurrences: r.occurrences, newContent: r.newContent });
+      total += r.occurrences;
+    }
+  }
+  // path 사전순(읽기 편하게)
+  items.sort((a, b) => a.path.localeCompare(b.path));
+  return { oldStem, newStem, items, totalOccurrences: total };
+}
+
 /**
  * 한 노트 본문에서 oldStem → newStem 치환.
  * - body는 처음에 frontmatter 포함된 raw 텍스트.
