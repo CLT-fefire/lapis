@@ -70,8 +70,10 @@
     openSearch,
     closeSearch,
     setMatchInfo,
+    setRegexError,
     resetSearch,
   } from "$lib/stores/inDocSearch";
+  import type { InDocSearchOptions } from "$lib/stores/inDocSearch";
   import {
     findMatches,
     applyHighlights,
@@ -321,24 +323,42 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   let previewTotal = $state(0);
   let previewCurrentIdx = $state(-1);
 
+  function currentEditorOpts() {
+    const o = get(inDocSearch).options;
+    return {
+      caseSensitive: o.caseSensitive,
+      wholeWord: o.wholeWord,
+      regex: o.regex,
+    };
+  }
+
   function editorOnQuery(q: string) {
     if (!editorApi) return;
-    const info = editorApi.setQuery(q);
+    const info = editorApi.setQuery(q, currentEditorOpts());
     setMatchInfo(info.total, info.current);
+    setRegexError(info.regexError === true);
   }
   function editorOnNext() {
     if (!editorApi) return;
     const info = editorApi.findNext();
     setMatchInfo(info.total, info.current);
+    setRegexError(info.regexError === true);
   }
   function editorOnPrev() {
     if (!editorApi) return;
     const info = editorApi.findPrev();
     setMatchInfo(info.total, info.current);
+    setRegexError(info.regexError === true);
   }
   function editorOnClosed() {
     editorApi?.clearQuery();
+    setRegexError(false);
     editorApi?.focus();
+  }
+  function editorOnOptionsChanged(_: InDocSearchOptions) {
+    // 같은 query로 옵션 반영해서 재검색.
+    const q = get(inDocSearch).query;
+    editorOnQuery(q);
   }
 
   function previewApply(query: string, currentIdx: number) {
@@ -348,9 +368,24 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       previewTotal = 0;
       previewCurrentIdx = -1;
       setMatchInfo(0, 0);
+      setRegexError(false);
       return;
     }
-    const matches = findMatches(previewBodyEl, query);
+    const opts = currentEditorOpts();
+    // regex 모드면 패턴 사전 검증해 invalid 시 빨간 표시 + 매치 0.
+    if (opts.regex) {
+      try {
+        new RegExp(query);
+      } catch {
+        previewTotal = 0;
+        previewCurrentIdx = -1;
+        setMatchInfo(0, 0);
+        setRegexError(true);
+        return;
+      }
+    }
+    setRegexError(false);
+    const matches = findMatches(previewBodyEl, query, opts);
     previewTotal = matches.length;
     if (matches.length === 0) {
       previewCurrentIdx = -1;
@@ -367,6 +402,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   function previewRecompute(query: string) {
     previewQuery = query;
     previewApply(query, 0);
+  }
+  function previewOnOptionsChanged(_: InDocSearchOptions) {
+    previewApply(previewQuery, 0);
   }
   function previewOnNext() {
     if (previewTotal === 0) return;
@@ -805,6 +843,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
           onNext={editorOnNext}
           onPrev={editorOnPrev}
           onClosed={editorOnClosed}
+          onOptionsChanged={editorOnOptionsChanged}
         />
         <div class="pane-body">
           <Editor bind:value={raw} bind:api={editorApi} onChange={handleEditorChange} />
@@ -858,6 +897,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
           onNext={previewOnNext}
           onPrev={previewOnPrev}
           onClosed={previewOnClosed}
+          onOptionsChanged={previewOnOptionsChanged}
         />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
