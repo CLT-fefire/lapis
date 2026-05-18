@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rewriteLinksInNote } from "$lib/linkRewrite";
+import { rewriteLinksInNote, computeLinkRewritePreview } from "$lib/linkRewrite";
 
 /**
  * 자동 링크 갱신 단위 테스트.
@@ -263,5 +263,56 @@ describe("rewriteLinksInNote — 부분 매치 회피", () => {
     expect(r.occurrences).toBe(1);
     expect(r.newContent).toContain("[text](newStem.md)");
     expect(r.newContent).toContain("[text](oldStemExtra.md)");
+  });
+});
+
+describe("computeLinkRewritePreview", () => {
+  it("affected 0건 (매치 없음)", () => {
+    const notes = new Map<string, string>([
+      ["/v/a.md", "nothing"],
+      ["/v/b.md", "neither"],
+    ]);
+    const p = computeLinkRewritePreview(notes, "oldStem", "newStem");
+    expect(p.items).toEqual([]);
+    expect(p.totalOccurrences).toBe(0);
+  });
+
+  it("affected multi-note + path 사전순 정렬 + occurrences 합", () => {
+    const notes = new Map<string, string>([
+      ["/v/zeta.md", "see [[oldStem]] and [[oldStem|x]]"],
+      ["/v/alpha.md", "[text](oldStem.md)"],
+      ["/v/beta.md", "no match here"],
+    ]);
+    const p = computeLinkRewritePreview(notes, "oldStem", "newStem");
+    expect(p.items).toHaveLength(2);
+    expect(p.items[0].path).toBe("/v/alpha.md");
+    expect(p.items[1].path).toBe("/v/zeta.md");
+    expect(p.items[0].occurrences).toBe(1);
+    expect(p.items[1].occurrences).toBe(2);
+    expect(p.totalOccurrences).toBe(3);
+    expect(p.items[0].newContent).toBe("[text](newStem.md)");
+    expect(p.items[1].newContent).toBe("see [[newStem]] and [[newStem|x]]");
+  });
+
+  it("oldStem === newStem (no-op)", () => {
+    const notes = new Map<string, string>([["/v/a.md", "[[stem]]"]]);
+    const p = computeLinkRewritePreview(notes, "stem", "stem");
+    expect(p.items).toEqual([]);
+    expect(p.totalOccurrences).toBe(0);
+  });
+
+  it("코드 펜스/인라인 코드 안의 매치는 카운트 X", () => {
+    const notes = new Map<string, string>([
+      [
+        "/v/a.md",
+        "real [[oldStem]]\n\n```\n[[oldStem]] in fence\n```\n\nand `[[oldStem]]` inline",
+      ],
+    ]);
+    const p = computeLinkRewritePreview(notes, "oldStem", "newStem");
+    expect(p.items).toHaveLength(1);
+    expect(p.items[0].occurrences).toBe(1);
+    expect(p.items[0].newContent).toContain("[[newStem]]");
+    expect(p.items[0].newContent).toContain("[[oldStem]] in fence");
+    expect(p.items[0].newContent).toContain("`[[oldStem]]`");
   });
 });
