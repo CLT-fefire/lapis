@@ -122,3 +122,16 @@ export function backupNotes(
 ): Promise<string> {
   return invoke<string>("backup_notes", { vaultPath, sourcePaths, backupDirRel });
 }
+
+/**
+ * 링크 자동 갱신 백업(`.lapis/link-rewrite-backup/`)에서 최신 `maxKeep`개를
+ * 제외한 오래된 것 삭제. 반환: 삭제된 디렉토리 수.
+ *
+ * 백업 누적 → vault 디스크 부담 방지. backup 직후 또는 vault 열 때 호출.
+ */
+export function pruneLinkRewriteBackups(
+  vaultPath: string,
+  maxKeep: number,
+): Promise<number> {
+  return invoke<number>("prune_link_rewrite_backups", { vaultPath, maxKeep });
+}

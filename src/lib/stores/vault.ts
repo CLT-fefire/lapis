@@ -12,6 +12,7 @@ import {
   moveNote as moveNoteTauri,
   writeNote,
   backupNotes,
+  pruneLinkRewriteBackups,
   type NoteEntry,
 } from "$lib/tauri/notes";
 import {
@@ -351,6 +352,9 @@ async function rewriteAllLinksWithPreview(
   await backupAndWrite(vault, preview);
 }
 
+/** 백업 디렉토리 최대 유지 개수. 초과 시 오래된 것부터 prune. */
+const LINK_REWRITE_BACKUP_KEEP = 20;
+
 async function backupAndWrite(
   vault: string,
   preview: LinkRewritePreview,
@@ -358,24 +362,82 @@ async function backupAndWrite(
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const backupDirRel = `.lapis/link-rewrite-backup/${ts}`;
   const sources = preview.items.map((i: LinkRewritePreviewItem) => i.path);
+  let backupAbs: string;
   try {
-    const backupAbs = await backupNotes(vault, sources, backupDirRel);
+    backupAbs = await backupNotes(vault, sources, backupDirRel);
     console.info(`[lapis] link rewrite backup → ${backupAbs}`);
   } catch (e) {
     console.error("link rewrite backup failed — write aborted:", e);
     return;
   }
 
+  // 순차 write. 실패 시 이미 성공한 path들을 backup에서 원본 복원.
+  const written: string[] = [];
   for (const item of preview.items) {
     try {
       await writeNote(vault, item.path, item.newContent);
+      written.push(item.path);
     } catch (e) {
-      console.error(`link rewrite write failed for ${item.path} — 중단:`, e);
+      console.error(`link rewrite write failed for ${item.path}:`, e);
+      await rollbackFromBackup(vault, backupAbs, written);
       console.info(
-        `[lapis] 이미 갱신된 파일은 .lapis/link-rewrite-backup/${ts}/에서 수동 복구 가능`,
+        `[lapis] 추가 수동 복구 필요 시 ${backupAbs} 에서 회수 가능`,
       );
       return;
     }
+  }
+
+  // 모든 write 성공 → 오래된 백업 prune (실패해도 메인 흐름엔 영향 X)
+  void pruneOldBackups(vault);
+}
+
+/**
+ * write fail 시 이미 갱신된 파일을 backup의 원본으로 되돌림.
+ * 복원 자체도 실패하면 stderr 로깅 + 다음으로 — 부분 복원이라도 시도.
+ */
+async function rollbackFromBackup(
+  vault: string,
+  backupAbs: string,
+  writtenPaths: string[],
+): Promise<void> {
+  if (writtenPaths.length === 0) return;
+  console.info(`[lapis] 자동 롤백 시작: ${writtenPaths.length}건 복원`);
+  // vault path는 canonicalize 결과(trailing slash X). vault relative 추출 후 backup path 조립.
+  // item.path는 Rust canonicalize 결과(절대 경로) → vault.startsWith 보장.
+  let restored = 0;
+  for (const target of writtenPaths) {
+    try {
+      const rel = relativeToVault(vault, target);
+      if (rel === null) {
+        console.error(`rollback: ${target}이 vault(${vault}) 밖 — skip`);
+        continue;
+      }
+      const backupFile = `${backupAbs}/${rel}`;
+      const original = await readNote(backupFile);
+      await writeNote(vault, target, original);
+      restored++;
+    } catch (re) {
+      console.error(`rollback failed for ${target}:`, re);
+    }
+  }
+  console.info(`[lapis] 자동 롤백 완료: ${restored}/${writtenPaths.length}건 복원`);
+}
+
+/** vault 기준 상대 경로. abs가 vault 안이 아니면 null. */
+function relativeToVault(vault: string, abs: string): string | null {
+  const prefix = vault.endsWith("/") ? vault : vault + "/";
+  if (!abs.startsWith(prefix)) return null;
+  return abs.slice(prefix.length);
+}
+
+async function pruneOldBackups(vault: string): Promise<void> {
+  try {
+    const removed = await pruneLinkRewriteBackups(vault, LINK_REWRITE_BACKUP_KEEP);
+    if (removed > 0) {
+      console.info(`[lapis] backup prune: ${removed}개 디렉토리 정리`);
+    }
+  } catch (e) {
+    console.warn("backup prune failed:", e);
   }
 }
 
