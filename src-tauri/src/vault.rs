@@ -334,6 +334,56 @@ pub fn backup_notes(
     Ok(backup_root_canon.to_string_lossy().to_string())
 }
 
+/// 링크 자동 갱신 백업 디렉토리(`.lapis/link-rewrite-backup/`) 안에서
+/// 최신 `max_keep`개를 제외한 오래된 백업 디렉토리를 삭제.
+///
+/// 백업 디렉토리 이름은 ISO timestamp (`new Date().toISOString().replace(/[:.]/g, "-")`)
+/// → 알파벳 정렬 == 시간 정렬. 안전하게 sort 후 앞쪽(오래된) 제외.
+///
+/// 반환: 삭제된 디렉토리 개수.
+///
+/// 백업 root가 없으면 0 반환 (에러 X). 개별 디렉토리 삭제 실패는 stderr 로그 + 계속 진행.
+#[tauri::command]
+pub fn prune_link_rewrite_backups(
+    vault_path: String,
+    max_keep: usize,
+) -> Result<usize, String> {
+    let vault = canonicalize_vault(&vault_path)?;
+    let backup_root = vault.join(".lapis/link-rewrite-backup");
+    if !backup_root.is_dir() {
+        return Ok(0);
+    }
+
+    let mut dirs: Vec<PathBuf> = fs::read_dir(&backup_root)
+        .map_err(|e| format!("read_dir failed: {e}"))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+
+    // ISO timestamp 디렉토리명 → 알파벳 정렬 == 시간 오름차순
+    dirs.sort();
+
+    if dirs.len() <= max_keep {
+        return Ok(0);
+    }
+
+    let cutoff = dirs.len() - max_keep;
+    let to_delete = &dirs[..cutoff];
+    let mut removed = 0;
+    for d in to_delete {
+        // 안전 재검증: backup_root 안인지.
+        if !d.starts_with(&backup_root) {
+            continue;
+        }
+        match fs::remove_dir_all(d) {
+            Ok(()) => removed += 1,
+            Err(e) => eprintln!("[lapis] backup prune failed for {}: {e}", d.display()),
+        }
+    }
+    Ok(removed)
+}
+
 // === 공통 헬퍼 ===
 
 fn canonicalize_vault(vault_path: &str) -> Result<PathBuf, String> {
