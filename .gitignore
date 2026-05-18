@@ -25,6 +25,10 @@ src-tauri/target/
 target/
 # Cargo.lock — Tauri 앱은 추적 권장 (재현성)
 
+# 사용자별 cargo 설정 — `scripts/setup-lindera-cache.sh`가 절대 경로로 박제하므로
+# 공유 불가. 새 환경은 `npm run setup:lindera`로 재생성.
+.cargo/config.toml
+
 # 환경 변수
 .env
 .env.local

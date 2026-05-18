@@ -23,8 +23,13 @@
 ```bash
 cd /Users/Shared/Source/Lapis
 npm install
-npm run tauri dev    # 데스크톱 앱 실행 (개발 모드)
+npm run setup:lindera   # 한국어 형태소 사전 cache 셋업 (최초 1회 ~50MB 다운로드)
+npm run tauri dev       # 데스크톱 앱 실행 (개발 모드)
 ```
+
+> `setup:lindera`는 `lindera-ko-dic` build script가 build 시점에 mecab-ko-dic을
+> 다운로드하는 동작을 사전에 cache로 박제한다. 네트워크가 차단된 환경
+> (sandbox/CI/enterprise firewall)에서도 `cargo build`가 통과하도록 함.
 
 ## 디렉토리 구조
 
