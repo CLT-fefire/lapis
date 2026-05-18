@@ -5,6 +5,7 @@
   import Sidebar from "$lib/Sidebar.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import GraphModal from "$lib/GraphModal.svelte";
+  import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import Backlinks from "$lib/Backlinks.svelte";
@@ -705,6 +706,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 <ContextMenu />
 <NewNoteModal />
 <SettingsModal />
+<LinkRewritePreviewModal />
 <CleanupOverlay />
 {#if $claudeMemEnabled}
   <MemorySyncModal />
