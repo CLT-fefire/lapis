@@ -1,8 +1,21 @@
 <script lang="ts" module>
+  export interface EditorSearchOptions {
+    caseSensitive?: boolean;
+    wholeWord?: boolean;
+    regex?: boolean;
+  }
+
+  export interface EditorMatchInfo {
+    total: number;
+    current: number;
+    /** regex 모드에서 패턴 자체가 invalid인 경우 true. */
+    regexError?: boolean;
+  }
+
   export interface EditorApi {
-    setQuery: (q: string) => { total: number; current: number };
-    findNext: () => { total: number; current: number };
-    findPrev: () => { total: number; current: number };
+    setQuery: (q: string, opts?: EditorSearchOptions) => EditorMatchInfo;
+    findNext: () => EditorMatchInfo;
+    findPrev: () => EditorMatchInfo;
     clearQuery: () => void;
     focus: () => void;
   }
@@ -24,7 +37,6 @@
     findNext,
     findPrevious,
     SearchQuery,
-    SearchCursor,
   } from "@codemirror/search";
 
   // 검색 매치 시각화 override.
@@ -65,44 +77,66 @@
   let host: HTMLDivElement;
   let view: EditorView | undefined;
 
-  function getMatchInfo(view: EditorView): { total: number; current: number } {
-    const q = getSearchQuery(view.state).search;
-    if (!q) return { total: 0, current: 0 };
-    const doc = view.state.doc;
+  function getMatchInfo(view: EditorView): EditorMatchInfo {
+    const sq = getSearchQuery(view.state);
+    if (!sq.search) return { total: 0, current: 0 };
+    // regex invalid 등으로 query 자체가 유효하지 않으면 cursor 생성 X.
+    if (!sq.valid) return { total: 0, current: 0, regexError: sq.regexp };
     const sel = view.state.selection.main;
-    const norm = (x: string) => x.toLowerCase();
-    const cursor = new SearchCursor(doc, q, 0, doc.length, norm);
+    // SearchQuery.getCursor는 옵션(regexp/caseSensitive/wholeWord)에 따라 적절한
+    // SearchCursor 또는 RegExpCursor를 반환. 두 cursor 모두 next()/value.from/to 인터페이스 공유.
+    const cursor = sq.getCursor(view.state);
     let total = 0;
     let current = 0;
-    while (!cursor.next().done) {
+    let step = cursor.next();
+    while (!step.done) {
       total++;
-      if (cursor.value.from === sel.from && cursor.value.to === sel.to) {
+      const v = step.value as { from: number; to: number };
+      if (v.from === sel.from && v.to === sel.to) {
         current = total;
       }
+      step = cursor.next();
     }
     return { total, current };
   }
 
+  function makeQuery(q: string, opts: EditorSearchOptions): SearchQuery {
+    return new SearchQuery({
+      search: q,
+      caseSensitive: opts.caseSensitive === true,
+      wholeWord: opts.wholeWord === true,
+      regexp: opts.regex === true,
+    });
+  }
+
   function buildApi(view: EditorView): EditorApi {
     return {
-      setQuery(q: string) {
+      setQuery(q: string, opts: EditorSearchOptions = {}) {
         // panel 활성화(이미 열려 있으면 no-op) → searchHighlighter가 매치 데코레이션을 그리는 조건 충족
         openSearchPanel(view);
-        const sq = new SearchQuery({ search: q, caseSensitive: false });
+        const sq = makeQuery(q, opts);
         view.dispatch({ effects: setSearchQuery.of(sq) });
-        if (q) findNext(view);
-        return getMatchInfo(view);
+        // regex invalid면 findNext가 throw할 수 있음 → valid 체크 후 호출.
+        if (q && sq.valid) findNext(view);
+        const info = getMatchInfo(view);
+        // valid가 false인데 regex 모드면 regexError 명시.
+        if (!sq.valid && opts.regex) {
+          return { ...info, regexError: true };
+        }
+        return info;
       },
       findNext() {
-        if (getSearchQuery(view.state).search) findNext(view);
+        const sq = getSearchQuery(view.state);
+        if (sq.search && sq.valid) findNext(view);
         return getMatchInfo(view);
       },
       findPrev() {
-        if (getSearchQuery(view.state).search) findPrevious(view);
+        const sq = getSearchQuery(view.state);
+        if (sq.search && sq.valid) findPrevious(view);
         return getMatchInfo(view);
       },
       clearQuery() {
-        const sq = new SearchQuery({ search: "", caseSensitive: false });
+        const sq = new SearchQuery({ search: "" });
         view.dispatch({ effects: setSearchQuery.of(sq) });
         closeSearchPanel(view);
       },

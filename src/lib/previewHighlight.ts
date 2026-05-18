@@ -14,18 +14,54 @@ export interface PreviewMatch {
   range: Range;
 }
 
+export interface FindOptions {
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  regex?: boolean;
+}
+
 const MARK_CLASS = "lapis-search-match";
 const CURRENT_CLASS = "lapis-search-current";
 
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 옵션을 반영한 RegExp 생성. 사용자 입력이 invalid regex이면 null 반환.
+ * - regex: 사용자 입력을 정규식으로 그대로 해석
+ * - 일반(literal): escape 후 substring 매치
+ * - wholeWord: 앞뒤 `\b` 추가 (ASCII 기준 — 한국어/CJK는 사실상 미동작)
+ * - caseSensitive: false면 `i` 플래그
+ * - `g` 플래그는 항상 켜짐 (matchAll/lastIndex 활용)
+ */
+export function buildSearchRegex(query: string, opts: FindOptions): RegExp | null {
+  if (!query) return null;
+  let body = opts.regex ? query : escapeRegExp(query);
+  if (opts.wholeWord) body = `\\b(?:${body})\\b`;
+  const flags = opts.caseSensitive ? "g" : "gi";
+  try {
+    return new RegExp(body, flags);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * root 하위 텍스트 노드를 순회하며 query에 매치되는 Range 목록을 반환.
- * 대소문자 구분 X (substring + toLowerCase).
  *
- * 이미 적용된 mark 안의 텍스트도 후보(재계산 시점에는 보통 clearHighlights가 선행되므로 mark 없음).
+ * 옵션 미지정 시 기본은 case-insensitive substring (기존 동작 유지).
+ * 매치 결과의 length가 0인 경우(예: `a*` 같은 zero-width 정규식)는 무한 루프 방지를 위해 1로 전진.
  */
-export function findMatches(root: HTMLElement, query: string): PreviewMatch[] {
+export function findMatches(
+  root: HTMLElement,
+  query: string,
+  opts: FindOptions = {},
+): PreviewMatch[] {
   if (!query) return [];
-  const q = query.toLowerCase();
+  const re = buildSearchRegex(query, opts);
+  if (!re) return [];
+
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       return (node.nodeValue ?? "").length > 0
@@ -37,16 +73,20 @@ export function findMatches(root: HTMLElement, query: string): PreviewMatch[] {
   let node = walker.nextNode() as Text | null;
   while (node) {
     const text = node.nodeValue ?? "";
-    const lower = text.toLowerCase();
-    let from = 0;
-    while (true) {
-      const idx = lower.indexOf(q, from);
-      if (idx === -1) break;
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (m[0].length === 0) {
+        re.lastIndex = start + 1;
+        continue;
+      }
       const range = document.createRange();
-      range.setStart(node, idx);
-      range.setEnd(node, idx + q.length);
+      range.setStart(node, start);
+      range.setEnd(node, end);
       matches.push({ range });
-      from = idx + q.length;
+      if (end === start) re.lastIndex = start + 1;
     }
     node = walker.nextNode() as Text | null;
   }
