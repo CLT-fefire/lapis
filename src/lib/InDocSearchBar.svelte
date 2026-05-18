@@ -1,7 +1,12 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { inDocSearch, setQuery, closeSearch } from "$lib/stores/inDocSearch";
-  import type { SearchTarget } from "$lib/stores/inDocSearch";
+  import {
+    inDocSearch,
+    setQuery,
+    closeSearch,
+    toggleOption,
+  } from "$lib/stores/inDocSearch";
+  import type { SearchTarget, InDocSearchOptions } from "$lib/stores/inDocSearch";
 
   interface Props {
     target: SearchTarget;
@@ -9,9 +14,11 @@
     onNext?: () => void;
     onPrev?: () => void;
     onClosed?: () => void;
+    /** 옵션(case/regex/wholeWord) 토글 시 호출. 호출자는 같은 쿼리로 재검색해야 함. */
+    onOptionsChanged?: (opts: InDocSearchOptions) => void;
   }
 
-  let { target, onQuery, onNext, onPrev, onClosed }: Props = $props();
+  let { target, onQuery, onNext, onPrev, onClosed, onOptionsChanged }: Props = $props();
 
   let inputEl: HTMLInputElement | undefined = $state();
 
@@ -53,12 +60,21 @@
     onClosed?.();
   }
 
+  function onToggle(key: keyof InDocSearchOptions) {
+    toggleOption(key);
+    // 토글 직후 store가 갱신된 옵션으로 재검색 콜백 발화.
+    // $inDocSearch.options는 toggleOption이 동기적으로 set하므로 즉시 읽어도 안전.
+    onOptionsChanged?.($inDocSearch.options);
+  }
+
   const countLabel = $derived(
     vm.query === ""
       ? ""
-      : vm.total === 0
-        ? "매치 없음"
-        : `${vm.current} / ${vm.total}`,
+      : vm.regexError
+        ? "정규식 오류"
+        : vm.total === 0
+          ? "매치 없음"
+          : `${vm.current} / ${vm.total}`,
   );
 
   const disabled = $derived(vm.total === 0);
@@ -69,14 +85,42 @@
     <input
       bind:this={inputEl}
       type="text"
-      placeholder="현재 노트에서 찾기"
+      placeholder={vm.options.regex ? "정규식 (JS regex)" : "현재 노트에서 찾기"}
       value={vm.query}
       oninput={handleInput}
       onkeydown={handleKeydown}
       spellcheck="false"
       autocomplete="off"
+      class:invalid={vm.regexError}
     />
-    <span class="count" class:none={vm.query !== "" && vm.total === 0}>
+    <button
+      type="button"
+      class="opt"
+      class:active={vm.options.caseSensitive}
+      title="대소문자 구분 (Aa)"
+      onclick={() => onToggle("caseSensitive")}
+      aria-pressed={vm.options.caseSensitive}
+      aria-label="대소문자 구분"
+    >Aa</button>
+    <button
+      type="button"
+      class="opt"
+      class:active={vm.options.wholeWord}
+      title="단어 단위 매치 (\b\w\b)"
+      onclick={() => onToggle("wholeWord")}
+      aria-pressed={vm.options.wholeWord}
+      aria-label="단어 단위 매치"
+    >W</button>
+    <button
+      type="button"
+      class="opt"
+      class:active={vm.options.regex}
+      title="정규식 사용 (JS RegExp)"
+      onclick={() => onToggle("regex")}
+      aria-pressed={vm.options.regex}
+      aria-label="정규식 사용"
+    >.*</button>
+    <span class="count" class:none={vm.query !== "" && (vm.total === 0 || vm.regexError)}>
       {countLabel}
     </span>
     <button
@@ -136,6 +180,10 @@
     border-color: #6dd6ff;
   }
 
+  input.invalid {
+    border-color: #f47174;
+  }
+
   .count {
     flex-shrink: 0;
     min-width: 56px;
@@ -146,6 +194,34 @@
 
   .count.none {
     color: #f47174;
+  }
+
+  .opt {
+    flex-shrink: 0;
+    height: 24px;
+    min-width: 26px;
+    padding: 0 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    color: #888;
+    font-size: 11px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    cursor: pointer;
+  }
+
+  .opt:hover {
+    background: #2c2c2c;
+    color: #e8e8e8;
+  }
+
+  .opt.active {
+    background: #2d4f6d;
+    border-color: #6dd6ff;
+    color: #e8e8e8;
   }
 
   .nav,
