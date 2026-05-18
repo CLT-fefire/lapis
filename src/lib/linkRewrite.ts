@@ -113,7 +113,7 @@ function rewriteRelatedInFrontmatter(
 
 /**
  * 본문에서 wikilink + md link 갱신.
- * 코드 펜스(```) / 인라인 코드(`...`) 안은 무시.
+ * 코드 펜스(``` 또는 ~~~) / 인라인 코드(`...`, ``...``, ```...``` 등) 안은 무시.
  */
 function rewriteLinksInBody(
   body: string,
@@ -136,13 +136,16 @@ function rewriteLinksInBody(
 
   const newLines = lines.map((line) => {
     const trimmed = line.trim();
-    if (trimmed.startsWith("```")) {
+    // CommonMark fence: ``` 또는 ~~~ (둘 다 line의 시작에서 3개 이상).
+    // 정밀한 fence pairing(opening/closing char 일치)까진 안 가지만,
+    // 실용적으로 ``` ↔ ``` 또는 ~~~ ↔ ~~~ 토글로 충분.
+    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
       inFence = !inFence;
       return line;
     }
     if (inFence) return line;
 
-    // 인라인 코드 영역 보호: backtick 사이는 그대로 두기 위해 split
+    // 인라인 코드 영역 보호: backtick run 단위로 정확히 매칭.
     const segments = splitByInlineCode(line);
     const replaced = segments
       .map((seg) => {
@@ -170,23 +173,59 @@ interface Segment {
   isCode: boolean;
 }
 
-/** 한 줄을 backtick 기준으로 [code, plain, code, plain, ...] 세그먼트로. */
+/**
+ * 한 줄을 backtick **run** 기준으로 [plain, code, plain, ...] 세그먼트로.
+ *
+ * CommonMark inline code: 같은 길이의 backtick run으로 열고 닫는다.
+ *   - `` ` `` ↔ `` ` ``       (run length 1)
+ *   - `` `` `` ↔ `` `` ``    (run length 2 — 안에 single backtick 허용)
+ *   - 다른 길이의 run은 안에서 평범한 문자로 간주
+ *
+ * 닫히지 않은 inline code는 라인 끝까지 code 영역으로 유지 (보수적 — 잘못된 매치보다 안전).
+ *
+ * backtick run 자체는 plain segment로 push (wikilink/mdlink 매칭에 영향 없음).
+ */
 function splitByInlineCode(line: string): Segment[] {
   const segments: Segment[] = [];
   let current = "";
   let inCode = false;
-  for (const c of line) {
-    if (c === "`") {
+  let openRunLen = 0;
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i]!;
+    if (ch !== "`") {
+      current += ch;
+      i++;
+      continue;
+    }
+    // backtick run 측정.
+    let runLen = 0;
+    while (i + runLen < line.length && line[i + runLen] === "`") runLen++;
+    const run = line.substring(i, i + runLen);
+
+    if (!inCode) {
+      // 코드 영역 열기.
       if (current.length > 0) {
-        segments.push({ text: current, isCode: inCode });
+        segments.push({ text: current, isCode: false });
         current = "";
       }
-      // backtick 자체는 어디로 갈까 — 모드 전환만, 본문엔 유지
-      segments.push({ text: "`", isCode: inCode });
-      inCode = !inCode;
+      segments.push({ text: run, isCode: false });
+      inCode = true;
+      openRunLen = runLen;
+    } else if (runLen === openRunLen) {
+      // 정확히 같은 길이 → 닫기.
+      if (current.length > 0) {
+        segments.push({ text: current, isCode: true });
+        current = "";
+      }
+      segments.push({ text: run, isCode: false });
+      inCode = false;
+      openRunLen = 0;
     } else {
-      current += c;
+      // 다른 길이 — 코드 안의 backtick으로 취급.
+      current += run;
     }
+    i += runLen;
   }
   if (current.length > 0) {
     segments.push({ text: current, isCode: inCode });
