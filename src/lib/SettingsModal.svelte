@@ -4,11 +4,59 @@
     closeSettings,
     claudeMemEnabled,
     applyClaudeMemToggle,
+    linkRewriteBackupKeep,
+    LINK_REWRITE_BACKUP_KEEP_MIN,
+    LINK_REWRITE_BACKUP_KEEP_MAX,
+    applyBackupKeep,
+    clampBackupKeep,
   } from "$lib/stores/settings";
 
   // 확인 다이얼로그 분기: null | "enable" | "disable"
   let confirmMode = $state<null | "enable" | "disable">(null);
   let busy = $state(false);
+
+  // 백업 max_keep — 입력 중에는 local state, blur/Enter 시 적용
+  let backupKeepInput = $state<number>($linkRewriteBackupKeep);
+  let backupKeepSaving = $state(false);
+  let backupKeepHint = $state<string>("");
+
+  // store가 외부에서 갱신되면 (예: 다른 모달, restoreSettings) input도 동기화
+  $effect(() => {
+    backupKeepInput = $linkRewriteBackupKeep;
+  });
+
+  async function commitBackupKeep() {
+    if (backupKeepSaving) return;
+    const raw = Number(backupKeepInput);
+    const clamped = clampBackupKeep(raw);
+    if (clamped !== raw) {
+      backupKeepInput = clamped;
+      backupKeepHint = `${LINK_REWRITE_BACKUP_KEEP_MIN}–${LINK_REWRITE_BACKUP_KEEP_MAX} 범위로 조정됨`;
+    } else {
+      backupKeepHint = "";
+    }
+    if (clamped === $linkRewriteBackupKeep) return; // 변경 없음 — 저장 skip
+    backupKeepSaving = true;
+    try {
+      await applyBackupKeep(clamped);
+      backupKeepHint = `저장됨 (max_keep=${clamped})`;
+      setTimeout(() => {
+        if (backupKeepHint.startsWith("저장됨")) backupKeepHint = "";
+      }, 2000);
+    } catch (e) {
+      console.error("[Settings] backup_keep apply failed", e);
+      backupKeepHint = "저장 실패 — 콘솔 확인";
+    } finally {
+      backupKeepSaving = false;
+    }
+  }
+
+  function onBackupKeepKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+    }
+  }
 
   function onToggleClaudeMem(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
@@ -85,6 +133,36 @@
           </label>
           <div class="setting-status" class:on={$claudeMemEnabled}>
             {$claudeMemEnabled ? "ON" : "OFF"}
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">링크 갱신 백업 보존 개수</span>
+              <span class="label-desc">
+                노트 이름을 바꿀 때 영향 노트의 스냅샷이 vault 안
+                <code>.lapis/link-rewrite-backup/</code>에 저장됩니다. 이 개수를 초과하면
+                오래된 것부터 자동 삭제합니다. (범위 {LINK_REWRITE_BACKUP_KEEP_MIN}–{LINK_REWRITE_BACKUP_KEEP_MAX})
+              </span>
+              {#if backupKeepHint}
+                <span class="label-hint">{backupKeepHint}</span>
+              {/if}
+            </span>
+          </div>
+          <div class="setting-control">
+            <input
+              type="number"
+              class="number-input"
+              min={LINK_REWRITE_BACKUP_KEEP_MIN}
+              max={LINK_REWRITE_BACKUP_KEEP_MAX}
+              step="1"
+              bind:value={backupKeepInput}
+              onblur={commitBackupKeep}
+              onkeydown={onBackupKeepKeydown}
+              disabled={backupKeepSaving || busy}
+              aria-label="링크 갱신 백업 보존 개수"
+            />
           </div>
         </section>
       </div>
@@ -272,6 +350,48 @@
   .setting-status.on {
     background: #2d4a36;
     color: #5ad469;
+  }
+
+  .setting-label.number {
+    flex: 1;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    cursor: default;
+  }
+  .setting-control {
+    align-self: flex-start;
+  }
+  .number-input {
+    width: 64px;
+    padding: 4px 8px;
+    background: #1a1a1a;
+    border: 1px solid #444;
+    color: #e8e8e8;
+    border-radius: 5px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    text-align: right;
+  }
+  .number-input:focus {
+    outline: none;
+    border-color: #6dd6ff;
+  }
+  .number-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .label-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #6dd6ff;
+  }
+  .label-text code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #f7c947;
   }
 
   .settings-foot,
