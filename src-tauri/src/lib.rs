@@ -81,7 +81,6 @@ pub fn run() {
             mirror::mirror_sync_status,
             mirror::mirror_query_memories,
             mirror::mirror_query_related_to_note,
-            mirror::mirror_list_memory_links,
             search::search_query,
             settings::settings_read,
             settings::settings_write,
