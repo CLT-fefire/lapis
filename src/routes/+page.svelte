@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { getVersion } from "@tauri-apps/api/app";
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
@@ -687,10 +688,21 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     }
   }
 
+  // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
+  // package.json/tauri.conf.json와 동기되지 않은 stale 값을 표시할 위험을 원천 차단.
+  let appVersion = $state<string>("");
+
   onMount(() => {
     void restoreSettings();
     restorePaneState();
     restoreLastVault();
+    void (async () => {
+      try {
+        appVersion = await getVersion();
+      } catch (e) {
+        console.warn("[app] getVersion failed", e);
+      }
+    })();
   });
 </script>
 
@@ -738,7 +750,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 <div class="app">
   <header class="topbar">
     <span class="brand">Lapis</span>
-    <span class="phase">v0.3.0</span>
+    {#if appVersion}
+      <span class="phase">v{appVersion}</span>
+    {/if}
     <span class="meta">
       {#if $currentNotePath}
         {noteDisplayName($currentNotePath)}

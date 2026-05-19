@@ -45,6 +45,14 @@ pub struct LapisSettings {
     /// 다음 startup 시 ON→OFF 전환 정리 routine을 실행해야 함을 표시.
     #[serde(default)]
     pub pending_cleanup: bool,
+    /// 노트 이름 변경 시 `.lapis/link-rewrite-backup/<ts>/` 스냅샷의 최대 보존 개수.
+    /// 초과 시 오래된 것부터 prune. 1-100 사이로 clamp (settings_write 단계).
+    #[serde(default = "default_backup_keep")]
+    pub link_rewrite_backup_keep: u32,
+}
+
+fn default_backup_keep() -> u32 {
+    20
 }
 
 impl Default for LapisSettings {
@@ -52,6 +60,7 @@ impl Default for LapisSettings {
         Self {
             claude_mem_enabled: false,
             pending_cleanup: false,
+            link_rewrite_backup_keep: default_backup_keep(),
         }
     }
 }
