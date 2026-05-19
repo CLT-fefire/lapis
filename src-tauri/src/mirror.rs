@@ -1592,58 +1592,6 @@ pub fn mirror_query_related_to_note(
     Ok(hits)
 }
 
-// ─── memory ↔ vault note links (Phase C.4 #3) ──────────────────────────────
-
-/// 그래프 노드 + 엣지 생성용. `links_to_vault_notes`를 memory 메타와 JOIN해 반환.
-#[derive(Debug, Serialize)]
-pub struct MemoryLink {
-    pub memory_id: i64,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub source_id: i64,
-    pub title: String,
-    pub project: String,
-    pub vault_note_path: String,
-    /// "read" | "edited" | "modified" | "both"
-    pub match_role: String,
-    pub obs_type: Option<String>,
-}
-
-/// 모든 memory ↔ vault note 링크 반환 (그래프 모달이 일괄 로드).
-/// 11469 memory × 평균 ~1 vault note 매칭 → 수천 row 예상. JSON 직렬화 비용은 있지만 매 그래프 open마다 1회.
-#[tauri::command]
-pub fn mirror_list_memory_links(app: AppHandle) -> Result<Vec<MemoryLink>, String> {
-    let conn = open_rw(&app)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT l.memory_id, m.kind, m.source_id, m.title, m.project, l.vault_note_path, \
-                    l.match_role, m.obs_type \
-             FROM links_to_vault_notes l \
-             JOIN memories m ON m.id = l.memory_id",
-        )
-        .map_err(|e| format!("mirror_list_memory_links prepare: {e}"))?;
-    let hits = stmt
-        .query_map([], |r| {
-            Ok(MemoryLink {
-                memory_id: r.get(0)?,
-                kind: r.get(1)?,
-                source_id: r.get(2)?,
-                title: r
-                    .get::<_, Option<String>>(3)?
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| "(no title)".to_string()),
-                project: r.get(4)?,
-                vault_note_path: r.get(5)?,
-                match_role: r.get(6)?,
-                obs_type: r.get(7)?,
-            })
-        })
-        .map_err(|e| format!("mirror_list_memory_links query_map: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("mirror_list_memory_links collect: {e}"))?;
-    Ok(hits)
-}
-
 // ─── 격리된 FTS5 helper (memory.rs와 동일 정책 복사 — 모듈 자기 완결) ───────
 
 /// FTS5 안전 쿼리. 모든 토큰을 prefix 매치(`token*`)로.
