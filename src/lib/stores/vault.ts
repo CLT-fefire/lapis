@@ -352,9 +352,6 @@ async function rewriteAllLinksWithPreview(
   await backupAndWrite(vault, preview);
 }
 
-/** 백업 디렉토리 최대 유지 개수. 초과 시 오래된 것부터 prune. */
-const LINK_REWRITE_BACKUP_KEEP = 20;
-
 async function backupAndWrite(
   vault: string,
   preview: LinkRewritePreview,
@@ -431,10 +428,13 @@ function relativeToVault(vault: string, abs: string): string | null {
 }
 
 async function pruneOldBackups(vault: string): Promise<void> {
+  // Settings(linkRewriteBackupKeep)의 현재 값을 사용. lazy import로 circular import 회피.
+  const { linkRewriteBackupKeep, LINK_REWRITE_BACKUP_KEEP_DEFAULT } = await import("./settings");
+  const max = get(linkRewriteBackupKeep) || LINK_REWRITE_BACKUP_KEEP_DEFAULT;
   try {
-    const removed = await pruneLinkRewriteBackups(vault, LINK_REWRITE_BACKUP_KEEP);
+    const removed = await pruneLinkRewriteBackups(vault, max);
     if (removed > 0) {
-      console.info(`[lapis] backup prune: ${removed}개 디렉토리 정리`);
+      console.info(`[lapis] backup prune: ${removed}개 디렉토리 정리 (max_keep=${max})`);
     }
   } catch (e) {
     console.warn("backup prune failed:", e);
