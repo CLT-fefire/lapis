@@ -122,24 +122,3 @@ export function mirrorQueryRelatedToNote(noteAbsPath: string): Promise<MirrorRel
   return invoke<MirrorRelatedHit[]>("mirror_query_related_to_note", { noteAbsPath });
 }
 
-/** Phase C.4 — `links_to_vault_notes`의 한 row (memory ↔ vault note 매치). */
-export interface MemoryLink {
-  memory_id: number;
-  /** "summary" | "observation" */
-  type: "summary" | "observation";
-  source_id: number;
-  title: string;
-  project: string;
-  vault_note_path: string;
-  /** "read" | "edited" | "modified" | "both" */
-  match_role: string;
-  obs_type: string | null;
-}
-
-/**
- * 모든 memory ↔ vault note 링크. GraphModal에서 메모리 노드 + 엣지 생성용.
- * 매 vault-aware mirror sync에서 사전 계산된 `links_to_vault_notes` 테이블 결과.
- */
-export function mirrorListMemoryLinks(): Promise<MemoryLink[]> {
-  return invoke<MemoryLink[]>("mirror_list_memory_links");
-}

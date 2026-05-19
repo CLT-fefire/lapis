@@ -5,7 +5,4 @@ declare global {
   namespace App {}
 }
 
-// cytoscape-fcose는 자체 타입 정의 미제공
-declare module "cytoscape-fcose";
-
 export {};

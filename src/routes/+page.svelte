@@ -4,7 +4,6 @@
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
-  import GraphModal from "$lib/GraphModal.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
@@ -23,7 +22,6 @@
   import { parseNote } from "$lib/markdown";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
-  import { openGraph } from "$lib/stores/graph";
   import { openNewNote } from "$lib/stores/tree-ui";
   import {
     vaultPath,
@@ -660,9 +658,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       const path = peekLastClosed();
       if (path && path !== $currentNotePath) void selectNote(path);
-    } else if (key === "g" && !e.shiftKey) {
-      e.preventDefault();
-      openGraph();
     } else if (key === "s" && !e.shiftKey) {
       e.preventDefault();
       void saveCurrentNote();
@@ -702,7 +697,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 <svelte:window onkeydown={handleGlobalKey} />
 
 <CommandPalette />
-<GraphModal />
 <ContextMenu />
 <NewNoteModal />
 <SettingsModal />

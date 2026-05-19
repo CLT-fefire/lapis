@@ -8,7 +8,6 @@ import {
   deletePath,
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
-import { openGraph } from "$lib/stores/graph";
 import { toggleEditor, togglePreview } from "$lib/stores/layout";
 import { openMemorySync } from "$lib/stores/memorySync";
 import { openMemorySearch } from "$lib/stores/memorySearch";
@@ -61,15 +60,6 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       void reloadNotes();
-    },
-  },
-  {
-    id: "open-graph",
-    label: "Graph View",
-    shortcut: "⌘G",
-    disabled: () => !get(vaultPath),
-    run() {
-      openGraph();
     },
   },
   {
