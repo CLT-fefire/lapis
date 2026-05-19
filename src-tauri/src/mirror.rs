@@ -50,7 +50,9 @@ impl Drop for SyncGuard {
 /// mirror DB의 현재 schema 버전.
 /// v1 → v2: `memories_au` 트리거에 `WHEN OLD.content_hash IS NOT NEW.content_hash` 추가
 /// + UPSERT의 ON CONFLICT DO UPDATE에 WHERE 절 추가. 풀 sync 비용 대폭 감소 (Phase C.4 발견).
-const SCHEMA_VERSION: i32 = 2;
+/// v2 → v3: `links_to_vault_notes` 테이블 + `idx_vault_note_path` 인덱스 제거.
+/// 그래프뷰 폐기(ADR-001)로 read 사용처가 없어진 dead code cleanup.
+const SCHEMA_VERSION: i32 = 3;
 
 /// claude-mem DB 파일명 (`~/.claude-mem/` 안 고정).
 const CLAUDE_MEM_DB_FILENAME: &str = "claude-mem.db";
@@ -99,23 +101,45 @@ fn ensure_schema(conn: &Connection) -> Result<(), String> {
         return Ok(());
     }
     if current == 0 {
-        // 새 DB — v2 형태로 한 번에 빌드 (build_schema_v1 + migrate)
+        // 새 DB — v3 형태로 한 번에 빌드 (build_v1 + v1→v2 + v2→v3 순차)
         build_schema_v1(conn)?;
         migrate_v1_to_v2(conn)?;
+        migrate_v2_to_v3(conn)?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(|e| format!("PRAGMA user_version 설정 실패: {e}"))?;
         return Ok(());
     }
     if current == 1 {
-        // 비파괴 마이그레이션 — 트리거만 drop + create. 데이터 보존.
         migrate_v1_to_v2(conn)?;
-        conn.pragma_update(None, "user_version", 2)
+        migrate_v2_to_v3(conn)?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+            .map_err(|e| format!("PRAGMA user_version 설정 실패: {e}"))?;
+        return Ok(());
+    }
+    if current == 2 {
+        // 비파괴 cleanup — DROP TABLE/INDEX만. 데이터 (memories 등)는 보존.
+        migrate_v2_to_v3(conn)?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(|e| format!("PRAGMA user_version 설정 실패: {e}"))?;
         return Ok(());
     }
     Err(format!(
         "lapis-mem.db schema 버전 불일치: 디스크={current}, 기대={SCHEMA_VERSION}. 재빌드 필요."
     ))
+}
+
+/// v2 → v3 마이그레이션 — 그래프뷰 폐기(ADR-001)로 dead code가 된
+/// `links_to_vault_notes` 테이블 + `idx_vault_note_path` 인덱스 제거.
+/// memories 테이블의 FOREIGN KEY ON DELETE CASCADE는 child 측 정의라
+/// links_to_vault_notes 제거는 memories에 영향 없음.
+fn migrate_v2_to_v3(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        r#"
+        DROP INDEX IF EXISTS idx_vault_note_path;
+        DROP TABLE IF EXISTS links_to_vault_notes;
+        "#,
+    )
+    .map_err(|e| format!("v2→v3 마이그레이션 실패: {e}"))
 }
 
 /// v1 → v2 마이그레이션 — `memories_au` 트리거에 WHEN 조건 추가.
@@ -323,23 +347,7 @@ pub fn sync_now(
     }
     report.deleted = apply_deletions(&tx, &pending_deletions)?;
 
-    // C.4 #2 — vault-aware sync에서 links_to_vault_notes 재계산 (cleanup_md 이후 DELETE도 끝난 상태).
-    // WAL watch sync는 vault_path=None이라 skip → 다음 vault-aware sync 시 catch-up.
-    if let Some(vp) = vault_path.as_deref() {
-        let vault_root = std::path::Path::new(vp);
-        if vault_root.exists() {
-            match recompute_links_to_vault_notes(&tx, vault_root) {
-                Ok(n) => {
-                    if n > 0 {
-                        eprintln!("[mirror] links_to_vault_notes: {n}건 재계산");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("[mirror] links_to_vault_notes 재계산 실패: {e}");
-                }
-            }
-        }
-    }
+    // (그래프뷰 폐기 — ADR-001) links_to_vault_notes 재계산은 v3 schema부터 제거됨.
 
     // sync 성공이면 last_failure 클리어 (#11 status indicator green 복귀)
     tx.execute(
@@ -761,148 +769,8 @@ fn apply_deletions(
     Ok(deleted)
 }
 
-// ─── vault 노트 cross-link 사전 계산 (Phase C.4 #1) ─────────────────────────
-
-/// `links_to_vault_notes`를 vault scan 결과로 재계산.
-///
-/// 매 vault-aware sync에서 전체 재계산 (DELETE all → INSERT). 매칭 로직은
-/// `mirror_query_related_to_note`와 일관 — `file_path == abs_path OR file_path == basename`.
-/// `_memories/` 하위는 vault scan에서 제외하여 메모리↔메모리 자기 매치 회피.
-///
-/// 같은 (memory_id, vault_note_path)에 role 합집합 → 2개 이상이면 'both', 단일이면 그 라벨.
-/// 반환: INSERT row 수.
-fn recompute_links_to_vault_notes(
-    tx: &Transaction,
-    vault_root: &std::path::Path,
-) -> Result<usize, String> {
-    // 1) vault scan — basename(lowercase) → Vec<abs_path>, abs_path 자체도 key로 박제(원본 경로 매치)
-    let mut index: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-    walk_vault_md(vault_root, &mut index)?;
-
-    // 2) 기존 links 전체 비움
-    tx.execute("DELETE FROM links_to_vault_notes", [])
-        .map_err(|e| format!("links_to_vault_notes DELETE 실패: {e}"))?;
-
-    // 3) files_mentioned 스캔 + 매칭 + role 합집합
-    let mut buf: std::collections::HashMap<(i64, String), HashSet<String>> =
-        std::collections::HashMap::new();
-    {
-        let mut stmt = tx
-            .prepare("SELECT memory_id, file_path, role FROM files_mentioned")
-            .map_err(|e| format!("files_mentioned scan prepare: {e}"))?;
-        let mut rows = stmt
-            .query([])
-            .map_err(|e| format!("files_mentioned scan query: {e}"))?;
-        while let Some(r) = rows
-            .next()
-            .map_err(|e| format!("files_mentioned scan next: {e}"))?
-        {
-            let memory_id: i64 = r.get(0).map_err(|e| format!("memory_id: {e}"))?;
-            let file_path: String = r.get(1).map_err(|e| format!("file_path: {e}"))?;
-            let role: String = r.get(2).map_err(|e| format!("role: {e}"))?;
-
-            // (a) 원본 경로 매치 — claude-mem이 절대 경로로 저장한 경우
-            if let Some(candidates) = index.get(&file_path.to_lowercase()) {
-                for abs in candidates {
-                    buf.entry((memory_id, abs.clone()))
-                        .or_default()
-                        .insert(role.clone());
-                }
-            }
-            // (b) basename 매치 — claude-mem이 basename만 저장한 경우
-            let basename = std::path::Path::new(&file_path)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
-            if !basename.is_empty() && basename != file_path {
-                let lowered = basename.to_lowercase();
-                if let Some(candidates) = index.get(&lowered) {
-                    for abs in candidates {
-                        buf.entry((memory_id, abs.clone()))
-                            .or_default()
-                            .insert(role.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    // 4) 합집합 → INSERT
-    let mut inserted = 0usize;
-    for ((memory_id, vault_note_path), roles) in buf {
-        let match_role = if roles.len() > 1 {
-            "both".to_string()
-        } else {
-            roles
-                .into_iter()
-                .next()
-                .unwrap_or_else(|| "read".to_string())
-        };
-        let n = tx
-            .execute(
-                "INSERT OR IGNORE INTO links_to_vault_notes(memory_id, vault_note_path, match_role) VALUES(?,?,?)",
-                params![memory_id, vault_note_path, match_role],
-            )
-            .map_err(|e| format!("links_to_vault_notes INSERT 실패: {e}"))?;
-        inserted += n;
-    }
-    Ok(inserted)
-}
-
-/// vault 재귀 walk — `.md` 파일만 수집. `_memories/` + 흔한 무관 디렉토리는 skip.
-/// 결과는 lowercase(abs) + lowercase(basename) 두 키로 박제 (절대 경로 / basename 매치 양쪽 지원).
-fn walk_vault_md(
-    dir: &std::path::Path,
-    index: &mut std::collections::HashMap<String, Vec<String>>,
-) -> Result<(), String> {
-    const SKIP_DIRS: &[&str] = &[
-        "_memories",
-        ".git",
-        "node_modules",
-        ".obsidian",
-        ".lapis",
-        "target",
-        "dist",
-        "build",
-        ".svelte-kit",
-    ];
-
-    let rd =
-        std::fs::read_dir(dir).map_err(|e| format!("vault read_dir {}: {e}", dir.display()))?;
-    for entry in rd.flatten() {
-        let path = entry.path();
-        let name = match path.file_name().and_then(|s| s.to_str()) {
-            Some(n) => n,
-            None => continue,
-        };
-
-        if path.is_dir() {
-            if name.starts_with('.') && name != "." {
-                continue;
-            }
-            if SKIP_DIRS.contains(&name) {
-                continue;
-            }
-            walk_vault_md(&path, index)?;
-            continue;
-        }
-
-        if path.extension().and_then(|s| s.to_str()) != Some("md") {
-            continue;
-        }
-        let abs = path.to_string_lossy().to_string();
-        index
-            .entry(abs.to_lowercase())
-            .or_default()
-            .push(abs.clone());
-        let lowered_name = name.to_lowercase();
-        if lowered_name != abs.to_lowercase() {
-            index.entry(lowered_name).or_default().push(abs.clone());
-        }
-    }
-    Ok(())
-}
+// (제거됨) vault 노트 cross-link 사전 계산 — ADR-001 (그래프뷰 폐기)로 dead code 제거.
+// v3 schema에서 `links_to_vault_notes` 테이블 자체가 사라짐. 마이그레이션은 ensure_schema 참조.
 
 // ─── .md 자동 삭제 + orphan 박제 (PR2 #12) ─────────────────────────────────
 
