@@ -59,14 +59,46 @@ fn cache_file(app: &AppHandle, vault_path: &str) -> Result<PathBuf, String> {
     Ok(cache_root(app)?.join(format!("{}.json", vault_key(vault_path))))
 }
 
+/// 가벼운 메타 응답 — cold-start `cacheLookup` 단계에서 받음.
+/// `minisearch_json`(30MB)을 빼고 `link_infos`(~2-3MB)만 포함 → frontend JSON.parse 비용 단축.
+#[derive(Debug, Serialize, Clone)]
+pub struct SearchCacheMeta {
+    pub version: u32,
+    pub fingerprint: String,
+    pub link_infos: Vec<LinkInfo>,
+}
+
+/// cold-start cacheLookup 단계 — 메타만. fingerprint 비교 + link/tag/facet 빌드 즉시 가능.
 #[tauri::command]
-pub async fn read_search_cache(
+pub async fn read_search_cache_meta(
     app: AppHandle,
     vault_path: String,
-) -> Result<Option<SearchCacheEntry>, String> {
-    tauri::async_runtime::spawn_blocking(move || read_search_cache_inner(&app, &vault_path))
-        .await
-        .map_err(|e| format!("read_search_cache join: {e}"))?
+) -> Result<Option<SearchCacheMeta>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let entry = read_search_cache_inner(&app, &vault_path)?;
+        Ok(entry.map(|e| SearchCacheMeta {
+            version: e.version,
+            fingerprint: e.fingerprint,
+            link_infos: e.link_infos,
+        }))
+    })
+    .await
+    .map_err(|e| format!("read_search_cache_meta join: {e}"))?
+}
+
+/// lazy load 시점 — `MiniSearch.loadJSON` 직전. 30MB JSON string만.
+/// disk read + gunzip + parse는 메타와 별개 — 두 번째라 idle 시점이라 사용자 perceived 영향 없음.
+#[tauri::command]
+pub async fn read_search_cache_minisearch_json(
+    app: AppHandle,
+    vault_path: String,
+) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let entry = read_search_cache_inner(&app, &vault_path)?;
+        Ok(entry.map(|e| e.minisearch_json))
+    })
+    .await
+    .map_err(|e| format!("read_search_cache_minisearch_json join: {e}"))?
 }
 
 fn read_search_cache_inner(

@@ -2,10 +2,10 @@
   import { tick } from "svelte";
   import { paletteOpen, paletteHintMode, closePalette } from "$lib/stores/palette";
   import {
-    fullTextIndex,
+    fullTextIndexReady,
     indexBuilding,
     fullTextLoading,
-    pendingFullTextJson,
+    pendingFullTextVault,
   } from "$lib/stores/search";
   import { unifiedSearch, groupResults, type PaletteResult, type PaletteEntry } from "$lib/palette";
   import { selectNote, ensureFullTextIndex } from "$lib/stores/vault";
@@ -246,8 +246,8 @@
   const showContentBuildingHint = $derived(
     ($paletteHintMode === "fulltext" || $paletteHintMode === "all") &&
       !!query.trim() &&
-      !$fullTextIndex &&
-      ($indexBuilding || $fullTextLoading || !!$pendingFullTextJson),
+      !$fullTextIndexReady &&
+      ($indexBuilding || $fullTextLoading || !!$pendingFullTextVault),
   );
 </script>
 
