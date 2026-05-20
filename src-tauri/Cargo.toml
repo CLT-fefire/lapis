@@ -33,3 +33,15 @@ tantivy = "0.25"
 lindera = "2"
 lindera-tantivy = { version = "2", features = ["embed-ko-dic"] }
 
+# release dmg 최적화 — 빌드 시간 증가 vs 런타임/바이너리 크기 트레이드오프.
+# - lto = "thin": 모듈 간 inline + dead code 제거. "fat"보다 빌드 시간 절약.
+# - codegen-units = 1: 단일 unit으로 LTO 효과 극대화.
+# - strip = true: 디버그 심볼 제거 → dmg 크기 감소.
+# - panic = "abort": panic 시 unwind 코드 제거 → 바이너리 더 작음. Lapis는 사용자
+#   panic 분석 빈도 낮아 OK (필요 시 panic hook으로 stderr 박제).
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+

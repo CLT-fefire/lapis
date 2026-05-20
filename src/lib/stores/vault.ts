@@ -115,18 +115,29 @@ export async function reloadNotes(): Promise<void> {
 async function reloadNotesInner(): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
+  // dev 모드 측정 — 어느 단계가 cold start 비용을 차지하는지 추적. release는 dead code.
+  const perf = import.meta.env.DEV;
+  const t0 = perf ? performance.now() : 0;
+  let tListEnd = 0;
+  let tFetchEnd = 0;
+  let tLinkEnd = 0;
+  let tTagEnd = 0;
+  let tFacetEnd = 0;
+  let noteCount = 0;
   // 전체 인덱스 재빌드 시 백링크 snippet 캐시도 stale — 안전하게 전부 비움.
   clearBacklinkCache();
   treeLoading.set(true);
   try {
     const list = await listNotes(root);
     notes.set(list);
+    noteCount = list.length;
   } catch (e) {
     console.error("list_notes failed", e);
     notes.set([]);
   } finally {
     treeLoading.set(false);
   }
+  if (perf) tListEnd = performance.now();
 
   // 링크 인덱스 + 검색 인덱스 + facet 카운트 갱신.
   // 5.1.d 변경: 큰 vault(10000+ 노트, 메모리 export 직후) 빌드 비용이 JS main thread를 수 초간
@@ -135,17 +146,21 @@ async function reloadNotesInner(): Promise<void> {
   indexBuilding.set(true);
   try {
     const [links, contents] = await Promise.all([scanLinks(root), readAllNotes(root)]);
+    if (perf) tFetchEnd = performance.now();
     await nextTick();
 
     linkIndex.set(buildIndex(links));
+    if (perf) tLinkEnd = performance.now();
     await nextTick();
 
     tagIndex.set(buildTagIndex(links));
+    if (perf) tTagEnd = performance.now();
     await nextTick();
 
     const facets = buildFacetCounts(links);
     docKindCounts.set(facets.docKindCounts);
     topicCounts.set(facets.topicCounts);
+    if (perf) tFacetEnd = performance.now();
     await nextTick();
 
     // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
@@ -159,6 +174,16 @@ async function reloadNotesInner(): Promise<void> {
     clearFilters();
   } finally {
     indexBuilding.set(false);
+  }
+  if (perf) {
+    const tEnd = performance.now();
+    const fmt = (a: number, b: number) => (b - a).toFixed(0);
+    console.debug(
+      `[lapis-perf] reloadNotes notes=${noteCount} list=${fmt(t0, tListEnd)}ms ` +
+        `fetch=${fmt(tListEnd, tFetchEnd)}ms link=${fmt(tFetchEnd, tLinkEnd)}ms ` +
+        `tag=${fmt(tLinkEnd, tTagEnd)}ms facet=${fmt(tTagEnd, tFacetEnd)}ms ` +
+        `search=${fmt(tFacetEnd, tEnd)}ms total=${fmt(t0, tEnd)}ms`,
+    );
   }
 }
 

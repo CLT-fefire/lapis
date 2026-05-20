@@ -100,6 +100,9 @@
     errorMsg = "";
     loading = true;
     debounceTimer = setTimeout(async () => {
+      // dev 모드 측정 — 검색 트리거(invoke 직전)~결과 set까지 wall clock.
+      // 사용자 perceived 응답성 추적용. release 빌드는 dead code.
+      const t0 = import.meta.env.DEV ? performance.now() : 0;
       try {
         const vault = $vaultPath;
         const filter = vault ? (await loadVaultConfig(vault)).mem_projects : ["*"];
@@ -108,6 +111,12 @@
         hits = result;
         activeIndex = 0;
         errorMsg = "";
+        if (import.meta.env.DEV) {
+          const dt = performance.now() - t0;
+          console.debug(
+            `[lapis-perf] mem-search q="${q}" hits=${result.length} dt=${dt.toFixed(1)}ms`,
+          );
+        }
       } catch (e) {
         errorMsg = `검색 실패: ${e}`;
         hits = [];

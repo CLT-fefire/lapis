@@ -16,7 +16,9 @@ use lindera::segmenter::Segmenter;
 use lindera_tantivy::tokenizer::LinderaTokenizer;
 use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, Query, TermQuery};
@@ -25,8 +27,14 @@ use tantivy::schema::{
     STORED, STRING,
 };
 use tantivy::snippet::SnippetGenerator;
-use tantivy::{doc, Index, IndexWriter, TantivyDocument, Term};
+use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument, Term};
 use tauri::{AppHandle, Emitter, Manager};
+
+/// `LAPIS_PERF=1` 환경 변수가 켜져 있을 때만 stderr에 단계별 elapsed를 박는다.
+/// release dmg에 잡음이 없도록 항상 게이트.
+fn perf_enabled() -> bool {
+    std::env::var("LAPIS_PERF").ok().as_deref() == Some("1")
+}
 
 /// reindex 중 frontend로 발행하는 progress event 이름.
 pub const REINDEX_PROGRESS_EVENT: &str = "search-reindex-progress";
@@ -113,8 +121,10 @@ pub fn index_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(p)
 }
 
-/// 인덱스 열거나 신규 생성. lindera 토크나이저 등록까지 한 번에.
-pub fn open_or_create_index(app: &AppHandle) -> Result<(Index, SearchSchema), String> {
+/// 인덱스 열거나 신규 생성 + 토크나이저 등록. **process 1회만 호출** (대신 `search_handle` 사용).
+///
+/// 캐시 우회가 필요한 케이스(테스트, schema 변경 후 강제 재초기화)에서만 직접 호출.
+fn open_or_create_index_uncached(app: &AppHandle) -> Result<(Index, SearchSchema), String> {
     let path = index_path(app)?;
     let dir = MmapDirectory::open(&path)
         .map_err(|e| format!("MmapDirectory open({}): {e}", path.display()))?;
@@ -123,6 +133,52 @@ pub fn open_or_create_index(app: &AppHandle) -> Result<(Index, SearchSchema), St
         .map_err(|e| format!("Index::open_or_create: {e}"))?;
     register_tokenizers(&index)?;
     Ok((index, schema_def))
+}
+
+/// process-level 캐시된 tantivy handle.
+///
+/// **왜 캐시**: lindera ko-dic 사전 로드(`load_embedded_dictionary` + `Segmenter::new`) +
+/// MmapDirectory open + Index::open_or_create는 매 검색마다 다시 할 필요가 없음. cold 비용을
+/// 1회로 압축하면 같은 query 반복 시 응답성이 즉시 개선된다.
+///
+/// **갱신**: `reindex` / `clear_index`가 writer commit 후 `handle.reader.reload()` 호출.
+/// tantivy IndexReader는 reload-able 설계라 같은 인스턴스 유지 가능.
+struct SearchHandle {
+    index: Index,
+    schema: SearchSchema,
+    reader: IndexReader,
+}
+
+static SEARCH_HANDLE: OnceLock<SearchHandle> = OnceLock::new();
+
+fn search_handle(app: &AppHandle) -> Result<&'static SearchHandle, String> {
+    if let Some(h) = SEARCH_HANDLE.get() {
+        return Ok(h);
+    }
+    let (index, schema) = open_or_create_index_uncached(app)?;
+    let reader = index
+        .reader()
+        .map_err(|e| format!("index reader: {e}"))?;
+    let handle = SearchHandle {
+        index,
+        schema,
+        reader,
+    };
+    // OnceLock::set은 race 시 Err — 그 경우 이미 다른 thread가 set한 값을 사용.
+    let _ = SEARCH_HANDLE.set(handle);
+    Ok(SEARCH_HANDLE.get().expect("SEARCH_HANDLE just set"))
+}
+
+/// reindex/clear_index 후 reader를 최신 segment에 맞춰 갱신 + 결과 LRU clear.
+fn refresh_after_write() {
+    if let Some(h) = SEARCH_HANDLE.get() {
+        if let Err(e) = h.reader.reload() {
+            eprintln!("[search] reader.reload 실패: {e}");
+        }
+    }
+    if let Ok(mut cache) = search_result_cache().lock() {
+        cache.clear();
+    }
 }
 
 /// lindera 한국어 (ko-dic) + 기본 lowercase 토크나이저 등록.
@@ -165,9 +221,11 @@ pub fn reindex(
     let start = std::time::Instant::now();
     let mut report = ReindexReport::default();
 
-    let (index, schema_def) = open_or_create_index(app)?;
+    let handle = search_handle(app)?;
+    let schema_def = &handle.schema;
     // tantivy 0.25는 writer가 Document generic이라 타입 명시 필요.
-    let mut writer: IndexWriter<TantivyDocument> = index
+    let mut writer: IndexWriter<TantivyDocument> = handle
+        .index
         .writer(50_000_000) // 50MB heap
         .map_err(|e| format!("tantivy writer: {e}"))?;
 
@@ -225,6 +283,8 @@ pub fn reindex(
     }
 
     writer.commit().map_err(|e| format!("writer commit: {e}"))?;
+    // commit 후 reader 갱신 + LRU clear — stale 검색 결과 회피
+    refresh_after_write();
     report.duration_ms = start.elapsed().as_millis();
     Ok(report)
 }
@@ -276,11 +336,8 @@ fn fetch_memory_row(
 /// 인덱스가 비어 있으면 mirror의 모든 row를 reindex. mirror가 비어 있으면 NOOP.
 /// 시점: 앱 setup hook 또는 첫 vault open IIFE 다음. 백그라운드 thread에서 실행 권장.
 pub fn ensure_index_built(app: &AppHandle) -> Result<ReindexReport, String> {
-    let (index, _schema_def) = open_or_create_index(app)?;
-    let reader = index
-        .reader()
-        .map_err(|e| format!("index reader: {e}"))?;
-    let num_docs = reader.searcher().num_docs();
+    let handle = search_handle(app)?;
+    let num_docs = handle.reader.searcher().num_docs();
     if num_docs > 0 {
         return Ok(ReindexReport::default()); // 이미 빌드됨
     }
@@ -303,13 +360,16 @@ pub fn ensure_index_built(app: &AppHandle) -> Result<ReindexReport, String> {
 /// 인덱스 통째 비우기 — schema 변경 시 또는 corrupt 회복용. 호출자가 직후 reindex 수행 가정.
 #[allow(dead_code)]
 pub fn clear_index(app: &AppHandle) -> Result<(), String> {
-    let (index, _) = open_or_create_index(app)?;
-    let mut writer: IndexWriter<TantivyDocument> =
-        index.writer(50_000_000).map_err(|e| format!("writer: {e}"))?;
+    let handle = search_handle(app)?;
+    let mut writer: IndexWriter<TantivyDocument> = handle
+        .index
+        .writer(50_000_000)
+        .map_err(|e| format!("writer: {e}"))?;
     writer
         .delete_all_documents()
         .map_err(|e| format!("delete_all_documents: {e}"))?;
     writer.commit().map_err(|e| format!("commit: {e}"))?;
+    refresh_after_write();
     Ok(())
 }
 
@@ -362,6 +422,9 @@ fn search_query_inner(
     include_summaries: bool,
     include_observations: bool,
 ) -> Result<Vec<crate::mirror::MirrorSearchHit>, String> {
+    let perf = perf_enabled();
+    let t_start = std::time::Instant::now();
+
     let tokens = sanitize_query_tokens(&query);
     if tokens.is_empty() {
         return Ok(Vec::new());
@@ -370,11 +433,33 @@ fn search_query_inner(
         return Ok(Vec::new());
     }
 
-    let (index, schema_def) = open_or_create_index(app)?;
-    let reader = index
-        .reader()
-        .map_err(|e| format!("index reader: {e}"))?;
-    let searcher = reader.searcher();
+    // LRU cache lookup — 같은 (query, filter, limit, toggles) 반복이면 즉시 반환.
+    // reindex 시 `refresh_after_write`가 cache.clear() 호출 → stale 안 보임.
+    let cache_key: SearchCacheKey = (
+        query.clone(),
+        filter.clone(),
+        limit,
+        include_summaries,
+        include_observations,
+    );
+    if let Ok(mut cache) = search_result_cache().lock() {
+        if let Some(cached) = cache.get(&cache_key) {
+            if perf {
+                eprintln!(
+                    "[lapis-perf] search cache-hit q=\"{}\" hits={} elapsed={:?}",
+                    query,
+                    cached.len(),
+                    t_start.elapsed(),
+                );
+            }
+            return Ok(cached);
+        }
+    }
+
+    let handle = search_handle(app)?;
+    let schema_def = &handle.schema;
+    let t_handle = t_start.elapsed();
+    let searcher = handle.reader.searcher();
 
     // 사용자 query를 (title prefix OR body prefix) 토큰별 → AND 결합.
     // title boost 2x. PhrasePrefixQuery는 1-term인 경우 단순 prefix term query로 동작.
@@ -522,7 +607,81 @@ fn search_query_inner(
             created_at_epoch,
         });
     }
+
+    // 결과 캐싱 — 같은 키 재방문 시 즉시 반환. reindex 시 자동 invalidate.
+    if let Ok(mut cache) = search_result_cache().lock() {
+        cache.put(cache_key, hits.clone());
+    }
+
+    if perf {
+        eprintln!(
+            "[lapis-perf] search q=\"{}\" hits={} handle={:?} total={:?}",
+            query,
+            hits.len(),
+            t_handle,
+            t_start.elapsed(),
+        );
+    }
+
     Ok(hits)
+}
+
+// ─── 검색 결과 LRU 캐시 ─────────────────────────────────────────────────────
+//
+// mirror.rs에 동일 구조의 SearchLru가 있지만 그쪽은 `mirror_query_memories`
+// path(현재 UI 미호출 dead path)에만 붙어 있다. 본 PR에선 mirror.rs 측 dead
+// code를 건드리지 않고 search.rs에 별도 LRU를 둠. 추후 chore에서 mirror.rs
+// dead path 정리 + 통합.
+
+type SearchCacheKey = (String, Vec<String>, u32, bool, bool);
+
+struct SearchLru {
+    map: HashMap<SearchCacheKey, Vec<crate::mirror::MirrorSearchHit>>,
+    order: VecDeque<SearchCacheKey>,
+    cap: usize,
+}
+
+impl SearchLru {
+    fn new(cap: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            cap,
+        }
+    }
+
+    fn get(&mut self, key: &SearchCacheKey) -> Option<Vec<crate::mirror::MirrorSearchHit>> {
+        if !self.map.contains_key(key) {
+            return None;
+        }
+        // MRU 갱신
+        self.order.retain(|k| k != key);
+        self.order.push_back(key.clone());
+        self.map.get(key).cloned()
+    }
+
+    fn put(&mut self, key: SearchCacheKey, value: Vec<crate::mirror::MirrorSearchHit>) {
+        if self.map.contains_key(&key) {
+            self.order.retain(|k| k != &key);
+        } else if self.map.len() >= self.cap {
+            if let Some(oldest) = self.order.pop_front() {
+                self.map.remove(&oldest);
+            }
+        }
+        self.order.push_back(key.clone());
+        self.map.insert(key, value);
+    }
+
+    fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+    }
+}
+
+static SEARCH_RESULT_CACHE: OnceLock<Mutex<SearchLru>> = OnceLock::new();
+
+fn search_result_cache() -> &'static Mutex<SearchLru> {
+    SEARCH_RESULT_CACHE.get_or_init(|| Mutex::new(SearchLru::new(50)))
 }
 
 #[cfg(test)]
