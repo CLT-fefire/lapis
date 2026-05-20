@@ -14,11 +14,10 @@
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -364,12 +363,8 @@ pub fn sync_now(
     tx.commit()
         .map_err(|e| format!("mirror tx commit 실패: {e}"))?;
 
-    // 데이터 변경 있었으면 검색 LRU 캐시 무효화 — stale 결과 회피.
-    if report.summaries_upserted + report.observations_upserted + report.deleted > 0 {
-        if let Ok(mut cache) = search_cache().lock() {
-            cache.clear();
-        }
-    }
+    // 검색 LRU invalidate는 `search::refresh_after_write`가 reindex commit 후 호출 (PR #49).
+    // mirror.rs 측 SearchLru는 dead path였으므로 별도 clear 호출 불필요.
 
     // Phase Search #4 — tantivy 인덱스 reindex (이번 sync의 변경 row만).
     // 변경된 row는 last_synced_at_epoch = now_epoch. 삭제된 row의 mirror_id는 pending_deletions에 박제.
@@ -1127,60 +1122,9 @@ fn event_matches_claude_mem(event: &notify::Event) -> bool {
     })
 }
 
-// ─── 검색 LRU 캐시 (검색 응답성 chore) ───────────────────────────────────────
-
-/// 검색 결과 LRU 캐시 키 — query + filter + limit + 두 토글.
-type SearchCacheKey = (String, Vec<String>, u32, bool, bool);
-
-/// 단순 LRU 캐시 — 외부 crate 없이. cap을 넘으면 가장 오래 미접근 entry 제거.
-struct SearchLru {
-    map: HashMap<SearchCacheKey, Vec<MirrorSearchHit>>,
-    order: VecDeque<SearchCacheKey>,
-    cap: usize,
-}
-
-impl SearchLru {
-    fn new(cap: usize) -> Self {
-        Self {
-            map: HashMap::new(),
-            order: VecDeque::new(),
-            cap,
-        }
-    }
-
-    fn get(&mut self, key: &SearchCacheKey) -> Option<Vec<MirrorSearchHit>> {
-        if !self.map.contains_key(key) {
-            return None;
-        }
-        // MRU 갱신 — 제거 후 끝에 다시 push.
-        self.order.retain(|k| k != key);
-        self.order.push_back(key.clone());
-        self.map.get(key).cloned()
-    }
-
-    fn put(&mut self, key: SearchCacheKey, value: Vec<MirrorSearchHit>) {
-        if self.map.contains_key(&key) {
-            self.order.retain(|k| k != &key);
-        } else if self.map.len() >= self.cap {
-            if let Some(oldest) = self.order.pop_front() {
-                self.map.remove(&oldest);
-            }
-        }
-        self.order.push_back(key.clone());
-        self.map.insert(key, value);
-    }
-
-    fn clear(&mut self) {
-        self.map.clear();
-        self.order.clear();
-    }
-}
-
-static SEARCH_CACHE: OnceLock<Mutex<SearchLru>> = OnceLock::new();
-
-fn search_cache() -> &'static Mutex<SearchLru> {
-    SEARCH_CACHE.get_or_init(|| Mutex::new(SearchLru::new(50)))
-}
+// LRU 결과 캐시(`SearchLru` + `SEARCH_CACHE` + `search_cache`)는 본 chore에서 제거됨.
+// `mirror_query_memories` dead path 전용이었고, 실제 UI 경로(`search_query` tantivy)에는
+// `src-tauri/src/search.rs`에 별도 LRU(50)가 살아 있어 캐시 효과는 유지된다.
 
 // ─── Tauri commands ─────────────────────────────────────────────────────────
 
@@ -1254,132 +1198,9 @@ pub struct MirrorSearchHit {
     pub obs_type: Option<String>,
 }
 
-/// mirror DB FTS5 검색 (`memory_fts_search` 대체 — PR2에서 UI 전환).
-///
-/// `include_summaries`/`include_observations`는 kind 필터.
-/// 둘 다 false면 빈 결과 반환 (UI 측에서 type 필터 OFF 시 호출 회피용 short-circuit).
-///
-/// 5.1.d 학습 적용: 매치 doc이 많을 때 bm25 채점 비용으로 수 초까지 걸리는 케이스가
-/// 있어 `spawn_blocking`으로 worker thread에 격리. main IPC handler thread를 막지 않아
-/// 검색 중에도 다른 UI는 응답성 유지.
-#[tauri::command]
-pub async fn mirror_query_memories(
-    app: AppHandle,
-    query: String,
-    filter: Vec<String>,
-    limit: u32,
-    include_summaries: bool,
-    include_observations: bool,
-) -> Result<Vec<MirrorSearchHit>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        mirror_query_memories_inner(&app, query, filter, limit, include_summaries, include_observations)
-    })
-    .await
-    .map_err(|e| format!("mirror_query_memories join 실패: {e}"))?
-}
-
-fn mirror_query_memories_inner(
-    app: &AppHandle,
-    query: String,
-    filter: Vec<String>,
-    limit: u32,
-    include_summaries: bool,
-    include_observations: bool,
-) -> Result<Vec<MirrorSearchHit>, String> {
-    // LRU cache hit 확인 — 같은 query 반복 시 즉시 반환 (sync 후 자동 무효화).
-    let cache_key: SearchCacheKey = (
-        query.clone(),
-        filter.clone(),
-        limit,
-        include_summaries,
-        include_observations,
-    );
-    if let Ok(mut cache) = search_cache().lock() {
-        if let Some(cached) = cache.get(&cache_key) {
-            return Ok(cached);
-        }
-    }
-
-    let q = sanitize_fts_query(&query);
-    if q.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // kind 필터 — hardcoded literal이라 SQL injection 무관.
-    let mut kind_literals: Vec<&'static str> = Vec::new();
-    if include_summaries {
-        kind_literals.push("'summary'");
-    }
-    if include_observations {
-        kind_literals.push("'observation'");
-    }
-    if kind_literals.is_empty() {
-        return Ok(Vec::new());
-    }
-    let kind_and = format!(" AND m.kind IN ({})", kind_literals.join(","));
-
-    let conn = open_rw(app)?;
-
-    let (proj_where, proj_params) = build_project_where(&filter);
-    let proj_and = if proj_where.is_empty() {
-        String::new()
-    } else {
-        format!(" AND {}", &proj_where[" WHERE ".len()..])
-    };
-
-    let sql = format!(
-        "SELECT m.id, m.kind, m.source_id, m.project, m.session_id, m.title, m.obs_type, \
-                m.created_at, m.created_at_epoch, \
-                snippet(memories_fts, -1, '<mark>', '</mark>', '…', 24) AS snip, \
-                bm25(memories_fts) AS score \
-         FROM memories_fts \
-         JOIN memories m ON m.id = memories_fts.rowid \
-         WHERE memories_fts MATCH ?{}{} \
-         ORDER BY score \
-         LIMIT ?",
-        kind_and, proj_and
-    );
-
-    let mut bound: Vec<rusqlite::types::Value> = Vec::with_capacity(proj_params.len() + 2);
-    bound.push(q.into());
-    for p in &proj_params {
-        bound.push(p.clone().into());
-    }
-    bound.push(rusqlite::types::Value::Integer(limit.clamp(1, 200) as i64));
-
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("mirror_query_memories prepare: {e}"))?;
-    let hits = stmt
-        .query_map(rusqlite::params_from_iter(bound.iter()), |r| {
-            Ok(MirrorSearchHit {
-                id: r.get(0)?,
-                kind: r.get(1)?,
-                source_id: r.get(2)?,
-                project: r.get(3)?,
-                session_id: r.get(4)?,
-                title_hint: r
-                    .get::<_, Option<String>>(5)?
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| "(no title)".to_string()),
-                obs_type: r.get(6)?,
-                created_at: r.get(7)?,
-                created_at_epoch: r.get(8)?,
-                snippet_html: r.get(9)?,
-                score: r.get(10)?,
-                channel: "fts".to_string(),
-            })
-        })
-        .map_err(|e| format!("mirror_query_memories query_map: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("mirror_query_memories collect: {e}"))?;
-
-    // LRU cache 박제 — 다음 호출 즉시 반환. sync 시 자동 invalidate.
-    if let Ok(mut cache) = search_cache().lock() {
-        cache.put(cache_key, hits.clone());
-    }
-    Ok(hits)
-}
+// `mirror_query_memories` + `mirror_query_memories_inner`는 본 chore에서 제거됨.
+// UI 경로(`MemorySearchModal` → `search_query`)는 tantivy 인덱스(`src/search.rs`)를
+// 직접 사용한다. mirror DB의 `memories_fts` virtual table은 sync/관리용으로만 유지.
 
 /// files_mentioned 정확 매치 → `memory_related_to_note` 대체 (PR2 UI 전환).
 ///
@@ -1460,50 +1281,9 @@ pub fn mirror_query_related_to_note(
     Ok(hits)
 }
 
-// ─── 격리된 FTS5 helper (memory.rs와 동일 정책 복사 — 모듈 자기 완결) ───────
-
-/// FTS5 안전 쿼리. 모든 토큰을 prefix 매치(`token*`)로.
-///
-/// 일반 검색 UX 일관성: "atomic" 입력 시 "atomicity"도 매치 (prefix). cutoff 도입은
-/// "atomic" → "atomicity" 미매치를 만들어 UX 위반이라 채택 안 함. 매치 doc 수가 많은
-/// 케이스의 응답성은 spawn_blocking + LRU cache + debounce로 보완.
-///
-/// `atomic-purring`은 `unicode61` 토크나이저로 `["atomic", "purring"]` 분리됨.
-/// `atomic pur` 쿼리 → `atomic* AND pur*` → 정확히 매치.
-fn sanitize_fts_query(q: &str) -> String {
-    q.split_whitespace()
-        .map(|w| {
-            let cleaned: String = w
-                .chars()
-                .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
-                .collect();
-            if cleaned.is_empty() {
-                String::new()
-            } else {
-                format!("{}*", cleaned)
-            }
-        })
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// project 필터 SQL 빌더. memory.rs와 동일 정책 (worktree 슬래시 prefix까지).
-fn build_project_where(filter: &[String]) -> (String, Vec<String>) {
-    if filter.is_empty() || filter.iter().any(|f| f == "*") {
-        return (String::new(), Vec::new());
-    }
-    let mut clauses = Vec::new();
-    let mut params = Vec::new();
-    for p in filter {
-        clauses.push("project = ?".to_string());
-        params.push(p.clone());
-        clauses.push("project LIKE ?".to_string());
-        params.push(format!("{}/%", p));
-    }
-    let where_sql = format!(" WHERE ({})", clauses.join(" OR "));
-    (where_sql, params)
-}
+// `sanitize_fts_query` + `build_project_where` 헬퍼는 `mirror_query_memories` 제거와
+// 함께 더 이상 호출되지 않아 본 chore에서 제거됨. 향후 mirror DB의 `memories_fts`를
+// 다른 진단/관리 목적으로 직접 query하게 되면 그때 다시 도입.
 
 // ─── 테스트 ─────────────────────────────────────────────────────────────────
 
