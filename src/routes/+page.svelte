@@ -459,8 +459,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   let editorCopied = $state(false);
   let previewCopied = $state(false);
+  /** 경로 복사 버튼은 Editor/Preview 양쪽에 있지만 한 state 공유 — 어느 쪽을 눌러도 "✓ 복사됨"이 두 버튼에 모두 표시되어 일관 UX. */
+  let pathCopied = $state(false);
   let editorCopyTimer: ReturnType<typeof setTimeout> | null = null;
   let previewCopyTimer: ReturnType<typeof setTimeout> | null = null;
+  let pathCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
   function flashCopied(target: "editor" | "preview") {
     if (target === "editor") {
@@ -480,6 +483,20 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       flashCopied("editor");
     } catch (e) {
       console.error("editor copy failed", e);
+    }
+  }
+
+  /** 현재 노트 절대 경로 복사. ⌘⇧C 단축키 + Editor/Preview pane-title 버튼 둘 다 호출. */
+  async function copyCurrentPath() {
+    const path = $currentNotePath;
+    if (!path) return;
+    try {
+      await navigator.clipboard.writeText(path);
+      pathCopied = true;
+      if (pathCopyTimer) clearTimeout(pathCopyTimer);
+      pathCopyTimer = setTimeout(() => (pathCopied = false), 1200);
+    } catch (e) {
+      console.error("copy current note path failed", e);
     }
   }
 
@@ -687,17 +704,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       openNewNote(parentDir, parentLabel);
     } else if (key === "c" && e.shiftKey) {
       // Cmd+Shift+C — 현재 노트 절대 경로 복사.
-      // 입력 영역(inEditing)에선 이미 위 가드로 패스됨. ⌘C는 OS 기본 복사라 본 키는 ⌘⇧C.
-      const cur = $currentNotePath;
-      if (!cur) return;
+      // copyCurrentPath()를 그대로 호출 → Editor/Preview pane-title 버튼과 동일한 ✓ 플래시.
+      if (!$currentNotePath) return;
       e.preventDefault();
-      void (async () => {
-        try {
-          await navigator.clipboard.writeText(cur);
-        } catch (err) {
-          console.error("copy current note path failed", err);
-        }
-      })();
+      void copyCurrentPath();
     } else if (key === "e" && e.shiftKey) {
       // Cmd+Shift+E — 사이드바 파일 트리 필터 input에 포커스 (Explorer)
       e.preventDefault();
@@ -849,6 +859,15 @@ GitHub: <https://github.com/CLT-fefire/lapis>
           <span>Editor</span>
           <div class="pane-actions">
             <button
+              class="copy-btn path"
+              class:done={pathCopied}
+              title="현재 노트의 절대 경로 복사 (⌘⇧C)"
+              onclick={copyCurrentPath}
+              disabled={!$currentNotePath}
+            >
+              {pathCopied ? "✓ 복사됨" : "🔗 경로 복사"}
+            </button>
+            <button
               class="copy-btn"
               class:done={editorCopied}
               title="마크다운 원본 전체 복사"
@@ -902,6 +921,15 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <div class="pane-title">
           <span>Preview</span>
           <div class="pane-actions">
+            <button
+              class="copy-btn path"
+              class:done={pathCopied}
+              title="현재 노트의 절대 경로 복사 (⌘⇧C)"
+              onclick={copyCurrentPath}
+              disabled={!$currentNotePath}
+            >
+              {pathCopied ? "✓ 복사됨" : "🔗 경로 복사"}
+            </button>
             <button
               class="copy-btn"
               class:done={previewCopied}
@@ -1296,6 +1324,27 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     background: #1f3a2a;
     border-color: #4caf7d;
     color: #8ee5b1;
+  }
+
+  /* 경로 복사 버튼 — 마크다운/리치 복사와 시각 구분 위해 약간 톤 다름 */
+  .copy-btn.path {
+    color: #aac6e6;
+  }
+
+  .copy-btn.path:hover:not(:disabled) {
+    border-color: #88a8d0;
+    color: #cfe2f5;
+  }
+
+  .copy-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .copy-btn:disabled:hover {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #ccc;
   }
 
   .pane-actions {
