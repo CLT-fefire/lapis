@@ -156,7 +156,10 @@ export function writeSearchCacheMeta(
   });
 }
 
-/** lazy load — 특정 shard의 MiniSearch JSON 문자열. 1.8s 단위로 progressive load 가능. */
+/**
+ * lazy load — 특정 shard의 msgpack 바이너리를 base64 string으로 받음.
+ * frontend가 `base64ToArrayBuffer` → worker postMessage transferable → `msgpack.decode`.
+ */
 export function readSearchCacheShard(
   vaultPath: string,
   shard_id: number,
@@ -164,16 +167,16 @@ export function readSearchCacheShard(
   return invoke<string | null>("read_search_cache_shard", { vaultPath, shardId: shard_id });
 }
 
-/** shard 저장 — worker.toJSONShard 결과 디스크 박제. */
+/** shard 저장 — worker.toJSONShard(msgpack bytes) → base64 → 본 호출. */
 export function writeSearchCacheShard(
   vaultPath: string,
   shard_id: number,
-  minisearch_json: string,
+  minisearch_msgpack_b64: string,
 ): Promise<void> {
   return invoke<void>("write_search_cache_shard", {
     vaultPath,
     shardId: shard_id,
-    minisearchJson: minisearch_json,
+    minisearchMsgpackB64: minisearch_msgpack_b64,
   });
 }
 

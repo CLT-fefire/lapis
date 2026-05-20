@@ -31,7 +31,8 @@
  * **옵션 일관**: `FULLTEXT_OPTIONS`는 `searchIndex.ts`와 동일. 옵션 변경 시 두 곳 + CACHE_VERSION bump.
  */
 
-import MiniSearch, { type Options } from "minisearch";
+import MiniSearch, { type Options, type AsPlainObject } from "minisearch";
+import { encode as msgpackEncode, decode as msgpackDecode } from "@msgpack/msgpack";
 
 interface FullTextDoc {
   id: string;
@@ -89,9 +90,6 @@ function post(msg: OutMsg, transfer?: Transferable[]): void {
   (self as unknown as Worker).postMessage(msg, transfer ?? []);
 }
 
-const textDecoder = new TextDecoder();
-const textEncoder = new TextEncoder();
-
 self.onmessage = async (e: MessageEvent<InMsg>) => {
   const msg = e.data;
   try {
@@ -100,9 +98,11 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
           throw new Error(`invalid shardId=${msg.shardId}`);
         }
-        const json = textDecoder.decode(new Uint8Array(msg.jsonBytes));
-        indexes[msg.shardId] = MiniSearch.loadJSON(
-          json,
+        // v5 binary path: msgpack bytes → AsPlainObject → MiniSearch.loadJS
+        // (JSON.parse + loadJSON 두 단계를 하나로 압축)
+        const plain = msgpackDecode(new Uint8Array(msg.jsonBytes)) as AsPlainObject;
+        indexes[msg.shardId] = MiniSearch.loadJS(
+          plain,
           FULLTEXT_OPTIONS,
         ) as MiniSearch<FullTextDoc>;
         post({ type: "ready", id: msg.id });
@@ -134,9 +134,15 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
           post({ type: "json", id: msg.id, jsonBytes: null });
           break;
         }
-        const jsonStr = JSON.stringify(idx);
-        const bytes = textEncoder.encode(jsonStr);
-        post({ type: "json", id: msg.id, jsonBytes: bytes.buffer }, [bytes.buffer]);
+        // v5 binary path: idx.toJSON() → AsPlainObject → msgpack.encode → Uint8Array
+        // JSON.stringify 단계 생략. msgpack은 binary라 disk + IPC 작음.
+        const plain = idx.toJSON();
+        const bytes = msgpackEncode(plain);
+        // Uint8Array → ArrayBuffer transferable. byteOffset 0 + byteLength 일치 보장 필요
+        // (msgpack-javascript는 SharedArrayBuffer 또는 view를 반환할 수 있음). 안전을 위해 slice.
+        const out = new Uint8Array(bytes.byteLength);
+        out.set(bytes);
+        post({ type: "json", id: msg.id, jsonBytes: out.buffer }, [out.buffer]);
         break;
       }
       case "search": {

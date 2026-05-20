@@ -37,6 +37,9 @@ lindera-tantivy = { version = "2", features = ["embed-ko-dic"] }
 rayon = "1"
 # gzip — search-cache JSON(30MB → ~5MB) 압축. IPC + disk read 큰 폭 단축.
 flate2 = "1"
+# base64 — msgpack 바이너리를 Tauri IPC string으로 통과 (Tauri 2 JSON IPC가 Vec<u8>를
+# 비효율적으로 number array 직렬화하는 문제 회피). frontend btoa/atob와 호환.
+base64 = "0.22"
 
 # release dmg 최적화 — 빌드 시간 증가 vs 런타임/바이너리 크기 트레이드오프.
 # - lto = "thin": 모듈 간 inline + dead code 제거. "fat"보다 빌드 시간 절약.

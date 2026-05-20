@@ -14,7 +14,11 @@
 //! - v2: storeFields=["name"]만
 //! - v3: gzip 압축
 //! - v4: sharded (메타 + N shard 파일 분리)
+//! - v5: shard 파일이 MessagePack 바이너리(`idx.toJSON()` → msgpack.encode → gzip). meta는 그대로 JSON+gzip.
+//!       IPC는 base64 string (Tauri JSON IPC가 Vec<u8>를 number array로 비효율 직렬화하는 문제 회피)
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -28,7 +32,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::vault::LinkInfo;
 
-pub const CACHE_VERSION: u32 = 4;
+pub const CACHE_VERSION: u32 = 5;
 
 /// 메타 파일 schema — `*.meta.json.gz`에 직렬화.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -39,14 +43,8 @@ pub struct SearchCacheMeta {
     pub shard_count: u32,
 }
 
-/// shard 파일 schema — `*.shard{i}.json.gz`에 직렬화.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SearchCacheShard {
-    pub version: u32,
-    pub shard_id: u32,
-    /// MiniSearch.toJSON() 결과 그대로
-    pub minisearch_json: String,
-}
+// v5부터 shard 파일은 wrapper struct 없이 raw bytes(gzip(msgpack)) 직접 저장.
+// version 확인은 meta.version으로 — meta가 같은 vault_key를 공유하므로 일관성 보장.
 
 fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -183,9 +181,33 @@ pub async fn write_search_cache_meta(
     .map_err(|e| format!("write_search_cache_meta join: {e}"))?
 }
 
-// ─── shard read/write ───────────────────────────────────────────────────────
+// ─── shard read/write (v5 binary) ────────────────────────────────────────────
+//
+// v5 변경: shard 파일은 wrapper struct 없이 `gzip(msgpack(idx.toJSON()))` raw bytes.
+// IPC는 base64 string으로 통과 — Tauri JSON IPC가 Vec<u8>를 number array로 비효율
+// 직렬화하는 문제 회피. base64 encode/decode 비용 ~50ms는 main thread sync이지만
+// disk + gzip의 큰 비용 대비 작음.
+// version은 meta 통과로 보장 (같은 vault_key 공유).
 
-/// lazy load 시점 — 특정 shard의 MiniSearch JSON 문자열만. 1.8s 단위로 progressive load 가능.
+fn gunzip_to_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut decoder = GzDecoder::new(bytes);
+    let mut out = Vec::new();
+    decoder
+        .read_to_end(&mut out)
+        .map_err(|e| format!("gunzip: {e}"))?;
+    Ok(out)
+}
+
+fn gzip_bytes(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(data)
+        .map_err(|e| format!("gzip write: {e}"))?;
+    encoder.finish().map_err(|e| format!("gzip finish: {e}"))
+}
+
+/// lazy load 시점 — 특정 shard의 msgpack 바이너리를 base64로 받음.
+/// frontend가 atob → ArrayBuffer → worker(transferable) → msgpack.decode → MiniSearch.loadJS.
 #[tauri::command]
 pub async fn read_search_cache_shard(
     app: AppHandle,
@@ -208,49 +230,39 @@ fn read_search_cache_shard_inner(
     if !path.exists() {
         return Ok(None);
     }
-    let bytes = match fs::read(&path) {
+    let gzipped = match fs::read(&path) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("[search-cache] shard{} read 실패: {}", shard_id, e);
             return Ok(None);
         }
     };
-    let json = match gunzip_to_string(&bytes) {
-        Ok(s) => s,
+    let msgpack_bytes = match gunzip_to_bytes(&gzipped) {
+        Ok(b) => b,
         Err(e) => {
+            // v4 이전(JSON+gzip) 캐시 또는 손상 → cache miss로 fallback
             eprintln!("[search-cache] shard{} gunzip 실패: {}", shard_id, e);
             return Ok(None);
         }
     };
-    let shard: SearchCacheShard = match serde_json::from_str(&json) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("[search-cache] shard{} parse 실패: {}", shard_id, e);
-            return Ok(None);
-        }
-    };
-    if shard.version != CACHE_VERSION {
-        return Ok(None);
-    }
-    Ok(Some(shard.minisearch_json))
+    Ok(Some(BASE64.encode(&msgpack_bytes)))
 }
 
+/// shard 저장. frontend가 worker bytes → btoa → 본 인자.
+/// Rust: base64 decode → gzip → atomic write.
 #[tauri::command]
 pub async fn write_search_cache_shard(
     app: AppHandle,
     vault_path: String,
     shard_id: u32,
-    minisearch_json: String,
+    minisearch_msgpack_b64: String,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let shard = SearchCacheShard {
-            version: CACHE_VERSION,
-            shard_id,
-            minisearch_json,
-        };
-        let json = serde_json::to_string(&shard).map_err(|e| format!("shard serialize: {e}"))?;
-        let bytes = gzip_string(&json)?;
-        atomic_write(&shard_file(&app, &vault_path, shard_id)?, &bytes)
+        let msgpack_bytes = BASE64
+            .decode(&minisearch_msgpack_b64)
+            .map_err(|e| format!("base64 decode: {e}"))?;
+        let gzipped = gzip_bytes(&msgpack_bytes)?;
+        atomic_write(&shard_file(&app, &vault_path, shard_id)?, &gzipped)
     })
     .await
     .map_err(|e| format!("write_search_cache_shard join: {e}"))?

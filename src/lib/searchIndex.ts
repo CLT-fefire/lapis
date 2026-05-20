@@ -196,18 +196,19 @@ function dispatch<T extends WorkerOutMsg>(
 }
 
 /**
- * 특정 shard에 cache JSON 로드 (cache hit lazy 시점).
+ * 특정 shard에 cache 인덱스 로드 (cache hit lazy 시점).
  *
- * **transferable ArrayBuffer** — string structured clone(WebKit에서 30MB가 ~32s)
- * 대신 zero-copy. JSON string → TextEncoder UTF-8 bytes → ArrayBuffer → postMessage
- * 두 번째 인자에 transfer list. main thread 비용 ms 단위.
+ * **v5 binary**: msgpack 바이너리(ArrayBuffer) 입력. 호출자가 base64 → ArrayBuffer 변환.
+ * transferable로 worker에 zero-copy 전송 + worker는 `msgpack.decode` + `MiniSearch.loadJS` 사용.
  */
-export async function workerLoadShard(shardId: number, json: string): Promise<void> {
+export async function workerLoadShard(
+  shardId: number,
+  msgpackBytes: ArrayBuffer,
+): Promise<void> {
   const id = ++nextMsgId;
-  const bytes = new TextEncoder().encode(json);
   await dispatch<{ type: "ready"; id: number }>(
-    { type: "loadShard", id, shardId, jsonBytes: bytes.buffer },
-    [bytes.buffer],
+    { type: "loadShard", id, shardId, jsonBytes: msgpackBytes },
+    [msgpackBytes],
   );
 }
 
@@ -255,26 +256,49 @@ export async function workerSearch(query: string, limit: number): Promise<Worker
 }
 
 /**
- * 특정 shard의 MiniSearch 인덱스 JSON 직렬화 — disk 캐시 저장 직전.
+ * 특정 shard의 인덱스를 msgpack binary로 직렬화 — disk 캐시 저장 직전.
  *
- * worker 안에서 JSON.stringify 후 UTF-8 bytes → ArrayBuffer transferable로 main 전송.
- * main에서 TextDecoder로 string 복원. clone 0.
+ * **v5 binary**: worker에서 `idx.toJSON()` → `msgpack.encode` → ArrayBuffer transferable로
+ * main 전송. 호출자가 base64 변환 후 Rust IPC로 전달.
  */
-export async function workerToJSONShard(shardId: number): Promise<string | null> {
+export async function workerToJSONShard(shardId: number): Promise<ArrayBuffer | null> {
   const id = ++nextMsgId;
   const r = await dispatch<{ type: "json"; id: number; jsonBytes: ArrayBuffer | null }>({
     type: "toJSONShard",
     id,
     shardId,
   });
-  if (!r.jsonBytes) return null;
-  return new TextDecoder().decode(new Uint8Array(r.jsonBytes));
+  return r.jsonBytes;
 }
 
 /** worker 안 모든 shard 인덱스 release. clearIndexes에서 호출. */
 export async function workerReset(): Promise<void> {
   const id = ++nextMsgId;
   await dispatch<{ type: "ready"; id: number }>({ type: "resetAll", id });
+}
+
+/**
+ * Rust IPC ↔ JS bytes 통과 helper — Tauri 2 JSON IPC가 Vec<u8>를 number array로
+ * 비효율 직렬화하는 문제를 base64로 회피.
+ *
+ * 5MB bytes ↔ ~6.7MB base64. encode/decode 비용 ~50ms each (main thread sync).
+ */
+export function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+export function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(parts.join(""));
 }
 
 /**

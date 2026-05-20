@@ -23,6 +23,8 @@ import {
   buildQuickEntries,
   workerLoadShard,
   workerToJSONShard,
+  base64ToArrayBuffer,
+  arrayBufferToBase64,
 } from "$lib/searchIndex";
 import {
   fullTextIndexReady,
@@ -162,22 +164,26 @@ async function buildFullTextFromPending(): Promise<void> {
   fullTextLoading.set(true);
   try {
     // N shard 순차 로드 — vault별 shardCount(decideShardCount). 첫 shard 완료 시
-    // fullTextIndexReady set → partial 검색 가능.
+    // fullTextIndexReady set → partial 검색 가능. v5: msgpack bytes (base64 IPC).
     for (let i = 0; i < shardCount; i++) {
       const t0 = perf ? performance.now() : 0;
-      const json = await readSearchCacheShard(vault, i);
-      if (!json) {
+      const b64 = await readSearchCacheShard(vault, i);
+      if (!b64) {
         console.warn(`[search-cache] shard${i} missing at lazy load time`);
         continue;
       }
       const tFetch = perf ? performance.now() : 0;
-      await workerLoadShard(i, json);
+      const bytes = base64ToArrayBuffer(b64);
+      const tDecode = perf ? performance.now() : 0;
+      await workerLoadShard(i, bytes);
       if (i === 0) fullTextIndexReady.set(true);
       if (perf) {
         const tLoad = performance.now();
         console.debug(
-          `[lapis-perf] fulltext-lazy.shard${i} fetch=${(tFetch - t0).toFixed(0)}ms ` +
-            `worker.loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
+          `[lapis-perf] fulltext-lazy.shard${i} ` +
+            `fetch=${(tFetch - t0).toFixed(0)}ms ` +
+            `b64decode=${(tDecode - tFetch).toFixed(0)}ms ` +
+            `worker.loadJS=${(tLoad - tDecode).toFixed(0)}ms`,
         );
       }
     }
@@ -323,9 +329,10 @@ async function reloadNotesInner(): Promise<void> {
             if (!get(fullTextIndexReady)) return;
             await writeSearchCacheMeta(root, fpForSave, linksForSave, shardCount);
             for (let i = 0; i < shardCount; i++) {
-              const json = await workerToJSONShard(i);
-              if (!json) continue;
-              await writeSearchCacheShard(root, i, json);
+              const bytes = await workerToJSONShard(i);
+              if (!bytes) continue;
+              const b64 = arrayBufferToBase64(bytes);
+              await writeSearchCacheShard(root, i, b64);
             }
             if (import.meta.env.DEV) {
               console.debug(`[lapis-perf] search-cache saved fp=${fpForSave} shards=${shardCount}`);
