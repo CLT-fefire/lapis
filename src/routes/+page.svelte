@@ -685,6 +685,27 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
         : "(vault root)";
       openNewNote(parentDir, parentLabel);
+    } else if (key === "c" && e.shiftKey) {
+      // Cmd+Shift+C — 현재 노트 절대 경로 복사.
+      // 입력 영역(inEditing)에선 이미 위 가드로 패스됨. ⌘C는 OS 기본 복사라 본 키는 ⌘⇧C.
+      const cur = $currentNotePath;
+      if (!cur) return;
+      e.preventDefault();
+      void (async () => {
+        try {
+          await navigator.clipboard.writeText(cur);
+        } catch (err) {
+          console.error("copy current note path failed", err);
+        }
+      })();
+    } else if (key === "e" && e.shiftKey) {
+      // Cmd+Shift+E — 사이드바 파일 트리 필터 input에 포커스 (Explorer)
+      e.preventDefault();
+      const input = document.querySelector<HTMLInputElement>(".tree-filter-input");
+      if (input) {
+        input.focus();
+        input.select();
+      }
     }
   }
 

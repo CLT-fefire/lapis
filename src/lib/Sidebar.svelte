@@ -11,6 +11,12 @@
     indexBuilding,
     createNewNote,
   } from "$lib/stores/vault";
+  import {
+    treeFilterQuery,
+    clearTreeFilter,
+    filterEntries,
+    countMatches,
+  } from "$lib/stores/treeFilter";
   import { sidebarTab, showFilesTab, showTagsTab, tagIndex } from "$lib/stores/tags";
   import {
     docKindCounts,
@@ -36,6 +42,22 @@
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
+  }
+
+  // tree filter — 필터 적용된 notes 트리. 매칭 leaf의 부모 체인까지 포함.
+  // FileTree는 필터 활성 시 모든 폴더 강제 펼침(forceExpand). 비어 있으면 원본.
+  const filteredNotes = $derived(filterEntries($notes, $treeFilterQuery));
+  const filteredMatchCount = $derived(
+    $treeFilterQuery.trim() ? countMatches(filteredNotes) : 0,
+  );
+  const treeFilterActive = $derived(!!$treeFilterQuery.trim());
+
+  function onTreeFilterKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      clearTreeFilter();
+      (e.currentTarget as HTMLInputElement).blur();
+    }
   }
 
   /** 배지 폭 방어 — 3자리 이상은 "99+"로 단축 */
@@ -282,7 +304,32 @@ graph LR
       </div>
     {:else if $sidebarTab === "files"}
       {#if $notes.length > 0}
-        <FileTree entries={$notes} />
+        <div class="tree-filter">
+          <input
+            type="text"
+            class="tree-filter-input"
+            placeholder="파일 필터…"
+            value={$treeFilterQuery}
+            oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
+            onkeydown={onTreeFilterKeydown}
+            spellcheck="false"
+            autocomplete="off"
+          />
+          {#if treeFilterActive}
+            <span class="match-count" title="매칭된 파일 수">{filteredMatchCount}</span>
+            <button
+              class="filter-clear"
+              onclick={clearTreeFilter}
+              title="필터 지우기 (Esc)"
+              aria-label="필터 지우기"
+            >✕</button>
+          {/if}
+        </div>
+        {#if treeFilterActive && filteredNotes.length === 0}
+          <div class="filter-empty">매칭되는 파일이 없습니다</div>
+        {:else}
+          <FileTree entries={filteredNotes} forceExpand={treeFilterActive} />
+        {/if}
       {:else}
         <div class="empty">
           <p>이 폴더에 .md 파일이 없습니다.</p>
@@ -666,5 +713,61 @@ graph LR
     font-size: 12px;
     padding: 0;
     cursor: pointer;
+  }
+
+  /* tree filter — 파일 트리 상단 검색 input */
+  .tree-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px 4px 10px;
+    border-bottom: 1px solid #2a2a2a;
+    background: #1f1f1f;
+  }
+
+  .tree-filter-input {
+    flex: 1;
+    min-width: 0;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #e8e8e8;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+  }
+
+  .tree-filter-input:focus {
+    border-color: #6dd6ff;
+  }
+
+  .match-count {
+    color: #888;
+    font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .filter-clear {
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 4px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .filter-clear:hover {
+    color: #f47174;
+  }
+
+  .filter-empty {
+    padding: 12px;
+    color: #888;
+    font-size: 12px;
+    text-align: center;
   }
 </style>

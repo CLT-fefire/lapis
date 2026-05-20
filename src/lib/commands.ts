@@ -100,6 +100,21 @@ export const BUILTIN_COMMANDS: Command[] = [
     },
   },
   {
+    id: "copy-current-note-path",
+    label: "Copy Current Note Path",
+    shortcut: "⌘⇧C",
+    disabled: () => !get(currentNotePath),
+    async run() {
+      const cur = get(currentNotePath);
+      if (!cur) return;
+      try {
+        await navigator.clipboard.writeText(cur);
+      } catch (e) {
+        console.error("copy current note path failed", e);
+      }
+    },
+  },
+  {
     id: "memory-sync",
     label: "Memory: Sync from claude-mem",
     disabled: () => !get(vaultPath) || !get(claudeMemEnabled),

@@ -10,16 +10,50 @@
     autoUpdateLinks,
   } from "$lib/stores/vault";
   import { contextTarget, renameRequest, clearRenameRequest } from "$lib/stores/tree-ui";
+  import { treeFilterQuery } from "$lib/stores/treeFilter";
   import Self from "./FileTree.svelte";
 
   interface Props {
     entries: NoteEntry[];
     depth?: number;
+    /** 필터 활성 시 모든 폴더 강제 펼침 — Sidebar가 filter query 입력 중일 때 true 전달 */
+    forceExpand?: boolean;
   }
 
-  let { entries, depth = 0 }: Props = $props();
+  let { entries, depth = 0, forceExpand = false }: Props = $props();
 
   let expanded = $state<Record<string, boolean>>({});
+
+  /** 실제 표시상 펼친 여부 — forceExpand 시 무조건 펼침, 아니면 사용자 toggle 결과. */
+  function isOpen(path: string): boolean {
+    return forceExpand || !!expanded[path];
+  }
+
+  /** entry.name에서 query 매치 부분에 <mark> 강조 (HTML safe — entry name은 user file이라 escape) */
+  function highlightName(name: string): string {
+    const q = $treeFilterQuery.trim();
+    if (!q) return escapeHtml(name);
+    const lower = name.toLowerCase();
+    const ql = q.toLowerCase();
+    const idx = lower.indexOf(ql);
+    if (idx < 0) return escapeHtml(name);
+    return (
+      escapeHtml(name.slice(0, idx)) +
+      "<mark>" +
+      escapeHtml(name.slice(idx, idx + q.length)) +
+      "</mark>" +
+      escapeHtml(name.slice(idx + q.length))
+    );
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
   /** 인라인 편집 중인 entry path */
   let editingPath = $state<string | null>(null);
   let editingName = $state("");
@@ -147,7 +181,7 @@
         >
           {#if isEditingThis(entry.path)}
             <span class="row dir editing">
-              <span class="caret" class:open={expanded[entry.path]}>▸</span>
+              <span class="caret" class:open={isOpen(entry.path)}>▸</span>
               <span class="icon folder">📁</span>
               <input
                 bind:this={editingInputEl}
@@ -164,14 +198,15 @@
               draggable="true"
               ondragstart={(e) => onDragStart(e, entry)}
             >
-              <span class="caret" class:open={expanded[entry.path]}>▸</span>
-              <span class="icon folder">{expanded[entry.path] ? "📂" : "📁"}</span>
-              <span class="name">{entry.name}</span>
+              <span class="caret" class:open={isOpen(entry.path)}>▸</span>
+              <span class="icon folder">{isOpen(entry.path) ? "📂" : "📁"}</span>
+              <!-- entry.name은 file/folder stem(사용자 입력). highlightName이 escape 처리 -->
+              <span class="name">{@html highlightName(entry.name)}</span>
             </button>
           {/if}
         </div>
-        {#if expanded[entry.path] && entry.children}
-          <Self entries={entry.children} depth={depth + 1} />
+        {#if isOpen(entry.path) && entry.children}
+          <Self entries={entry.children} depth={depth + 1} {forceExpand} />
         {/if}
       </li>
     {:else}
@@ -204,7 +239,8 @@
             >
               <span class="caret-spacer"></span>
               <span class="icon file">📝</span>
-              <span class="name">{entry.name}</span>
+              <!-- entry.name은 file stem(사용자 입력). highlightName이 escape 처리 -->
+              <span class="name">{@html highlightName(entry.name)}</span>
             </button>
           {/if}
         </div>
@@ -343,5 +379,13 @@
   .row.editing {
     background: rgba(109, 214, 255, 0.08);
     border-radius: 4px;
+  }
+
+  /* tree filter 매치 강조 — entry name 안의 substring */
+  .name :global(mark) {
+    background: rgba(255, 200, 0, 0.4);
+    color: inherit;
+    padding: 0 1px;
+    border-radius: 2px;
   }
 </style>
