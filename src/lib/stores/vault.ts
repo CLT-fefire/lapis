@@ -215,21 +215,33 @@ async function reloadNotesInner(): Promise<void> {
       // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
       await rebuildIndexes(links, contents);
 
-      // 캐시 저장 — fire-and-forget. 사용자 perceived 지연 없도록 await 안 함.
-      // 다음 vault open에서 hit. 저장 실패는 silent (다음에 다시 시도).
-      void (async () => {
-        try {
-          const idx = get(fullTextIndex);
-          if (!idx) return;
-          // JSON.stringify(idx)는 MiniSearch가 노출하는 toJSON 메서드를 자동 호출.
-          await writeSearchCache(root, fp.fingerprint, JSON.stringify(idx), links);
-          if (import.meta.env.DEV) {
-            console.debug(`[lapis-perf] search-cache saved fp=${fp.fingerprint}`);
+      // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리 →
+      // reloadNotesInner의 finally + measurement가 모두 끝난 다음에 실행되어
+      // `JSON.stringify(idx)`(인덱스 11-13MB 직렬화)의 sync 비용이 측정에 안 잡힘.
+      // void IIFE만으로는 첫 await 인자 평가 시 JSON.stringify가 same task 안에서
+      // 동기 실행되어 cache miss 측정값이 부풀어짐 (실측 23s 사례).
+      const fpForSave = fp.fingerprint;
+      const linksForSave = links;
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const idx = get(fullTextIndex);
+            if (!idx) return;
+            // JSON.stringify(idx)는 MiniSearch가 노출하는 toJSON 메서드를 자동 호출.
+            await writeSearchCache(
+              root,
+              fpForSave,
+              JSON.stringify(idx),
+              linksForSave,
+            );
+            if (import.meta.env.DEV) {
+              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave}`);
+            }
+          } catch (e) {
+            console.warn("[search-cache] write failed", e);
           }
-        } catch (e) {
-          console.warn("[search-cache] write failed", e);
-        }
-      })();
+        })();
+      }, 0);
     }
   } catch (e) {
     console.error("link/search index build failed", e);
