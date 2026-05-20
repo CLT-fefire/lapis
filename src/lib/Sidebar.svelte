@@ -10,7 +10,16 @@
     treeLoading,
     indexBuilding,
     createNewNote,
+    selectNote,
   } from "$lib/stores/vault";
+  import {
+    treeFilterQuery,
+    clearTreeFilter,
+    filterEntries,
+    countMatches,
+    collectLeafPaths,
+  } from "$lib/stores/treeFilter";
+  import { tick } from "svelte";
   import { sidebarTab, showFilesTab, showTagsTab, tagIndex } from "$lib/stores/tags";
   import {
     docKindCounts,
@@ -36,6 +45,121 @@
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
+  }
+
+  // tree filter — 매 입력 keystroke마다 filterEntries(11924 노트 재귀 walk) + DOM 재렌더
+  // 비용이 누적되어 UI 멈춤 발생. `$treeFilterQuery`(store)는 input value 즉시 반영하되,
+  // 실제 필터 적용은 `debouncedQuery`(100ms debounce)로 분리.
+  let debouncedQuery = $state("");
+  let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    const q = $treeFilterQuery;
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    // 빈 입력은 즉시 반영(필터 해제는 빨라야 함)
+    if (!q.trim()) {
+      debouncedQuery = q;
+      return;
+    }
+    filterDebounceTimer = setTimeout(() => {
+      debouncedQuery = q;
+    }, 100);
+  });
+
+  // FileTree는 필터 활성 시 모든 폴더 강제 펼침(forceExpand). 비어 있으면 원본.
+  const filteredNotes = $derived.by(() => {
+    if (!import.meta.env.DEV) return filterEntries($notes, debouncedQuery);
+    const t0 = performance.now();
+    const r = filterEntries($notes, debouncedQuery);
+    const dt = performance.now() - t0;
+    if (debouncedQuery.trim() && dt > 1) {
+      console.debug(
+        `[lapis-perf] tree-filter filterEntries q="${debouncedQuery}" ` +
+          `notes=${$notes.length} dt=${dt.toFixed(1)}ms`,
+      );
+    }
+    return r;
+  });
+  const filteredMatchCount = $derived.by(() => {
+    if (!debouncedQuery.trim()) return 0;
+    if (!import.meta.env.DEV) return countMatches(filteredNotes);
+    const t0 = performance.now();
+    const n = countMatches(filteredNotes);
+    const dt = performance.now() - t0;
+    if (dt > 1) {
+      console.debug(
+        `[lapis-perf] tree-filter countMatches count=${n} dt=${dt.toFixed(1)}ms`,
+      );
+    }
+    return n;
+  });
+  const treeFilterActive = $derived(!!debouncedQuery.trim());
+
+  // 매칭된 leaf 파일 paths — 트리 표시 순서대로. ↑↓ 키보드 순회용.
+  const flatMatchPaths = $derived.by(() => {
+    if (!treeFilterActive) return [] as string[];
+    if (!import.meta.env.DEV) return collectLeafPaths(filteredNotes);
+    const t0 = performance.now();
+    const r = collectLeafPaths(filteredNotes);
+    const dt = performance.now() - t0;
+    if (dt > 1) {
+      console.debug(
+        `[lapis-perf] tree-filter collectLeafPaths paths=${r.length} dt=${dt.toFixed(1)}ms`,
+      );
+    }
+    return r;
+  });
+  let activeFilterIndex = $state(0);
+  const activeFilterPath = $derived<string | null>(
+    flatMatchPaths.length > 0 && activeFilterIndex < flatMatchPaths.length
+      ? flatMatchPaths[activeFilterIndex]
+      : null,
+  );
+
+  // query/필터 결과 변경 시 인덱스 0으로 리셋. 결과 비면 -1로(activeFilterPath null).
+  $effect(() => {
+    const _ = debouncedQuery;
+    activeFilterIndex = 0;
+  });
+
+  // activeFilterPath 변경 시 해당 row를 사이드바 안에 스크롤 노출
+  let filesPaneEl: HTMLDivElement | null = $state(null);
+  $effect(() => {
+    const path = activeFilterPath;
+    if (!path || !filesPaneEl) return;
+    void tick().then(() => {
+      if (!filesPaneEl) return;
+      const el = filesPaneEl.querySelector<HTMLElement>(
+        `[data-leaf-path="${cssEscape(path)}"]`,
+      );
+      if (el) el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  });
+
+  function cssEscape(s: string): string {
+    // CSS attribute selector value 안 backslash + double quote escape.
+    return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function onTreeFilterKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      clearTreeFilter();
+      (e.currentTarget as HTMLInputElement).blur();
+      return;
+    }
+    if (!treeFilterActive || flatMatchPaths.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeFilterIndex = Math.min(flatMatchPaths.length - 1, activeFilterIndex + 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeFilterIndex = Math.max(0, activeFilterIndex - 1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const path = activeFilterPath;
+      if (path) void selectNote(path);
+    }
   }
 
   /** 배지 폭 방어 — 3자리 이상은 "99+"로 단축 */
@@ -282,7 +406,38 @@ graph LR
       </div>
     {:else if $sidebarTab === "files"}
       {#if $notes.length > 0}
-        <FileTree entries={$notes} />
+        <div class="tree-filter">
+          <input
+            type="text"
+            class="tree-filter-input"
+            placeholder="파일 필터…"
+            value={$treeFilterQuery}
+            oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
+            onkeydown={onTreeFilterKeydown}
+            spellcheck="false"
+            autocomplete="off"
+          />
+          {#if treeFilterActive}
+            <span class="match-count" title="매칭된 파일 수">{filteredMatchCount}</span>
+            <button
+              class="filter-clear"
+              onclick={clearTreeFilter}
+              title="필터 지우기 (Esc)"
+              aria-label="필터 지우기"
+            >✕</button>
+          {/if}
+        </div>
+        {#if treeFilterActive && filteredNotes.length === 0}
+          <div class="filter-empty">매칭되는 파일이 없습니다</div>
+        {:else}
+          <div class="files-pane" bind:this={filesPaneEl}>
+            <FileTree
+              entries={filteredNotes}
+              forceExpand={treeFilterActive}
+              activePath={activeFilterPath}
+            />
+          </div>
+        {/if}
       {:else}
         <div class="empty">
           <p>이 폴더에 .md 파일이 없습니다.</p>
@@ -666,5 +821,61 @@ graph LR
     font-size: 12px;
     padding: 0;
     cursor: pointer;
+  }
+
+  /* tree filter — 파일 트리 상단 검색 input */
+  .tree-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px 4px 10px;
+    border-bottom: 1px solid #2a2a2a;
+    background: #1f1f1f;
+  }
+
+  .tree-filter-input {
+    flex: 1;
+    min-width: 0;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #e8e8e8;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+  }
+
+  .tree-filter-input:focus {
+    border-color: #6dd6ff;
+  }
+
+  .match-count {
+    color: #888;
+    font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .filter-clear {
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 4px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .filter-clear:hover {
+    color: #f47174;
+  }
+
+  .filter-empty {
+    padding: 12px;
+    color: #888;
+    font-size: 12px;
+    text-align: center;
   }
 </style>
