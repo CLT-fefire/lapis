@@ -4,7 +4,7 @@ import {
   workerAddAllShard,
   workerReset,
   computeShardId,
-  SHARD_COUNT,
+  decideShardCount,
   type QuickEntry,
   type FullTextDoc,
 } from "$lib/searchIndex";
@@ -28,43 +28,53 @@ export const fullTextIndexReady = writable<boolean>(false);
 export const indexBuilding = writable<boolean>(false);
 
 /**
- * cache hit 시 cold-start measurement 안에서 `MiniSearch.loadJSON`(sync ~4.5s)을
- * 호출하지 않고, "이 vault path에 대한 minisearch_json을 idle 시점에 받아서 로드한다"는
- * pending 상태만 보관. 값이 있으면 = lazy load 대기 중.
+ * cache hit 시 lazy load 대기 정보. cold-start cacheLookup에서 meta만 받고 본 store에
+ * vault path + shard_count를 박은 뒤, idle 시점에 shard 0..N 순차 로드.
  *
- * cold-start cacheLookup에선 메타(`read_search_cache_meta`)만 받고, 본 store에 vault path를
- * 박은 뒤 `requestIdleCallback` 시점에 `read_search_cache_minisearch_json`을 호출 → 30MB
- * IPC + worker.loadJSON은 그때서야 발생.
+ * - null: lazy 대기 없음 (이미 로드됨 또는 vault 없음)
+ * - {vault, shardCount}: 그 vault의 N개 shard를 idle 시점에 로드
  */
-export const pendingFullTextVault = writable<string | null>(null);
+export const pendingFullTextVault = writable<{
+  vault: string;
+  shardCount: number;
+} | null>(null);
 
 /** worker가 loadJSON / addAll 중일 때 true. UI에 "빌드 중" 표시용. */
 export const fullTextLoading = writable<boolean>(false);
 
 /**
- * vault 로딩 시 호출 — cache miss 풀 빌드 경로. **sharded**: 4 shard로 분할 후 순차
- * worker addAll.
+ * vault 로딩 시 호출 — cache miss 풀 빌드 경로. **sharded(동적)**: vault 크기 기반
+ * shard 수 결정 후 분할 + 순차 worker addAll.
  *
- * - 각 shard 약 contents.length/4 doc. fnv32(path) % SHARD_COUNT로 결정론 분배.
+ * - shard 수 = `decideShardCount(contents.length)`. 사용자 vault 11933 → 4 shard.
+ *   매우 큰 vault(50000+) → 16 shard로 첫 shard ready 더 빠름.
  * - 첫 shard 완료 시점에 `fullTextIndexReady=true` set → 사용자 부분 검색 가능
- * - 모든 shard 완료 후에도 ready 유지. caller(vault.ts)가 캐시 저장 트리거
+ * - 모든 shard 완료 후 caller(vault.ts)가 캐시 저장 트리거 — meta에 shard_count 박제
+ *
+ * @returns 결정된 shard 수 (caller가 cache 저장 시 사용)
  */
 export async function rebuildIndexes(
   linkInfos: LinkInfo[],
   contents: NoteContent[],
-): Promise<void> {
+): Promise<number> {
   quickEntries.set(buildQuickEntries(linkInfos));
   indexBuilding.set(true);
   fullTextIndexReady.set(false);
+  const shardCount = decideShardCount(contents.length);
   try {
-    // shard별로 분할 — fnv32(path) % SHARD_COUNT 결정론
-    const shards: FullTextDoc[][] = Array.from({ length: SHARD_COUNT }, () => []);
+    if (import.meta.env.DEV) {
+      console.debug(
+        `[lapis-perf] rebuildIndexes shardCount=${shardCount} notes=${contents.length}`,
+      );
+    }
+    // shard별로 분할 — fnv32(path) % shardCount 결정론
+    const shards: FullTextDoc[][] = Array.from({ length: shardCount }, () => []);
     for (const n of contents) {
-      const s = computeShardId(n.path);
+      const s = computeShardId(n.path, shardCount);
       shards[s].push({ id: n.path, name: n.name, body: n.body });
     }
     // 순차 addAll. 첫 shard 완료 시 partial ready set.
-    for (let i = 0; i < SHARD_COUNT; i++) {
+    for (let i = 0; i < shardCount; i++) {
       const t0 = import.meta.env.DEV ? performance.now() : 0;
       await workerAddAllShard(i, shards[i]);
       if (i === 0) fullTextIndexReady.set(true);
@@ -81,6 +91,7 @@ export async function rebuildIndexes(
   } finally {
     indexBuilding.set(false);
   }
+  return shardCount;
 }
 
 export function clearIndexes(): void {

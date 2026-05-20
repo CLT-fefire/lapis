@@ -23,7 +23,7 @@
  * **transferable**: jsonBytes는 ArrayBuffer. WKWebView postMessage 30MB string clone
  * (~32s)을 zero-copy(ms)로 압축. PR #53 학습.
  *
- * **shard 결정론**: `shardId = fnv32(doc.path) % SHARD_COUNT`. main thread도 같은 함수
+ * **shard 결정론**: `shardId = fnv32(doc.path) % MAX_SHARDS`. main thread도 같은 함수
  * 사용 (`searchIndex.ts:computeShardId`).
  *
  * **제약**: worker는 Tauri invoke 불가. snippet 생성은 main thread에서 `readNote` 사용.
@@ -50,8 +50,15 @@ const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
   },
 };
 
-const SHARD_COUNT = 4;
-const indexes: (MiniSearch<FullTextDoc> | null)[] = new Array(SHARD_COUNT).fill(null);
+/**
+ * 최대 shard 수 — main과 일치(`searchIndex.ts:MAX_SHARDS`). 실제 사용 shard 수는
+ * vault별로 다름(`decideShardCount`로 main 결정). worker는 max 길이 배열을 미리
+ * 할당해두고 사용하지 않는 shardId는 `null`로 유지. 메모리 영향 없음(null 16개).
+ *
+ * search 시 모든 인덱스 순회 — null은 자동 skip.
+ */
+const MAX_SHARDS = 16;
+const indexes: (MiniSearch<FullTextDoc> | null)[] = new Array(MAX_SHARDS).fill(null);
 
 interface WorkerHit {
   path: string;
@@ -90,7 +97,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
   try {
     switch (msg.type) {
       case "loadShard": {
-        if (msg.shardId < 0 || msg.shardId >= SHARD_COUNT) {
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
           throw new Error(`invalid shardId=${msg.shardId}`);
         }
         const json = textDecoder.decode(new Uint8Array(msg.jsonBytes));
@@ -102,7 +109,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         break;
       }
       case "addAllShard": {
-        if (msg.shardId < 0 || msg.shardId >= SHARD_COUNT) {
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
           throw new Error(`invalid shardId=${msg.shardId}`);
         }
         const newIndex = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
@@ -119,7 +126,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         break;
       }
       case "toJSONShard": {
-        if (msg.shardId < 0 || msg.shardId >= SHARD_COUNT) {
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
           throw new Error(`invalid shardId=${msg.shardId}`);
         }
         const idx = indexes[msg.shardId];
@@ -153,7 +160,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         break;
       }
       case "resetAll": {
-        for (let i = 0; i < SHARD_COUNT; i++) indexes[i] = null;
+        for (let i = 0; i < MAX_SHARDS; i++) indexes[i] = null;
         post({ type: "ready", id: msg.id });
         break;
       }

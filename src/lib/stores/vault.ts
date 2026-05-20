@@ -23,7 +23,6 @@ import {
   buildQuickEntries,
   workerLoadShard,
   workerToJSONShard,
-  SHARD_COUNT,
 } from "$lib/searchIndex";
 import {
   fullTextIndexReady,
@@ -156,14 +155,15 @@ async function buildFullTextFromPending(): Promise<void> {
   // race 방지 — idle callback + CommandPalette open이 같은 함수를 두 번 호출 시
   // 중복 진입 차단.
   if (get(fullTextLoading)) return;
-  const vault = get(pendingFullTextVault);
-  if (!vault) return;
+  const pending = get(pendingFullTextVault);
+  if (!pending) return;
+  const { vault, shardCount } = pending;
   const perf = import.meta.env.DEV;
   fullTextLoading.set(true);
   try {
-    // 4 shard 순차 로드. 첫 shard 완료 시점에 fullTextIndexReady set → partial 검색 가능.
-    // 첫 shard ~1.8s 예상 → 사용자 perceived "검색 인덱스 빌드 중" 대기 큰 폭 단축.
-    for (let i = 0; i < SHARD_COUNT; i++) {
+    // N shard 순차 로드 — vault별 shardCount(decideShardCount). 첫 shard 완료 시
+    // fullTextIndexReady set → partial 검색 가능.
+    for (let i = 0; i < shardCount; i++) {
       const t0 = perf ? performance.now() : 0;
       const json = await readSearchCacheShard(vault, i);
       if (!json) {
@@ -271,7 +271,8 @@ async function reloadNotesInner(): Promise<void> {
       await nextTick();
       quickEntries.set(buildQuickEntries(links));
       fullTextIndexReady.set(false);
-      pendingFullTextVault.set(root);
+      // meta.shard_count는 cache miss 시 결정한 동적 값. lazy load가 같은 수로 순차 로드.
+      pendingFullTextVault.set({ vault: root, shardCount: meta.shard_count });
       scheduleLazyFullTextLoad();
       appliedFromCache = true;
       cacheMode = "hit";
@@ -308,26 +309,26 @@ async function reloadNotesInner(): Promise<void> {
       topicCounts.set(facets.topicCounts);
       await nextTick();
 
-      // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
-      await rebuildIndexes(links, contents);
+      // rebuildIndexes — 동적 shardCount 반환 (vault 크기 기반)
+      const shardCount = await rebuildIndexes(links, contents);
 
       // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리.
       // sharded — meta + N shard 파일 각각 저장. worker.toJSONShard가 worker thread에서
-      // 직렬화 → main thread freeze 0.
+      // 직렬화 → main thread freeze 0. shardCount는 vault별 동적 값.
       const fpForSave = fp.fingerprint;
       const linksForSave = links;
       setTimeout(() => {
         void (async () => {
           try {
             if (!get(fullTextIndexReady)) return;
-            await writeSearchCacheMeta(root, fpForSave, linksForSave, SHARD_COUNT);
-            for (let i = 0; i < SHARD_COUNT; i++) {
+            await writeSearchCacheMeta(root, fpForSave, linksForSave, shardCount);
+            for (let i = 0; i < shardCount; i++) {
               const json = await workerToJSONShard(i);
               if (!json) continue;
               await writeSearchCacheShard(root, i, json);
             }
             if (import.meta.env.DEV) {
-              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave} shards=${SHARD_COUNT}`);
+              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave} shards=${shardCount}`);
             }
           } catch (e) {
             console.warn("[search-cache] write failed", e);
