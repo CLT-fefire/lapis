@@ -6,8 +6,9 @@ import {
   readVaultBundle,
   vaultFingerprint,
   readSearchCacheMeta,
-  readSearchCacheMinisearchJson,
-  writeSearchCache,
+  readSearchCacheShard,
+  writeSearchCacheMeta,
+  writeSearchCacheShard,
   createNote as createNoteTauri,
   createFolder as createFolderTauri,
   deleteNote as deleteNoteTauri,
@@ -18,7 +19,12 @@ import {
   pruneLinkRewriteBackups,
   type NoteEntry,
 } from "$lib/tauri/notes";
-import { buildQuickEntries, workerLoadJSON, workerToJSON } from "$lib/searchIndex";
+import {
+  buildQuickEntries,
+  workerLoadShard,
+  workerToJSONShard,
+  SHARD_COUNT,
+} from "$lib/searchIndex";
 import {
   fullTextIndexReady,
   quickEntries,
@@ -147,34 +153,39 @@ export async function ensureFullTextIndex(): Promise<void> {
 
 async function buildFullTextFromPending(): Promise<void> {
   if (get(fullTextIndexReady)) return;
-  // race 방지 — idle callback + CommandPalette open이 같은 함수를 두 번 호출하면
-  // worker가 loadJSON 두 번 처리(직렬). fullTextLoading flag로 중복 진입 차단.
+  // race 방지 — idle callback + CommandPalette open이 같은 함수를 두 번 호출 시
+  // 중복 진입 차단.
   if (get(fullTextLoading)) return;
   const vault = get(pendingFullTextVault);
   if (!vault) return;
   const perf = import.meta.env.DEV;
-  const t0 = perf ? performance.now() : 0;
   fullTextLoading.set(true);
   try {
-    // 30MB JSON IPC — Rust 측은 disk read + gunzip + serde 두 번째지만 idle 시점이라 OK
-    const json = await readSearchCacheMinisearchJson(vault);
-    if (!json) {
-      console.warn("[search-cache] minisearch_json missing at lazy load time");
-      return;
+    // 4 shard 순차 로드. 첫 shard 완료 시점에 fullTextIndexReady set → partial 검색 가능.
+    // 첫 shard ~1.8s 예상 → 사용자 perceived "검색 인덱스 빌드 중" 대기 큰 폭 단축.
+    for (let i = 0; i < SHARD_COUNT; i++) {
+      const t0 = perf ? performance.now() : 0;
+      const json = await readSearchCacheShard(vault, i);
+      if (!json) {
+        console.warn(`[search-cache] shard${i} missing at lazy load time`);
+        continue;
+      }
+      const tFetch = perf ? performance.now() : 0;
+      await workerLoadShard(i, json);
+      if (i === 0) fullTextIndexReady.set(true);
+      if (perf) {
+        const tLoad = performance.now();
+        console.debug(
+          `[lapis-perf] fulltext-lazy.shard${i} fetch=${(tFetch - t0).toFixed(0)}ms ` +
+            `worker.loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
+        );
+      }
     }
-    const tFetch = perf ? performance.now() : 0;
-    // worker에 postMessage(30MB string) + worker 안 MiniSearch.loadJSON. main thread freeze 0.
-    await workerLoadJSON(json);
-    fullTextIndexReady.set(true);
-    if (perf) {
-      const tLoad = performance.now();
-      console.debug(
-        `[lapis-perf] fulltext-lazy fetch=${(tFetch - t0).toFixed(0)}ms ` +
-          `worker.loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
-      );
+    if (!get(fullTextIndexReady)) {
+      console.warn("[search-cache] no shards loaded — keeping fullTextIndexReady=false");
     }
   } catch (e) {
-    console.warn("[search-cache] worker loadJSON failed", e);
+    console.warn("[search-cache] worker loadShard failed", e);
   } finally {
     pendingFullTextVault.set(null);
     fullTextLoading.set(false);
@@ -301,18 +312,22 @@ async function reloadNotesInner(): Promise<void> {
       await rebuildIndexes(links, contents);
 
       // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리.
-      // worker.toJSON()이 worker thread에서 인덱스 직렬화 — main thread freeze 0.
+      // sharded — meta + N shard 파일 각각 저장. worker.toJSONShard가 worker thread에서
+      // 직렬화 → main thread freeze 0.
       const fpForSave = fp.fingerprint;
       const linksForSave = links;
       setTimeout(() => {
         void (async () => {
           try {
             if (!get(fullTextIndexReady)) return;
-            const json = await workerToJSON();
-            if (!json) return;
-            await writeSearchCache(root, fpForSave, json, linksForSave);
+            await writeSearchCacheMeta(root, fpForSave, linksForSave, SHARD_COUNT);
+            for (let i = 0; i < SHARD_COUNT; i++) {
+              const json = await workerToJSONShard(i);
+              if (!json) continue;
+              await writeSearchCacheShard(root, i, json);
+            }
             if (import.meta.env.DEV) {
-              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave}`);
+              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave} shards=${SHARD_COUNT}`);
             }
           } catch (e) {
             console.warn("[search-cache] write failed", e);
