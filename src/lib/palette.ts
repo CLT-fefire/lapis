@@ -185,13 +185,14 @@ function matchFiles(query: string, entries: QuickEntry[], limit = 20): PaletteRe
   }));
 }
 
-function matchContent(
+async function matchContent(
   query: string,
   index: MiniSearch<FullTextDoc> | null,
   limit = 20,
-): PaletteResult[] {
+): Promise<PaletteResult[]> {
   if (!index || !query.trim()) return [];
-  const hits = searchFullText(query, index, limit);
+  // searchFullText는 async — body가 storeFields에서 빠져 매 hit마다 readNote 호출.
+  const hits = await searchFullText(query, index, limit);
   return hits.map((h) => ({
     entry: { kind: "content", path: h.path, name: h.name, snippet: h.snippet },
     score: normalizedScore("content", h.score),
@@ -245,8 +246,14 @@ function quickActionsAsResults(): PaletteResult[] {
 /**
  * 통합 검색. mode에 따라 어떤 그룹을 채울지 결정.
  * - 같은 path를 가진 note와 content 결과는 점수 높은 쪽만 유지 (dedupe).
+ *
+ * **async**: `matchContent`가 storeFields=["name"]만 캐시한 인덱스 사용 → snippet 생성을
+ * 위해 매 hit마다 `readNote`를 호출하므로 async 체인. files/tags/facets/commands는 sync.
  */
-export function unifiedSearch(input: string, hint: PaletteMode = "all"): PaletteResult[] {
+export async function unifiedSearch(
+  input: string,
+  hint: PaletteMode = "all",
+): Promise<PaletteResult[]> {
   const { mode, query } = parseInput(input, hint);
 
   if (mode === "command") return commandsAsResults(query);
@@ -257,17 +264,19 @@ export function unifiedSearch(input: string, hint: PaletteMode = "all"): Palette
     return query ? matchFiles(query, get(quickEntries)) : recentAsResults();
   }
   if (mode === "fulltext") {
-    return query ? matchContent(query, get(fullTextIndex)) : recentAsResults();
+    return query ? await matchContent(query, get(fullTextIndex)) : recentAsResults();
   }
 
   // all 모드 — 빈 query면 Recent + Quick Actions
   if (!query) return [...recentAsResults(), ...quickActionsAsResults()];
 
+  // content는 IPC(readNote × N) 동반이라 다른 sync 빌더와 병렬로 진행
   const files = matchFiles(query, get(quickEntries));
-  const content = matchContent(query, get(fullTextIndex));
+  const contentP = matchContent(query, get(fullTextIndex));
   const tags = matchTags(query, get(tagIndex));
   const facets = matchFacets(query);
   const cmds = commandsAsResults(query);
+  const content = await contentP;
 
   // path 중복 제거: file과 content가 같은 노트를 가리키면 더 높은 score만 유지
   const byPath = new Map<string, PaletteResult>();

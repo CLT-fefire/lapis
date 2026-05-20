@@ -4,6 +4,9 @@ import {
   listNotes,
   readNote,
   readVaultBundle,
+  vaultFingerprint,
+  readSearchCache,
+  writeSearchCache,
   createNote as createNoteTauri,
   createFolder as createFolderTauri,
   deleteNote as deleteNoteTauri,
@@ -14,6 +17,8 @@ import {
   pruneLinkRewriteBackups,
   type NoteEntry,
 } from "$lib/tauri/notes";
+import { loadFullTextIndexFromJson, buildQuickEntries } from "$lib/searchIndex";
+import { fullTextIndex, quickEntries } from "$lib/stores/search";
 import {
   computeLinkRewritePreview,
   type LinkRewritePreview,
@@ -118,13 +123,16 @@ async function reloadNotesInner(): Promise<void> {
   const perf = import.meta.env.DEV;
   const t0 = perf ? performance.now() : 0;
   let tListEnd = 0;
-  let tFetchEnd = 0;
-  let tLinkEnd = 0;
-  let tTagEnd = 0;
-  let tFacetEnd = 0;
+  let tCacheCheckEnd = 0;
+  let tEnd = 0;
   let noteCount = 0;
+  let cacheMode: "hit" | "miss" = "miss";
+  let fingerprint = "";
+
   // 전체 인덱스 재빌드 시 백링크 snippet 캐시도 stale — 안전하게 전부 비움.
   clearBacklinkCache();
+
+  // 1) 트리
   treeLoading.set(true);
   try {
     const list = await listNotes(root);
@@ -138,42 +146,103 @@ async function reloadNotesInner(): Promise<void> {
   }
   if (perf) tListEnd = performance.now();
 
-  // 링크 인덱스 + 검색 인덱스 + facet 카운트 갱신.
-  // 5.1.d 변경: 큰 vault(10000+ 노트, 메모리 export 직후) 빌드 비용이 JS main thread를 수 초간
-  // 점유 → 다른 앱/macOS WindowServer 응답성 저하. 각 단계 사이 `nextTick`으로 양보하고
-  // rebuildIndexes는 chunked async로 처리. dim overlay (Sidebar)가 사용자에게 명확히 표시.
+  // 2) 캐시 hit/miss 결정 + 인덱스 빌드
+  // 5.1.d 변경: 큰 vault(10000+ 노트) MiniSearch 빌드가 main thread를 수 초 점유 → 다른
+  // 앱/macOS WindowServer 응답성 저하. chunked yield + dim overlay로 처리(`Sidebar`).
+  // 본 chore(2026-05-20): vault fingerprint(stat 누적 hash) + disk 캐시(MiniSearch JSON +
+  // link_infos)로 vault 변경이 없으면 9s addAll + 1s IPC body를 모두 회피. cache miss는
+  // 첫 사용/노트 편집 후만 발생.
   indexBuilding.set(true);
   try {
-    // scan_links + read_all_notes 통합 — 한 walk + rayon 병렬 read.
-    // 이전: 같은 파일을 2번 read + 2번 walk + 2번 IPC.
-    const bundle = await readVaultBundle(root);
-    const links = bundle.links;
-    const contents = bundle.contents;
-    if (perf) {
-      tFetchEnd = performance.now();
-      console.debug(
-        `[lapis-perf] vault-bundle files=${bundle.stats.file_count} ` +
-          `walk=${bundle.stats.walk_ms}ms read=${bundle.stats.read_ms}ms`,
-      );
+    const [fp, cache] = await Promise.all([
+      vaultFingerprint(root),
+      readSearchCache(root),
+    ]);
+    fingerprint = fp.fingerprint;
+    if (perf) tCacheCheckEnd = performance.now();
+
+    let appliedFromCache = false;
+    if (cache && cache.fingerprint === fp.fingerprint) {
+      const idx = loadFullTextIndexFromJson(cache.minisearch_json);
+      if (idx) {
+        const links = cache.link_infos;
+        linkIndex.set(buildIndex(links));
+        await nextTick();
+        tagIndex.set(buildTagIndex(links));
+        await nextTick();
+        const facets = buildFacetCounts(links);
+        docKindCounts.set(facets.docKindCounts);
+        topicCounts.set(facets.topicCounts);
+        await nextTick();
+        quickEntries.set(buildQuickEntries(links));
+        fullTextIndex.set(idx);
+        appliedFromCache = true;
+        cacheMode = "hit";
+        if (perf) {
+          console.debug(
+            `[lapis-perf] search-cache HIT fp=${fp.fingerprint} ` +
+              `files=${fp.file_count} links=${links.length} ` +
+              `addAll skipped (~9s saved)`,
+          );
+        }
+      }
     }
-    await nextTick();
 
-    linkIndex.set(buildIndex(links));
-    if (perf) tLinkEnd = performance.now();
-    await nextTick();
+    if (!appliedFromCache) {
+      // cache miss(또는 loadJSON 실패) — 풀 빌드 + 캐시 저장
+      const bundle = await readVaultBundle(root);
+      if (perf) {
+        console.debug(
+          `[lapis-perf] vault-bundle files=${bundle.stats.file_count} ` +
+            `walk=${bundle.stats.walk_ms}ms read=${bundle.stats.read_ms}ms`,
+        );
+      }
+      const links = bundle.links;
+      const contents = bundle.contents;
+      await nextTick();
 
-    tagIndex.set(buildTagIndex(links));
-    if (perf) tTagEnd = performance.now();
-    await nextTick();
+      linkIndex.set(buildIndex(links));
+      await nextTick();
 
-    const facets = buildFacetCounts(links);
-    docKindCounts.set(facets.docKindCounts);
-    topicCounts.set(facets.topicCounts);
-    if (perf) tFacetEnd = performance.now();
-    await nextTick();
+      tagIndex.set(buildTagIndex(links));
+      await nextTick();
 
-    // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
-    await rebuildIndexes(links, contents);
+      const facets = buildFacetCounts(links);
+      docKindCounts.set(facets.docKindCounts);
+      topicCounts.set(facets.topicCounts);
+      await nextTick();
+
+      // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
+      await rebuildIndexes(links, contents);
+
+      // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리 →
+      // reloadNotesInner의 finally + measurement가 모두 끝난 다음에 실행되어
+      // `JSON.stringify(idx)`(인덱스 11-13MB 직렬화)의 sync 비용이 측정에 안 잡힘.
+      // void IIFE만으로는 첫 await 인자 평가 시 JSON.stringify가 same task 안에서
+      // 동기 실행되어 cache miss 측정값이 부풀어짐 (실측 23s 사례).
+      const fpForSave = fp.fingerprint;
+      const linksForSave = links;
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const idx = get(fullTextIndex);
+            if (!idx) return;
+            // JSON.stringify(idx)는 MiniSearch가 노출하는 toJSON 메서드를 자동 호출.
+            await writeSearchCache(
+              root,
+              fpForSave,
+              JSON.stringify(idx),
+              linksForSave,
+            );
+            if (import.meta.env.DEV) {
+              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave}`);
+            }
+          } catch (e) {
+            console.warn("[search-cache] write failed", e);
+          }
+        })();
+      }, 0);
+    }
   } catch (e) {
     console.error("link/search index build failed", e);
     linkIndex.set(null);
@@ -185,13 +254,13 @@ async function reloadNotesInner(): Promise<void> {
     indexBuilding.set(false);
   }
   if (perf) {
-    const tEnd = performance.now();
+    tEnd = performance.now();
     const fmt = (a: number, b: number) => (b - a).toFixed(0);
     console.debug(
-      `[lapis-perf] reloadNotes notes=${noteCount} list=${fmt(t0, tListEnd)}ms ` +
-        `fetch=${fmt(tListEnd, tFetchEnd)}ms link=${fmt(tFetchEnd, tLinkEnd)}ms ` +
-        `tag=${fmt(tLinkEnd, tTagEnd)}ms facet=${fmt(tTagEnd, tFacetEnd)}ms ` +
-        `search=${fmt(tFacetEnd, tEnd)}ms total=${fmt(t0, tEnd)}ms`,
+      `[lapis-perf] reloadNotes cache=${cacheMode} fp=${fingerprint} ` +
+        `notes=${noteCount} list=${fmt(t0, tListEnd)}ms ` +
+        `cacheLookup=${fmt(tListEnd, tCacheCheckEnd)}ms ` +
+        `build=${fmt(tCacheCheckEnd, tEnd)}ms total=${fmt(t0, tEnd)}ms`,
     );
   }
 }

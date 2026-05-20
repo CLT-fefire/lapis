@@ -75,9 +75,8 @@ export interface LinkInfo {
   related: string[];       // 파일 stem 배열 (cross-ref)
 }
 
-export function scanLinks(vaultPath: string): Promise<LinkInfo[]> {
-  return invoke<LinkInfo[]>("scan_links", { vaultPath });
-}
+// `scanLinks` / `readAllNotes` wrapper는 `readVaultBundle` 도입 후 호출자 0 → 제거.
+// 백엔드도 같은 PR에서 Tauri 명령 제거. 단일 노트 link 추출은 `scanLinkSingle` 유지.
 
 /** 단일 노트의 LinkInfo만 추출 — file watcher 증분 갱신용 */
 export function scanLinkSingle(vaultPath: string, path: string): Promise<LinkInfo> {
@@ -88,10 +87,6 @@ export interface NoteContent {
   path: string;
   name: string;
   body: string;
-}
-
-export function readAllNotes(vaultPath: string): Promise<NoteContent[]> {
-  return invoke<NoteContent[]>("read_all_notes", { vaultPath });
 }
 
 export interface VaultBundleStats {
@@ -117,6 +112,48 @@ export interface VaultBundle {
 
 export function readVaultBundle(vaultPath: string): Promise<VaultBundle> {
   return invoke<VaultBundle>("read_vault_bundle", { vaultPath });
+}
+
+export interface VaultFingerprintResult {
+  fingerprint: string;
+  file_count: number;
+  walk_ms: number;
+}
+
+/**
+ * vault의 모든 .md (rel_path, mtime_ms, size) 누적 hash. read 없음, stat만.
+ * search-cache invalidate 키로 사용 — 같은 fingerprint면 인덱스 재사용 가능.
+ */
+export function vaultFingerprint(vaultPath: string): Promise<VaultFingerprintResult> {
+  return invoke<VaultFingerprintResult>("vault_fingerprint", { vaultPath });
+}
+
+export interface SearchCacheEntry {
+  version: number;
+  fingerprint: string;
+  /** `MiniSearch.toJSON()` 결과 그대로 — `MiniSearch.loadJSON`으로 복원 */
+  minisearch_json: string;
+  link_infos: LinkInfo[];
+}
+
+/** app_data_dir/search-cache/{vault_hash}.json — 없으면 null. version mismatch도 null. */
+export function readSearchCache(vaultPath: string): Promise<SearchCacheEntry | null> {
+  return invoke<SearchCacheEntry | null>("read_search_cache", { vaultPath });
+}
+
+/** atomic 저장. 빌드 직후 1회만 호출. */
+export function writeSearchCache(
+  vaultPath: string,
+  fingerprint: string,
+  minisearch_json: string,
+  link_infos: LinkInfo[],
+): Promise<void> {
+  return invoke<void>("write_search_cache", {
+    vaultPath,
+    fingerprint,
+    minisearchJson: minisearch_json,
+    linkInfos: link_infos,
+  });
 }
 
 /** 노트와 같은 폴더에서 같은 stem으로 시작하는 이미지(svg/png/jpg/jpeg/gif/webp) — Phase 4.4.b */
