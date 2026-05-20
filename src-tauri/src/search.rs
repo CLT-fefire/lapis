@@ -31,8 +31,8 @@ use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument, Term};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// `LAPIS_PERF=1` 환경 변수가 켜져 있을 때만 stderr에 단계별 elapsed를 박는다.
-/// release dmg에 잡음이 없도록 항상 게이트.
-fn perf_enabled() -> bool {
+/// release dmg에 잡음이 없도록 항상 게이트. crate-public — vault::read_vault_bundle 등 재사용.
+pub(crate) fn perf_enabled() -> bool {
     std::env::var("LAPIS_PERF").ok().as_deref() == Some("1")
 }
 
