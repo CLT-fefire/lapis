@@ -112,7 +112,13 @@
     return () => ro.disconnect();
   });
 
-  // activePath(키보드 활성) 변경 시 visible range 안으로 scrollTop 조정
+  // activePath(키보드 활성) 변경 시 visible range 안으로 scrollTop 조정.
+  //
+  // **중요**: viewport 위치/높이는 `containerEl.scrollTop` / `clientHeight`로 DOM 직접
+  // 읽기 — Svelte 5 reactive `scrollTop` state를 읽으면 사용자 휠 scroll이 본 effect를
+  // 재실행 → activePath가 visible 밖이면 다시 scrollTop을 reset하여 휠 스크롤이 즉시
+  // 되돌려짐(필터 ON 측정 사례). DOM 읽기는 non-reactive라 deps는 activePath +
+  // flatRows + containerEl만.
   $effect(() => {
     const path = activePath;
     if (!path || !containerEl) return;
@@ -120,12 +126,12 @@
     if (idx < 0) return;
     const rowTop = idx * ROW_HEIGHT;
     const rowBottom = rowTop + ROW_HEIGHT;
-    const viewportTop = scrollTop;
-    const viewportBottom = scrollTop + containerHeight;
+    const viewportTop = containerEl.scrollTop;
+    const viewportBottom = viewportTop + containerEl.clientHeight;
     if (rowTop < viewportTop) {
       containerEl.scrollTop = rowTop;
     } else if (rowBottom > viewportBottom) {
-      containerEl.scrollTop = rowBottom - containerHeight;
+      containerEl.scrollTop = rowBottom - containerEl.clientHeight;
     }
   });
 
