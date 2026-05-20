@@ -5,7 +5,7 @@
     fullTextIndex,
     indexBuilding,
     fullTextLoading,
-    pendingFullTextJson,
+    pendingFullTextVault,
   } from "$lib/stores/search";
   import { unifiedSearch, groupResults, type PaletteResult, type PaletteEntry } from "$lib/palette";
   import { selectNote, ensureFullTextIndex } from "$lib/stores/vault";
@@ -247,7 +247,7 @@
     ($paletteHintMode === "fulltext" || $paletteHintMode === "all") &&
       !!query.trim() &&
       !$fullTextIndex &&
-      ($indexBuilding || $fullTextLoading || !!$pendingFullTextJson),
+      ($indexBuilding || $fullTextLoading || !!$pendingFullTextVault),
   );
 </script>
 

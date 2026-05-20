@@ -5,7 +5,8 @@ import {
   readNote,
   readVaultBundle,
   vaultFingerprint,
-  readSearchCache,
+  readSearchCacheMeta,
+  readSearchCacheMinisearchJson,
   writeSearchCache,
   createNote as createNoteTauri,
   createFolder as createFolderTauri,
@@ -21,7 +22,7 @@ import { loadFullTextIndexFromJson, buildQuickEntries } from "$lib/searchIndex";
 import {
   fullTextIndex,
   quickEntries,
-  pendingFullTextJson,
+  pendingFullTextVault,
   fullTextLoading,
 } from "$lib/stores/search";
 import {
@@ -105,12 +106,13 @@ function nextTick(): Promise<void> {
 }
 
 /**
- * cache hit 시점에 호출 — `pendingFullTextJson`에 있는 MiniSearch JSON을 idle
- * 시점에 백그라운드 sync 빌드. cold-start measurement에서 4.5s 빠짐.
+ * cache hit 시점에 호출 — `pendingFullTextVault`에 박은 vault path 기준으로 idle 시점에
+ * `read_search_cache_minisearch_json`(30MB IPC) + `MiniSearch.loadJSON`(sync 4.5s) 진행.
+ * cold-start measurement에서 4.5s + ~1s IPC 빠짐.
  *
  * 같은 vault open 안에서 이미 빌드됐거나 진행 중이면 noop.
  * 사용자가 검색을 시도해서 `ensureFullTextIndex`(아래)가 먼저 호출되면 그쪽이
- * pendingFullTextJson을 소비하므로 본 함수가 다시 와도 noop.
+ * pending을 소비하므로 본 함수가 다시 와도 noop.
  */
 let lazyLoadScheduled = false;
 function scheduleLazyFullTextLoad(): void {
@@ -118,11 +120,9 @@ function scheduleLazyFullTextLoad(): void {
   lazyLoadScheduled = true;
   const run = () => {
     lazyLoadScheduled = false;
-    try {
-      buildFullTextFromPending();
-    } catch (e) {
+    void buildFullTextFromPending().catch((e) => {
       console.warn("[search] lazy fulltext load failed", e);
-    }
+    });
   };
   // requestIdleCallback이 있으면 idle 진입 시점, 없으면 fallback 50ms.
   const ric = (globalThis as unknown as {
@@ -136,33 +136,42 @@ function scheduleLazyFullTextLoad(): void {
 }
 
 /**
- * 사용자 검색 모달이 열릴 때 호출(현재 fullTextIndex가 null + pending이 있으면
- * 즉시 await). 빌드가 이미 진행 중이거나 끝났으면 noop.
+ * 사용자 검색 모달이 열릴 때 호출 — 현재 fullTextIndex가 null + pending이 있으면
+ * 즉시 백그라운드 로드 트리거. 이미 빌드 중/완료면 noop. idempotent.
  */
 export async function ensureFullTextIndex(): Promise<void> {
   if (get(fullTextIndex)) return;
-  // 진행 중인 lazy 빌드가 있으면 그것에 의존 — 빈 결과 표시 후 reactive 갱신.
-  if (get(fullTextLoading)) return;
-  buildFullTextFromPending();
+  if (get(fullTextLoading)) return; // 다른 lazy 빌드 진행 중 — 그쪽이 끝낼 것
+  await buildFullTextFromPending();
 }
 
-function buildFullTextFromPending(): void {
+async function buildFullTextFromPending(): Promise<void> {
   if (get(fullTextIndex)) return;
-  const json = get(pendingFullTextJson);
-  if (!json) return;
+  const vault = get(pendingFullTextVault);
+  if (!vault) return;
   const perf = import.meta.env.DEV;
   const t0 = perf ? performance.now() : 0;
   fullTextLoading.set(true);
   try {
+    // 30MB JSON IPC — Rust 측은 disk read + gunzip + serde 두 번째지만 idle 시점이라 OK
+    const json = await readSearchCacheMinisearchJson(vault);
+    if (!json) {
+      console.warn("[search-cache] minisearch_json missing at lazy load time");
+      return;
+    }
+    const tFetch = perf ? performance.now() : 0;
     const idx = loadFullTextIndexFromJson(json);
     if (idx) fullTextIndex.set(idx);
-  } finally {
-    pendingFullTextJson.set(null);
-    fullTextLoading.set(false);
     if (perf) {
-      const dt = performance.now() - t0;
-      console.debug(`[lapis-perf] fulltext-lazy loadJSON=${dt.toFixed(0)}ms`);
+      const tLoad = performance.now();
+      console.debug(
+        `[lapis-perf] fulltext-lazy fetch=${(tFetch - t0).toFixed(0)}ms ` +
+          `loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
+      );
     }
+  } finally {
+    pendingFullTextVault.set(null);
+    fullTextLoading.set(false);
   }
 }
 
@@ -221,19 +230,20 @@ async function reloadNotesInner(): Promise<void> {
   // 첫 사용/노트 편집 후만 발생.
   indexBuilding.set(true);
   try {
-    const [fp, cache] = await Promise.all([
+    // cold-start cacheLookup — 메타만 받음 (link_infos ~2-3MB). minisearch_json(30MB)은
+    // lazy 시점에 별 명령으로. Tauri IPC + frontend JSON.parse 비용 큰 폭 단축.
+    const [fp, meta] = await Promise.all([
       vaultFingerprint(root),
-      readSearchCache(root),
+      readSearchCacheMeta(root),
     ]);
     fingerprint = fp.fingerprint;
     if (perf) tCacheCheckEnd = performance.now();
 
     let appliedFromCache = false;
-    if (cache && cache.fingerprint === fp.fingerprint) {
-      // cache hit. link_infos는 즉시 사용. fullTextIndex(MiniSearch.loadJSON sync
-      // ~4.5s) 비용은 cold-start measurement 밖으로 옮긴다 — pendingFullTextJson에
-      // 보관 후 idle 시점에 백그라운드 빌드. 검색을 즉시 시도하면 그때 await.
-      const links = cache.link_infos;
+    if (meta && meta.fingerprint === fp.fingerprint) {
+      // cache hit. link_infos는 즉시 사용. fullTextIndex는 lazy — pendingFullTextVault에
+      // vault path만 박고 idle 시점에 minisearch_json 받아 loadJSON.
+      const links = meta.link_infos;
       linkIndex.set(buildIndex(links));
       await nextTick();
       tagIndex.set(buildTagIndex(links));
@@ -243,9 +253,8 @@ async function reloadNotesInner(): Promise<void> {
       topicCounts.set(facets.topicCounts);
       await nextTick();
       quickEntries.set(buildQuickEntries(links));
-      // fullTextIndex는 빌드되기 전까진 null. pendingFullTextJson이 trigger.
       fullTextIndex.set(null);
-      pendingFullTextJson.set(cache.minisearch_json);
+      pendingFullTextVault.set(root);
       scheduleLazyFullTextLoad();
       appliedFromCache = true;
       cacheMode = "hit";
@@ -253,7 +262,7 @@ async function reloadNotesInner(): Promise<void> {
         console.debug(
           `[lapis-perf] search-cache HIT fp=${fp.fingerprint} ` +
             `files=${fp.file_count} links=${links.length} ` +
-            `(addAll+loadJSON deferred → idle)`,
+            `(minisearch_json + loadJSON deferred → idle)`,
         );
       }
     }

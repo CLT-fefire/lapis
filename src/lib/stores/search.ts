@@ -19,12 +19,14 @@ export const indexBuilding = writable<boolean>(false);
 
 /**
  * cache hit 시 cold-start measurement 안에서 `MiniSearch.loadJSON`(sync ~4.5s)을
- * 호출하지 않고, 캐시된 JSON 문자열을 잠시 보관 → idle 시점에 백그라운드 빌드.
+ * 호출하지 않고, "이 vault path에 대한 minisearch_json을 idle 시점에 받아서 로드한다"는
+ * pending 상태만 보관. 값이 있으면 = lazy load 대기 중.
  *
- * - 값이 있으면 = fullTextIndex가 아직 빌드 중 (loadJSON 대기)
- * - 사용자가 검색을 시도할 때 fullTextIndex가 null + 본 store가 not-null이면 즉시 await
+ * cold-start cacheLookup에선 메타(`read_search_cache_meta`)만 받고, 본 store에 vault path를
+ * 박은 뒤 `requestIdleCallback` 시점에 `read_search_cache_minisearch_json`을 호출 → 30MB
+ * IPC + loadJSON은 그때서야 발생.
  */
-export const pendingFullTextJson = writable<string | null>(null);
+export const pendingFullTextVault = writable<string | null>(null);
 
 /** `MiniSearch.loadJSON`이 메인 thread를 점유하는 동안 true. UI에 "빌드 중" 표시용. */
 export const fullTextLoading = writable<boolean>(false);
