@@ -1,6 +1,8 @@
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -489,7 +491,8 @@ fn atomic_write(target: &Path, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Serialize, Clone)]
+// Deserialize 추가: search-cache가 디스크에서 LinkInfo를 역직렬화해서 frontend로 그대로 돌려줌.
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LinkInfo {
     pub source_path: String,
     pub source_name: String,
@@ -503,16 +506,8 @@ pub struct LinkInfo {
     pub related: Vec<String>,     // 파일 stem 배열 (cross-ref)
 }
 
-#[tauri::command]
-pub fn scan_links(vault_path: String) -> Result<Vec<LinkInfo>, String> {
-    let root = PathBuf::from(&vault_path);
-    if !root.is_dir() {
-        return Err(format!("Not a directory: {}", vault_path));
-    }
-    let mut out = Vec::new();
-    walk_for_links(&root, &mut out).map_err(|e| e.to_string())?;
-    Ok(out)
-}
+// `scan_links` Tauri 명령은 `read_vault_bundle` 도입 후 호출자 0 → 본 chore에서 제거.
+// 단일 노트 link 추출은 `scan_link_single`(watcher 호환) 유지.
 
 #[derive(Debug, Serialize, Clone)]
 pub struct NoteContent {
@@ -544,16 +539,7 @@ pub fn scan_link_single(vault_path: String, path: String) -> Result<LinkInfo, St
     Ok(extract_link_info(&target, &content))
 }
 
-#[tauri::command]
-pub fn read_all_notes(vault_path: String) -> Result<Vec<NoteContent>, String> {
-    let root = PathBuf::from(&vault_path);
-    if !root.is_dir() {
-        return Err(format!("Not a directory: {}", vault_path));
-    }
-    let mut out = Vec::new();
-    walk_for_content(&root, &mut out).map_err(|e| e.to_string())?;
-    Ok(out)
-}
+// `read_all_notes` 도 `read_vault_bundle` 도입 후 호출자 0 → 본 chore에서 제거.
 
 /// vault cold-start 묶음 — `scan_links` + `read_all_notes`를 한 번에.
 ///
@@ -647,6 +633,100 @@ fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
     })
 }
 
+// ─── vault_fingerprint (검색 캐시용) ─────────────────────────────────────────
+
+/// vault 모든 .md의 (rel_path, mtime_ms, size)를 정렬해 누적 hash. read 없음, stat만.
+///
+/// 같은 vault 두 호출이 결정론적으로 같은 값을 반환 — disk 캐시 invalidate 키로 사용.
+/// 외부 도구가 mtime 갱신 없이 in-place write하는 케이스만 false negative (희박). size 변경
+/// 만 있어도 catch.
+#[derive(Debug, Serialize, Clone)]
+pub struct VaultFingerprint {
+    pub fingerprint: String,
+    pub file_count: usize,
+    pub walk_ms: u128,
+}
+
+#[tauri::command]
+pub async fn vault_fingerprint(vault_path: String) -> Result<VaultFingerprint, String> {
+    tauri::async_runtime::spawn_blocking(move || vault_fingerprint_inner(&vault_path))
+        .await
+        .map_err(|e| format!("vault_fingerprint join: {e}"))?
+}
+
+fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String> {
+    let root = PathBuf::from(vault_path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", vault_path));
+    }
+    let t0 = Instant::now();
+    // (rel_path, mtime_ms_or_0, size) — 정렬해 결정론적
+    let mut entries: Vec<(String, u128, u64)> = Vec::new();
+    walk_md_stats(&root, &root, &mut entries).map_err(|e| e.to_string())?;
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut hasher = DefaultHasher::new();
+    for (p, m, s) in &entries {
+        p.hash(&mut hasher);
+        m.hash(&mut hasher);
+        s.hash(&mut hasher);
+    }
+    let fingerprint = format!("{:016x}", hasher.finish());
+    let walk_ms = t0.elapsed().as_millis();
+
+    if crate::search::perf_enabled() {
+        eprintln!(
+            "[lapis-perf] vault-fingerprint files={} elapsed={}ms fp={}",
+            entries.len(),
+            walk_ms,
+            fingerprint,
+        );
+    }
+
+    Ok(VaultFingerprint {
+        fingerprint,
+        file_count: entries.len(),
+        walk_ms,
+    })
+}
+
+/// vault root 기준 상대 경로 + mtime_ms(unix, 결정론) + file size를 수집.
+fn walk_md_stats(
+    root: &Path,
+    current: &Path,
+    out: &mut Vec<(String, u128, u64)>,
+) -> std::io::Result<()> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        if SKIP_DIRS.iter().any(|d| *d == name) {
+            continue;
+        }
+        if path.is_dir() {
+            walk_md_stats(root, &path, out)?;
+        } else if path.extension().is_some_and(|e| e == "md") {
+            let meta = entry.metadata()?;
+            let mtime_ms = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let size = meta.len();
+            let rel = path
+                .strip_prefix(root)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| path.to_string_lossy().to_string());
+            out.push((rel, mtime_ms, size));
+        }
+    }
+    Ok(())
+}
+
 /// recursive walk만 — read 없음. `walk_for_content`/`walk_for_links`의 push만 분리.
 fn walk_md_files(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     for entry in fs::read_dir(current)? {
@@ -668,57 +748,9 @@ fn walk_md_files(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> 
     Ok(())
 }
 
-fn walk_for_content(current: &Path, out: &mut Vec<NoteContent>) -> std::io::Result<()> {
-    for entry in fs::read_dir(current)? {
-        let entry = entry?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
-        }
-        if SKIP_DIRS.iter().any(|d| *d == name) {
-            continue;
-        }
-        if path.is_dir() {
-            walk_for_content(&path, out)?;
-        } else if path.extension().is_some_and(|e| e == "md") {
-            if let Ok(body) = fs::read_to_string(&path) {
-                let stem = path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                out.push(NoteContent {
-                    path: path.to_string_lossy().to_string(),
-                    name: stem,
-                    body,
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
-fn walk_for_links(current: &Path, out: &mut Vec<LinkInfo>) -> std::io::Result<()> {
-    for entry in fs::read_dir(current)? {
-        let entry = entry?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
-        }
-        if SKIP_DIRS.iter().any(|d| *d == name) {
-            continue;
-        }
-        if path.is_dir() {
-            walk_for_links(&path, out)?;
-        } else if path.extension().is_some_and(|e| e == "md") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                out.push(extract_link_info(&path, &content));
-            }
-        }
-    }
-    Ok(())
-}
+// `walk_for_content` + `walk_for_links` 헬퍼는 dead 명령(`scan_links`, `read_all_notes`)
+// 제거와 함께 본 chore에서 제거. 현재 walk 책임은 `walk_md_files`(`read_vault_bundle`용) +
+// `walk_md_stats`(`vault_fingerprint`용) 두 가지로 분리.
 
 fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
     let source_name = path

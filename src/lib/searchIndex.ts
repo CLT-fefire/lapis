@@ -1,4 +1,4 @@
-import MiniSearch from "minisearch";
+import MiniSearch, { type Options } from "minisearch";
 import type { NoteContent, LinkInfo } from "$lib/tauri/notes";
 import { extractSnippetAround } from "$lib/snippet";
 
@@ -105,21 +105,41 @@ export interface FullTextHit {
   snippet: string;
 }
 
+/**
+ * MiniSearch 옵션 — 빌드/loadJSON 모두 같은 객체 사용 필수.
+ * 본 옵션이 변경되면 `src-tauri/src/search_cache.rs`의 `CACHE_VERSION`을 bump해야
+ * 기존 disk 캐시가 invalidate됨 (옵션 mismatch 시 search 결과 깨짐).
+ */
+const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
+  fields: ["name", "body"],
+  storeFields: ["name", "body"],
+  idField: "id",
+  searchOptions: {
+    boost: { name: 3 },
+    prefix: true,
+    fuzzy: 0.15,
+  },
+};
+
 export function buildFullTextIndex(notes: NoteContent[]): MiniSearch<FullTextDoc> {
-  const index = new MiniSearch<FullTextDoc>({
-    fields: ["name", "body"],
-    storeFields: ["name", "body"],
-    idField: "id",
-    searchOptions: {
-      boost: { name: 3 },
-      prefix: true,
-      fuzzy: 0.15,
-    },
-  });
+  const index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
   for (const n of notes) {
     index.add({ id: n.path, name: n.name, body: n.body });
   }
   return index;
+}
+
+/**
+ * disk 캐시(`search_cache.rs`)에 저장된 `MiniSearch.toJSON()` 문자열에서 인덱스 복원.
+ * 옵션은 빌드와 동일해야 검색 결과 일관. 파싱 실패 시 null(호출자가 cache miss로 fallback).
+ */
+export function loadFullTextIndexFromJson(json: string): MiniSearch<FullTextDoc> | null {
+  try {
+    return MiniSearch.loadJSON(json, FULLTEXT_OPTIONS) as MiniSearch<FullTextDoc>;
+  } catch (e) {
+    console.warn("[search-cache] loadJSON failed → cache miss fallback", e);
+    return null;
+  }
 }
 
 /**
@@ -134,16 +154,7 @@ export async function buildFullTextIndexChunked(
   notes: NoteContent[],
   chunkSize = 200,
 ): Promise<MiniSearch<FullTextDoc>> {
-  const index = new MiniSearch<FullTextDoc>({
-    fields: ["name", "body"],
-    storeFields: ["name", "body"],
-    idField: "id",
-    searchOptions: {
-      boost: { name: 3 },
-      prefix: true,
-      fuzzy: 0.15,
-    },
-  });
+  const index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
   for (let i = 0; i < notes.length; i += chunkSize) {
     const chunk = notes.slice(i, i + chunkSize);
     // MiniSearch.addAll은 내부 루프 — chunk size만큼만 한 번에 처리
