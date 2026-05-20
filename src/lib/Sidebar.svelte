@@ -47,18 +47,68 @@
     return path.split("/").filter(Boolean).pop() ?? path;
   }
 
-  // tree filter — 필터 적용된 notes 트리. 매칭 leaf의 부모 체인까지 포함.
+  // tree filter — 매 입력 keystroke마다 filterEntries(11924 노트 재귀 walk) + DOM 재렌더
+  // 비용이 누적되어 UI 멈춤 발생. `$treeFilterQuery`(store)는 input value 즉시 반영하되,
+  // 실제 필터 적용은 `debouncedQuery`(100ms debounce)로 분리.
+  let debouncedQuery = $state("");
+  let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    const q = $treeFilterQuery;
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    // 빈 입력은 즉시 반영(필터 해제는 빨라야 함)
+    if (!q.trim()) {
+      debouncedQuery = q;
+      return;
+    }
+    filterDebounceTimer = setTimeout(() => {
+      debouncedQuery = q;
+    }, 100);
+  });
+
   // FileTree는 필터 활성 시 모든 폴더 강제 펼침(forceExpand). 비어 있으면 원본.
-  const filteredNotes = $derived(filterEntries($notes, $treeFilterQuery));
-  const filteredMatchCount = $derived(
-    $treeFilterQuery.trim() ? countMatches(filteredNotes) : 0,
-  );
-  const treeFilterActive = $derived(!!$treeFilterQuery.trim());
+  const filteredNotes = $derived.by(() => {
+    if (!import.meta.env.DEV) return filterEntries($notes, debouncedQuery);
+    const t0 = performance.now();
+    const r = filterEntries($notes, debouncedQuery);
+    const dt = performance.now() - t0;
+    if (debouncedQuery.trim() && dt > 1) {
+      console.debug(
+        `[lapis-perf] tree-filter filterEntries q="${debouncedQuery}" ` +
+          `notes=${$notes.length} dt=${dt.toFixed(1)}ms`,
+      );
+    }
+    return r;
+  });
+  const filteredMatchCount = $derived.by(() => {
+    if (!debouncedQuery.trim()) return 0;
+    if (!import.meta.env.DEV) return countMatches(filteredNotes);
+    const t0 = performance.now();
+    const n = countMatches(filteredNotes);
+    const dt = performance.now() - t0;
+    if (dt > 1) {
+      console.debug(
+        `[lapis-perf] tree-filter countMatches count=${n} dt=${dt.toFixed(1)}ms`,
+      );
+    }
+    return n;
+  });
+  const treeFilterActive = $derived(!!debouncedQuery.trim());
 
   // 매칭된 leaf 파일 paths — 트리 표시 순서대로. ↑↓ 키보드 순회용.
-  const flatMatchPaths = $derived(
-    treeFilterActive ? collectLeafPaths(filteredNotes) : [],
-  );
+  const flatMatchPaths = $derived.by(() => {
+    if (!treeFilterActive) return [] as string[];
+    if (!import.meta.env.DEV) return collectLeafPaths(filteredNotes);
+    const t0 = performance.now();
+    const r = collectLeafPaths(filteredNotes);
+    const dt = performance.now() - t0;
+    if (dt > 1) {
+      console.debug(
+        `[lapis-perf] tree-filter collectLeafPaths paths=${r.length} dt=${dt.toFixed(1)}ms`,
+      );
+    }
+    return r;
+  });
   let activeFilterIndex = $state(0);
   const activeFilterPath = $derived<string | null>(
     flatMatchPaths.length > 0 && activeFilterIndex < flatMatchPaths.length
@@ -68,7 +118,7 @@
 
   // query/필터 결과 변경 시 인덱스 0으로 리셋. 결과 비면 -1로(activeFilterPath null).
   $effect(() => {
-    const _ = $treeFilterQuery;
+    const _ = debouncedQuery;
     activeFilterIndex = 0;
   });
 
