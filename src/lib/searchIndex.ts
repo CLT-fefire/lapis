@@ -1,5 +1,6 @@
 import MiniSearch, { type Options } from "minisearch";
 import type { NoteContent, LinkInfo } from "$lib/tauri/notes";
+import { readNote } from "$lib/tauri/notes";
 import { extractSnippetAround } from "$lib/snippet";
 
 /* =========================================================
@@ -109,10 +110,15 @@ export interface FullTextHit {
  * MiniSearch 옵션 — 빌드/loadJSON 모두 같은 객체 사용 필수.
  * 본 옵션이 변경되면 `src-tauri/src/search_cache.rs`의 `CACHE_VERSION`을 bump해야
  * 기존 disk 캐시가 invalidate됨 (옵션 mismatch 시 search 결과 깨짐).
+ *
+ * **storeFields=["name"]만**: body를 인덱스 JSON에 저장하지 않음 → cache JSON 크기
+ * 12MB → ~2–3MB. cache hit cacheLookup + loadJSON 비용 큰 폭 감소.
+ * 검색 결과 snippet 생성을 위해 `searchFullText`가 매 hit마다 `readNote`를 호출.
+ * 30 IPC × ~5ms = ~150ms 추가지만 cache hit 전체 단축이 훨씬 큼.
  */
 const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
   fields: ["name", "body"],
-  storeFields: ["name", "body"],
+  storeFields: ["name"],
   idField: "id",
   searchOptions: {
     boost: { name: 3 },
@@ -169,28 +175,50 @@ export async function buildFullTextIndexChunked(
   return index;
 }
 
-export function searchFullText(
+/**
+ * 풀텍스트 검색 — async.
+ *
+ * storeFields가 ["name"]만이라 body가 결과에 없음. snippet 생성을 위해 매 hit마다
+ * `readNote(path)`로 본문을 lazy fetch. 30건 limit이면 IPC ~30 × ~5ms = ~150ms.
+ * 한 노트 read 실패 시 그 결과만 skip (전체 검색 흐름은 진행).
+ *
+ * 호출자(palette.ts:matchContent → unifiedSearch)도 async 체인.
+ */
+export async function searchFullText(
   query: string,
   index: MiniSearch<FullTextDoc>,
   limit = 30,
-): FullTextHit[] {
+): Promise<FullTextHit[]> {
   const q = query.trim();
   if (!q) return [];
   const results = index.search(q);
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
   const RADIUS = 60;
-  return results.slice(0, limit).map((r) => {
-    const body = (r as unknown as { body: string }).body;
-    // 백링크 컨텍스트와 동일한 발췌 로직 공유. 매칭 없으면 본문 앞자락으로 fallback.
-    const { snippet, matched } = extractSnippetAround(body, tokens, RADIUS);
-    const finalSnippet = matched
-      ? snippet
-      : body.slice(0, RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
-    return {
-      path: r.id as string,
-      name: (r as unknown as { name: string }).name,
-      score: r.score,
-      snippet: finalSnippet,
-    };
-  });
+
+  const slice = results.slice(0, limit);
+  const hits = await Promise.all(
+    slice.map(async (r): Promise<FullTextHit | null> => {
+      const path = r.id as string;
+      let body = "";
+      try {
+        body = await readNote(path);
+      } catch (e) {
+        // 파일이 사라졌거나 권한 변경 — 그 결과만 skip
+        console.warn(`[search] readNote failed for ${path}`, e);
+        return null;
+      }
+      // 백링크 컨텍스트와 동일한 발췌 로직 공유. 매칭 없으면 본문 앞자락으로 fallback.
+      const { snippet, matched } = extractSnippetAround(body, tokens, RADIUS);
+      const finalSnippet = matched
+        ? snippet
+        : body.slice(0, RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
+      return {
+        path,
+        name: (r as unknown as { name: string }).name,
+        score: r.score,
+        snippet: finalSnippet,
+      };
+    }),
+  );
+  return hits.filter((h): h is FullTextHit => h !== null);
 }

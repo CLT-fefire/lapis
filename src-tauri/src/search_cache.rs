@@ -21,9 +21,10 @@ use tauri::{AppHandle, Manager};
 use crate::vault::LinkInfo;
 
 /// MiniSearch 빌드 옵션이 변경되면 bump. 모든 캐시가 buster된다.
-/// 현 schema(v1) = MiniSearch fields=["name","body"] storeFields=["name","body"]
-///                 boost name×3 + prefix + fuzzy 0.15. link_infos는 그대로.
-pub const CACHE_VERSION: u32 = 1;
+/// - v1: fields=["name","body"] storeFields=["name","body"]
+/// - v2: fields=["name","body"] storeFields=["name"]만 (cache JSON 크기 절감, snippet은
+///       검색 시 readNote로 lazy fetch). 옵션 mismatch 시 검색 결과 깨짐 방지를 위해 bump.
+pub const CACHE_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SearchCacheEntry {

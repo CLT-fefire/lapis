@@ -42,9 +42,32 @@
     return () => window.removeEventListener("mousemove", onMove);
   });
 
-  const results = $derived.by<PaletteResult[]>(() => {
-    if (!$paletteOpen) return [];
-    return unifiedSearch(query, $paletteHintMode);
+  // unifiedSearch가 async (matchContent가 readNote × N 동반)이라 $derived 대신 $state + $effect.
+  // cancellation으로 빠른 타이핑 시 stale 결과 덮어쓰기 방지.
+  let results = $state<PaletteResult[]>([]);
+
+  $effect(() => {
+    if (!$paletteOpen) {
+      results = [];
+      return;
+    }
+    const q = query;
+    const hint = $paletteHintMode;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await unifiedSearch(q, hint);
+        if (!cancelled) results = r;
+      } catch (e) {
+        if (!cancelled) {
+          console.warn("unifiedSearch failed", e);
+          results = [];
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   });
 
   const groups = $derived(groupResults(results));
