@@ -75,3 +75,44 @@ function walkLeaves(entries: NoteEntry[], out: string[]): void {
     }
   }
 }
+
+/**
+ * 표시 가능한 row를 트리 표시 순서대로 평탄화. 가상 스크롤(`FileTree.svelte` windowing)이
+ * DOM에 단일 flat list로 렌더하기 위한 데이터.
+ *
+ * - 폴더는 항상 row 1개 추가
+ * - 폴더가 펼쳐진 경우(`forceExpand` 또는 `expanded.get(path)` true) children을 재귀 평탄화
+ * - depth는 padding-left 계산용 (CSS: `padding-left: 14 + depth * 14`)
+ */
+export interface FlatRow {
+  entry: NoteEntry;
+  depth: number;
+}
+
+export function flattenTree(
+  entries: NoteEntry[],
+  expanded: Map<string, boolean>,
+  forceExpand: boolean,
+): FlatRow[] {
+  const out: FlatRow[] = [];
+  walkFlat(entries, 0, expanded, forceExpand, out);
+  return out;
+}
+
+function walkFlat(
+  entries: NoteEntry[],
+  depth: number,
+  expanded: Map<string, boolean>,
+  forceExpand: boolean,
+  out: FlatRow[],
+): void {
+  for (const entry of entries) {
+    out.push({ entry, depth });
+    if (entry.is_dir && entry.children) {
+      const open = forceExpand || expanded.get(entry.path) === true;
+      if (open) {
+        walkFlat(entry.children, depth + 1, expanded, forceExpand, out);
+      }
+    }
+  }
+}

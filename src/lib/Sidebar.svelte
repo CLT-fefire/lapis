@@ -688,8 +688,23 @@ graph LR
 
   .sidebar-body {
     flex: 1;
+    display: flex;
+    flex-direction: column;
     overflow-y: auto;
+    overflow-x: hidden;
     position: relative;
+    min-height: 0;
+  }
+
+  /* files 탭에서 FileTree를 가상 스크롤하는 컨테이너 — sidebar-body 안에서 남은 영역 채움 */
+  .files-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+  .files-pane > :global(.virtual-container) {
+    flex: 1;
   }
 
   /* 하단 푸터 — 톱니바퀴 등 보조 액션. vault 미선택 상태에서도 노출. */
