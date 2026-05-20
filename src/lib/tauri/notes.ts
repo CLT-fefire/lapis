@@ -128,11 +128,12 @@ export function vaultFingerprint(vaultPath: string): Promise<VaultFingerprintRes
   return invoke<VaultFingerprintResult>("vault_fingerprint", { vaultPath });
 }
 
-/** cold-start cacheLookup — 가벼운 메타만 (minisearch_json 30MB 제외). */
+/** cold-start cacheLookup — 가벼운 메타만 (minisearch_json 제외). v4부터 shard_count 포함. */
 export interface SearchCacheMeta {
   version: number;
   fingerprint: string;
   link_infos: LinkInfo[];
+  shard_count: number;
 }
 
 /** cold-start 단계 — fingerprint 비교 + link/tag/facet 빌드 즉시 가능. */
@@ -140,9 +141,40 @@ export function readSearchCacheMeta(vaultPath: string): Promise<SearchCacheMeta 
   return invoke<SearchCacheMeta | null>("read_search_cache_meta", { vaultPath });
 }
 
-/** lazy load 시점 — `MiniSearch.loadJSON` 직전에 30MB string만 받음. */
-export function readSearchCacheMinisearchJson(vaultPath: string): Promise<string | null> {
-  return invoke<string | null>("read_search_cache_minisearch_json", { vaultPath });
+/** meta 저장 — cache miss 풀 빌드 후 + cache hit 시 fingerprint 갱신. */
+export function writeSearchCacheMeta(
+  vaultPath: string,
+  fingerprint: string,
+  link_infos: LinkInfo[],
+  shard_count: number,
+): Promise<void> {
+  return invoke<void>("write_search_cache_meta", {
+    vaultPath,
+    fingerprint,
+    linkInfos: link_infos,
+    shardCount: shard_count,
+  });
+}
+
+/** lazy load — 특정 shard의 MiniSearch JSON 문자열. 1.8s 단위로 progressive load 가능. */
+export function readSearchCacheShard(
+  vaultPath: string,
+  shard_id: number,
+): Promise<string | null> {
+  return invoke<string | null>("read_search_cache_shard", { vaultPath, shardId: shard_id });
+}
+
+/** shard 저장 — worker.toJSONShard 결과 디스크 박제. */
+export function writeSearchCacheShard(
+  vaultPath: string,
+  shard_id: number,
+  minisearch_json: string,
+): Promise<void> {
+  return invoke<void>("write_search_cache_shard", {
+    vaultPath,
+    shardId: shard_id,
+    minisearchJson: minisearch_json,
+  });
 }
 
 /** atomic 저장. 빌드 직후 1회만 호출. */

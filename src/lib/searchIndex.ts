@@ -113,12 +113,21 @@ interface WorkerHit {
   name: string;
 }
 
+/** 인덱스 shard 수 — worker와 일치해야. shardId = fnv32(doc.path) % SHARD_COUNT. */
+export const SHARD_COUNT = 4;
+
 type WorkerInMsg =
-  | { type: "loadJSON"; id: number; jsonBytes: ArrayBuffer }
-  | { type: "addAll"; id: number; docs: FullTextDoc[]; chunkSize?: number }
+  | { type: "loadShard"; id: number; shardId: number; jsonBytes: ArrayBuffer }
+  | {
+      type: "addAllShard";
+      id: number;
+      shardId: number;
+      docs: FullTextDoc[];
+      chunkSize?: number;
+    }
+  | { type: "toJSONShard"; id: number; shardId: number }
   | { type: "search"; id: number; query: string; limit: number }
-  | { type: "toJSON"; id: number }
-  | { type: "reset"; id: number };
+  | { type: "resetAll"; id: number };
 
 type WorkerOutMsg =
   | { type: "ready"; id: number }
@@ -164,25 +173,50 @@ function dispatch<T extends WorkerOutMsg>(
 }
 
 /**
- * worker에 cache JSON 보내고 인덱스 복원 (cache hit lazy 시점).
+ * 특정 shard에 cache JSON 로드 (cache hit lazy 시점).
  *
  * **transferable ArrayBuffer** — string structured clone(WebKit에서 30MB가 ~32s)
  * 대신 zero-copy. JSON string → TextEncoder UTF-8 bytes → ArrayBuffer → postMessage
  * 두 번째 인자에 transfer list. main thread 비용 ms 단위.
  */
-export async function workerLoadJSON(json: string): Promise<void> {
+export async function workerLoadShard(shardId: number, json: string): Promise<void> {
   const id = ++nextMsgId;
   const bytes = new TextEncoder().encode(json);
   await dispatch<{ type: "ready"; id: number }>(
-    { type: "loadJSON", id, jsonBytes: bytes.buffer },
+    { type: "loadShard", id, shardId, jsonBytes: bytes.buffer },
     [bytes.buffer],
   );
 }
 
-/** worker에서 풀 빌드 (cache miss). docs는 main에서 contents → {id, name, body} 변환 후 전달. */
-export async function workerAddAll(docs: FullTextDoc[], chunkSize = 200): Promise<void> {
+/** 특정 shard에 docs addAll (cache miss). 각 shard는 대략 totalDocs/SHARD_COUNT개. */
+export async function workerAddAllShard(
+  shardId: number,
+  docs: FullTextDoc[],
+  chunkSize = 200,
+): Promise<void> {
   const id = ++nextMsgId;
-  await dispatch<{ type: "ready"; id: number }>({ type: "addAll", id, docs, chunkSize });
+  await dispatch<{ type: "ready"; id: number }>({
+    type: "addAllShard",
+    id,
+    shardId,
+    docs,
+    chunkSize,
+  });
+}
+
+/**
+ * doc.path → shardId 결정론 함수. fnv32 hash 후 modulo.
+ * worker와 main이 같은 함수 써야 — sharded query/build 일관.
+ */
+export function computeShardId(path: string): number {
+  // FNV-1a 32-bit
+  let h = 0x811c9dc5;
+  for (let i = 0; i < path.length; i++) {
+    h ^= path.charCodeAt(i);
+    // multiplication 16777619 in 32-bit
+    h = Math.imul(h, 0x01000193);
+  }
+  return ((h >>> 0) % SHARD_COUNT);
 }
 
 /** worker 안 인덱스로 검색. snippet 없이 path+score+name만 반환. */
@@ -198,25 +232,26 @@ export async function workerSearch(query: string, limit: number): Promise<Worker
 }
 
 /**
- * worker 인덱스를 JSON 직렬화 — disk 캐시 저장 직전.
+ * 특정 shard의 MiniSearch 인덱스 JSON 직렬화 — disk 캐시 저장 직전.
  *
  * worker 안에서 JSON.stringify 후 UTF-8 bytes → ArrayBuffer transferable로 main 전송.
  * main에서 TextDecoder로 string 복원. clone 0.
  */
-export async function workerToJSON(): Promise<string | null> {
+export async function workerToJSONShard(shardId: number): Promise<string | null> {
   const id = ++nextMsgId;
   const r = await dispatch<{ type: "json"; id: number; jsonBytes: ArrayBuffer | null }>({
-    type: "toJSON",
+    type: "toJSONShard",
     id,
+    shardId,
   });
   if (!r.jsonBytes) return null;
   return new TextDecoder().decode(new Uint8Array(r.jsonBytes));
 }
 
-/** worker 안 인덱스 release. clearIndexes에서 호출. */
+/** worker 안 모든 shard 인덱스 release. clearIndexes에서 호출. */
 export async function workerReset(): Promise<void> {
   const id = ++nextMsgId;
-  await dispatch<{ type: "ready"; id: number }>({ type: "reset", id });
+  await dispatch<{ type: "ready"; id: number }>({ type: "resetAll", id });
 }
 
 /**
