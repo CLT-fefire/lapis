@@ -114,7 +114,7 @@ interface WorkerHit {
 }
 
 type WorkerInMsg =
-  | { type: "loadJSON"; id: number; json: string }
+  | { type: "loadJSON"; id: number; jsonBytes: ArrayBuffer }
   | { type: "addAll"; id: number; docs: FullTextDoc[]; chunkSize?: number }
   | { type: "search"; id: number; query: string; limit: number }
   | { type: "toJSON"; id: number }
@@ -123,7 +123,7 @@ type WorkerInMsg =
 type WorkerOutMsg =
   | { type: "ready"; id: number }
   | { type: "results"; id: number; hits: WorkerHit[] }
-  | { type: "json"; id: number; json: string | null }
+  | { type: "json"; id: number; jsonBytes: ArrayBuffer | null }
   | { type: "error"; id: number; error: string };
 
 let workerSingleton: Worker | null = null;
@@ -147,7 +147,10 @@ function getWorker(): Worker {
   return w;
 }
 
-function dispatch<T extends WorkerOutMsg>(msg: WorkerInMsg): Promise<T> {
+function dispatch<T extends WorkerOutMsg>(
+  msg: WorkerInMsg,
+  transfer?: Transferable[],
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     pending.set(msg.id, (data) => {
       if (data.type === "error") {
@@ -156,14 +159,24 @@ function dispatch<T extends WorkerOutMsg>(msg: WorkerInMsg): Promise<T> {
         resolve(data as T);
       }
     });
-    getWorker().postMessage(msg);
+    getWorker().postMessage(msg, transfer ?? []);
   });
 }
 
-/** worker에 cache JSON 보내고 인덱스 복원 (cache hit lazy 시점). */
+/**
+ * worker에 cache JSON 보내고 인덱스 복원 (cache hit lazy 시점).
+ *
+ * **transferable ArrayBuffer** — string structured clone(WebKit에서 30MB가 ~32s)
+ * 대신 zero-copy. JSON string → TextEncoder UTF-8 bytes → ArrayBuffer → postMessage
+ * 두 번째 인자에 transfer list. main thread 비용 ms 단위.
+ */
 export async function workerLoadJSON(json: string): Promise<void> {
   const id = ++nextMsgId;
-  await dispatch<{ type: "ready"; id: number }>({ type: "loadJSON", id, json });
+  const bytes = new TextEncoder().encode(json);
+  await dispatch<{ type: "ready"; id: number }>(
+    { type: "loadJSON", id, jsonBytes: bytes.buffer },
+    [bytes.buffer],
+  );
 }
 
 /** worker에서 풀 빌드 (cache miss). docs는 main에서 contents → {id, name, body} 변환 후 전달. */
@@ -184,14 +197,20 @@ export async function workerSearch(query: string, limit: number): Promise<Worker
   return r.hits;
 }
 
-/** worker 인덱스를 JSON 직렬화 — disk 캐시 저장 직전. */
+/**
+ * worker 인덱스를 JSON 직렬화 — disk 캐시 저장 직전.
+ *
+ * worker 안에서 JSON.stringify 후 UTF-8 bytes → ArrayBuffer transferable로 main 전송.
+ * main에서 TextDecoder로 string 복원. clone 0.
+ */
 export async function workerToJSON(): Promise<string | null> {
   const id = ++nextMsgId;
-  const r = await dispatch<{ type: "json"; id: number; json: string | null }>({
+  const r = await dispatch<{ type: "json"; id: number; jsonBytes: ArrayBuffer | null }>({
     type: "toJSON",
     id,
   });
-  return r.json;
+  if (!r.jsonBytes) return null;
+  return new TextDecoder().decode(new Uint8Array(r.jsonBytes));
 }
 
 /** worker 안 인덱스 release. clearIndexes에서 호출. */

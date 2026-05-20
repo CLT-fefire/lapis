@@ -52,7 +52,7 @@ interface WorkerHit {
 }
 
 type InMsg =
-  | { type: "loadJSON"; id: number; json: string }
+  | { type: "loadJSON"; id: number; jsonBytes: ArrayBuffer }
   | { type: "addAll"; id: number; docs: FullTextDoc[]; chunkSize?: number }
   | { type: "search"; id: number; query: string; limit: number }
   | { type: "toJSON"; id: number }
@@ -61,19 +61,25 @@ type InMsg =
 type OutMsg =
   | { type: "ready"; id: number }
   | { type: "results"; id: number; hits: WorkerHit[] }
-  | { type: "json"; id: number; json: string | null }
+  | { type: "json"; id: number; jsonBytes: ArrayBuffer | null }
   | { type: "error"; id: number; error: string };
 
-function post(msg: OutMsg): void {
-  (self as unknown as Worker).postMessage(msg);
+function post(msg: OutMsg, transfer?: Transferable[]): void {
+  (self as unknown as Worker).postMessage(msg, transfer ?? []);
 }
+
+const textDecoder = new TextDecoder();
+const textEncoder = new TextEncoder();
 
 self.onmessage = async (e: MessageEvent<InMsg>) => {
   const msg = e.data;
   try {
     switch (msg.type) {
       case "loadJSON": {
-        index = MiniSearch.loadJSON(msg.json, FULLTEXT_OPTIONS) as MiniSearch<FullTextDoc>;
+        // transferable ArrayBuffer — zero-copy 전송. 30MB string clone(WebKit에서
+        // 매우 느림, 32s 측정 사례)을 피한다.
+        const json = textDecoder.decode(new Uint8Array(msg.jsonBytes));
+        index = MiniSearch.loadJSON(json, FULLTEXT_OPTIONS) as MiniSearch<FullTextDoc>;
         post({ type: "ready", id: msg.id });
         break;
       }
@@ -109,10 +115,14 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
       }
       case "toJSON": {
         if (!index) {
-          post({ type: "json", id: msg.id, json: null });
+          post({ type: "json", id: msg.id, jsonBytes: null });
           break;
         }
-        post({ type: "json", id: msg.id, json: JSON.stringify(index) });
+        // JSON 직렬화는 worker 안에서 (main thread freeze 0).
+        // 결과는 ArrayBuffer로 transferable — main thread clone 비용 0.
+        const jsonStr = JSON.stringify(index);
+        const bytes = textEncoder.encode(jsonStr);
+        post({ type: "json", id: msg.id, jsonBytes: bytes.buffer }, [bytes.buffer]);
         break;
       }
       case "reset": {

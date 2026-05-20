@@ -147,6 +147,9 @@ export async function ensureFullTextIndex(): Promise<void> {
 
 async function buildFullTextFromPending(): Promise<void> {
   if (get(fullTextIndexReady)) return;
+  // race 방지 — idle callback + CommandPalette open이 같은 함수를 두 번 호출하면
+  // worker가 loadJSON 두 번 처리(직렬). fullTextLoading flag로 중복 진입 차단.
+  if (get(fullTextLoading)) return;
   const vault = get(pendingFullTextVault);
   if (!vault) return;
   const perf = import.meta.env.DEV;
