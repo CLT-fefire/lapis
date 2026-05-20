@@ -113,8 +113,31 @@ interface WorkerHit {
   name: string;
 }
 
-/** 인덱스 shard 수 — worker와 일치해야. shardId = fnv32(doc.path) % SHARD_COUNT. */
-export const SHARD_COUNT = 4;
+/**
+ * worker `indexes` 배열의 최대 길이 — vault별 실제 shard 수는 `decideShardCount`로 동적 결정.
+ * shardId 범위는 항상 `[0, MAX_SHARDS)` 안에 들어와야 worker가 정상 동작.
+ */
+export const MAX_SHARDS = 16;
+
+/**
+ * vault 노트 수 기반 shard 수 결정. 각 shard 약 2000–3000 doc이 첫 shard ready 1–2초 sweet spot.
+ *
+ * - < 1000: 1 (작은 vault, overhead 제거)
+ * - 1000–5000: 2
+ * - 5000–15000: 4 (이전 고정값)
+ * - 15000–50000: 8
+ * - 50000+: 16
+ *
+ * cache meta(`SearchCacheMeta.shard_count`)에 박제 → 다음 cold-start에서 같은 값 사용.
+ * cache miss 빌드 시 결정. vault content_hash 변경 시(노트 추가/삭제 큰 폭) 재결정 가능.
+ */
+export function decideShardCount(noteCount: number): number {
+  if (noteCount < 1000) return 1;
+  if (noteCount < 5000) return 2;
+  if (noteCount < 15000) return 4;
+  if (noteCount < 50000) return 8;
+  return 16;
+}
 
 type WorkerInMsg =
   | { type: "loadShard"; id: number; shardId: number; jsonBytes: ArrayBuffer }
@@ -205,18 +228,18 @@ export async function workerAddAllShard(
 }
 
 /**
- * doc.path → shardId 결정론 함수. fnv32 hash 후 modulo.
+ * doc.path → shardId 결정론 함수. fnv32 hash 후 modulo N.
  * worker와 main이 같은 함수 써야 — sharded query/build 일관.
+ * `shardCount`는 vault별로 다름 (`decideShardCount` 참조).
  */
-export function computeShardId(path: string): number {
+export function computeShardId(path: string, shardCount: number): number {
   // FNV-1a 32-bit
   let h = 0x811c9dc5;
   for (let i = 0; i < path.length; i++) {
     h ^= path.charCodeAt(i);
-    // multiplication 16777619 in 32-bit
     h = Math.imul(h, 0x01000193);
   }
-  return ((h >>> 0) % SHARD_COUNT);
+  return ((h >>> 0) % shardCount);
 }
 
 /** worker 안 인덱스로 검색. snippet 없이 path+score+name만 반환. */
