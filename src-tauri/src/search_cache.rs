@@ -11,10 +11,14 @@
 //! - `vault_key` = vault path의 fnv64 hex. 다른 vault 충돌 방지.
 //! - `version` 필드 — MiniSearch 빌드 옵션 변경 시 bump → 모든 캐시 invalidate.
 
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
@@ -22,9 +26,9 @@ use crate::vault::LinkInfo;
 
 /// MiniSearch 빌드 옵션이 변경되면 bump. 모든 캐시가 buster된다.
 /// - v1: fields=["name","body"] storeFields=["name","body"]
-/// - v2: fields=["name","body"] storeFields=["name"]만 (cache JSON 크기 절감, snippet은
-///       검색 시 readNote로 lazy fetch). 옵션 mismatch 시 검색 결과 깨짐 방지를 위해 bump.
-pub const CACHE_VERSION: u32 = 2;
+/// - v2: storeFields=["name"]만 (snippet은 readNote로 lazy fetch).
+/// - v3: gzip 압축 (옵션 자체는 v2와 같지만 disk 포맷 다름 → 자동 invalidate).
+pub const CACHE_VERSION: u32 = 3;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SearchCacheEntry {
@@ -73,15 +77,22 @@ fn read_search_cache_inner(
     if !path.exists() {
         return Ok(None);
     }
-    let raw = match fs::read_to_string(&path) {
-        Ok(s) => s,
+    // gzip 바이너리. 옛 v2 plain JSON 캐시는 gunzip 실패 → cache miss로 fallback.
+    let bytes = match fs::read(&path) {
+        Ok(b) => b,
         Err(e) => {
-            // 손상/권한 문제는 cache miss로 fallback
             eprintln!("[search-cache] read 실패: {e}");
             return Ok(None);
         }
     };
-    let entry: SearchCacheEntry = match serde_json::from_str(&raw) {
+    let mut decoder = GzDecoder::new(bytes.as_slice());
+    let mut json = String::new();
+    if let Err(e) = decoder.read_to_string(&mut json) {
+        // 손상 또는 옛 plain JSON — 정상 시나리오 (스키마 마이그레이션)
+        eprintln!("[search-cache] gunzip 실패 (옛 plain JSON 가능 → cache miss): {e}");
+        return Ok(None);
+    }
+    let entry: SearchCacheEntry = match serde_json::from_str(&json) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("[search-cache] parse 실패 (cache miss fallback): {e}");
@@ -138,7 +149,15 @@ fn write_search_cache_inner(
     let tmp_path = parent.join(tmp_name);
 
     let json = serde_json::to_string(entry).map_err(|e| format!("serialize: {e}"))?;
-    fs::write(&tmp_path, json).map_err(|e| format!("temp write: {e}"))?;
+    // gzip 압축 — 30MB JSON → ~5MB. disk write/read + IPC 큰 폭 단축.
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(json.as_bytes())
+        .map_err(|e| format!("gzip write: {e}"))?;
+    let compressed = encoder
+        .finish()
+        .map_err(|e| format!("gzip finish: {e}"))?;
+    fs::write(&tmp_path, &compressed).map_err(|e| format!("temp write: {e}"))?;
     fs::rename(&tmp_path, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         format!("rename: {e}")

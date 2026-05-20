@@ -2398,6 +2398,7 @@ dependencies = [
 name = "lapis"
 version = "0.5.1"
 dependencies = [
+ "flate2",
  "lindera",
  "lindera-tantivy",
  "notify",

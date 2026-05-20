@@ -18,7 +18,12 @@ import {
   type NoteEntry,
 } from "$lib/tauri/notes";
 import { loadFullTextIndexFromJson, buildQuickEntries } from "$lib/searchIndex";
-import { fullTextIndex, quickEntries } from "$lib/stores/search";
+import {
+  fullTextIndex,
+  quickEntries,
+  pendingFullTextJson,
+  fullTextLoading,
+} from "$lib/stores/search";
 import {
   computeLinkRewritePreview,
   type LinkRewritePreview,
@@ -100,6 +105,68 @@ function nextTick(): Promise<void> {
 }
 
 /**
+ * cache hit 시점에 호출 — `pendingFullTextJson`에 있는 MiniSearch JSON을 idle
+ * 시점에 백그라운드 sync 빌드. cold-start measurement에서 4.5s 빠짐.
+ *
+ * 같은 vault open 안에서 이미 빌드됐거나 진행 중이면 noop.
+ * 사용자가 검색을 시도해서 `ensureFullTextIndex`(아래)가 먼저 호출되면 그쪽이
+ * pendingFullTextJson을 소비하므로 본 함수가 다시 와도 noop.
+ */
+let lazyLoadScheduled = false;
+function scheduleLazyFullTextLoad(): void {
+  if (lazyLoadScheduled) return;
+  lazyLoadScheduled = true;
+  const run = () => {
+    lazyLoadScheduled = false;
+    try {
+      buildFullTextFromPending();
+    } catch (e) {
+      console.warn("[search] lazy fulltext load failed", e);
+    }
+  };
+  // requestIdleCallback이 있으면 idle 진입 시점, 없으면 fallback 50ms.
+  const ric = (globalThis as unknown as {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof ric === "function") {
+    ric(run, { timeout: 5000 });
+  } else {
+    setTimeout(run, 50);
+  }
+}
+
+/**
+ * 사용자 검색 모달이 열릴 때 호출(현재 fullTextIndex가 null + pending이 있으면
+ * 즉시 await). 빌드가 이미 진행 중이거나 끝났으면 noop.
+ */
+export async function ensureFullTextIndex(): Promise<void> {
+  if (get(fullTextIndex)) return;
+  // 진행 중인 lazy 빌드가 있으면 그것에 의존 — 빈 결과 표시 후 reactive 갱신.
+  if (get(fullTextLoading)) return;
+  buildFullTextFromPending();
+}
+
+function buildFullTextFromPending(): void {
+  if (get(fullTextIndex)) return;
+  const json = get(pendingFullTextJson);
+  if (!json) return;
+  const perf = import.meta.env.DEV;
+  const t0 = perf ? performance.now() : 0;
+  fullTextLoading.set(true);
+  try {
+    const idx = loadFullTextIndexFromJson(json);
+    if (idx) fullTextIndex.set(idx);
+  } finally {
+    pendingFullTextJson.set(null);
+    fullTextLoading.set(false);
+    if (perf) {
+      const dt = performance.now() - t0;
+      console.debug(`[lapis-perf] fulltext-lazy loadJSON=${dt.toFixed(0)}ms`);
+    }
+  }
+}
+
+/**
  * 진행 중 reloadNotes 중복 호출 guard.
  * 예: MemorySyncModal이 직접 await reloadNotes를 부르는 동안 file watcher의
  * scheduleFullReload(500ms 디바운스)도 같은 burst 끝에 한 번 부른다 → guard로 중복 차단.
@@ -163,28 +230,31 @@ async function reloadNotesInner(): Promise<void> {
 
     let appliedFromCache = false;
     if (cache && cache.fingerprint === fp.fingerprint) {
-      const idx = loadFullTextIndexFromJson(cache.minisearch_json);
-      if (idx) {
-        const links = cache.link_infos;
-        linkIndex.set(buildIndex(links));
-        await nextTick();
-        tagIndex.set(buildTagIndex(links));
-        await nextTick();
-        const facets = buildFacetCounts(links);
-        docKindCounts.set(facets.docKindCounts);
-        topicCounts.set(facets.topicCounts);
-        await nextTick();
-        quickEntries.set(buildQuickEntries(links));
-        fullTextIndex.set(idx);
-        appliedFromCache = true;
-        cacheMode = "hit";
-        if (perf) {
-          console.debug(
-            `[lapis-perf] search-cache HIT fp=${fp.fingerprint} ` +
-              `files=${fp.file_count} links=${links.length} ` +
-              `addAll skipped (~9s saved)`,
-          );
-        }
+      // cache hit. link_infos는 즉시 사용. fullTextIndex(MiniSearch.loadJSON sync
+      // ~4.5s) 비용은 cold-start measurement 밖으로 옮긴다 — pendingFullTextJson에
+      // 보관 후 idle 시점에 백그라운드 빌드. 검색을 즉시 시도하면 그때 await.
+      const links = cache.link_infos;
+      linkIndex.set(buildIndex(links));
+      await nextTick();
+      tagIndex.set(buildTagIndex(links));
+      await nextTick();
+      const facets = buildFacetCounts(links);
+      docKindCounts.set(facets.docKindCounts);
+      topicCounts.set(facets.topicCounts);
+      await nextTick();
+      quickEntries.set(buildQuickEntries(links));
+      // fullTextIndex는 빌드되기 전까진 null. pendingFullTextJson이 trigger.
+      fullTextIndex.set(null);
+      pendingFullTextJson.set(cache.minisearch_json);
+      scheduleLazyFullTextLoad();
+      appliedFromCache = true;
+      cacheMode = "hit";
+      if (perf) {
+        console.debug(
+          `[lapis-perf] search-cache HIT fp=${fp.fingerprint} ` +
+            `files=${fp.file_count} links=${links.length} ` +
+            `(addAll+loadJSON deferred → idle)`,
+        );
       }
     }
 
