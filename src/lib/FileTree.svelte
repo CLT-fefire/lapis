@@ -18,9 +18,11 @@
     depth?: number;
     /** 필터 활성 시 모든 폴더 강제 펼침 — Sidebar가 filter query 입력 중일 때 true 전달 */
     forceExpand?: boolean;
+    /** 필터 ↑↓ 키보드 순회로 활성화된 leaf path. row.keyboard-active 강조. */
+    activePath?: string | null;
   }
 
-  let { entries, depth = 0, forceExpand = false }: Props = $props();
+  let { entries, depth = 0, forceExpand = false, activePath = null }: Props = $props();
 
   let expanded = $state<Record<string, boolean>>({});
 
@@ -206,7 +208,7 @@
           {/if}
         </div>
         {#if isOpen(entry.path) && entry.children}
-          <Self entries={entry.children} depth={depth + 1} {forceExpand} />
+          <Self entries={entry.children} depth={depth + 1} {forceExpand} {activePath} />
         {/if}
       </li>
     {:else}
@@ -233,6 +235,8 @@
             <button
               class="row note"
               class:active={$currentNotePath === entry.path}
+              class:keyboard-active={activePath === entry.path}
+              data-leaf-path={entry.path}
               onclick={() => selectNote(entry.path)}
               draggable="true"
               ondragstart={(e) => onDragStart(e, entry)}
@@ -318,6 +322,18 @@
 
   .row.note.active:hover {
     background: #355a6e;
+  }
+
+  /* 필터 ↑↓ 키보드로 활성화된 row — 현재 열린 노트(.active)와 시각 구분(노란 톤) */
+  .row.note.keyboard-active {
+    background: rgba(247, 201, 71, 0.12);
+    box-shadow: inset 3px 0 0 #f7c947;
+  }
+
+  .row.note.active.keyboard-active {
+    /* 두 클래스 동시 — keyboard 강조 + active 글자색 유지. shadow는 keyboard쪽이 이김 */
+    background: #3a4a4a;
+    box-shadow: inset 3px 0 0 #f7c947;
   }
 
   .caret {

@@ -10,13 +10,16 @@
     treeLoading,
     indexBuilding,
     createNewNote,
+    selectNote,
   } from "$lib/stores/vault";
   import {
     treeFilterQuery,
     clearTreeFilter,
     filterEntries,
     countMatches,
+    collectLeafPaths,
   } from "$lib/stores/treeFilter";
+  import { tick } from "svelte";
   import { sidebarTab, showFilesTab, showTagsTab, tagIndex } from "$lib/stores/tags";
   import {
     docKindCounts,
@@ -52,11 +55,60 @@
   );
   const treeFilterActive = $derived(!!$treeFilterQuery.trim());
 
+  // 매칭된 leaf 파일 paths — 트리 표시 순서대로. ↑↓ 키보드 순회용.
+  const flatMatchPaths = $derived(
+    treeFilterActive ? collectLeafPaths(filteredNotes) : [],
+  );
+  let activeFilterIndex = $state(0);
+  const activeFilterPath = $derived<string | null>(
+    flatMatchPaths.length > 0 && activeFilterIndex < flatMatchPaths.length
+      ? flatMatchPaths[activeFilterIndex]
+      : null,
+  );
+
+  // query/필터 결과 변경 시 인덱스 0으로 리셋. 결과 비면 -1로(activeFilterPath null).
+  $effect(() => {
+    const _ = $treeFilterQuery;
+    activeFilterIndex = 0;
+  });
+
+  // activeFilterPath 변경 시 해당 row를 사이드바 안에 스크롤 노출
+  let filesPaneEl: HTMLDivElement | null = $state(null);
+  $effect(() => {
+    const path = activeFilterPath;
+    if (!path || !filesPaneEl) return;
+    void tick().then(() => {
+      if (!filesPaneEl) return;
+      const el = filesPaneEl.querySelector<HTMLElement>(
+        `[data-leaf-path="${cssEscape(path)}"]`,
+      );
+      if (el) el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  });
+
+  function cssEscape(s: string): string {
+    // CSS attribute selector value 안 backslash + double quote escape.
+    return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
   function onTreeFilterKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
       clearTreeFilter();
       (e.currentTarget as HTMLInputElement).blur();
+      return;
+    }
+    if (!treeFilterActive || flatMatchPaths.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeFilterIndex = Math.min(flatMatchPaths.length - 1, activeFilterIndex + 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeFilterIndex = Math.max(0, activeFilterIndex - 1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const path = activeFilterPath;
+      if (path) void selectNote(path);
     }
   }
 
@@ -328,7 +380,13 @@ graph LR
         {#if treeFilterActive && filteredNotes.length === 0}
           <div class="filter-empty">매칭되는 파일이 없습니다</div>
         {:else}
-          <FileTree entries={filteredNotes} forceExpand={treeFilterActive} />
+          <div class="files-pane" bind:this={filesPaneEl}>
+            <FileTree
+              entries={filteredNotes}
+              forceExpand={treeFilterActive}
+              activePath={activeFilterPath}
+            />
+          </div>
         {/if}
       {:else}
         <div class="empty">

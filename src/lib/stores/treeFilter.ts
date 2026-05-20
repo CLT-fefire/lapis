@@ -55,3 +55,23 @@ export function countMatches(entries: NoteEntry[]): number {
   }
   return n;
 }
+
+/**
+ * 매칭된 파일(leaf) path를 트리 표시 순서대로 flat 수집.
+ * 키보드 ↑↓ 순회 + Enter 선택용. 폴더는 skip (필터 시 자동 펼침이라 활성 의미 없음).
+ */
+export function collectLeafPaths(entries: NoteEntry[]): string[] {
+  const out: string[] = [];
+  walkLeaves(entries, out);
+  return out;
+}
+
+function walkLeaves(entries: NoteEntry[], out: string[]): void {
+  for (const entry of entries) {
+    if (entry.is_dir) {
+      if (entry.children) walkLeaves(entry.children, out);
+    } else {
+      out.push(entry.path);
+    }
+  }
+}
