@@ -1,7 +1,7 @@
-import MiniSearch, { type Options } from "minisearch";
 import type { NoteContent, LinkInfo } from "$lib/tauri/notes";
 import { readNote } from "$lib/tauri/notes";
 import { extractSnippetAround } from "$lib/snippet";
+import FullTextWorker from "./fullTextWorker?worker";
 
 /* =========================================================
  * Quick Switcher (파일명 / alias / title fuzzy 매칭)
@@ -90,11 +90,12 @@ export function searchQuick(query: string, entries: QuickEntry[], limit = 30): Q
 }
 
 /* =========================================================
- * 풀텍스트 검색 (MiniSearch)
+ * 풀텍스트 검색 — Web Worker proxy
+ * MiniSearch 인스턴스는 worker thread에 보관. main thread freeze 0.
  * ========================================================= */
 
 export interface FullTextDoc {
-  id: string;     // path
+  id: string;
   name: string;
   body: string;
 }
@@ -106,116 +107,136 @@ export interface FullTextHit {
   snippet: string;
 }
 
-/**
- * MiniSearch 옵션 — 빌드/loadJSON 모두 같은 객체 사용 필수.
- * 본 옵션이 변경되면 `src-tauri/src/search_cache.rs`의 `CACHE_VERSION`을 bump해야
- * 기존 disk 캐시가 invalidate됨 (옵션 mismatch 시 search 결과 깨짐).
- *
- * **storeFields=["name"]만**: body를 인덱스 JSON에 저장하지 않음 → cache JSON 크기
- * 12MB → ~2–3MB. cache hit cacheLookup + loadJSON 비용 큰 폭 감소.
- * 검색 결과 snippet 생성을 위해 `searchFullText`가 매 hit마다 `readNote`를 호출.
- * 30 IPC × ~5ms = ~150ms 추가지만 cache hit 전체 단축이 훨씬 큼.
- */
-const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
-  fields: ["name", "body"],
-  storeFields: ["name"],
-  idField: "id",
-  searchOptions: {
-    boost: { name: 3 },
-    prefix: true,
-    fuzzy: 0.15,
-  },
-};
-
-export function buildFullTextIndex(notes: NoteContent[]): MiniSearch<FullTextDoc> {
-  const index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
-  for (const n of notes) {
-    index.add({ id: n.path, name: n.name, body: n.body });
-  }
-  return index;
+interface WorkerHit {
+  path: string;
+  score: number;
+  name: string;
 }
 
-/**
- * disk 캐시(`search_cache.rs`)에 저장된 `MiniSearch.toJSON()` 문자열에서 인덱스 복원.
- * 옵션은 빌드와 동일해야 검색 결과 일관. 파싱 실패 시 null(호출자가 cache miss로 fallback).
- */
-export function loadFullTextIndexFromJson(json: string): MiniSearch<FullTextDoc> | null {
-  try {
-    return MiniSearch.loadJSON(json, FULLTEXT_OPTIONS) as MiniSearch<FullTextDoc>;
-  } catch (e) {
-    console.warn("[search-cache] loadJSON failed → cache miss fallback", e);
-    return null;
-  }
-}
+type WorkerInMsg =
+  | { type: "loadJSON"; id: number; json: string }
+  | { type: "addAll"; id: number; docs: FullTextDoc[]; chunkSize?: number }
+  | { type: "search"; id: number; query: string; limit: number }
+  | { type: "toJSON"; id: number }
+  | { type: "reset"; id: number };
 
-/**
- * 대규모 vault(>1000노트) 대응 chunked 빌드.
- * MiniSearch.addAll은 fields 토크나이즈 비용이 크고 sync라 JS main thread를 길게 점유 →
- * 다른 앱 응답성/UI 인터랙션 영향. CHUNK 단위로 끊고 `await Promise(setTimeout 0)`로
- * event loop yield → UI/OS 메시지 처리 시간 확보.
- *
- * 1000노트 미만은 buildFullTextIndex 사용해도 충분. 10000+ 노트 export 직후엔 이쪽 호출.
- */
-export async function buildFullTextIndexChunked(
-  notes: NoteContent[],
-  chunkSize = 200,
-): Promise<MiniSearch<FullTextDoc>> {
-  const index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
-  for (let i = 0; i < notes.length; i += chunkSize) {
-    const chunk = notes.slice(i, i + chunkSize);
-    // MiniSearch.addAll은 내부 루프 — chunk size만큼만 한 번에 처리
-    index.addAll(
-      chunk.map((n) => ({ id: n.path, name: n.name, body: n.body })),
-    );
-    // event loop yield — 다음 chunk 전에 macro task로 양보
-    if (i + chunkSize < notes.length) {
-      await new Promise<void>((r) => setTimeout(r, 0));
+type WorkerOutMsg =
+  | { type: "ready"; id: number }
+  | { type: "results"; id: number; hits: WorkerHit[] }
+  | { type: "json"; id: number; json: string | null }
+  | { type: "error"; id: number; error: string };
+
+let workerSingleton: Worker | null = null;
+let nextMsgId = 0;
+const pending = new Map<number, (data: WorkerOutMsg) => void>();
+
+function getWorker(): Worker {
+  if (workerSingleton) return workerSingleton;
+  const w = new FullTextWorker();
+  w.onmessage = (e: MessageEvent<WorkerOutMsg>) => {
+    const handler = pending.get(e.data.id);
+    if (handler) {
+      pending.delete(e.data.id);
+      handler(e.data);
     }
-  }
-  return index;
+  };
+  w.onerror = (e) => {
+    console.error("[fulltext-worker] error event", e);
+  };
+  workerSingleton = w;
+  return w;
+}
+
+function dispatch<T extends WorkerOutMsg>(msg: WorkerInMsg): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    pending.set(msg.id, (data) => {
+      if (data.type === "error") {
+        reject(new Error(data.error));
+      } else {
+        resolve(data as T);
+      }
+    });
+    getWorker().postMessage(msg);
+  });
+}
+
+/** worker에 cache JSON 보내고 인덱스 복원 (cache hit lazy 시점). */
+export async function workerLoadJSON(json: string): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({ type: "loadJSON", id, json });
+}
+
+/** worker에서 풀 빌드 (cache miss). docs는 main에서 contents → {id, name, body} 변환 후 전달. */
+export async function workerAddAll(docs: FullTextDoc[], chunkSize = 200): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({ type: "addAll", id, docs, chunkSize });
+}
+
+/** worker 안 인덱스로 검색. snippet 없이 path+score+name만 반환. */
+export async function workerSearch(query: string, limit: number): Promise<WorkerHit[]> {
+  const id = ++nextMsgId;
+  const r = await dispatch<{ type: "results"; id: number; hits: WorkerHit[] }>({
+    type: "search",
+    id,
+    query,
+    limit,
+  });
+  return r.hits;
+}
+
+/** worker 인덱스를 JSON 직렬화 — disk 캐시 저장 직전. */
+export async function workerToJSON(): Promise<string | null> {
+  const id = ++nextMsgId;
+  const r = await dispatch<{ type: "json"; id: number; json: string | null }>({
+    type: "toJSON",
+    id,
+  });
+  return r.json;
+}
+
+/** worker 안 인덱스 release. clearIndexes에서 호출. */
+export async function workerReset(): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({ type: "reset", id });
 }
 
 /**
- * 풀텍스트 검색 — async.
+ * 풀텍스트 검색 — async, worker proxy.
  *
- * storeFields가 ["name"]만이라 body가 결과에 없음. snippet 생성을 위해 매 hit마다
- * `readNote(path)`로 본문을 lazy fetch. 30건 limit이면 IPC ~30 × ~5ms = ~150ms.
- * 한 노트 read 실패 시 그 결과만 skip (전체 검색 흐름은 진행).
+ * - worker가 path/score/name 반환
+ * - main에서 매 hit마다 readNote(path)로 body lazy fetch → snippet 생성
+ * - 한 노트 read 실패 시 그 결과만 skip
  *
- * 호출자(palette.ts:matchContent → unifiedSearch)도 async 체인.
+ * 호출자(`palette.ts:matchContent`)도 async 체인. 인덱스 인자는 안 받음(worker singleton).
  */
 export async function searchFullText(
   query: string,
-  index: MiniSearch<FullTextDoc>,
   limit = 30,
 ): Promise<FullTextHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const results = index.search(q);
+  const workerHits = await workerSearch(q, limit);
+  if (workerHits.length === 0) return [];
   const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
   const RADIUS = 60;
 
-  const slice = results.slice(0, limit);
   const hits = await Promise.all(
-    slice.map(async (r): Promise<FullTextHit | null> => {
-      const path = r.id as string;
+    workerHits.map(async (h): Promise<FullTextHit | null> => {
       let body = "";
       try {
-        body = await readNote(path);
+        body = await readNote(h.path);
       } catch (e) {
-        // 파일이 사라졌거나 권한 변경 — 그 결과만 skip
-        console.warn(`[search] readNote failed for ${path}`, e);
+        console.warn(`[search] readNote failed for ${h.path}`, e);
         return null;
       }
-      // 백링크 컨텍스트와 동일한 발췌 로직 공유. 매칭 없으면 본문 앞자락으로 fallback.
       const { snippet, matched } = extractSnippetAround(body, tokens, RADIUS);
       const finalSnippet = matched
         ? snippet
         : body.slice(0, RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
       return {
-        path,
-        name: (r as unknown as { name: string }).name,
-        score: r.score,
+        path: h.path,
+        name: h.name,
+        score: h.score,
         snippet: finalSnippet,
       };
     }),

@@ -18,9 +18,9 @@ import {
   pruneLinkRewriteBackups,
   type NoteEntry,
 } from "$lib/tauri/notes";
-import { loadFullTextIndexFromJson, buildQuickEntries } from "$lib/searchIndex";
+import { buildQuickEntries, workerLoadJSON, workerToJSON } from "$lib/searchIndex";
 import {
-  fullTextIndex,
+  fullTextIndexReady,
   quickEntries,
   pendingFullTextVault,
   fullTextLoading,
@@ -140,13 +140,13 @@ function scheduleLazyFullTextLoad(): void {
  * 즉시 백그라운드 로드 트리거. 이미 빌드 중/완료면 noop. idempotent.
  */
 export async function ensureFullTextIndex(): Promise<void> {
-  if (get(fullTextIndex)) return;
+  if (get(fullTextIndexReady)) return;
   if (get(fullTextLoading)) return; // 다른 lazy 빌드 진행 중 — 그쪽이 끝낼 것
   await buildFullTextFromPending();
 }
 
 async function buildFullTextFromPending(): Promise<void> {
-  if (get(fullTextIndex)) return;
+  if (get(fullTextIndexReady)) return;
   const vault = get(pendingFullTextVault);
   if (!vault) return;
   const perf = import.meta.env.DEV;
@@ -160,15 +160,18 @@ async function buildFullTextFromPending(): Promise<void> {
       return;
     }
     const tFetch = perf ? performance.now() : 0;
-    const idx = loadFullTextIndexFromJson(json);
-    if (idx) fullTextIndex.set(idx);
+    // worker에 postMessage(30MB string) + worker 안 MiniSearch.loadJSON. main thread freeze 0.
+    await workerLoadJSON(json);
+    fullTextIndexReady.set(true);
     if (perf) {
       const tLoad = performance.now();
       console.debug(
         `[lapis-perf] fulltext-lazy fetch=${(tFetch - t0).toFixed(0)}ms ` +
-          `loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
+          `worker.loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
       );
     }
+  } catch (e) {
+    console.warn("[search-cache] worker loadJSON failed", e);
   } finally {
     pendingFullTextVault.set(null);
     fullTextLoading.set(false);
@@ -253,7 +256,7 @@ async function reloadNotesInner(): Promise<void> {
       topicCounts.set(facets.topicCounts);
       await nextTick();
       quickEntries.set(buildQuickEntries(links));
-      fullTextIndex.set(null);
+      fullTextIndexReady.set(false);
       pendingFullTextVault.set(root);
       scheduleLazyFullTextLoad();
       appliedFromCache = true;
@@ -294,25 +297,17 @@ async function reloadNotesInner(): Promise<void> {
       // rebuildIndexes는 내부에서 MiniSearch addAll을 chunked로 yield
       await rebuildIndexes(links, contents);
 
-      // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리 →
-      // reloadNotesInner의 finally + measurement가 모두 끝난 다음에 실행되어
-      // `JSON.stringify(idx)`(인덱스 11-13MB 직렬화)의 sync 비용이 측정에 안 잡힘.
-      // void IIFE만으로는 첫 await 인자 평가 시 JSON.stringify가 same task 안에서
-      // 동기 실행되어 cache miss 측정값이 부풀어짐 (실측 23s 사례).
+      // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리.
+      // worker.toJSON()이 worker thread에서 인덱스 직렬화 — main thread freeze 0.
       const fpForSave = fp.fingerprint;
       const linksForSave = links;
       setTimeout(() => {
         void (async () => {
           try {
-            const idx = get(fullTextIndex);
-            if (!idx) return;
-            // JSON.stringify(idx)는 MiniSearch가 노출하는 toJSON 메서드를 자동 호출.
-            await writeSearchCache(
-              root,
-              fpForSave,
-              JSON.stringify(idx),
-              linksForSave,
-            );
+            if (!get(fullTextIndexReady)) return;
+            const json = await workerToJSON();
+            if (!json) return;
+            await writeSearchCache(root, fpForSave, json, linksForSave);
             if (import.meta.env.DEV) {
               console.debug(`[lapis-perf] search-cache saved fp=${fpForSave}`);
             }

@@ -2,7 +2,7 @@
   import { tick } from "svelte";
   import { paletteOpen, paletteHintMode, closePalette } from "$lib/stores/palette";
   import {
-    fullTextIndex,
+    fullTextIndexReady,
     indexBuilding,
     fullTextLoading,
     pendingFullTextVault,
@@ -246,7 +246,7 @@
   const showContentBuildingHint = $derived(
     ($paletteHintMode === "fulltext" || $paletteHintMode === "all") &&
       !!query.trim() &&
-      !$fullTextIndex &&
+      !$fullTextIndexReady &&
       ($indexBuilding || $fullTextLoading || !!$pendingFullTextVault),
   );
 </script>

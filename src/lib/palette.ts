@@ -1,13 +1,11 @@
 import { get } from "svelte/store";
-import type MiniSearch from "minisearch";
 import {
   fuzzyMatch,
   searchQuick,
   searchFullText,
   type QuickEntry,
-  type FullTextDoc,
 } from "$lib/searchIndex";
-import { quickEntries, fullTextIndex } from "$lib/stores/search";
+import { quickEntries, fullTextIndexReady } from "$lib/stores/search";
 import { tagIndex, type TagIndex } from "$lib/stores/tags";
 import { docKindCounts, topicCounts } from "$lib/stores/filters";
 import { matchCommands, BUILTIN_COMMANDS, type Command } from "$lib/commands";
@@ -185,14 +183,11 @@ function matchFiles(query: string, entries: QuickEntry[], limit = 20): PaletteRe
   }));
 }
 
-async function matchContent(
-  query: string,
-  index: MiniSearch<FullTextDoc> | null,
-  limit = 20,
-): Promise<PaletteResult[]> {
-  if (!index || !query.trim()) return [];
-  // searchFullText는 async — body가 storeFields에서 빠져 매 hit마다 readNote 호출.
-  const hits = await searchFullText(query, index, limit);
+async function matchContent(query: string, limit = 20): Promise<PaletteResult[]> {
+  if (!query.trim()) return [];
+  if (!get(fullTextIndexReady)) return []; // worker 인덱스가 아직 빌드 중 — CommandPalette UI에 안내
+  // searchFullText는 async — worker.search + main의 readNote × N으로 snippet 합성.
+  const hits = await searchFullText(query, limit);
   return hits.map((h) => ({
     entry: { kind: "content", path: h.path, name: h.name, snippet: h.snippet },
     score: normalizedScore("content", h.score),
@@ -264,7 +259,7 @@ export async function unifiedSearch(
     return query ? matchFiles(query, get(quickEntries)) : recentAsResults();
   }
   if (mode === "fulltext") {
-    return query ? await matchContent(query, get(fullTextIndex)) : recentAsResults();
+    return query ? await matchContent(query) : recentAsResults();
   }
 
   // all 모드 — 빈 query면 Recent + Quick Actions
@@ -272,7 +267,7 @@ export async function unifiedSearch(
 
   // content는 IPC(readNote × N) 동반이라 다른 sync 빌더와 병렬로 진행
   const files = matchFiles(query, get(quickEntries));
-  const contentP = matchContent(query, get(fullTextIndex));
+  const contentP = matchContent(query);
   const tags = matchTags(query, get(tagIndex));
   const facets = matchFacets(query);
   const cmds = commandsAsResults(query);
