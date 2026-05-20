@@ -2,6 +2,7 @@ mod cleanup;
 mod memory;
 mod mirror;
 mod search;
+mod search_cache;
 mod settings;
 mod vault;
 mod watcher;
@@ -58,10 +59,9 @@ pub fn run() {
             vault::list_notes,
             vault::read_note,
             vault::write_note,
-            vault::scan_links,
             vault::scan_link_single,
-            vault::read_all_notes,
             vault::read_vault_bundle,
+            vault::vault_fingerprint,
             vault::create_note,
             vault::create_folder,
             vault::delete_note,
@@ -70,6 +70,8 @@ pub fn run() {
             vault::find_assets_for_note,
             vault::backup_notes,
             vault::prune_link_rewrite_backups,
+            search_cache::read_search_cache,
+            search_cache::write_search_cache,
             watcher::watch_vault,
             watcher::unwatch_vault,
             memory::memory_list_summaries,
