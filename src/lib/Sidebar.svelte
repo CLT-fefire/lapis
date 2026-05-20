@@ -696,15 +696,18 @@ graph LR
     min-height: 0;
   }
 
-  /* files 탭에서 FileTree를 가상 스크롤하는 컨테이너 — sidebar-body 안에서 남은 영역 채움 */
+  /* files 탭에서 FileTree를 가상 스크롤하는 컨테이너 — sidebar-body 안에서 남은 영역 채움.
+     position:absolute + inset:0 패턴으로 .virtual-container의 height를 명시적으로 부여 →
+     OS native wheel/trackpad scroll이 정상 발화 (flex:1만으로는 일부 환경에서 height 0). */
   .files-pane {
     flex: 1;
     min-height: 0;
-    display: flex;
+    position: relative;
     overflow: hidden;
   }
   .files-pane > :global(.virtual-container) {
-    flex: 1;
+    position: absolute;
+    inset: 0;
   }
 
   /* 하단 푸터 — 톱니바퀴 등 보조 액션. vault 미선택 상태에서도 노출. */

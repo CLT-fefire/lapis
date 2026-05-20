@@ -334,11 +334,11 @@
 
 <style>
   /* 가상 스크롤 컨테이너 — 사이드바 안에서 flex로 크기 부여됨(부모가 결정) */
+  /* 부모(.files-pane)가 position:relative + inset:0으로 명시 size 부여 — flex:1 만으론
+     일부 환경에서 height 0이 되어 wheel/trackpad scroll이 안 발화. */
   .virtual-container {
-    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    min-height: 0;
   }
 
   .spacer {
