@@ -1,9 +1,12 @@
 import { writable, get } from "svelte/store";
 import {
   buildQuickEntries,
-  workerAddAll,
+  workerAddAllShard,
   workerReset,
+  computeShardId,
+  SHARD_COUNT,
   type QuickEntry,
+  type FullTextDoc,
 } from "$lib/searchIndex";
 import type { LinkInfo, NoteContent } from "$lib/tauri/notes";
 
@@ -39,12 +42,12 @@ export const pendingFullTextVault = writable<string | null>(null);
 export const fullTextLoading = writable<boolean>(false);
 
 /**
- * vault 로딩 시 호출 — cache miss 풀 빌드 경로. worker에 addAll 위임.
+ * vault 로딩 시 호출 — cache miss 풀 빌드 경로. **sharded**: 4 shard로 분할 후 순차
+ * worker addAll.
  *
- * 5.1.d 변경(이전): queueMicrotask + sync addAll → async + chunked yield.
- * **본 chore 변경**: worker로 addAll 위임 → main thread freeze 0. 단, worker로 docs를
- * postMessage하므로 structured clone 비용 발생(~수백 ms). 그래도 main thread에서 9s sync
- * addAll보다 압도적으로 가벼움.
+ * - 각 shard 약 contents.length/4 doc. fnv32(path) % SHARD_COUNT로 결정론 분배.
+ * - 첫 shard 완료 시점에 `fullTextIndexReady=true` set → 사용자 부분 검색 가능
+ * - 모든 shard 완료 후에도 ready 유지. caller(vault.ts)가 캐시 저장 트리거
  */
 export async function rebuildIndexes(
   linkInfos: LinkInfo[],
@@ -54,11 +57,26 @@ export async function rebuildIndexes(
   indexBuilding.set(true);
   fullTextIndexReady.set(false);
   try {
-    const docs = contents.map((n) => ({ id: n.path, name: n.name, body: n.body }));
-    await workerAddAll(docs);
-    fullTextIndexReady.set(true);
+    // shard별로 분할 — fnv32(path) % SHARD_COUNT 결정론
+    const shards: FullTextDoc[][] = Array.from({ length: SHARD_COUNT }, () => []);
+    for (const n of contents) {
+      const s = computeShardId(n.path);
+      shards[s].push({ id: n.path, name: n.name, body: n.body });
+    }
+    // 순차 addAll. 첫 shard 완료 시 partial ready set.
+    for (let i = 0; i < SHARD_COUNT; i++) {
+      const t0 = import.meta.env.DEV ? performance.now() : 0;
+      await workerAddAllShard(i, shards[i]);
+      if (i === 0) fullTextIndexReady.set(true);
+      if (import.meta.env.DEV) {
+        const dt = performance.now() - t0;
+        console.debug(
+          `[lapis-perf] worker.shard${i} addAll docs=${shards[i].length} dt=${dt.toFixed(0)}ms`,
+        );
+      }
+    }
   } catch (e) {
-    console.error("worker addAll failed", e);
+    console.error("worker shard addAll failed", e);
     fullTextIndexReady.set(false);
   } finally {
     indexBuilding.set(false);
