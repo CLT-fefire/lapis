@@ -128,17 +128,21 @@ export function vaultFingerprint(vaultPath: string): Promise<VaultFingerprintRes
   return invoke<VaultFingerprintResult>("vault_fingerprint", { vaultPath });
 }
 
-export interface SearchCacheEntry {
+/** cold-start cacheLookup — 가벼운 메타만 (minisearch_json 30MB 제외). */
+export interface SearchCacheMeta {
   version: number;
   fingerprint: string;
-  /** `MiniSearch.toJSON()` 결과 그대로 — `MiniSearch.loadJSON`으로 복원 */
-  minisearch_json: string;
   link_infos: LinkInfo[];
 }
 
-/** app_data_dir/search-cache/{vault_hash}.json — 없으면 null. version mismatch도 null. */
-export function readSearchCache(vaultPath: string): Promise<SearchCacheEntry | null> {
-  return invoke<SearchCacheEntry | null>("read_search_cache", { vaultPath });
+/** cold-start 단계 — fingerprint 비교 + link/tag/facet 빌드 즉시 가능. */
+export function readSearchCacheMeta(vaultPath: string): Promise<SearchCacheMeta | null> {
+  return invoke<SearchCacheMeta | null>("read_search_cache_meta", { vaultPath });
+}
+
+/** lazy load 시점 — `MiniSearch.loadJSON` 직전에 30MB string만 받음. */
+export function readSearchCacheMinisearchJson(vaultPath: string): Promise<string | null> {
+  return invoke<string | null>("read_search_cache_minisearch_json", { vaultPath });
 }
 
 /** atomic 저장. 빌드 직후 1회만 호출. */
