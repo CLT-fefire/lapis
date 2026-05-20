@@ -26,14 +26,29 @@ function configPath(vaultPath: string): string {
 }
 
 /**
+ * 메모리 캐시 — vault path → 마지막으로 읽은 VaultConfig.
+ * MemorySearchModal이 검색마다 loadVaultConfig를 호출하는데 vault config는 세션 중
+ * 거의 안 변하는 값이라 매번 disk read는 낭비. 첫 호출에서만 readNote, 이후 in-memory.
+ *
+ * **invalidate 트리거**: 현재 Lapis엔 vault config 쓰기 흐름이 없음. 향후 추가 시
+ * `invalidateVaultConfig(path)` 호출 필수.
+ */
+const cache = new Map<string, VaultConfig>();
+
+/**
  * vault config 읽기. 파일이 없거나 JSON 파싱 실패 시 default 반환.
  * default 반환 시 자동 생성 X — 사용자가 명시적으로 작성하기 전엔 file 없음 상태 유지.
+ *
+ * 같은 vaultPath 두 번째 호출부터는 in-memory cache hit.
  */
 export async function loadVaultConfig(vaultPath: string): Promise<VaultConfig> {
+  const cached = cache.get(vaultPath);
+  if (cached) return cached;
+  let result: VaultConfig;
   try {
     const raw = await readNote(configPath(vaultPath));
     const parsed = JSON.parse(raw) as Partial<VaultConfig>;
-    return {
+    result = {
       mem_projects:
         Array.isArray(parsed.mem_projects) && parsed.mem_projects.length > 0
           ? parsed.mem_projects.map(String)
@@ -48,7 +63,21 @@ export async function loadVaultConfig(vaultPath: string): Promise<VaultConfig> {
           : DEFAULT_VAULT_CONFIG.mem_observations,
     };
   } catch {
-    return { ...DEFAULT_VAULT_CONFIG };
+    result = { ...DEFAULT_VAULT_CONFIG };
+  }
+  cache.set(vaultPath, result);
+  return result;
+}
+
+/**
+ * 캐시 무효화. `.lapis-vault.json`이 외부에서 변경되거나 향후 쓰기 흐름이 추가될 때 호출.
+ * 인자 없이 호출하면 전체 클리어.
+ */
+export function invalidateVaultConfig(vaultPath?: string): void {
+  if (vaultPath === undefined) {
+    cache.clear();
+  } else {
+    cache.delete(vaultPath);
   }
 }
 
