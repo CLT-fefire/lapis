@@ -45,11 +45,18 @@
   let { entries, forceExpand = false, activePath = null }: Props = $props();
 
   // 폴더 펼침 상태 — 본 컴포넌트가 SOT. 컴포넌트 인스턴스가 한 개라 vault 전환해도 reset.
+  // `expanded.has(path)`면 사용자가 명시적으로 toggle한 상태 → 그 값이 우선.
+  // 없으면 `forceExpand`(필터 활성 시 true) 따름 → 필터 중에도 사용자가 폴더 접기 가능.
   let expanded = $state<Map<string, boolean>>(new Map());
+
+  function isOpen(path: string): boolean {
+    if (expanded.has(path)) return expanded.get(path)!;
+    return forceExpand;
+  }
 
   function toggle(path: string) {
     const next = new Map(expanded);
-    next.set(path, !next.get(path));
+    next.set(path, !isOpen(path));
     expanded = next;
   }
 
@@ -245,9 +252,6 @@
       .replace(/'/g, "&#39;");
   }
 
-  function isOpen(path: string): boolean {
-    return forceExpand || expanded.get(path) === true;
-  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

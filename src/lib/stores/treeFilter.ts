@@ -81,8 +81,9 @@ function walkLeaves(entries: NoteEntry[], out: string[]): void {
  * DOM에 단일 flat list로 렌더하기 위한 데이터.
  *
  * - 폴더는 항상 row 1개 추가
- * - 폴더가 펼쳐진 경우(`forceExpand` 또는 `expanded.get(path)` true) children을 재귀 평탄화
- * - depth는 padding-left 계산용 (CSS: `padding-left: 14 + depth * 14`)
+ * - 폴더가 펼쳐졌는지는 `expanded.has(path)`이면 그 값, 아니면 `forceExpand` 따름
+ *   → 필터 활성(`forceExpand=true`) 중에도 사용자가 caret 클릭해 폴더 접기 가능
+ * - depth는 padding-left 계산용
  */
 export interface FlatRow {
   entry: NoteEntry;
@@ -109,7 +110,10 @@ function walkFlat(
   for (const entry of entries) {
     out.push({ entry, depth });
     if (entry.is_dir && entry.children) {
-      const open = forceExpand || expanded.get(entry.path) === true;
+      // expanded.has(path)이면 explicit 값(사용자 toggle 결과), 없으면 forceExpand
+      const open = expanded.has(entry.path)
+        ? expanded.get(entry.path)!
+        : forceExpand;
       if (open) {
         walkFlat(entry.children, depth + 1, expanded, forceExpand, out);
       }
