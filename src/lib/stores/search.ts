@@ -18,6 +18,18 @@ export const fullTextIndex = writable<MiniSearch<FullTextDoc> | null>(null);
 export const indexBuilding = writable<boolean>(false);
 
 /**
+ * cache hit 시 cold-start measurement 안에서 `MiniSearch.loadJSON`(sync ~4.5s)을
+ * 호출하지 않고, 캐시된 JSON 문자열을 잠시 보관 → idle 시점에 백그라운드 빌드.
+ *
+ * - 값이 있으면 = fullTextIndex가 아직 빌드 중 (loadJSON 대기)
+ * - 사용자가 검색을 시도할 때 fullTextIndex가 null + 본 store가 not-null이면 즉시 await
+ */
+export const pendingFullTextJson = writable<string | null>(null);
+
+/** `MiniSearch.loadJSON`이 메인 thread를 점유하는 동안 true. UI에 "빌드 중" 표시용. */
+export const fullTextLoading = writable<boolean>(false);
+
+/**
  * vault 로딩 시 호출. 두 인덱스를 모두 빌드.
  *
  * 5.1.d 변경: queueMicrotask + sync addAll → async + chunked yield.

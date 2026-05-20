@@ -35,6 +35,8 @@ lindera-tantivy = { version = "2", features = ["embed-ko-dic"] }
 # 병렬 iterator — vault read_vault_bundle에서 read_to_string 동시 다발 실행.
 # work-stealing scheduler라 thread pool 관리 신경 안 써도 됨. 바이너리 +~50KB.
 rayon = "1"
+# gzip — search-cache JSON(30MB → ~5MB) 압축. IPC + disk read 큰 폭 단축.
+flate2 = "1"
 
 # release dmg 최적화 — 빌드 시간 증가 vs 런타임/바이너리 크기 트레이드오프.
 # - lto = "thin": 모듈 간 inline + dead code 제거. "fat"보다 빌드 시간 절약.

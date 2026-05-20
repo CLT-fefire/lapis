@@ -1,9 +1,14 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { paletteOpen, paletteHintMode, closePalette } from "$lib/stores/palette";
-  import { fullTextIndex, indexBuilding } from "$lib/stores/search";
+  import {
+    fullTextIndex,
+    indexBuilding,
+    fullTextLoading,
+    pendingFullTextJson,
+  } from "$lib/stores/search";
   import { unifiedSearch, groupResults, type PaletteResult, type PaletteEntry } from "$lib/palette";
-  import { selectNote } from "$lib/stores/vault";
+  import { selectNote, ensureFullTextIndex } from "$lib/stores/vault";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
   import { toggleDocKind, toggleTopic } from "$lib/stores/filters";
 
@@ -26,6 +31,10 @@
       keyboardNavMode = false;
       lastMouseXY = { x: -1, y: -1 };
       tick().then(() => inputEl?.focus());
+      // cold-start cache hit 직후 fullTextIndex가 lazy 빌드 대기 상태일 수 있음.
+      // idle callback이 아직 안 돌았으면 여기서 즉시 트리거 — 사용자가 검색을 시작
+      // 하기 전에 백그라운드 빌드 시작. ensureFullTextIndex는 idempotent.
+      void Promise.resolve().then(() => ensureFullTextIndex());
     }
   });
 
@@ -231,11 +240,14 @@
   // 빈 입력 시 COMMANDS 그룹은 "QUICK ACTIONS"로 라벨
   const commandsHeaderLabel = $derived(query.trim() ? "COMMANDS" : "QUICK ACTIONS");
 
+  // 풀텍스트 인덱스가 아직 준비 안 됨 — 두 가지 케이스:
+  // 1) cold-start 풀 빌드 중 (`$indexBuilding`)
+  // 2) cache hit 후 lazy load 진행 중 또는 대기 중 (`$fullTextLoading` || `$pendingFullTextJson`)
   const showContentBuildingHint = $derived(
     ($paletteHintMode === "fulltext" || $paletteHintMode === "all") &&
       !!query.trim() &&
       !$fullTextIndex &&
-      $indexBuilding,
+      ($indexBuilding || $fullTextLoading || !!$pendingFullTextJson),
   );
 </script>
 
