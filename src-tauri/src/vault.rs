@@ -1,7 +1,8 @@
+use rayon::prelude::*;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct NoteEntry {
@@ -552,6 +553,119 @@ pub fn read_all_notes(vault_path: String) -> Result<Vec<NoteContent>, String> {
     let mut out = Vec::new();
     walk_for_content(&root, &mut out).map_err(|e| e.to_string())?;
     Ok(out)
+}
+
+/// vault cold-start 묶음 — `scan_links` + `read_all_notes`를 한 번에.
+///
+/// 이전 흐름은 `Promise.all([scanLinks, readAllNotes])`로 2개의 IPC + 2번의 walk +
+/// 같은 파일을 2번 `read_to_string` (11000 노트면 22000 syscall). 본 함수는:
+/// 1) **한 번만 walk**해서 .md 파일 경로 목록 수집
+/// 2) **rayon `par_iter`로 병렬 `read_to_string`** + 한 read에서 LinkInfo +
+///    NoteContent 둘 다 추출
+/// 3) (links, contents)로 unzip
+///
+/// 단일 thread sync read 대비 디스크 I/O 큐 depth를 활용 → cold start 시간 큰 폭 단축 기대.
+/// `LAPIS_PERF=1` 시 walk/read 분리 elapsed를 stderr + 응답 stats에 박제.
+#[derive(Debug, Serialize, Clone, Default)]
+pub struct VaultBundleStats {
+    pub walk_ms: u128,
+    pub read_ms: u128,
+    pub file_count: usize,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct VaultBundle {
+    pub links: Vec<LinkInfo>,
+    pub contents: Vec<NoteContent>,
+    pub stats: VaultBundleStats,
+}
+
+#[tauri::command]
+pub async fn read_vault_bundle(vault_path: String) -> Result<VaultBundle, String> {
+    tauri::async_runtime::spawn_blocking(move || read_vault_bundle_inner(&vault_path))
+        .await
+        .map_err(|e| format!("read_vault_bundle join: {e}"))?
+}
+
+fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
+    let root = PathBuf::from(vault_path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", vault_path));
+    }
+
+    let t_walk_start = Instant::now();
+    let mut files: Vec<PathBuf> = Vec::new();
+    walk_md_files(&root, &mut files).map_err(|e| e.to_string())?;
+    let walk_ms = t_walk_start.elapsed().as_millis();
+
+    let t_read_start = Instant::now();
+    // par_iter — rayon 글로벌 thread pool에서 work-stealing 병렬 read_to_string.
+    // 한 파일이 read 실패하면 silent skip (기존 `if let Ok(body)`와 동일 행동).
+    let pairs: Vec<(LinkInfo, NoteContent)> = files
+        .par_iter()
+        .filter_map(|path| {
+            let body = fs::read_to_string(path).ok()?;
+            let link = extract_link_info(path, &body);
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let content = NoteContent {
+                path: path.to_string_lossy().to_string(),
+                name: stem,
+                body,
+            };
+            Some((link, content))
+        })
+        .collect();
+    let read_ms = t_read_start.elapsed().as_millis();
+
+    let mut links = Vec::with_capacity(pairs.len());
+    let mut contents = Vec::with_capacity(pairs.len());
+    for (l, c) in pairs {
+        links.push(l);
+        contents.push(c);
+    }
+
+    let stats = VaultBundleStats {
+        walk_ms,
+        read_ms,
+        file_count: files.len(),
+    };
+
+    if crate::search::perf_enabled() {
+        eprintln!(
+            "[lapis-perf] vault-bundle files={} walk={}ms read={}ms",
+            stats.file_count, walk_ms, read_ms,
+        );
+    }
+
+    Ok(VaultBundle {
+        links,
+        contents,
+        stats,
+    })
+}
+
+/// recursive walk만 — read 없음. `walk_for_content`/`walk_for_links`의 push만 분리.
+fn walk_md_files(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        if SKIP_DIRS.iter().any(|d| *d == name) {
+            continue;
+        }
+        if path.is_dir() {
+            walk_md_files(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "md") {
+            out.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn walk_for_content(current: &Path, out: &mut Vec<NoteContent>) -> std::io::Result<()> {

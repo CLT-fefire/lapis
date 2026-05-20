@@ -3,8 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   listNotes,
   readNote,
-  scanLinks,
-  readAllNotes,
+  readVaultBundle,
   createNote as createNoteTauri,
   createFolder as createFolderTauri,
   deleteNote as deleteNoteTauri,
@@ -145,8 +144,18 @@ async function reloadNotesInner(): Promise<void> {
   // rebuildIndexes는 chunked async로 처리. dim overlay (Sidebar)가 사용자에게 명확히 표시.
   indexBuilding.set(true);
   try {
-    const [links, contents] = await Promise.all([scanLinks(root), readAllNotes(root)]);
-    if (perf) tFetchEnd = performance.now();
+    // scan_links + read_all_notes 통합 — 한 walk + rayon 병렬 read.
+    // 이전: 같은 파일을 2번 read + 2번 walk + 2번 IPC.
+    const bundle = await readVaultBundle(root);
+    const links = bundle.links;
+    const contents = bundle.contents;
+    if (perf) {
+      tFetchEnd = performance.now();
+      console.debug(
+        `[lapis-perf] vault-bundle files=${bundle.stats.file_count} ` +
+          `walk=${bundle.stats.walk_ms}ms read=${bundle.stats.read_ms}ms`,
+      );
+    }
     await nextTick();
 
     linkIndex.set(buildIndex(links));

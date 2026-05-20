@@ -94,6 +94,31 @@ export function readAllNotes(vaultPath: string): Promise<NoteContent[]> {
   return invoke<NoteContent[]>("read_all_notes", { vaultPath });
 }
 
+export interface VaultBundleStats {
+  walk_ms: number;
+  read_ms: number;
+  file_count: number;
+}
+
+/**
+ * `scan_links` + `read_all_notes`를 한 번에. cold-start 묶음.
+ *
+ * 이전: Promise.all([scanLinks, readAllNotes])는 같은 파일을 2번 read +
+ * 2번 walk + 2번 IPC. 본 함수는 1번 walk + rayon 병렬 read 1번 + 1번 IPC.
+ * 한 read에서 LinkInfo + NoteContent 둘 다 추출.
+ *
+ * `stats`는 측정용 — `LAPIS_PERF=1` Rust stderr 로그와 함께 응답에도 동봉.
+ */
+export interface VaultBundle {
+  links: LinkInfo[];
+  contents: NoteContent[];
+  stats: VaultBundleStats;
+}
+
+export function readVaultBundle(vaultPath: string): Promise<VaultBundle> {
+  return invoke<VaultBundle>("read_vault_bundle", { vaultPath });
+}
+
 /** 노트와 같은 폴더에서 같은 stem으로 시작하는 이미지(svg/png/jpg/jpeg/gif/webp) — Phase 4.4.b */
 export interface AssetInfo {
   name: string;
