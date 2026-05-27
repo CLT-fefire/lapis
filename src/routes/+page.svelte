@@ -51,11 +51,13 @@
   import {
     editorCollapsed,
     previewCollapsed,
+    sidebarCollapsed,
     sidebarWidth,
     setSidebarWidth,
     resetSidebarWidth,
     toggleEditor,
     togglePreview,
+    toggleSidebar,
     restorePaneState,
   } from "$lib/stores/layout";
   import { get } from "svelte/store";
@@ -708,6 +710,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       if (!$currentNotePath) return;
       e.preventDefault();
       void copyCurrentPath();
+    } else if (key === "b" && !e.shiftKey) {
+      // Cmd+B — 사이드바 접기/펼치기 (VS Code 표준)
+      e.preventDefault();
+      toggleSidebar();
     } else if (key === "e" && e.shiftKey) {
       // Cmd+Shift+E — 사이드바 파일 트리 필터 input에 포커스 (Explorer)
       e.preventDefault();
@@ -718,6 +724,16 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       }
     }
   }
+
+  // Workspace 4-column grid를 collapse 상태 조합으로 동적 산출.
+  // sidebar / resizer / editor / preview 순. 클래스별 하드코딩 대신 derived로
+  // 조합 폭발(사이드바×에디터×프리뷰)을 피한다.
+  const gridCols = $derived(
+    `${$sidebarCollapsed ? "40px" : "var(--sidebar-w, 260px)"} ` +
+      `${$sidebarCollapsed ? "0px" : "4px"} ` +
+      `${$editorCollapsed ? "36px" : "1fr"} ` +
+      `${$previewCollapsed ? "36px" : "1fr"}`,
+  );
 
   // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
   // package.json/tauri.conf.json와 동기되지 않은 stale 값을 표시할 위험을 원천 차단.
@@ -821,15 +837,26 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   <div
     class="workspace"
-    class:editor-collapsed={$editorCollapsed}
-    class:preview-collapsed={$previewCollapsed}
-    style="--sidebar-w: {$sidebarWidth}px"
+    style="--sidebar-w: {$sidebarWidth}px; grid-template-columns: {gridCols};"
   >
-    <Sidebar />
+    {#if $sidebarCollapsed}
+      <button
+        class="sidebar-collapsed-strip"
+        onclick={toggleSidebar}
+        title="사이드바 펼치기 (⌘B)"
+        aria-label="사이드바 펼치기"
+      >
+        <span class="strip-icon">▶</span>
+        <span class="strip-label">Explorer</span>
+      </button>
+    {:else}
+      <Sidebar />
+    {/if}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="sidebar-resizer"
+      class:rz-hidden={$sidebarCollapsed}
       role="separator"
       aria-orientation="vertical"
       aria-label="사이드바 폭 조절 (더블클릭으로 기본값 복원)"
@@ -1248,17 +1275,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: var(--sidebar-w, 260px) 4px 1fr 1fr;
+    /* grid-template-columns는 인라인 style의 gridCols(derived)로 지정 — collapse 조합 대응 */
     overflow: hidden;
     transition: grid-template-columns 0.18s ease;
-  }
-
-  .workspace.editor-collapsed {
-    grid-template-columns: var(--sidebar-w, 260px) 4px 36px 1fr;
-  }
-
-  .workspace.preview-collapsed {
-    grid-template-columns: var(--sidebar-w, 260px) 4px 1fr 36px;
   }
 
   .sidebar-resizer {
@@ -1272,6 +1291,35 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .sidebar-resizer:hover,
   .sidebar-resizer:active {
     background: #6dd6ff;
+  }
+
+  /* 사이드바 접힘 시 resizer는 0px 컬럼 — 드래그 비활성화 */
+  .sidebar-resizer.rz-hidden {
+    pointer-events: none;
+  }
+
+  /* 접힌 사이드바의 세로 띠 — 클릭하면 다시 펼침. .collapsed-strip과 동일 룩 */
+  .sidebar-collapsed-strip {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px 0;
+    background: #252526;
+    border: none;
+    border-right: 1px solid #333;
+    color: #888;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .sidebar-collapsed-strip:hover {
+    background: #2f2f2f;
+    color: #6dd6ff;
   }
 
   .pane {

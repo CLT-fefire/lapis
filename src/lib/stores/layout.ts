@@ -2,6 +2,7 @@ import { writable, get } from "svelte/store";
 
 const PANE_KEY = "lapis.pane-state";
 const SIDEBAR_WIDTH_KEY = "lapis.sidebar-width";
+const SIDEBAR_COLLAPSED_KEY = "lapis.sidebar-collapsed";
 
 export const DEFAULT_SIDEBAR_WIDTH = 260;
 export const MIN_SIDEBAR_WIDTH = 180;
@@ -9,7 +10,13 @@ export const MAX_SIDEBAR_WIDTH = 600;
 
 export const editorCollapsed = writable<boolean>(false);
 export const previewCollapsed = writable<boolean>(false);
+export const sidebarCollapsed = writable<boolean>(false);
 export const sidebarWidth = writable<number>(DEFAULT_SIDEBAR_WIDTH);
+
+export function toggleSidebar(): void {
+  sidebarCollapsed.update((v) => !v);
+  persistSidebarCollapsed();
+}
 
 // 둘 다 접히는 상태는 의미 없으므로 가드. 다른 쪽이 이미 접혀 있으면 토글 거부.
 export function toggleEditor(): void {
@@ -55,6 +62,11 @@ function persistSidebarWidth(px: number): void {
   localStorage.setItem(SIDEBAR_WIDTH_KEY, String(px));
 }
 
+function persistSidebarCollapsed(): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(get(sidebarCollapsed)));
+}
+
 export function restorePaneState(): void {
   if (typeof localStorage === "undefined") return;
 
@@ -85,5 +97,10 @@ export function restorePaneState(): void {
     } else {
       localStorage.removeItem(SIDEBAR_WIDTH_KEY);
     }
+  }
+
+  const collapsedRaw = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+  if (collapsedRaw) {
+    sidebarCollapsed.set(collapsedRaw === "true");
   }
 }
