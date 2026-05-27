@@ -8,7 +8,7 @@ import {
   deletePath,
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
-import { toggleEditor, togglePreview } from "$lib/stores/layout";
+import { toggleEditor, togglePreview, toggleSidebar } from "$lib/stores/layout";
 import { openMemorySync } from "$lib/stores/memorySync";
 import { openMemorySearch } from "$lib/stores/memorySearch";
 import { claudeMemEnabled } from "$lib/stores/settings";
@@ -60,6 +60,14 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       void reloadNotes();
+    },
+  },
+  {
+    id: "toggle-sidebar",
+    label: "Toggle Sidebar",
+    shortcut: "⌘B",
+    run() {
+      toggleSidebar();
     },
   },
   {
