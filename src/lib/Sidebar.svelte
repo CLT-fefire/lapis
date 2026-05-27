@@ -37,6 +37,7 @@
     markMirrorSyncStart,
     markMirrorSyncEnd,
   } from "$lib/stores/settings";
+  import { toggleSidebar } from "$lib/stores/layout";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
   function showFiltersTab() {
@@ -353,6 +354,7 @@ graph LR
         {/if}
         <button class="icon-btn" title="새로고침" onclick={reloadNotes}>↻</button>
         <button class="icon-btn" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
+        <button class="icon-btn" title="사이드바 접기 (⌘B)" aria-label="사이드바 접기" onclick={toggleSidebar}>◀</button>
       </div>
     {:else}
       <button class="open-btn" onclick={pickAndOpenVault}>Vault 열기…</button>
