@@ -462,8 +462,9 @@ fn sanitize_file_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// 같은 디렉토리에 temp file 쓴 후 rename — atomic write.
-fn atomic_write(target: &Path, content: &str) -> Result<(), String> {
+/// 같은 디렉토리에 temp file 쓴 후 rename — atomic write (바이너리).
+/// 부분 쓰기 방지: temp 완성 후 단일 rename. 실패 시 temp 정리.
+fn atomic_write_bytes(target: &Path, content: &[u8]) -> Result<(), String> {
     let dir = target
         .parent()
         .ok_or_else(|| "no parent directory".to_string())?;
@@ -489,6 +490,25 @@ fn atomic_write(target: &Path, content: &str) -> Result<(), String> {
         return Err(format!("rename failed: {e}"));
     }
     Ok(())
+}
+
+/// 같은 디렉토리에 temp file 쓴 후 rename — atomic write (텍스트).
+fn atomic_write(target: &Path, content: &str) -> Result<(), String> {
+    atomic_write_bytes(target, content.as_bytes())
+}
+
+/// 임의 경로에 바이너리 파일을 atomic하게 저장 (mermaid PNG 내보내기 등).
+///
+/// 경로는 save 다이얼로그로 사용자가 직접 고른 것이라 vault confine은 비적용 —
+/// 의도적으로 vault 밖에도 저장 가능. 부모 디렉토리 부재/권한 에러는 Err로 전달.
+/// bytes는 Frontend에서 `Array.from(Uint8Array)` → `Vec<u8>`로 역직렬화됨.
+#[tauri::command]
+pub async fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        atomic_write_bytes(&PathBuf::from(&path), &bytes)
+    })
+    .await
+    .map_err(|e| format!("write_binary_file join: {e}"))?
 }
 
 // Deserialize 추가: search-cache가 디스크에서 LinkInfo를 역직렬화해서 frontend로 그대로 돌려줌.
