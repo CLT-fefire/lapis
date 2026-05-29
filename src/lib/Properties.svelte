@@ -489,7 +489,7 @@
     text-align: left;
     padding: 2px 6px;
     margin: -2px -6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     cursor: text;
     width: 100%;
     display: flex;
@@ -526,7 +526,7 @@
     border: 1px solid var(--accent);
     color: var(--text-primary);
     padding: 3px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: inherit;
     font-size: var(--fs-base);
   }
@@ -568,7 +568,7 @@
     padding: 10px 16px;
     border-radius: var(--r-md);
     font-size: var(--fs-sm);
-    max-width: 360px;
+    max-width: var(--modal-w-sm);
     z-index: 1200;
     cursor: pointer;
     box-shadow: var(--shadow-md);

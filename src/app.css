@@ -110,10 +110,21 @@
   --sp-10: 32px;
 
   /* --- Radius --- */
+  --r-xs: 3px;
   --r-sm: 4px;
   --r-md: 6px;
   --r-lg: 10px;
   --r-full: 9999px;
+
+  /* --- Control 높이 (인터랙티브 컨트롤 표준 3단) --- */
+  --control-h-sm: 24px;
+  --control-h-md: 28px;
+  --control-h-lg: 32px;
+
+  /* --- Modal 폭 (3단 표준; 기존 360/440/460/540 → 최대 +20px 수렴) --- */
+  --modal-w-sm: 380px;
+  --modal-w-md: 460px;
+  --modal-w-lg: 540px;
 
   /* --- Font size 스케일 --- */
   --fs-xs: 11px;

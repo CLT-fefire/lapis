@@ -197,7 +197,7 @@
 
   .opt {
     flex-shrink: 0;
-    height: 24px;
+    height: var(--control-h-sm);
     min-width: 26px;
     padding: 0 6px;
     display: inline-flex;
@@ -205,7 +205,7 @@
     justify-content: center;
     background: transparent;
     border: 1px solid var(--border-default);
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     color: var(--text-muted);
     font-size: var(--fs-xs);
     font-family: var(--font-mono);
@@ -227,13 +227,13 @@
   .close {
     flex-shrink: 0;
     width: 24px;
-    height: 24px;
+    height: var(--control-h-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     color: var(--text-secondary);
     font-size: var(--fs-xs);
     cursor: pointer;

@@ -132,7 +132,7 @@
     border: 1px dashed var(--border-strong);
     color: var(--text-muted);
     width: 22px;
-    height: 22px;
+    height: var(--control-h-sm);
     border-radius: var(--r-full);
     cursor: pointer;
     font-size: var(--fs-base);

@@ -585,7 +585,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     margin-right: 8px;
     vertical-align: 1px;
   }
@@ -645,14 +645,14 @@
     width: 100%;
     height: 6px;
     background: var(--surface-overlay);
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     overflow: hidden;
   }
 
   .prog-fill {
     height: 100%;
     transition: width var(--dur-base) ease-out;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
   }
 
   .prog-fill.summary {
@@ -729,7 +729,7 @@
   code {
     background: var(--surface-overlay);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-size: var(--fs-xs);
   }
 
@@ -745,7 +745,7 @@
     padding: 6px 14px;
     background: transparent;
     border: 1px solid var(--border-strong);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     color: var(--text-primary);
     font-size: var(--fs-sm);
     cursor: pointer;
@@ -824,7 +824,7 @@
   .reindex-row .prog-bar {
     height: 4px;
     background: var(--surface-overlay);
-    border-radius: 2px;
+    border-radius: var(--r-xs);
     overflow: hidden;
   }
 

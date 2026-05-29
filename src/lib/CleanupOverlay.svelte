@@ -94,7 +94,7 @@
     border-radius: var(--r-lg);
     padding: 18px 22px;
     box-shadow: var(--shadow-overlay);
-    max-width: 440px;
+    max-width: var(--modal-w-md);
   }
   .spinner {
     width: 22px;
