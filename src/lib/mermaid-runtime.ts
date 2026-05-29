@@ -20,6 +20,10 @@ function loadMermaid(): Promise<MermaidModule> {
         startOnLoad: false,
         theme: "dark",
         securityLevel: "strict",
+        // PNG 내보내기 호환: htmlLabels(true)는 라벨을 <foreignObject>(HTML)로 그려
+        // WKWebView canvas 래스터화 시 라벨이 통째로 누락된다. <text> 라벨을 강제해
+        // export가 항상 정상 동작하게 한다. (Preview 표시 차이는 미미)
+        flowchart: { htmlLabels: false },
       });
       return mod;
     });
@@ -41,6 +45,8 @@ async function renderHost(host: HTMLElement): Promise<void> {
     const { svg } = await mermaid.render(id, source);
     host.innerHTML = svg;
     host.dataset.rendered = "1";
+    // innerHTML 교체 "이후"에 버튼 추가 (문자열에 같이 넣으면 SVG가 덮어씀)
+    appendExportButton(host);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     host.innerHTML = `<pre class="mermaid-error">Mermaid 렌더 실패: ${escapeText(
@@ -48,6 +54,20 @@ async function renderHost(host: HTMLElement): Promise<void> {
     )}\n\n${escapeText(source)}</pre>`;
     host.dataset.rendered = "error";
   }
+}
+
+/**
+ * 렌더 성공한 host 우상단에 PNG 내보내기 hover 버튼 추가.
+ * 클릭 처리는 +page.svelte의 handlePreviewClick 이벤트 위임에서 분기한다.
+ */
+function appendExportButton(host: HTMLElement): void {
+  if (host.querySelector(".mermaid-export-btn")) return; // 중복 방어
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mermaid-export-btn";
+  btn.title = "PNG로 저장";
+  btn.textContent = "⬇ PNG";
+  host.appendChild(btn);
 }
 
 function escapeText(s: string): string {

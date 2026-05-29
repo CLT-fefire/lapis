@@ -20,6 +20,15 @@ export function writeNote(vaultPath: string, path: string, content: string): Pro
   return invoke<void>("write_note", { vaultPath, path, content });
 }
 
+/**
+ * 임의 경로에 바이너리 파일 atomic 저장 (mermaid PNG 내보내기 등).
+ * 경로는 save 다이얼로그로 사용자가 고른 것 — vault confine 비적용.
+ * `Array.from(bytes)`로 number[] JSON 직렬화 → Rust `Vec<u8>`.
+ */
+export function writeBinaryFile(path: string, bytes: Uint8Array): Promise<void> {
+  return invoke<void>("write_binary_file", { path, bytes: Array.from(bytes) });
+}
+
 /** parent_dir(vault 상대 또는 절대) 안에 새 .md 노트 생성. 생성된 절대 경로 반환. */
 export function createNote(
   vaultPath: string,
