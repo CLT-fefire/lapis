@@ -184,28 +184,27 @@
 
   .input {
     width: 100%;
-    background: #1a1a1a;
-    border: 1px solid #6dd6ff;
-    color: #fff;
+    background: var(--surface-sunken);
+    border: 1px solid var(--accent);
+    color: var(--text-primary);
     padding: 3px 6px;
     border-radius: 3px;
     font-family: inherit;
-    font-size: 13px;
-    outline: none;
+    font-size: var(--fs-base);
   }
 
   .input.invalid {
-    border-color: #f47174;
+    border-color: var(--danger);
   }
 
   .hint {
     margin-top: 2px;
-    font-size: 11px;
-    color: #888;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
   }
 
   .hint.invalid {
-    color: #f47174;
+    color: var(--danger);
   }
 
   .dropdown {
@@ -216,10 +215,10 @@
     margin: 2px 0 0 0;
     padding: 4px 0;
     list-style: none;
-    background: #1f1f1f;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-md);
     max-height: 240px;
     overflow-y: auto;
     z-index: 50;
@@ -227,13 +226,13 @@
 
   .item {
     padding: 4px 10px;
-    font-size: 12px;
-    color: #ddd;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
     cursor: pointer;
   }
 
   .item.active {
-    background: #2d4a5a;
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
   }
 </style>

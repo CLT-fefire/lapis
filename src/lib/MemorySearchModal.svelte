@@ -261,7 +261,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--backdrop);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -272,11 +272,11 @@
   .modal {
     width: min(640px, 92vw);
     max-height: 76vh;
-    background: #1f1f1f;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    color: #e8e8e8;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-overlay);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -287,37 +287,37 @@
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-default);
   }
 
   input {
     flex: 1;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
     border-radius: 5px;
-    color: #e8e8e8;
+    color: var(--text-primary);
     padding: 6px 10px;
-    font-size: 13px;
+    font-size: var(--fs-base);
     outline: none;
   }
 
   input:focus {
-    border-color: #6dd6ff;
+    border-color: var(--accent);
   }
 
   .status {
-    color: #888;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     min-width: 60px;
     text-align: right;
   }
 
   .err {
     padding: 8px 12px;
-    color: #f47174;
-    font-size: 12px;
-    border-bottom: 1px solid #2a1818;
-    background: rgba(244, 113, 116, 0.06);
+    color: var(--danger);
+    font-size: var(--fs-sm);
+    border-bottom: 1px solid var(--danger-border);
+    background: var(--danger-bg-subtle);
   }
 
   .results {
@@ -327,12 +327,12 @@
 
   .hit {
     padding: 10px 12px;
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
   }
 
   .hit.active {
-    background: rgba(109, 214, 255, 0.08);
+    background: var(--accent-bg-subtle);
   }
 
   .hit-head {
@@ -355,24 +355,24 @@
   }
 
   .kind.summary {
-    background: rgba(168, 119, 232, 0.18);
-    color: #c4a3ff;
-    border: 1px solid rgba(168, 119, 232, 0.35);
+    background: var(--violet-bg-subtle);
+    color: var(--violet);
+    border: 1px solid var(--violet-border);
   }
 
   .kind.obs {
-    background: rgba(73, 216, 196, 0.16);
-    color: #7be4cf;
-    border: 1px solid rgba(73, 216, 196, 0.35);
+    background: var(--teal-bg-subtle);
+    color: var(--teal);
+    border: 1px solid var(--teal-border);
   }
 
   .filters {
     display: flex;
     gap: 14px;
     padding: 6px 12px;
-    border-bottom: 1px solid #2a2a2a;
-    font-size: 11px;
-    background: #181818;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--fs-xs);
+    background: var(--surface-sunken);
   }
 
   .filters label {
@@ -384,15 +384,15 @@
   }
 
   .filters input[type="checkbox"] {
-    accent-color: #6dd6ff;
+    accent-color: var(--accent);
     cursor: pointer;
     margin: 0;
   }
 
   .title {
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    color: #e8e8e8;
+    color: var(--text-primary);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -400,14 +400,14 @@
   }
 
   .meta {
-    color: #888;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     flex-shrink: 0;
   }
 
   .snippet {
-    color: #bbb;
-    font-size: 12px;
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
     line-height: 1.5;
     overflow: hidden;
     display: -webkit-box;
@@ -417,7 +417,7 @@
   }
 
   .snippet :global(mark) {
-    background: rgba(255, 200, 0, 0.35);
+    background: var(--warning-bg-subtle);
     color: inherit;
     padding: 0 1px;
     border-radius: 2px;
@@ -425,8 +425,8 @@
 
   footer.hint {
     padding: 6px 12px;
-    border-top: 1px solid #333;
-    color: #666;
-    font-size: 11px;
+    border-top: 1px solid var(--border-default);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
   }
 </style>

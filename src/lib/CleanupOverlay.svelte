@@ -77,7 +77,7 @@
   .cleanup-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(15, 15, 15, 0.82);
+    background: var(--backdrop);
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
     display: flex;
@@ -89,18 +89,18 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    background: #232323;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
     padding: 18px 22px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--shadow-overlay);
     max-width: 440px;
   }
   .spinner {
     width: 22px;
     height: 22px;
-    border: 2px solid #2a2a2a;
-    border-top-color: #6dd6ff;
+    border: 2px solid var(--border-subtle);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     flex-shrink: 0;
@@ -109,12 +109,12 @@
     to { transform: rotate(360deg); }
   }
   .check {
-    color: #5ad469;
+    color: var(--success);
     font-size: 22px;
     font-weight: 700;
   }
   .warn {
-    color: #f7c947;
+    color: var(--warning);
     font-size: 22px;
   }
   .text {
@@ -126,25 +126,25 @@
   .title {
     font-size: 13.5px;
     font-weight: 600;
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
   .detail {
     font-size: 11.5px;
-    color: #999;
+    color: var(--text-muted);
     line-height: 1.5;
   }
   .dismiss {
     margin-top: 8px;
     background: transparent;
-    border: 1px solid #444;
-    color: #ddd;
-    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--r-sm);
     padding: 4px 10px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     cursor: pointer;
     align-self: flex-start;
   }
   .dismiss:hover {
-    border-color: #6dd6ff;
+    border-color: var(--accent);
   }
 </style>

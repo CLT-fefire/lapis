@@ -495,7 +495,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--backdrop);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -505,11 +505,11 @@
 
   .modal {
     width: min(520px, 92vw);
-    background: #1f1f1f;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    color: #e8e8e8;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-overlay);
     display: flex;
     flex-direction: column;
   }
@@ -518,31 +518,31 @@
     display: flex;
     align-items: center;
     padding: 12px 16px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-default);
   }
 
   .title {
     font-weight: 600;
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   .close {
     margin-left: auto;
     background: transparent;
     border: none;
-    color: #777;
-    font-size: 14px;
+    color: var(--text-muted);
+    font-size: var(--fs-md);
     cursor: pointer;
     padding: 4px 8px;
   }
 
   .close:hover {
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
 
   .body {
     padding: 16px;
-    font-size: 13px;
+    font-size: var(--fs-base);
     line-height: 1.6;
   }
 
@@ -551,16 +551,16 @@
   }
 
   .body .hint {
-    color: #888;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
   }
 
   .body .info {
-    color: #f7c947;
+    color: var(--warning);
   }
 
   .body .err {
-    color: #f47174;
+    color: var(--danger);
   }
 
   .counts {
@@ -574,7 +574,7 @@
   }
 
   .counts .new {
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   /* kind 배지 — summary는 보라, obs는 청록 (RelatedMemoriesPanel/SearchModal 색 톤 통일) */
@@ -591,23 +591,23 @@
   }
 
   .kind.summary {
-    background: rgba(168, 119, 232, 0.18);
-    color: #c4a3ff;
-    border: 1px solid rgba(168, 119, 232, 0.35);
+    background: var(--violet-bg-subtle);
+    color: var(--violet);
+    border: 1px solid var(--violet-border);
   }
 
   .kind.obs {
-    background: rgba(73, 216, 196, 0.16);
-    color: #7be4cf;
-    border: 1px solid rgba(73, 216, 196, 0.35);
+    background: var(--teal-bg-subtle);
+    color: var(--teal);
+    border: 1px solid var(--teal-border);
   }
 
   .toggles {
     display: flex;
     gap: 16px;
     margin: 10px 0 4px;
-    font-size: 12px;
-    color: #d0d0d0;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
   }
 
   .toggles label {
@@ -619,7 +619,7 @@
   }
 
   .toggles input[type="checkbox"] {
-    accent-color: #6dd6ff;
+    accent-color: var(--accent);
     cursor: pointer;
   }
 
@@ -633,34 +633,34 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 4px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
 
   .prog-text {
-    color: #ccc;
-    font-size: 11px;
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
   }
 
   .prog-bar {
     width: 100%;
     height: 6px;
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     border-radius: 3px;
     overflow: hidden;
   }
 
   .prog-fill {
     height: 100%;
-    transition: width 0.15s ease-out;
+    transition: width var(--dur-base) ease-out;
     border-radius: 3px;
   }
 
   .prog-fill.summary {
-    background: linear-gradient(90deg, #a877e8, #c4a3ff);
+    background: linear-gradient(90deg, var(--violet), var(--violet));
   }
 
   .prog-fill.obs {
-    background: linear-gradient(90deg, #49d8c4, #7be4cf);
+    background: linear-gradient(90deg, var(--teal), var(--teal));
   }
 
   /* indexing stage — 사이드바 dim overlay와 톤 통일 (spinner + 2줄 텍스트) */
@@ -674,9 +674,9 @@
   .spinner {
     width: 18px;
     height: 18px;
-    border: 2px solid #2a2a2a;
-    border-top-color: #6dd6ff;
-    border-radius: 50%;
+    border: 2px solid var(--border-subtle);
+    border-top-color: var(--accent);
+    border-radius: var(--r-full);
     animation: spin 0.8s linear infinite;
     flex-shrink: 0;
   }
@@ -695,42 +695,42 @@
   }
 
   .indexing-text .primary {
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
 
   .indexing-text .secondary {
-    font-size: 11px;
-    color: #999;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
   }
 
   details {
     margin-top: 10px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
 
   details summary {
     cursor: pointer;
-    color: #aaa;
+    color: var(--text-secondary);
   }
 
   pre {
-    background: #111;
-    border: 1px solid #2a2a2a;
-    border-radius: 6px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
     padding: 8px;
     overflow: auto;
     max-height: 180px;
-    color: #d0d0d0;
-    font-size: 11px;
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
   }
 
   code {
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     padding: 1px 5px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   footer {
@@ -738,32 +738,32 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 10px 16px;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-default);
   }
 
   .btn {
     padding: 6px 14px;
     background: transparent;
-    border: 1px solid #444;
+    border: 1px solid var(--border-strong);
     border-radius: 5px;
-    color: #e8e8e8;
-    font-size: 12px;
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
     cursor: pointer;
   }
 
   .btn:hover:not(:disabled) {
-    background: #2c2c2c;
-    border-color: #555;
+    background: var(--surface-overlay);
+    border-color: var(--border-strong);
   }
 
   .btn.primary {
-    background: rgba(109, 214, 255, 0.12);
-    border-color: rgba(109, 214, 255, 0.5);
-    color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    border-color: var(--accent-border);
+    color: var(--accent);
   }
 
   .btn.primary:hover:not(:disabled) {
-    background: rgba(109, 214, 255, 0.2);
+    background: var(--accent-bg-subtle);
   }
 
   .btn:disabled {
@@ -778,7 +778,7 @@
 
   .mirror-sep {
     border: 0;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-default);
     margin: 14px 0 10px;
   }
 
@@ -797,11 +797,11 @@
 
   .mirror-title {
     font-weight: 600;
-    color: #cfcfcf;
+    color: var(--text-secondary);
   }
 
   .mirror-result {
-    color: #9ad3ff;
+    color: var(--accent-hover);
     font-size: 0.85em;
     margin: 2px 0 0;
   }
@@ -818,19 +818,19 @@
     gap: 4px;
     margin-top: 6px;
     padding-top: 6px;
-    border-top: 1px dashed #2a2a2a;
+    border-top: 1px dashed var(--border-subtle);
   }
 
   .reindex-row .prog-bar {
     height: 4px;
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     border-radius: 2px;
     overflow: hidden;
   }
 
   .reindex-row .prog-fill {
     height: 100%;
-    background: #7be4cf;
-    transition: width 0.2s ease-out;
+    background: var(--teal);
+    transition: width var(--dur-slow) ease-out;
   }
 </style>

@@ -135,7 +135,7 @@
 <style>
   .related {
     margin-top: 24px;
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid var(--border-subtle);
     padding-top: 14px;
   }
 
@@ -148,31 +148,31 @@
   }
 
   .caret {
-    color: #888;
+    color: var(--text-muted);
     font-size: 10px;
     width: 12px;
   }
 
   .title {
-    color: #c9a4ff;
+    color: var(--violet);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-base);
   }
 
   .meta {
-    color: #777;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
   }
 
   .err {
-    color: #f47174;
-    font-size: 12px;
+    color: var(--danger);
+    font-size: var(--fs-sm);
     padding: 8px 0 0 20px;
   }
 
   .empty {
-    color: #666;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     padding: 8px 0 0 20px;
   }
 
@@ -184,12 +184,12 @@
 
   li {
     padding: 6px 0;
-    border-bottom: 1px dashed #2a2a2a;
+    border-bottom: 1px dashed var(--border-subtle);
     cursor: pointer;
   }
 
   li:hover {
-    background: rgba(201, 164, 255, 0.06);
+    background: var(--violet-bg-subtle);
   }
 
   li:last-child {
@@ -204,8 +204,8 @@
   }
 
   .li-title {
-    font-size: 12px;
-    color: #e8e8e8;
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -217,35 +217,35 @@
     font-size: 10px;
     padding: 1px 5px;
     border-radius: 7px;
-    background: rgba(201, 164, 255, 0.12);
-    color: #c9a4ff;
-    border: 1px solid rgba(201, 164, 255, 0.3);
+    background: var(--violet-bg-subtle);
+    color: var(--violet);
+    border: 1px solid var(--violet-border);
   }
 
   .badge.files_edited {
-    background: rgba(255, 200, 0, 0.12);
-    color: #f7c947;
-    border-color: rgba(247, 201, 71, 0.3);
+    background: var(--warning-bg-subtle);
+    color: var(--warning);
+    border-color: var(--warning-border);
   }
 
   /* observation의 files_modified — files_edited와 동일 톤 (의미적으로 같은 "수정") */
   .badge.files_modified {
-    background: rgba(255, 200, 0, 0.12);
-    color: #f7c947;
-    border-color: rgba(247, 201, 71, 0.3);
+    background: var(--warning-bg-subtle);
+    color: var(--warning);
+    border-color: var(--warning-border);
   }
 
   .badge.both {
-    background: rgba(109, 214, 255, 0.12);
-    color: #6dd6ff;
-    border-color: rgba(109, 214, 255, 0.3);
+    background: var(--accent-bg-subtle);
+    color: var(--accent);
+    border-color: var(--accent-border);
   }
 
   /* 본문 언급 — 가장 약한 신호라 회색 톤 */
   .badge.body {
-    background: rgba(170, 170, 170, 0.08);
-    color: #aaa;
-    border-color: rgba(170, 170, 170, 0.25);
+    background: var(--surface-sunken);
+    color: var(--text-secondary);
+    border-color: var(--border-strong);
   }
 
   /* kind 배지 — MemorySyncModal / SearchModal과 톤 통일 */
@@ -260,19 +260,19 @@
   }
 
   .kind.summary {
-    background: rgba(168, 119, 232, 0.18);
-    color: #c4a3ff;
-    border: 1px solid rgba(168, 119, 232, 0.35);
+    background: var(--violet-bg-subtle);
+    color: var(--violet);
+    border: 1px solid var(--violet-border);
   }
 
   .kind.obs {
-    background: rgba(73, 216, 196, 0.16);
-    color: #7be4cf;
-    border: 1px solid rgba(73, 216, 196, 0.35);
+    background: var(--teal-bg-subtle);
+    color: var(--teal);
+    border: 1px solid var(--teal-border);
   }
 
   .li-meta {
-    color: #777;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
   }
 </style>

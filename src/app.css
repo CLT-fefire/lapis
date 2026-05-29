@@ -61,8 +61,43 @@
   --success-border: rgba(88, 208, 137, 0.3);
   --info: var(--accent);
 
+  /* 확장 팔레트 — 분류용 색 (memory/AI = violet+teal, 태그 heat = lime) */
+  --violet: #c4a3ff;
+  --violet-bg-subtle: rgba(168, 119, 232, 0.16);
+  --violet-border: rgba(168, 119, 232, 0.35);
+  --teal: #5fd4bd;
+  --teal-bg-subtle: rgba(73, 216, 196, 0.16);
+  --teal-border: rgba(73, 216, 196, 0.35);
+  --lime: #c3d96b;
+  --lime-bg-subtle: rgba(212, 232, 142, 0.12);
+
   /* Focus */
   --focus-ring: var(--accent);
+
+  /* 모달/오버레이 배경 스크림 */
+  --backdrop: rgba(0, 0, 0, 0.6);
+
+  /* 시맨틱 — CodeMirror 에디터 (chrome은 적응형 토큰 참조 → 라이트 자동 반영) */
+  --cm-bg: var(--surface-base);
+  --cm-fg: var(--text-primary);
+  --cm-caret: var(--accent);
+  --cm-selection: rgba(92, 200, 255, 0.2);
+  --cm-active-line: rgba(255, 255, 255, 0.045);
+  --cm-gutter-fg: var(--text-disabled);
+  --cm-gutter-active-fg: var(--text-secondary);
+  /* CM 마크다운 syntax 색 (고정 hue — 라이트 블록에서 오버라이드) */
+  --cm-heading: #7ad4ff;
+  --cm-strong: var(--text-primary);
+  --cm-emphasis: var(--text-secondary);
+  --cm-link: var(--accent);
+  --cm-quote: var(--text-muted);
+  --cm-list: #f5c451;
+  --cm-code: #58d089;
+  --cm-meta: var(--text-muted);
+  --cm-keyword: #c792ea;
+  --cm-string: #89d08a;
+  --cm-number: #f5c451;
+  --cm-comment: var(--text-muted);
 
   /* --- Spacing (4/8 기반) --- */
   --sp-1: 2px;
@@ -149,9 +184,30 @@
   --success-bg-subtle: rgba(31, 157, 87, 0.1);
   --success-border: rgba(31, 157, 87, 0.3);
 
+  --violet: #7c3aed;
+  --violet-bg-subtle: rgba(124, 58, 237, 0.1);
+  --violet-border: rgba(124, 58, 237, 0.3);
+  --teal: #0d9488;
+  --teal-bg-subtle: rgba(13, 148, 136, 0.1);
+  --teal-border: rgba(13, 148, 136, 0.3);
+  --lime: #6c8a1f;
+  --lime-bg-subtle: rgba(108, 138, 31, 0.12);
+
+  --backdrop: rgba(16, 24, 40, 0.4);
+
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.1);
   --shadow-overlay: 0 20px 50px rgba(16, 24, 40, 0.18);
+
+  /* CodeMirror — 라이트 syntax 오버라이드 (chrome 토큰은 적응형이라 불필요) */
+  --cm-selection: rgba(10, 120, 194, 0.18);
+  --cm-active-line: rgba(10, 30, 60, 0.05);
+  --cm-heading: #0a6aad;
+  --cm-list: #b7791f;
+  --cm-code: #1f9d57;
+  --cm-keyword: #8a3fc0;
+  --cm-string: #1f7a3f;
+  --cm-number: #b7791f;
 
   color-scheme: light;
 }
@@ -189,9 +245,30 @@
     --success-bg-subtle: rgba(31, 157, 87, 0.1);
     --success-border: rgba(31, 157, 87, 0.3);
 
+    --violet: #7c3aed;
+    --violet-bg-subtle: rgba(124, 58, 237, 0.1);
+    --violet-border: rgba(124, 58, 237, 0.3);
+    --teal: #0d9488;
+    --teal-bg-subtle: rgba(13, 148, 136, 0.1);
+    --teal-border: rgba(13, 148, 136, 0.3);
+    --lime: #6c8a1f;
+    --lime-bg-subtle: rgba(108, 138, 31, 0.12);
+
+    --backdrop: rgba(16, 24, 40, 0.4);
+
     --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
     --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.1);
     --shadow-overlay: 0 20px 50px rgba(16, 24, 40, 0.18);
+
+    /* CodeMirror — 라이트 syntax 오버라이드 */
+    --cm-selection: rgba(10, 120, 194, 0.18);
+    --cm-active-line: rgba(10, 30, 60, 0.05);
+    --cm-heading: #0a6aad;
+    --cm-list: #b7791f;
+    --cm-code: #1f9d57;
+    --cm-keyword: #8a3fc0;
+    --cm-string: #1f7a3f;
+    --cm-number: #b7791f;
 
     color-scheme: light;
   }

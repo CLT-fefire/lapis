@@ -158,42 +158,41 @@
     align-items: center;
     gap: 6px;
     padding: 6px 8px;
-    background: #252526;
-    border-bottom: 1px solid #333;
-    font-size: 12px;
-    color: #e8e8e8;
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border-default);
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
   }
 
   input {
     flex: 1;
     min-width: 0;
     padding: 4px 8px;
-    background: #1e1e1e;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: #e8e8e8;
-    font-size: 12px;
-    outline: none;
+    background: var(--surface-base);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
   }
 
   input:focus {
-    border-color: #6dd6ff;
+    border-color: var(--accent);
   }
 
   input.invalid {
-    border-color: #f47174;
+    border-color: var(--danger);
   }
 
   .count {
     flex-shrink: 0;
     min-width: 56px;
     text-align: right;
-    color: #aaa;
+    color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
   }
 
   .count.none {
-    color: #f47174;
+    color: var(--danger);
   }
 
   .opt {
@@ -205,23 +204,23 @@
     align-items: center;
     justify-content: center;
     background: transparent;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-default);
     border-radius: 3px;
-    color: #888;
-    font-size: 11px;
-    font-family: "SF Mono", Menlo, Consolas, monospace;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
     cursor: pointer;
   }
 
   .opt:hover {
-    background: #2c2c2c;
-    color: #e8e8e8;
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .opt.active {
-    background: #2d4f6d;
-    border-color: #6dd6ff;
-    color: #e8e8e8;
+    background: var(--accent-bg-subtle);
+    border-color: var(--accent);
+    color: var(--text-primary);
   }
 
   .nav,
@@ -235,16 +234,16 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 3px;
-    color: #aaa;
-    font-size: 11px;
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
     cursor: pointer;
     padding: 0;
   }
 
   .nav:hover:not(:disabled),
   .close:hover {
-    background: #3a3a3a;
-    color: #e8e8e8;
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .nav:disabled {
@@ -254,6 +253,6 @@
 
   .close {
     margin-left: 2px;
-    color: #777;
+    color: var(--text-muted);
   }
 </style>

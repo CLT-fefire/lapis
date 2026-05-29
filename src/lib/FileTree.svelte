@@ -358,9 +358,9 @@
   }
 
   .row-wrap.drop-target {
-    background: rgba(109, 214, 255, 0.15);
-    outline: 1px dashed #6dd6ff;
-    border-radius: 4px;
+    background: var(--accent-bg-subtle);
+    outline: 1px dashed var(--accent);
+    border-radius: var(--r-sm);
   }
 
   .row {
@@ -375,49 +375,49 @@
     text-align: left;
     cursor: pointer;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-base);
     line-height: 1.4;
     transition: background 0.1s;
   }
 
   .row.dir {
-    color: #e8e8e8;
+    color: var(--text-primary);
     font-weight: 600;
   }
 
   .row.note {
-    color: #aaa;
+    color: var(--text-secondary);
     font-weight: 400;
   }
 
   .row:hover {
-    background: #2f2f2f;
+    background: var(--surface-overlay);
   }
 
   .row.dir:hover {
-    background: #353535;
+    background: var(--surface-overlay);
   }
 
   .row.note.active {
-    background: #2d4a5a;
-    color: #ffffff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 #6dd6ff;
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .row.note.active:hover {
-    background: #355a6e;
+    background: var(--accent-bg-subtle);
   }
 
   /* 필터 ↑↓ 키보드로 활성화된 row — 현재 열린 노트(.active)와 시각 구분(노란 톤) */
   .row.note.keyboard-active {
-    background: rgba(247, 201, 71, 0.12);
-    box-shadow: inset 3px 0 0 #f7c947;
+    background: var(--warning-bg-subtle);
+    box-shadow: inset 3px 0 0 var(--warning);
   }
 
   .row.note.active.keyboard-active {
-    background: #3a4a4a;
-    box-shadow: inset 3px 0 0 #f7c947;
+    background: var(--warning-bg-subtle);
+    box-shadow: inset 3px 0 0 var(--warning);
   }
 
   .caret {
@@ -426,7 +426,7 @@
     width: 10px;
     flex-shrink: 0;
     transition: transform 0.15s;
-    color: #888;
+    color: var(--text-muted);
   }
 
   .caret.open {
@@ -440,7 +440,7 @@
   }
 
   .icon {
-    font-size: 13px;
+    font-size: var(--fs-base);
     line-height: 1;
     flex-shrink: 0;
   }
@@ -452,7 +452,7 @@
   .icon.file {
     width: 16px;
     opacity: 0.65;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .name {
@@ -465,25 +465,25 @@
 
   .rename-input {
     flex: 1;
-    background: #1a1a1a;
-    border: 1px solid #6dd6ff;
-    color: #fff;
+    background: var(--surface-sunken);
+    border: 1px solid var(--accent);
+    color: var(--text-primary);
     padding: 2px 6px;
     border-radius: 3px;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-base);
     min-width: 0;
     outline: none;
   }
 
   .row.editing {
-    background: rgba(109, 214, 255, 0.08);
-    border-radius: 4px;
+    background: var(--accent-bg-subtle);
+    border-radius: var(--r-sm);
   }
 
   /* tree filter 매치 강조 — entry name 안의 substring */
   .name :global(mark) {
-    background: rgba(255, 200, 0, 0.4);
+    background: var(--warning-bg-subtle);
     color: inherit;
     padding: 0 1px;
     border-radius: 2px;

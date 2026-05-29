@@ -95,7 +95,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--backdrop);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -105,12 +105,12 @@
 
   .modal {
     width: min(520px, 92vw);
-    background: #1f1f1f;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
     overflow: hidden;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    color: #e8e8e8;
+    box-shadow: var(--shadow-overlay);
+    color: var(--text-primary);
   }
 
   .modal-head {
@@ -118,27 +118,27 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 16px;
-    background: #2a2a2a;
-    border-bottom: 1px solid #333;
+    background: var(--surface-overlay);
+    border-bottom: 1px solid var(--border-default);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-base);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   .close-btn {
     background: transparent;
     border: none;
-    color: #aaa;
-    font-size: 16px;
+    color: var(--text-secondary);
+    font-size: var(--fs-lg);
     cursor: pointer;
     padding: 0 4px;
     line-height: 1;
   }
 
   .close-btn:hover {
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .modal-body {
@@ -155,38 +155,37 @@
   .row label,
   .row .label-text {
     width: 78px;
-    font-size: 12px;
-    color: #888;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
   }
 
   .folder {
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     padding: 4px 10px;
-    border-radius: 4px;
-    color: #aaa;
+    border-radius: var(--r-sm);
+    color: var(--text-secondary);
     font-family: "SF Mono", Menlo, monospace;
-    font-size: 12px;
+    font-size: var(--fs-sm);
   }
 
   input[type="text"] {
     flex: 1;
-    background: #1a1a1a;
-    border: 1px solid #444;
-    color: #fff;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
     padding: 6px 10px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     font-family: inherit;
-    font-size: 13px;
-    outline: none;
+    font-size: var(--fs-base);
   }
 
   input[type="text"]:focus {
-    border-color: #6dd6ff;
+    border-color: var(--accent);
   }
 
   .error {
-    color: #f47174;
-    font-size: 12px;
+    color: var(--danger);
+    font-size: var(--fs-sm);
     padding: 6px 0 0 88px;
   }
 
@@ -195,32 +194,32 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 10px 14px;
-    background: #2a2a2a;
-    border-top: 1px solid #333;
+    background: var(--surface-overlay);
+    border-top: 1px solid var(--border-default);
   }
 
   .btn {
     padding: 6px 14px;
-    border-radius: 4px;
-    border: 1px solid #444;
-    background: #2a2a2a;
-    color: #ddd;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     cursor: pointer;
   }
 
   .btn.cancel:hover {
-    background: #333;
+    background: var(--border-default);
   }
 
   .btn.create {
-    border-color: #6dd6ff;
-    color: #6dd6ff;
+    border-color: var(--accent);
+    color: var(--accent);
     font-weight: 600;
   }
 
   .btn.create:hover {
-    background: rgba(109, 214, 255, 0.1);
+    background: var(--accent-bg-subtle);
   }
 </style>

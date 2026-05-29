@@ -27,7 +27,8 @@
   import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
   import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
   import { markdown } from "@codemirror/lang-markdown";
-  import { oneDark } from "@codemirror/theme-one-dark";
+  import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+  import { tags as t } from "@lezer/highlight";
   import {
     search,
     setSearchQuery,
@@ -39,9 +40,59 @@
     SearchQuery,
   } from "@codemirror/search";
 
-  // 검색 매치 시각화 override.
-  // 기본 cm-searchMatch는 one-dark 청색 + outline으로 약하고,
-  // selected는 노란 위 syntax 색이 묻혀 글자가 안 보이는 문제 → 색 + 글자 강제.
+  // 디자인 토큰 기반 에디터 테마 (oneDark 대체).
+  // 모든 색을 var(--cm-*)로 지정 → data-theme 전환 시 자동 적응 (Compartment 불필요).
+  const lapisTheme = EditorView.theme(
+    {
+      "&": {
+        color: "var(--cm-fg)",
+        backgroundColor: "var(--cm-bg)",
+      },
+      ".cm-content": {
+        caretColor: "var(--cm-caret)",
+      },
+      ".cm-cursor, .cm-dropCursor": {
+        borderLeftColor: "var(--cm-caret)",
+      },
+      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
+        {
+          backgroundColor: "var(--cm-selection)",
+        },
+      ".cm-activeLine": {
+        backgroundColor: "var(--cm-active-line)",
+      },
+      ".cm-gutters": {
+        backgroundColor: "var(--cm-bg)",
+        color: "var(--cm-gutter-fg)",
+        border: "none",
+      },
+      ".cm-activeLineGutter": {
+        backgroundColor: "var(--cm-active-line)",
+        color: "var(--cm-gutter-active-fg)",
+      },
+    },
+    { dark: false },
+  );
+
+  // 마크다운 syntax 하이라이팅 (var() 토큰 → 라이트/다크 자동 적응).
+  const lapisHighlight = HighlightStyle.define([
+    { tag: t.heading, color: "var(--cm-heading)", fontWeight: "600" },
+    { tag: t.strong, color: "var(--cm-strong)", fontWeight: "700" },
+    { tag: t.emphasis, color: "var(--cm-emphasis)", fontStyle: "italic" },
+    { tag: [t.link, t.url], color: "var(--cm-link)", textDecoration: "underline" },
+    { tag: t.quote, color: "var(--cm-quote)", fontStyle: "italic" },
+    { tag: t.list, color: "var(--cm-list)" },
+    { tag: t.monospace, color: "var(--cm-code)" },
+    { tag: [t.processingInstruction, t.meta], color: "var(--cm-meta)" },
+    { tag: t.keyword, color: "var(--cm-keyword)" },
+    { tag: t.string, color: "var(--cm-string)" },
+    { tag: [t.number, t.bool, t.atom], color: "var(--cm-number)" },
+    { tag: t.comment, color: "var(--cm-comment)", fontStyle: "italic" },
+    { tag: t.strikethrough, textDecoration: "line-through" },
+  ]);
+
+  // 검색 매치 시각화 override (노란 하이라이트는 라이트/다크 양쪽에서 동일하게 유효).
+  // selected 매치 안의 자식(syntax span 포함)을 어두운 글자로 강제 → 노란 배경 + 검정 대비.
   const searchHighlightTheme = EditorView.theme({
     ".cm-searchMatch": {
       backgroundColor: "rgba(255, 200, 0, 0.30)",
@@ -53,17 +104,11 @@
       outline: "1.5px solid #ff7a00",
       borderRadius: "2px",
     },
-    // selected 매치 안의 모든 자식(syntax 색 span 포함)을 어두운 색으로 강제 →
-    // 노란 배경 + 검정 글자로 명확한 대비.
     ".cm-searchMatch.cm-searchMatch-selected, .cm-searchMatch.cm-searchMatch-selected *":
       {
         color: "#1a1a1a !important",
         fontWeight: "600",
       },
-    // 활성 라인 (커서/매치 위치 라인)도 one-dark 기본이 거의 안 보일 정도로 약함 → 살짝 진하게.
-    ".cm-activeLine": {
-      backgroundColor: "rgba(255, 255, 255, 0.045)",
-    },
   });
 
   interface Props {
@@ -155,8 +200,9 @@
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         markdown(),
-        oneDark,
-        searchHighlightTheme, // oneDark 이후에 → cm-searchMatch override
+        lapisTheme,
+        syntaxHighlighting(lapisHighlight),
+        searchHighlightTheme, // 테마 이후에 → cm-searchMatch override
         EditorView.lineWrapping,
         // 검색 확장.
         // 매치 데코레이션(cm-searchMatch)은 CodeMirror 6 내부적으로 "panel이 active일 때만"
@@ -210,8 +256,8 @@
     height: 100%;
     width: 100%;
     overflow: auto;
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 14px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-md);
   }
 
   :global(.editor .cm-editor) {
