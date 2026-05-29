@@ -60,6 +60,7 @@
     toggleSidebar,
     restorePaneState,
   } from "$lib/stores/layout";
+  import { restoreTheme } from "$lib/stores/theme";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { renderMermaidIn } from "$lib/mermaid-runtime";
@@ -759,6 +760,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   let appVersion = $state<string>("");
 
   onMount(() => {
+    restoreTheme();
     void restoreSettings();
     restorePaneState();
     restoreLastVault();
@@ -1032,16 +1034,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 </div>
 
 <style>
-  :global(html, body) {
-    margin: 0;
-    padding: 0;
-    height: 100vh;
-    overflow: hidden;
-    background: #1e1e1e;
-    color: #e8e8e8;
-    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Apple SD Gothic Neo", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
+  /* 베이스 리셋(html/body, box-sizing)·focus·reduced-motion은 src/app.css가 소유 */
 
   /* in-document search Preview 하이라이트 (Phase 5.0) — <mark> 삽입 방식 */
   :global(.preview-pane mark.lapis-search-match) {
@@ -1060,10 +1053,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   /* Editor 측 cm-searchMatch는 Editor.svelte의 EditorView.theme()에서 override (specificity 문제로 일반 CSS는 안 통함) */
 
-  :global(*, *::before, *::after) {
-    box-sizing: border-box;
-  }
-
   .app {
     display: flex;
     flex-direction: column;
@@ -1075,25 +1064,25 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    border-bottom: 1px solid #333;
-    background: #252526;
-    font-size: 13px;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-raised);
+    font-size: var(--fs-base);
   }
 
   .brand {
     font-weight: 700;
     letter-spacing: 0.04em;
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   .phase {
-    color: #aaa;
+    color: var(--text-secondary);
   }
 
   .meta {
     margin-left: auto;
-    color: #777;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1104,29 +1093,29 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .save-badge {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     padding: 2px 7px;
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     font-weight: 500;
     flex-shrink: 0;
   }
 
   .save-badge.dirty {
-    color: #f7c947;
-    background: rgba(247, 201, 71, 0.12);
-    border: 1px solid rgba(247, 201, 71, 0.3);
+    color: var(--warning);
+    background: var(--warning-bg-subtle);
+    border: 1px solid var(--warning-border);
   }
 
   .save-badge.saving {
-    color: #6dd6ff;
-    background: rgba(109, 214, 255, 0.12);
-    border: 1px solid rgba(109, 214, 255, 0.3);
+    color: var(--accent);
+    background: var(--accent-bg-subtle);
+    border: 1px solid var(--accent-border);
   }
 
   .save-badge.error {
-    color: #f47174;
-    background: rgba(244, 113, 116, 0.12);
-    border: 1px solid rgba(244, 113, 116, 0.4);
+    color: var(--danger);
+    background: var(--danger-bg-subtle);
+    border: 1px solid var(--danger-border);
   }
 
   /* 외부 변경 충돌 다이얼로그 */

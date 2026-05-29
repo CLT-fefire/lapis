@@ -10,6 +10,13 @@
     applyBackupKeep,
     clampBackupKeep,
   } from "$lib/stores/settings";
+  import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
+
+  const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+    { value: "system", label: "시스템" },
+    { value: "light", label: "라이트" },
+    { value: "dark", label: "다크" },
+  ];
 
   // 확인 다이얼로그 분기: null | "enable" | "disable"
   let confirmMode = $state<null | "enable" | "disable">(null);
@@ -115,6 +122,32 @@
       </header>
 
       <div class="settings-body">
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">테마</span>
+              <span class="label-desc">
+                앱 색상 테마. "시스템"은 macOS 라이트/다크 설정을 따릅니다.
+              </span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label="테마 선택">
+              {#each THEME_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$themeMode === opt.value}
+                  aria-pressed={$themeMode === opt.value}
+                  onclick={() => setTheme(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+
         <section class="setting-row">
           <label class="setting-label">
             <input
@@ -461,5 +494,34 @@
   }
   .btn.primary:hover:not(:disabled) {
     background: #3a5d70;
+  }
+
+  /* 테마 세그먼트 컨트롤 (디자인 토큰 사용) */
+  .segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+  }
+  .segment {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    padding: 4px 12px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--dur-fast), color var(--dur-fast);
+  }
+  .segment:hover {
+    color: var(--text-primary);
+  }
+  .segment.active {
+    background: var(--accent-bg-subtle);
+    color: var(--accent);
   }
 </style>
