@@ -63,6 +63,7 @@
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { renderMermaidIn } from "$lib/mermaid-runtime";
+  import { exportMermaidHostToPng } from "$lib/mermaidExport";
   import { rewriteImageSources } from "$lib/assetPath";
   import type { LinkInfo } from "$lib/tauri/notes";
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
@@ -234,6 +235,24 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   async function handlePreviewClick(e: MouseEvent) {
     const el = e.target as HTMLElement | null;
     if (!el) return;
+
+    // 0) mermaid PNG 내보내기 버튼 — 반드시 anchor 체크보다 앞.
+    //    <button>은 closest("a")에 안 걸려 아래 `if (!anchor) return`에서 무시됨.
+    const exportBtn = el.closest(".mermaid-export-btn") as HTMLElement | null;
+    if (exportBtn) {
+      e.preventDefault();
+      const host = exportBtn.closest(".mermaid-host") as HTMLElement | null;
+      if (host) {
+        const fileName = $currentNotePath?.split("/").pop() ?? "diagram";
+        const base = fileName.replace(/\.(md|mmd)$/i, "");
+        try {
+          await exportMermaidHostToPng(host, base);
+        } catch (err) {
+          console.error("mermaid PNG 내보내기 실패", err);
+        }
+      }
+      return;
+    }
 
     // 1) wikilink (span)
     const wikilink = el.closest(".wikilink") as HTMLElement | null;
@@ -1536,6 +1555,34 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .rendered :global(.mermaid-host) {
     margin: 1em 0;
     text-align: center;
+    position: relative; /* PNG 내보내기 버튼 absolute 기준 */
+  }
+
+  /* PNG 내보내기 hover 버튼 */
+  .rendered :global(.mermaid-export-btn) {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1;
+    color: #e8e8e8;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 2;
+  }
+
+  .rendered :global(.mermaid-host:hover .mermaid-export-btn) {
+    opacity: 1;
+  }
+
+  .rendered :global(.mermaid-export-btn:hover) {
+    background: #3a3a3a;
+    border-color: #666;
   }
 
   .rendered :global(.mermaid-host[data-rendered="pending"]) {

@@ -59,6 +59,7 @@ pub fn run() {
             vault::list_notes,
             vault::read_note,
             vault::write_note,
+            vault::write_binary_file,
             vault::scan_link_single,
             vault::read_vault_bundle,
             vault::vault_fingerprint,
