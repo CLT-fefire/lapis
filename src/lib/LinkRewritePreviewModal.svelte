@@ -74,7 +74,7 @@
     background: var(--surface-overlay);
     color: var(--text-primary);
     border: 1px solid var(--border-default);
-    border-radius: 8px;
+    border-radius: var(--r-lg);
     width: 560px;
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 80px);
@@ -118,7 +118,7 @@
   .summary code {
     background: var(--surface-sunken);
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: var(--fs-sm);
   }
@@ -133,7 +133,7 @@
   .hint code {
     background: var(--surface-sunken);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: 10px;
   }

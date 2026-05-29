@@ -569,7 +569,7 @@ graph LR
 
   .icon-btn {
     width: 26px;
-    height: 26px;
+    height: var(--control-h-sm);
     font-size: var(--fs-base);
     display: inline-flex;
     align-items: center;
@@ -726,7 +726,7 @@ graph LR
 
   .settings-btn {
     width: 26px;
-    height: 26px;
+    height: var(--control-h-sm);
     font-size: var(--fs-md);
     color: var(--text-muted);
   }
@@ -755,7 +755,7 @@ graph LR
     gap: 12px;
     background: var(--surface-overlay);
     border: 1px solid var(--border-default);
-    border-radius: 8px;
+    border-radius: var(--r-lg);
     padding: 14px 18px;
     box-shadow: var(--shadow-md);
     max-width: calc(100% - 32px);
@@ -816,7 +816,7 @@ graph LR
     background: var(--accent-bg-subtle);
     border: 1px solid var(--accent);
     color: var(--accent);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     padding: 7px 14px;
     font-size: var(--fs-sm);
     font-weight: 500;

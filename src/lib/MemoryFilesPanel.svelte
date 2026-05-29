@@ -141,7 +141,7 @@
     flex-shrink: 0;
     font-size: 10px;
     padding: 1px 6px;
-    border-radius: 7px;
+    border-radius: var(--r-md);
     height: fit-content;
     margin-top: 2px;
   }

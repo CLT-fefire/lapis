@@ -469,7 +469,7 @@
     border: 1px solid var(--accent);
     color: var(--text-primary);
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: inherit;
     font-size: var(--fs-base);
     min-width: 0;
@@ -486,6 +486,6 @@
     background: var(--warning-bg-subtle);
     color: inherit;
     padding: 0 1px;
-    border-radius: 2px;
+    border-radius: var(--r-xs);
   }
 </style>

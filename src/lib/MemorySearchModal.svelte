@@ -294,7 +294,7 @@
     flex: 1;
     background: var(--surface-sunken);
     border: 1px solid var(--border-default);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     color: var(--text-primary);
     padding: 6px 10px;
     font-size: var(--fs-base);
@@ -350,7 +350,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     flex-shrink: 0;
   }
 
@@ -420,7 +420,7 @@
     background: var(--warning-bg-subtle);
     color: inherit;
     padding: 0 1px;
-    border-radius: 2px;
+    border-radius: var(--r-xs);
   }
 
   footer.hint {

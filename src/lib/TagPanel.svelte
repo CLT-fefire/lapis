@@ -162,7 +162,7 @@
   .empty code {
     background: var(--surface-overlay);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     color: var(--text-secondary);
   }
 
@@ -179,7 +179,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px 4px 10px;
-    border-radius: 12px;
+    border-radius: var(--r-lg);
     background: var(--accent-bg-subtle);
     color: var(--text-primary);
     font-size: var(--fs-sm);
