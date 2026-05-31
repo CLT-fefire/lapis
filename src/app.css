@@ -321,3 +321,99 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* =============================================================================
+ * 컴포넌트 프리미티브 — 액션 버튼 (.btn)
+ * 흩어진 13종 버튼 정의를 공유 베이스로 통일. 도메인 컨트롤(facet-chip,
+ * note-row, result, badge, chip 등)은 고유 의미가 있어 대상 아님.
+ *
+ * 사용:
+ *   <button class="btn">기본</button>
+ *   <button class="btn btn--primary">강조</button>
+ *   <button class="btn btn--ghost">고스트</button>
+ *   <button class="btn btn--danger">위험</button>
+ *   <button class="btn btn--sm">작게</button>
+ *   <button class="btn btn--icon" aria-label="...">⬇</button>
+ * 변형 결합: `btn btn--primary btn--sm`, `btn btn--icon btn--sm` 등.
+ * ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: var(--control-h-md);
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-overlay);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast),
+    color var(--dur-fast), transform var(--dur-fast);
+}
+.btn:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+  background: var(--surface-sunken);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 변형 — Primary(강조) */
+.btn--primary {
+  background: var(--accent-bg-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-border);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 변형 — Ghost(투명) */
+.btn--ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  border-color: var(--accent);
+}
+
+/* 변형 — Danger(위험) */
+.btn--danger {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-bg-subtle);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* 크기 — Small */
+.btn--sm {
+  height: var(--control-h-sm);
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+}
+
+/* 형태 — Icon-only(정사각) */
+.btn--icon {
+  width: var(--control-h-md);
+  padding: 0;
+}
+.btn--icon.btn--sm {
+  width: var(--control-h-sm);
+}

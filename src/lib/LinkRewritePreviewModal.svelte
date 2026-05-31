@@ -52,8 +52,8 @@
       </ul>
 
       <footer>
-        <button class="cancel" onclick={() => close(false)}>취소</button>
-        <button class="apply" onclick={() => close(true)}>적용</button>
+        <button class="btn btn--ghost" onclick={() => close(false)}>취소</button>
+        <button class="btn btn--primary" onclick={() => close(true)}>적용</button>
       </footer>
     </div>
   </div>
@@ -188,26 +188,5 @@
     padding: 12px 18px;
   }
 
-  footer button {
-    padding: 6px 16px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--border-default);
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-    font-size: var(--fs-sm);
-    cursor: pointer;
-  }
-
-  .cancel:hover {
-    background: var(--border-default);
-  }
-
-  .apply {
-    background: var(--accent-bg-subtle);
-    border-color: var(--accent);
-  }
-
-  .apply:hover {
-    background: var(--accent-border);
-  }
+  /* 푸터 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn--ghost / .btn--primary) */
 </style>

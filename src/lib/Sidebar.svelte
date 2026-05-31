@@ -445,7 +445,7 @@ graph LR
           <p>이 폴더에 .md 파일이 없습니다.</p>
           <p class="empty-hint">처음이신가요? 단축키와 wikilink 예제가 담긴 샘플 노트로 시작해보세요.</p>
           <button
-            class="welcome-btn"
+            class="btn btn--primary welcome-btn"
             onclick={createWelcomeNote}
             disabled={welcomeCreating}
           >
@@ -812,25 +812,9 @@ graph LR
     margin: -4px 0 14px 0;
   }
 
+  /* .welcome-btn은 app.css .btn 프리미티브(.btn--primary) 사용 + 레이아웃만 로컬 */
   .welcome-btn {
-    background: var(--accent-bg-subtle);
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    border-radius: var(--r-md);
-    padding: 7px 14px;
-    font-size: var(--fs-sm);
-    font-weight: 500;
-    cursor: pointer;
-    font-family: inherit;
     margin-bottom: 10px;
-    display: inline-block;
-  }
-  .welcome-btn:hover:not(:disabled) {
-    background: var(--accent-border);
-  }
-  .welcome-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .link-btn {

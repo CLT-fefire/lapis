@@ -66,7 +66,7 @@
         <div class="text">
           <div class="title">정리 중 오류</div>
           <div class="detail">{errorText}</div>
-          <button class="dismiss" onclick={dismissError}>닫기</button>
+          <button class="btn btn--ghost btn--sm dismiss" onclick={dismissError}>닫기</button>
         </div>
       {/if}
     </div>
@@ -133,18 +133,9 @@
     color: var(--text-muted);
     line-height: 1.5;
   }
+  /* .dismiss는 app.css .btn 프리미티브(.btn--ghost.btn--sm) 사용 + 레이아웃만 로컬 */
   .dismiss {
     margin-top: 8px;
-    background: transparent;
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: var(--r-sm);
-    padding: 4px 10px;
-    font-size: var(--fs-xs);
-    cursor: pointer;
     align-self: flex-start;
-  }
-  .dismiss:hover {
-    border-color: var(--accent);
   }
 </style>
