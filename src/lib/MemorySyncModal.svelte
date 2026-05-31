@@ -349,10 +349,10 @@
                 <p class="err">{mirrorError}</p>
               {/if}
               <div class="mirror-actions">
-                <button class="btn small" disabled={mirrorBusy} onclick={() => runMirrorSync(false)}>
+                <button class="btn btn--ghost btn--sm" disabled={mirrorBusy} onclick={() => runMirrorSync(false)}>
                   {mirrorBusy ? "동기화 중…" : "증분 sync"}
                 </button>
-                <button class="btn small" disabled={mirrorBusy} onclick={() => runMirrorSync(true)}>
+                <button class="btn btn--ghost btn--sm" disabled={mirrorBusy} onclick={() => runMirrorSync(true)}>
                   {mirrorBusy ? "동기화 중…" : "풀 sync"}
                 </button>
               </div>
@@ -470,9 +470,9 @@
 
       <footer>
         {#if stage === "confirm"}
-          <button class="btn" onclick={close}>취소</button>
+          <button class="btn btn--ghost" onclick={close}>취소</button>
           <button
-            class="btn primary"
+            class="btn btn--primary"
             onclick={runExport}
             title={nothingToExport(preview)
               ? "신규 export 대상이 없어도 export 함수를 다시 돌립니다 (모두 skip 처리)"
@@ -481,10 +481,10 @@
             {nothingToExport(preview) ? "다시 동기화 (변경 없음)" : "Sync 시작"}
           </button>
         {:else if stage === "done"}
-          <button class="btn primary" onclick={close}>닫기</button>
+          <button class="btn btn--primary" onclick={close}>닫기</button>
         {:else if stage === "error"}
-          <button class="btn" onclick={close}>닫기</button>
-          <button class="btn primary" onclick={runPreview}>다시 시도</button>
+          <button class="btn btn--ghost" onclick={close}>닫기</button>
+          <button class="btn btn--primary" onclick={runPreview}>다시 시도</button>
         {/if}
       </footer>
     </div>
@@ -741,40 +741,7 @@
     border-top: 1px solid var(--border-default);
   }
 
-  .btn {
-    padding: 6px 14px;
-    background: transparent;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-md);
-    color: var(--text-primary);
-    font-size: var(--fs-sm);
-    cursor: pointer;
-  }
-
-  .btn:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    border-color: var(--border-strong);
-  }
-
-  .btn.primary {
-    background: var(--accent-bg-subtle);
-    border-color: var(--accent-border);
-    color: var(--accent);
-  }
-
-  .btn.primary:hover:not(:disabled) {
-    background: var(--accent-bg-subtle);
-  }
-
-  .btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .btn.small {
-    padding: 4px 10px;
-    font-size: 0.85em;
-  }
+  /* 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn--ghost / .btn--primary / .btn--sm) */
 
   .mirror-sep {
     border: 0;

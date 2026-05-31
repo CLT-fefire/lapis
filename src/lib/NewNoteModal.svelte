@@ -84,8 +84,8 @@
         {/if}
       </div>
       <footer class="modal-foot">
-        <button class="btn cancel" onclick={closeNewNote}>Cancel</button>
-        <button class="btn create" onclick={submit}>Create &amp; Open</button>
+        <button class="btn btn--ghost" onclick={closeNewNote}>Cancel</button>
+        <button class="btn btn--primary" onclick={submit}>Create &amp; Open</button>
       </footer>
     </div>
   </div>
@@ -198,28 +198,5 @@
     border-top: 1px solid var(--border-default);
   }
 
-  .btn {
-    padding: 6px 14px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--border-strong);
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-    font-family: inherit;
-    font-size: var(--fs-sm);
-    cursor: pointer;
-  }
-
-  .btn.cancel:hover {
-    background: var(--border-default);
-  }
-
-  .btn.create {
-    border-color: var(--accent);
-    color: var(--accent);
-    font-weight: 600;
-  }
-
-  .btn.create:hover {
-    background: var(--accent-bg-subtle);
-  }
+  /* 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn--ghost / .btn--primary) */
 </style>
