@@ -22,6 +22,12 @@
   import { requestRename } from "$lib/stores/tree-ui";
   import { parseNote } from "$lib/markdown";
   import { computeTextStats, readingTimeLabel } from "$lib/textStats";
+  import { showOutlineTab } from "$lib/stores/tags";
+  import {
+    outlineHeadings,
+    activeHeadingSlug,
+    headingJumpRequest,
+  } from "$lib/stores/outline";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
   import { openNewNote } from "$lib/stores/tree-ui";
@@ -399,6 +405,65 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     editorOnQuery(q);
   }
 
+  // --- 문서 아웃라인(TOC) 양방향 동기 (Phase: post-v0.9.1 ①) ---
+  // parsed.headings → outline 스토어 (사이드바 OutlinePanel이 구독).
+  $effect(() => {
+    outlineHeadings.set(parsed.headings);
+  });
+
+  // TOC 클릭 → 에디터 라인 점프 + 프리뷰 스크롤. nonce로 동일 헤딩 반복 클릭도 재발화.
+  let lastJumpNonce = -1;
+  $effect(() => {
+    const req = $headingJumpRequest;
+    if (!req || req.nonce === lastJumpNonce) return;
+    lastJumpNonce = req.nonce;
+    const heading = req.heading;
+    if (editorApi && !get(editorCollapsed)) {
+      editorApi.jumpToLine(heading.line + 1);
+    }
+    if (previewBodyEl && !get(previewCollapsed)) {
+      const el = previewBodyEl.querySelector<HTMLElement>(
+        `.rendered [id="${cssEscapeAttr(heading.slug)}"]`,
+      );
+      el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+    activeHeadingSlug.set(heading.slug);
+  });
+
+  // 프리뷰 스크롤 → 활성 헤딩 하이라이트 (scroll-spy). rAF 스로틀.
+  let scrollSpyScheduled = false;
+  function handlePreviewScroll() {
+    if (scrollSpyScheduled) return;
+    scrollSpyScheduled = true;
+    requestAnimationFrame(() => {
+      scrollSpyScheduled = false;
+      updateActiveHeading();
+    });
+  }
+  function updateActiveHeading() {
+    const container = previewBodyEl;
+    if (!container) return;
+    const hs = container.querySelectorAll<HTMLElement>(
+      ".rendered h1[id], .rendered h2[id], .rendered h3[id], .rendered h4[id], .rendered h5[id], .rendered h6[id]",
+    );
+    if (hs.length === 0) {
+      activeHeadingSlug.set(null);
+      return;
+    }
+    const cTop = container.getBoundingClientRect().top;
+    let active = hs[0].id;
+    for (const h of hs) {
+      if (h.getBoundingClientRect().top - cTop <= 8) active = h.id;
+      else break;
+    }
+    activeHeadingSlug.set(active);
+  }
+
+  // 슬러그를 CSS 속성 선택자 값으로 안전하게 (백슬래시/따옴표 escape).
+  function cssEscapeAttr(s: string): string {
+    return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
   function previewApply(query: string, currentIdx: number) {
     if (!previewBodyEl) return;
     clearHighlights(previewBodyEl);
@@ -758,6 +823,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         input.focus();
         input.select();
       }
+    } else if (key === "o" && e.shiftKey) {
+      // Cmd+Shift+O — 아웃라인(TOC) 패널 표시 (사이드바 접혀 있으면 펼침)
+      e.preventDefault();
+      if (get(sidebarCollapsed)) toggleSidebar();
+      showOutlineTab();
     }
   }
 
@@ -1029,7 +1099,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick}>
+        <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick} onscroll={handlePreviewScroll}>
         <Properties data={effectiveProperties} isAuto={propertiesAuto} rawNote={raw} />
         <article class="rendered">
           {@html parsed.html}
