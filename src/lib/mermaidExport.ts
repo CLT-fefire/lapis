@@ -29,8 +29,14 @@ const MAX_CANVAS_AREA = 16_777_216;
  *
  * viewBox(없으면 렌더된 bounding rect)에서 내재 크기를 얻고, 명시적 width/height +
  * xmlns를 보강한 clone을 직렬화해 `<img>`로 로드 → canvas에 배경 fill 후 drawImage →
- * `toBlob`. mermaid SVG는 `<style>` 인라인이라 self-contained → canvas taint 없음
- * (단, foreignObject가 있으면 taint/누락 가능 → 호출 측에서 htmlLabels:false로 회피).
+ * `toBlob`.
+ *
+ * ⚠️ URL은 반드시 인라인 `data:` URL이어야 한다. WKWebView(WebKit)는 `blob:` URL로
+ * 로드한 SVG를 canvas에 그리면 origin-clean 플래그를 꺼서(canvas taint) `toBlob`이
+ * `SecurityError: "The operation is insecure."`를 던진다. 같은 origin이라도 blob+SVG
+ * 조합이면 taint된다(WebKit 고유 동작). `data:` URL은 완전 인라인이라 taint되지 않는다.
+ * mermaid flowchart SVG는 `<style>` 인라인 + foreignObject 없음(htmlLabels:false)이라
+ * 그 외 외부 참조가 없어 data URL로 안전하게 래스터화된다.
  *
  * 배율은 기본 3x이되, `width*height*scale²`가 WebKit canvas 면적 한계를 넘으면 그에
  * 맞춰 배율을 내려잡는다(큰 다이어그램이 빈/검은 PNG로 저장되는 사고 방지).
@@ -69,26 +75,24 @@ export async function svgElementToPngBlob(svg: SVGSVGElement): Promise<Blob> {
   clone.setAttribute("height", String(height));
   const svgString = new XMLSerializer().serializeToString(clone);
 
-  const url = URL.createObjectURL(
-    new Blob([svgString], { type: "image/svg+xml;charset=utf-8" }),
-  );
-  try {
-    const img = await loadImage(url);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas 2d context 생성 실패");
+  // ⚠️ blob: URL이 아닌 data: URL을 쓴다 — WKWebView에서 blob+SVG는 canvas를
+  // taint시켜 toBlob이 SecurityError("The operation is insecure.")로 죽는다.
+  // (charset=utf-8 + encodeURIComponent로 한국어 등 멀티바이트 라벨 보존)
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
 
-    ctx.fillStyle = exportBackground();
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.drawImage(img, 0, 0, width, height);
+  const img = await loadImage(url);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d context 생성 실패");
 
-    return await canvasToBlob(canvas);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  ctx.fillStyle = exportBackground();
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.drawImage(img, 0, 0, width, height);
+
+  return await canvasToBlob(canvas);
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
