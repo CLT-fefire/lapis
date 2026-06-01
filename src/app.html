@@ -4,7 +4,19 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tauri + SvelteKit + Typescript App</title>
+    <title>Lapis</title>
+    <script>
+      // FOUC 방지 — first-paint 전에 테마 속성 적용 (theme.ts와 키 동기화)
+      (function () {
+        try {
+          var t = localStorage.getItem("lapis.theme");
+          document.documentElement.dataset.theme =
+            t === "light" || t === "dark" || t === "system" ? t : "system";
+        } catch (e) {
+          document.documentElement.dataset.theme = "system";
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

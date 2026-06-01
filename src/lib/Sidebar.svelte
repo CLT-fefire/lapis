@@ -488,8 +488,8 @@ graph LR
   .sidebar {
     display: flex;
     flex-direction: column;
-    background: #1e1e1e;
-    border-right: 1px solid #333;
+    background: var(--surface-base);
+    border-right: 1px solid var(--border-default);
     height: 100%;
     overflow: hidden;
     /* 폭 제어는 +page.svelte의 .workspace grid가 담당 (드래그 가능). */
@@ -501,8 +501,8 @@ graph LR
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    border-bottom: 1px solid #333;
-    background: #252526;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-raised);
     min-height: 42px;
   }
 
@@ -512,8 +512,8 @@ graph LR
     white-space: nowrap;
     text-overflow: ellipsis;
     font-weight: 600;
-    font-size: 13px;
-    color: #6dd6ff;
+    font-size: var(--fs-base);
+    color: var(--accent);
   }
 
   /* 트리 로딩 — 짧음 (~30-100ms). 작은 pulse dot. */
@@ -521,7 +521,7 @@ graph LR
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #6dd6ff;
+    background: var(--accent);
     animation: pulse-dot 0.9s ease-in-out infinite;
     flex-shrink: 0;
     margin-right: 4px;
@@ -535,14 +535,14 @@ graph LR
   /* 인덱스 빌드 — 길음 (~1-3s). 헤더 하단 1px sliding bar. */
   .progress-strip {
     height: 2px;
-    background: #1e1e1e;
+    background: var(--surface-base);
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
     width: 35%;
-    background: linear-gradient(90deg, transparent, #6dd6ff, transparent);
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
     animation: slide 1.2s ease-in-out infinite;
   }
 
@@ -560,9 +560,9 @@ graph LR
   .open-btn,
   .link-btn {
     background: transparent;
-    border: 1px solid #444;
-    color: #ddd;
-    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
   }
@@ -570,17 +570,17 @@ graph LR
   .icon-btn {
     width: 26px;
     height: 26px;
-    font-size: 13px;
+    font-size: var(--fs-base);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-color: transparent;
-    background: #2a2a2a;
+    background: var(--surface-overlay);
   }
 
   .icon-btn:hover {
-    border-color: #6dd6ff;
-    background: #333;
+    border-color: var(--accent);
+    background: var(--surface-sunken);
   }
 
   /* Mirror status indicator — 점만 노출, 클릭 시 MemorySyncModal 오픈 */
@@ -593,22 +593,22 @@ graph LR
     padding: 0;
     margin: 0 4px 0 0;
     cursor: pointer;
-    box-shadow: 0 0 0 1px #1a1a1a;
+    box-shadow: 0 0 0 1px var(--surface-sunken);
   }
   .mirror-dot:hover {
-    box-shadow: 0 0 0 2px #6dd6ff;
+    box-shadow: 0 0 0 2px var(--accent);
   }
   .mirror-green {
-    background: #5ad469;
+    background: var(--success);
   }
   .mirror-yellow {
-    background: #f7c947;
+    background: var(--warning);
   }
   .mirror-red {
-    background: #f47174;
+    background: var(--danger);
   }
   .mirror-blue {
-    background: #6dd6ff;
+    background: var(--accent);
   }
 
   /* sync 진행 중 — 펄스로 활동 중임을 시각화 */
@@ -623,20 +623,20 @@ graph LR
   .open-btn {
     width: 100%;
     padding: 6px 10px;
-    font-size: 13px;
-    background: #2a2a2a;
+    font-size: var(--fs-base);
+    background: var(--surface-overlay);
   }
 
   .open-btn:hover {
-    border-color: #6dd6ff;
-    background: #333;
+    border-color: var(--accent);
+    background: var(--surface-sunken);
   }
 
   /* 탭 */
   .tabs {
     display: flex;
-    background: #252526;
-    border-bottom: 1px solid #333;
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border-default);
   }
 
   .tab {
@@ -646,8 +646,8 @@ graph LR
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: #888;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     cursor: pointer;
@@ -656,25 +656,25 @@ graph LR
     align-items: center;
     justify-content: center;
     gap: 4px;
-    transition: color 0.1s, border-color 0.1s;
+    transition: color var(--dur-fast), border-color var(--dur-fast);
     overflow: hidden;
   }
 
   .tab:hover {
-    color: #ccc;
+    color: var(--text-secondary);
   }
 
   .tab.active {
-    color: #6dd6ff;
-    border-bottom-color: #6dd6ff;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
 
   .badge {
-    background: #2d4a5a;
-    color: #9adff7;
+    background: var(--accent-bg-subtle);
+    color: var(--accent-hover);
     font-size: 10px;
     padding: 1px 5px;
-    border-radius: 9px;
+    border-radius: var(--r-lg);
     text-transform: none;
     letter-spacing: normal;
     font-weight: 500;
@@ -683,8 +683,8 @@ graph LR
   }
 
   .badge.active {
-    background: #6dd6ff;
-    color: #1a1a1a;
+    background: var(--accent);
+    color: var(--accent-fg);
     font-weight: 600;
   }
 
@@ -719,26 +719,26 @@ graph LR
     justify-content: flex-end;
     gap: 4px;
     padding: 6px 10px;
-    border-top: 1px solid #2a2a2a;
-    background: #1c1c1c;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--surface-raised);
     flex-shrink: 0;
   }
 
   .settings-btn {
     width: 26px;
     height: 26px;
-    font-size: 14px;
-    color: #999;
+    font-size: var(--fs-md);
+    color: var(--text-muted);
   }
   .settings-btn:hover {
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   /* 인덱스 빌드 중 dim overlay — 트리 영역 cover */
   .index-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(20, 20, 20, 0.78);
+    background: var(--backdrop);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     display: flex;
@@ -753,19 +753,19 @@ graph LR
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #232323;
-    border: 1px solid #3a3a3a;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
     border-radius: 8px;
     padding: 14px 18px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-md);
     max-width: calc(100% - 32px);
   }
 
   .spinner {
     width: 18px;
     height: 18px;
-    border: 2px solid #2a2a2a;
-    border-top-color: #6dd6ff;
+    border: 2px solid var(--border-default);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     flex-shrink: 0;
@@ -783,19 +783,19 @@ graph LR
   }
 
   .index-overlay-text .primary {
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
 
   .index-overlay-text .secondary {
-    font-size: 11px;
-    color: #999;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
   }
 
   .empty {
-    color: #666;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     text-align: center;
     padding: 30px 16px;
     line-height: 1.6;
@@ -806,19 +806,19 @@ graph LR
   }
 
   .empty .empty-hint {
-    color: #888;
+    color: var(--text-muted);
     font-size: 11.5px;
     line-height: 1.55;
     margin: -4px 0 14px 0;
   }
 
   .welcome-btn {
-    background: #2d4a5a;
-    border: 1px solid #6dd6ff;
-    color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    border: 1px solid var(--accent);
+    color: var(--accent);
     border-radius: 5px;
     padding: 7px 14px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     font-weight: 500;
     cursor: pointer;
     font-family: inherit;
@@ -826,7 +826,7 @@ graph LR
     display: inline-block;
   }
   .welcome-btn:hover:not(:disabled) {
-    background: #3a5d70;
+    background: var(--accent-border);
   }
   .welcome-btn:disabled {
     opacity: 0.5;
@@ -836,9 +836,9 @@ graph LR
   .link-btn {
     background: transparent;
     border: none;
-    color: #6dd6ff;
+    color: var(--accent);
     text-decoration: underline;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     padding: 0;
     cursor: pointer;
   }
@@ -849,30 +849,29 @@ graph LR
     align-items: center;
     gap: 6px;
     padding: 6px 10px 4px 10px;
-    border-bottom: 1px solid #2a2a2a;
-    background: #1f1f1f;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-raised);
   }
 
   .tree-filter-input {
     flex: 1;
     min-width: 0;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    color: #e8e8e8;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     font-family: inherit;
-    font-size: 12px;
-    outline: none;
+    font-size: var(--fs-sm);
   }
 
   .tree-filter-input:focus {
-    border-color: #6dd6ff;
+    border-color: var(--accent);
   }
 
   .match-count {
-    color: #888;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -880,22 +879,22 @@ graph LR
   .filter-clear {
     background: transparent;
     border: none;
-    color: #888;
+    color: var(--text-muted);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     padding: 0 4px;
     line-height: 1;
     flex-shrink: 0;
   }
 
   .filter-clear:hover {
-    color: #f47174;
+    color: var(--danger);
   }
 
   .filter-empty {
     padding: 12px;
-    color: #888;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     text-align: center;
   }
 </style>

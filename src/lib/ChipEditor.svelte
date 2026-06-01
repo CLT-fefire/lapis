@@ -102,40 +102,40 @@
     align-items: center;
     gap: 4px;
     padding: 1px 4px 1px 8px;
-    background: #2d4a5a;
-    border-radius: 10px;
-    font-size: 12px;
-    color: #9adff7;
+    background: var(--accent-bg-subtle);
+    border-radius: var(--r-lg);
+    font-size: var(--fs-sm);
+    color: var(--accent-hover);
     line-height: 1.6;
   }
 
   .x {
     background: transparent;
     border: none;
-    color: #9adff7;
+    color: var(--accent-hover);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--fs-md);
     line-height: 1;
     padding: 0 2px;
-    border-radius: 50%;
+    border-radius: var(--r-full);
     opacity: 0.7;
   }
 
   .x:hover {
-    background: #355a6e;
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
     opacity: 1;
   }
 
   .add-btn {
     background: transparent;
-    border: 1px dashed #444;
-    color: #888;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-muted);
     width: 22px;
     height: 22px;
-    border-radius: 50%;
+    border-radius: var(--r-full);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-base);
     line-height: 1;
     padding: 0;
     display: inline-flex;
@@ -144,8 +144,8 @@
   }
 
   .add-btn:hover {
-    border-color: #6dd6ff;
-    color: #6dd6ff;
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .adding {
