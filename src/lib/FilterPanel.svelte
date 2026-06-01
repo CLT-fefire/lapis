@@ -162,7 +162,7 @@
   .empty code {
     background: var(--surface-overlay);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     color: var(--text-secondary);
   }
 
@@ -327,7 +327,7 @@
   .meta {
     font-size: 10px;
     padding: 0 5px;
-    border-radius: 8px;
+    border-radius: var(--r-lg);
     line-height: 1.5;
   }
 

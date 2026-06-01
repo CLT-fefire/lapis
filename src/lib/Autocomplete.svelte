@@ -188,7 +188,7 @@
     border: 1px solid var(--accent);
     color: var(--text-primary);
     padding: 3px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: inherit;
     font-size: var(--fs-base);
   }

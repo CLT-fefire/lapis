@@ -52,8 +52,8 @@
       </ul>
 
       <footer>
-        <button class="cancel" onclick={() => close(false)}>취소</button>
-        <button class="apply" onclick={() => close(true)}>적용</button>
+        <button class="btn btn--ghost" onclick={() => close(false)}>취소</button>
+        <button class="btn btn--primary" onclick={() => close(true)}>적용</button>
       </footer>
     </div>
   </div>
@@ -74,7 +74,7 @@
     background: var(--surface-overlay);
     color: var(--text-primary);
     border: 1px solid var(--border-default);
-    border-radius: 8px;
+    border-radius: var(--r-lg);
     width: 560px;
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 80px);
@@ -118,7 +118,7 @@
   .summary code {
     background: var(--surface-sunken);
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: var(--fs-sm);
   }
@@ -133,7 +133,7 @@
   .hint code {
     background: var(--surface-sunken);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: 10px;
   }
@@ -188,26 +188,5 @@
     padding: 12px 18px;
   }
 
-  footer button {
-    padding: 6px 16px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--border-default);
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-    font-size: var(--fs-sm);
-    cursor: pointer;
-  }
-
-  .cancel:hover {
-    background: var(--border-default);
-  }
-
-  .apply {
-    background: var(--accent-bg-subtle);
-    border-color: var(--accent);
-  }
-
-  .apply:hover {
-    background: var(--accent-border);
-  }
+  /* 푸터 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn--ghost / .btn--primary) */
 </style>

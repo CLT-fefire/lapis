@@ -472,7 +472,7 @@
   .status.hint kbd {
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     padding: 1px 5px;
     margin: 0 2px;
     color: var(--text-secondary);
@@ -554,7 +554,7 @@
     color: var(--accent-hover);
     font-size: 10px;
     padding: 1px 5px;
-    border-radius: 9px;
+    border-radius: var(--r-lg);
     font-weight: 500;
     text-transform: none;
     letter-spacing: normal;
@@ -575,7 +575,7 @@
     color: var(--text-muted);
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
-    border-radius: 3px;
+    border-radius: var(--r-xs);
     padding: 1px 6px;
   }
 
