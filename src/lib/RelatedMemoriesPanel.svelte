@@ -216,7 +216,7 @@
     flex-shrink: 0;
     font-size: 10px;
     padding: 1px 5px;
-    border-radius: 7px;
+    border-radius: var(--r-md);
     background: var(--violet-bg-subtle);
     color: var(--violet);
     border: 1px solid var(--violet-border);
@@ -256,7 +256,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--r-xs);
   }
 
   .kind.summary {

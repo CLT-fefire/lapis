@@ -201,7 +201,7 @@
       </div>
 
       <footer class="settings-foot">
-        <button class="btn ghost" onclick={closeSettings} disabled={busy}>닫기</button>
+        <button class="btn btn--ghost" onclick={closeSettings} disabled={busy}>닫기</button>
       </footer>
     </div>
   </div>
@@ -245,8 +245,8 @@
           <p class="hint">변경은 즉시 적용됩니다 (재시작 불필요).</p>
         </div>
         <footer class="confirm-foot">
-          <button class="btn ghost" onclick={cancelConfirm} disabled={busy}>취소</button>
-          <button class="btn primary" onclick={applyChange} disabled={busy}>
+          <button class="btn btn--ghost" onclick={cancelConfirm} disabled={busy}>취소</button>
+          <button class="btn btn--primary" onclick={applyChange} disabled={busy}>
             {busy ? "적용 중…" : "지금 적용"}
           </button>
         </footer>
@@ -279,13 +279,13 @@
     box-shadow: var(--shadow-overlay);
     color: var(--text-primary);
     width: 100%;
-    max-width: 540px;
+    max-width: var(--modal-w-lg);
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
   .confirm-modal {
-    max-width: 460px;
+    max-width: var(--modal-w-md);
   }
 
   .settings-head,
@@ -341,7 +341,7 @@
     padding: 12px;
     background: var(--surface-base);
     border: 1px solid var(--border-subtle);
-    border-radius: 8px;
+    border-radius: var(--r-lg);
   }
 
   .setting-label {
@@ -401,7 +401,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--border-strong);
     color: var(--text-primary);
-    border-radius: 5px;
+    border-radius: var(--r-md);
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
     text-align: right;
@@ -465,35 +465,7 @@
     margin-top: 8px;
   }
 
-  .btn {
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: 5px;
-    padding: 6px 14px;
-    font-size: var(--fs-sm);
-    cursor: pointer;
-    font-family: inherit;
-  }
-  .btn:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--surface-sunken);
-  }
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .btn.ghost {
-    background: transparent;
-  }
-  .btn.primary {
-    background: var(--accent-bg-subtle);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .btn.primary:hover:not(:disabled) {
-    background: var(--accent-border);
-  }
+  /* 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn / .btn--ghost / .btn--primary) */
 
   /* 테마 세그먼트 컨트롤 (디자인 토큰 사용) */
   .segmented {

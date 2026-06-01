@@ -111,7 +111,7 @@
     height: auto;
     object-fit: contain;
     background: var(--surface-overlay);
-    border-radius: 3px;
+    border-radius: var(--r-xs);
   }
 
   .caption {

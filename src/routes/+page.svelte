@@ -1041,14 +1041,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     background-color: rgba(255, 200, 0, 0.35);
     color: inherit;
     padding: 0;
-    border-radius: 2px;
+    border-radius: var(--r-xs);
   }
 
   :global(.preview-pane mark.lapis-search-current) {
     background-color: rgba(255, 140, 0, 0.75);
     color: inherit;
     padding: 0;
-    border-radius: 2px;
+    border-radius: var(--r-xs);
   }
 
   /* Editor 측 cm-searchMatch는 Editor.svelte의 EditorView.theme()에서 override (specificity 문제로 일반 CSS는 안 통함) */
@@ -1259,7 +1259,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .topbar-btn {
     width: 28px;
-    height: 24px;
+    height: var(--control-h-sm);
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     color: var(--text-secondary);
@@ -1413,7 +1413,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .collapse-btn {
     width: 26px;
-    height: 24px;
+    height: var(--control-h-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;

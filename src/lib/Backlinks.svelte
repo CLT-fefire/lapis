@@ -138,7 +138,7 @@
     align-items: center;
     gap: 4px;
     border: 1px solid var(--accent-border);
-    border-radius: 14px;
+    border-radius: var(--r-full);
     background: transparent;
     transition: background 0.15s, border-color 0.15s;
   }
@@ -157,7 +157,7 @@
     font-family: inherit;
     font-size: var(--fs-xs);
     line-height: 1;
-    border-radius: 14px 0 0 14px;
+    border-radius: var(--r-full) 0 0 var(--r-full);
   }
 
   .chevron:hover {
@@ -173,7 +173,7 @@
     cursor: pointer;
     font-family: inherit;
     font-size: var(--fs-sm);
-    border-radius: 0 14px 14px 0;
+    border-radius: 0 var(--r-full) var(--r-full) 0;
     transition: background 0.15s, color 0.15s;
   }
 
