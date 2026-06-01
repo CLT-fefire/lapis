@@ -9,26 +9,34 @@
  * DOM에서 제거된 host의 observer 참조는 자동 dropreference — 별도 cleanup 불필요.
  */
 
+import { resolveEffectiveTheme } from "$lib/stores/theme";
+
 type MermaidModule = typeof import("mermaid");
 
 let mermaidPromise: Promise<MermaidModule> | null = null;
 
 function loadMermaid(): Promise<MermaidModule> {
   if (!mermaidPromise) {
-    mermaidPromise = import("mermaid").then((mod) => {
-      mod.default.initialize({
-        startOnLoad: false,
-        theme: "dark",
-        securityLevel: "strict",
-        // PNG 내보내기 호환: htmlLabels(true)는 라벨을 <foreignObject>(HTML)로 그려
-        // WKWebView canvas 래스터화 시 라벨이 통째로 누락된다. <text> 라벨을 강제해
-        // export가 항상 정상 동작하게 한다. (Preview 표시 차이는 미미)
-        flowchart: { htmlLabels: false },
-      });
-      return mod;
-    });
+    mermaidPromise = import("mermaid");
   }
   return mermaidPromise;
+}
+
+/**
+ * 렌더 직전마다 현재 실효 테마(라이트/다크)로 mermaid를 (재)초기화한다.
+ * theme는 전역 설정이라 매 렌더 시 적용해야 라이트/다크 전환이 반영된다.
+ * 라이트 → "default"(밝은 배경·어두운 글씨), 다크 → "dark".
+ */
+function applyMermaidTheme(mermaid: MermaidModule["default"]): void {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: resolveEffectiveTheme() === "light" ? "default" : "dark",
+    securityLevel: "strict",
+    // PNG 내보내기 호환: htmlLabels(true)는 라벨을 <foreignObject>(HTML)로 그려
+    // WKWebView canvas 래스터화 시 라벨이 통째로 누락된다. <text> 라벨을 강제해
+    // export가 항상 정상 동작하게 한다. (Preview 표시 차이는 미미)
+    flowchart: { htmlLabels: false },
+  });
 }
 
 let sharedObserver: IntersectionObserver | null = null;
@@ -41,6 +49,7 @@ async function renderHost(host: HTMLElement): Promise<void> {
   const source = host.dataset.source ?? "";
   try {
     const { default: mermaid } = await loadMermaid();
+    applyMermaidTheme(mermaid);
     const id = `m-${++renderCounter}-${Date.now()}`;
     const { svg } = await mermaid.render(id, source);
     host.innerHTML = svg;
@@ -75,6 +84,19 @@ function escapeText(s: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+/**
+ * 테마 전환 시 호출 — 이미 렌더된 다이어그램의 data-rendered 가드를 풀어
+ * renderMermaidIn이 새 테마로 다시 렌더하도록 한다. (SVG는 테마별로 baked되어
+ * CSS 토큰처럼 자동 적응하지 못하므로 명시적 재렌더가 필요하다.)
+ */
+export function resetMermaidHosts(container: HTMLElement): void {
+  container
+    .querySelectorAll<HTMLElement>(".mermaid-host[data-rendered]")
+    .forEach((h) => {
+      delete h.dataset.rendered;
+    });
 }
 
 export function renderMermaidIn(container: HTMLElement): void {

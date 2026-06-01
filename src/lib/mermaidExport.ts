@@ -4,7 +4,8 @@
  * Preview에 렌더된 mermaid SVG를 canvas로 래스터화해 PNG Blob을 만들고,
  * save 다이얼로그로 고른 경로에 Rust `write_binary_file`(atomic)로 저장한다.
  *
- * - 배경: 항상 불투명 `#1e1e1e` (앱이 다크 전용 → 다이어그램은 항상 밝은 글씨).
+ * - 배경: 실효 테마에 맞춰 불투명 채움 (다크 → `#1e1e1e`, 라이트 → `#ffffff`).
+ *   다이어그램 글씨색이 테마별로 다르므로 배경도 맞춰야 대비가 유지된다.
  * - scale 3x 고해상도. 단 WebKit canvas 면적 한계를 넘기면 자동으로 배율을 낮춰
  *   빈/검은 PNG가 나오지 않게 한다.
  * - foreignObject 라벨(htmlLabels)은 WKWebView canvas에서 누락되므로,
@@ -13,9 +14,13 @@
 
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
+import { resolveEffectiveTheme } from "$lib/stores/theme";
 
 const SCALE = 3;
-const BACKGROUND = "#1e1e1e";
+/** 다이어그램 테마(라이트/다크)에 맞춘 불투명 PNG 배경. */
+function exportBackground(): string {
+  return resolveEffectiveTheme() === "light" ? "#ffffff" : "#1e1e1e";
+}
 /** WebKit(WKWebView) canvas 면적 한계 ≈ 16,777,216 px² (≈4096×4096). 초과 시 빈/검은 출력. */
 const MAX_CANVAS_AREA = 16_777_216;
 
@@ -75,7 +80,7 @@ export async function svgElementToPngBlob(svg: SVGSVGElement): Promise<Blob> {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("canvas 2d context 생성 실패");
 
-    ctx.fillStyle = BACKGROUND;
+    ctx.fillStyle = exportBackground();
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.drawImage(img, 0, 0, width, height);
