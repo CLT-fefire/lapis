@@ -18,6 +18,8 @@
     findPrev: () => EditorMatchInfo;
     clearQuery: () => void;
     focus: () => void;
+    /** 1-based 라인으로 커서 이동 + 스크롤 (아웃라인 TOC 점프용). */
+    jumpToLine: (line: number) => void;
   }
 </script>
 
@@ -186,6 +188,16 @@
         closeSearchPanel(view);
       },
       focus() {
+        view.focus();
+      },
+      jumpToLine(line: number) {
+        const total = view.state.doc.lines;
+        const n = Math.min(Math.max(1, Math.floor(line)), total);
+        const info = view.state.doc.line(n);
+        view.dispatch({
+          selection: { anchor: info.from },
+          effects: EditorView.scrollIntoView(info.from, { y: "start" }),
+        });
         view.focus();
       },
     };

@@ -2,6 +2,8 @@
   import FileTree from "./FileTree.svelte";
   import TagPanel from "./TagPanel.svelte";
   import FilterPanel from "./FilterPanel.svelte";
+  import OutlinePanel from "./OutlinePanel.svelte";
+  import { outlineHeadings } from "$lib/stores/outline";
   import {
     vaultPath,
     notes,
@@ -20,7 +22,7 @@
     collectLeafPaths,
   } from "$lib/stores/treeFilter";
   import { tick } from "svelte";
-  import { sidebarTab, showFilesTab, showTagsTab, tagIndex } from "$lib/stores/tags";
+  import { sidebarTab, showFilesTab, showOutlineTab, showTagsTab, tagIndex } from "$lib/stores/tags";
   import {
     docKindCounts,
     topicCounts,
@@ -378,6 +380,16 @@ graph LR
       </button>
       <button
         class="tab"
+        class:active={$sidebarTab === "outline"}
+        onclick={showOutlineTab}
+      >
+        Outline
+        {#if $outlineHeadings.length > 0}
+          <span class="badge">{compactCount($outlineHeadings.length)}</span>
+        {/if}
+      </button>
+      <button
+        class="tab"
         class:active={$sidebarTab === "tags"}
         onclick={showTagsTab}
       >
@@ -454,6 +466,8 @@ graph LR
           <button class="link-btn" onclick={pickAndOpenVault}>다른 vault 선택</button>
         </div>
       {/if}
+    {:else if $sidebarTab === "outline"}
+      <OutlinePanel />
     {:else if $sidebarTab === "tags"}
       <TagPanel />
     {:else}
