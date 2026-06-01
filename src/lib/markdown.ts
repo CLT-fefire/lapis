@@ -23,6 +23,10 @@ import diff from "highlight.js/lib/languages/diff";
 import toml from "highlight.js/lib/languages/ini";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
+import {
+  headingAnchorPlugin,
+  type HeadingInfo,
+} from "$lib/markdownPlugins/headingAnchor";
 
 // 코드 펜스 구문 하이라이팅용 언어 등록 (core 빌드 + 선택 언어만 → 번들 경량).
 // 각 언어 모듈은 자체 alias(js/ts/py/sh/yml 등)도 함께 등록한다.
@@ -76,24 +80,27 @@ const md = new MarkdownIt({
   },
 })
   .use(wikilinkPlugin)
-  .use(mermaidPlugin);
+  .use(mermaidPlugin)
+  .use(headingAnchorPlugin);
 
 export interface ParsedNote {
   data: Record<string, unknown>;
   body: string;
   html: string;
+  /** 문서 아웃라인(TOC)용 헤딩 목록. line은 원본 raw 기준 0-based. */
+  headings: HeadingInfo[];
 }
 
 const FRONTMATTER_RE = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?([\s\S]*)$/;
 
 export function parseNote(raw: string): ParsedNote {
   const match = FRONTMATTER_RE.exec(raw);
+  // md.render(_, env) — headingAnchorPlugin이 env.headings를 채운다.
+  const env: { headings?: HeadingInfo[] } = {};
+
   if (!match) {
-    return {
-      data: {},
-      body: raw,
-      html: md.render(raw),
-    };
+    const html = md.render(raw, env);
+    return { data: {}, body: raw, html, headings: env.headings ?? [] };
   }
 
   const [, fmRaw, body] = match;
@@ -107,9 +114,16 @@ export function parseNote(raw: string): ParsedNote {
     console.warn("Frontmatter YAML parse failed:", err);
   }
 
-  return {
-    data,
-    body,
-    html: md.render(body),
-  };
+  const html = md.render(body, env);
+  // 헤딩 line은 body 기준 0-based → frontmatter 줄 수만큼 보정해 raw 기준으로.
+  // body는 raw의 접미사이므로 (raw 전체 − body) 구간의 개행 수 = frontmatter 줄 수.
+  const fmOffset = (
+    raw.slice(0, raw.length - body.length).match(/\n/g) ?? []
+  ).length;
+  const headings = (env.headings ?? []).map((h) => ({
+    ...h,
+    line: h.line + fmOffset,
+  }));
+
+  return { data, body, html, headings };
 }
