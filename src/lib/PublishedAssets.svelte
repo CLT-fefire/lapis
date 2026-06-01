@@ -65,14 +65,14 @@
   .published {
     margin-top: 28px;
     padding-top: 18px;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-default);
   }
 
   .published h3 {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: #888;
+    color: var(--text-muted);
     margin: 0 0 10px 0;
     font-weight: 600;
   }
@@ -84,13 +84,13 @@
   }
 
   .thumb {
-    background: #1a1a1a;
-    border: 1px solid #2d4a5a;
-    border-radius: 6px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--r-md);
     padding: 8px;
     cursor: pointer;
     font-family: inherit;
-    color: #ccc;
+    color: var(--text-secondary);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -100,8 +100,8 @@
   }
 
   .thumb:hover {
-    border-color: #6dd6ff;
-    background: #1d2a33;
+    border-color: var(--accent);
+    background: var(--accent-bg-subtle);
   }
 
   .thumb img {
@@ -110,13 +110,13 @@
     width: auto;
     height: auto;
     object-fit: contain;
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     border-radius: 3px;
   }
 
   .caption {
-    font-size: 11px;
-    color: #aaa;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
     max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -124,6 +124,6 @@
   }
 
   .thumb:hover .caption {
-    color: #fff;
+    color: var(--text-primary);
   }
 </style>

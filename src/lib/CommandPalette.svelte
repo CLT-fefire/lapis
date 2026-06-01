@@ -425,7 +425,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--backdrop);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -438,12 +438,12 @@
     max-height: 75vh;
     display: flex;
     flex-direction: column;
-    background: #1f1f1f;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-overlay);
     overflow: hidden;
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
 
   .palette-input {
@@ -451,33 +451,33 @@
     padding: 14px 18px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid #333;
-    color: #fff;
+    border-bottom: 1px solid var(--border-default);
+    color: var(--text-primary);
     font-size: 15px;
     font-family: inherit;
     outline: none;
   }
 
   .palette-input::placeholder {
-    color: #666;
+    color: var(--text-muted);
   }
 
   .status {
     padding: 18px;
     text-align: center;
-    color: #777;
-    font-size: 13px;
+    color: var(--text-muted);
+    font-size: var(--fs-base);
   }
 
   .status.hint kbd {
-    background: #2a2a2a;
-    border: 1px solid #444;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     padding: 1px 5px;
     margin: 0 2px;
-    color: #ccc;
+    color: var(--text-secondary);
     font-family: "SF Mono", Menlo, monospace;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .results {
@@ -489,12 +489,12 @@
   .group-header {
     position: sticky;
     top: 0;
-    background: #1f1f1f;
+    background: var(--surface-overlay);
     padding: 8px 18px 4px;
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: #6dd6ff;
+    color: var(--accent);
     font-weight: 600;
     z-index: 1;
   }
@@ -515,13 +515,13 @@
   }
 
   .result.active {
-    background: #2d4a5a;
-    box-shadow: inset 3px 0 0 #6dd6ff;
+    background: var(--accent-bg-subtle);
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .title {
-    font-size: 14px;
-    color: #fff;
+    font-size: var(--fs-md);
+    color: var(--text-primary);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -531,16 +531,16 @@
   }
 
   .sub {
-    font-size: 11px;
-    color: #888;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .snippet {
-    font-size: 12px;
-    color: #aaa;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -550,8 +550,8 @@
   }
 
   .badge {
-    background: #2d4a5a;
-    color: #9adff7;
+    background: var(--accent-bg-subtle);
+    color: var(--accent-hover);
     font-size: 10px;
     padding: 1px 5px;
     border-radius: 9px;
@@ -561,7 +561,7 @@
   }
 
   .facet-field {
-    color: #888;
+    color: var(--text-muted);
     font-weight: 500;
   }
 
@@ -571,10 +571,10 @@
     top: 50%;
     transform: translateY(-50%);
     font-family: "SF Mono", Menlo, monospace;
-    font-size: 11px;
-    color: #888;
-    background: #2a2a2a;
-    border: 1px solid #444;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     padding: 1px 6px;
   }
@@ -584,9 +584,9 @@
     gap: 16px;
     justify-content: flex-end;
     padding: 8px 14px;
-    background: #2a2a2a;
-    border-top: 1px solid #333;
-    font-size: 11px;
-    color: #888;
+    background: var(--surface-overlay);
+    border-top: 1px solid var(--border-default);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
   }
 </style>

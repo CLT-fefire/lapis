@@ -148,27 +148,27 @@
 <style>
   .empty {
     padding: 30px 16px;
-    color: #666;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     text-align: center;
     line-height: 1.6;
   }
 
   .empty .hint {
     margin-top: 8px;
-    color: #555;
+    color: var(--text-disabled);
   }
 
   .empty code {
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     padding: 1px 5px;
     border-radius: 3px;
-    color: #aaa;
+    color: var(--text-secondary);
   }
 
   .filter-bar {
     padding: 6px 8px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-default);
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -180,25 +180,25 @@
     gap: 6px;
     padding: 4px 8px 4px 10px;
     border-radius: 12px;
-    background: #2d4a5a;
-    color: #fff;
-    font-size: 12px;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
+    font-size: var(--fs-sm);
     font-weight: 600;
   }
 
   .filter-chip.prefix {
-    background: #3a4a2d;
-    color: #d4e88e;
+    background: var(--lime-bg-subtle);
+    color: var(--lime);
   }
 
   .filter-chip .count {
-    color: #9adff7;
+    color: var(--accent-hover);
     font-weight: 400;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .filter-chip.prefix .count {
-    color: #c3d96b;
+    color: var(--lime);
   }
 
   .chip-close {
@@ -207,7 +207,7 @@
     color: inherit;
     opacity: 0.7;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--fs-md);
     line-height: 1;
     padding: 0 2px;
     font-family: inherit;
@@ -235,7 +235,7 @@
   .prefix-toggle {
     background: transparent;
     border: none;
-    color: #888;
+    color: var(--text-muted);
     cursor: pointer;
     padding: 4px 4px 4px 10px;
     font-family: inherit;
@@ -258,8 +258,8 @@
     flex: 1;
     background: transparent;
     border: none;
-    color: #d4e88e;
-    font-size: 13px;
+    color: var(--lime);
+    font-size: var(--fs-base);
     font-weight: 600;
     text-align: left;
     padding: 4px 10px 4px 4px;
@@ -269,18 +269,18 @@
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
   }
 
   .prefix-name:hover {
-    background: rgba(212, 232, 142, 0.1);
-    color: #e3f29e;
+    background: var(--lime-bg-subtle);
+    color: var(--lime);
   }
 
   .prefix-name .count {
-    color: #888;
+    color: var(--text-muted);
     font-weight: 400;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .child-list {
@@ -297,42 +297,42 @@
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     background: transparent;
-    border: 1px solid #2d4a5a;
-    color: #6dd6ff;
-    font-size: 11px;
+    border: 1px solid var(--accent-border);
+    color: var(--accent);
+    font-size: var(--fs-xs);
     cursor: pointer;
     font-family: inherit;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
 
   .child-chip:hover {
-    background: #2d4a5a;
-    color: #fff;
-    border-color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
+    border-color: var(--accent);
   }
 
   .child-chip.sub-prefix {
-    color: #d4e88e;
-    border-color: #3a4a2d;
+    color: var(--lime);
+    border-color: var(--lime-bg-subtle);
   }
 
   .child-chip.sub-prefix:hover {
-    background: #3a4a2d;
-    color: #e3f29e;
-    border-color: #d4e88e;
+    background: var(--lime-bg-subtle);
+    color: var(--lime);
+    border-color: var(--lime);
   }
 
   .child-chip .count {
-    color: #777;
+    color: var(--text-muted);
     font-size: 10px;
   }
 
   .flat-section {
     margin-top: 12px;
     padding-top: 8px;
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .flat-header {
@@ -340,7 +340,7 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #666;
+    color: var(--text-muted);
   }
 
   .flat-list {
@@ -357,24 +357,24 @@
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     background: transparent;
-    border: 1px solid #2d4a5a;
-    color: #6dd6ff;
-    font-size: 11px;
+    border: 1px solid var(--accent-border);
+    color: var(--accent);
+    font-size: var(--fs-xs);
     cursor: pointer;
     font-family: inherit;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
 
   .flat-chip:hover {
-    background: #2d4a5a;
-    color: #fff;
-    border-color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
+    border-color: var(--accent);
   }
 
   .flat-chip .count {
-    color: #777;
+    color: var(--text-muted);
     font-size: 10px;
   }
 
@@ -397,27 +397,27 @@
     padding: 4px 8px;
     background: transparent;
     border: none;
-    color: #aaa;
-    font-size: 13px;
+    color: var(--text-secondary);
+    font-size: var(--fs-base);
     text-align: left;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     font-family: inherit;
   }
 
   .note-row:hover {
-    background: #2f2f2f;
+    background: var(--surface-overlay);
   }
 
   .note-row.active {
-    background: #2d4a5a;
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 #6dd6ff;
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .dot {
-    color: #555;
+    color: var(--text-disabled);
     font-size: 9px;
     width: 10px;
     text-align: center;

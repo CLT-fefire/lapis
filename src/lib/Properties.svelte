@@ -373,9 +373,9 @@
 
 <style>
   .properties {
-    background: #252526;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
     padding: 8px 12px;
     margin-bottom: 24px;
   }
@@ -387,75 +387,75 @@
     gap: 6px;
     padding: 8px 12px;
     margin-bottom: 24px;
-    background: #1f1f1f;
-    border: 1px dashed #3a3a3a;
-    border-radius: 6px;
-    font-size: 12px;
-    color: #888;
+    background: var(--surface-raised);
+    border: 1px dashed var(--border-default);
+    border-radius: var(--r-md);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
   }
 
   .add-properties-btn {
     background: transparent;
-    border: 1px solid #444;
-    color: #9adff7;
-    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    color: var(--accent-hover);
+    border-radius: var(--r-sm);
     padding: 5px 12px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     cursor: pointer;
     font-family: inherit;
   }
   .add-properties-btn:hover {
-    border-color: #6dd6ff;
-    background: #2a3a44;
+    border-color: var(--accent);
+    background: var(--accent-bg-subtle);
   }
 
   .picker-label {
-    color: #888;
+    color: var(--text-muted);
     margin-right: 4px;
   }
 
   .add-chip {
-    background: #2a3a44;
-    border: 1px solid #3a4d58;
-    color: #9adff7;
-    border-radius: 4px;
+    background: var(--accent-bg-subtle);
+    border: 1px solid var(--accent-border);
+    color: var(--accent-hover);
+    border-radius: var(--r-sm);
     padding: 3px 10px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     cursor: pointer;
     font-family: inherit;
   }
   .add-chip:hover {
-    border-color: #6dd6ff;
-    background: #34505e;
+    border-color: var(--accent);
+    background: var(--accent-bg-subtle);
   }
 
   .picker-cancel {
     background: transparent;
     border: none;
-    color: #888;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     cursor: pointer;
     font-family: inherit;
     padding: 3px 8px;
     margin-left: 4px;
   }
   .picker-cancel:hover {
-    color: #ccc;
+    color: var(--text-secondary);
   }
 
   .properties summary {
     cursor: pointer;
-    color: #6dd6ff;
+    color: var(--accent);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-base);
     user-select: none;
   }
 
   .auto-tag {
     margin-left: 6px;
-    color: #888;
+    color: var(--text-muted);
     font-weight: 400;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
@@ -464,12 +464,12 @@
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
-    font-size: 13px;
+    font-size: var(--fs-base);
   }
 
   .properties th {
     text-align: left;
-    color: #888;
+    color: var(--text-muted);
     padding: 4px 12px 4px 0;
     font-weight: 500;
     width: 110px;
@@ -478,7 +478,7 @@
 
   .properties td {
     padding: 4px 0;
-    color: #ddd;
+    color: var(--text-secondary);
   }
 
   .edit-trigger {
@@ -499,14 +499,14 @@
   }
 
   .edit-trigger:hover {
-    border-color: #3a4a5a;
-    background: #1a2a33;
+    border-color: var(--accent-border);
+    background: var(--accent-bg-subtle);
   }
 
   .edit-icon {
     opacity: 0;
-    color: #888;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     transition: opacity 0.1s;
     flex-shrink: 0;
   }
@@ -516,20 +516,19 @@
   }
 
   .empty {
-    color: #666;
+    color: var(--text-muted);
     font-style: italic;
   }
 
   .inline-edit {
     width: 100%;
-    background: #1a1a1a;
-    border: 1px solid #6dd6ff;
-    color: #fff;
+    background: var(--surface-sunken);
+    border: 1px solid var(--accent);
+    color: var(--text-primary);
     padding: 3px 6px;
     border-radius: 3px;
     font-family: inherit;
-    font-size: 13px;
-    outline: none;
+    font-size: var(--fs-base);
   }
 
   select.inline-edit {
@@ -540,10 +539,10 @@
     display: inline-block;
     padding: 1px 8px;
     margin: 2px 4px 2px 0;
-    background: #2d4a5a;
-    border-radius: 10px;
-    font-size: 12px;
-    color: #9adff7;
+    background: var(--accent-bg-subtle);
+    border-radius: var(--r-lg);
+    font-size: var(--fs-sm);
+    color: var(--accent-hover);
   }
 
   .chip-tag {
@@ -554,24 +553,24 @@
   }
 
   .chip-tag:hover {
-    background: #355a6e;
-    color: #fff;
-    border-color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
+    border-color: var(--accent);
   }
 
   .notice {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    background: #2a2a2a;
-    border: 1px solid #6dd6ff;
-    color: #ddd;
+    background: var(--surface-overlay);
+    border: 1px solid var(--accent);
+    color: var(--text-secondary);
     padding: 10px 16px;
-    border-radius: 6px;
-    font-size: 12px;
+    border-radius: var(--r-md);
+    font-size: var(--fs-sm);
     max-width: 360px;
     z-index: 1200;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-md);
   }
 </style>

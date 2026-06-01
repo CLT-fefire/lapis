@@ -108,14 +108,14 @@
   .backlinks {
     margin-top: 36px;
     padding-top: 18px;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-default);
   }
 
   .backlinks h3 {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: #888;
+    color: var(--text-muted);
     margin: 0 0 10px 0;
     font-weight: 600;
   }
@@ -137,58 +137,58 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: 1px solid #2d4a5a;
+    border: 1px solid var(--accent-border);
     border-radius: 14px;
     background: transparent;
     transition: background 0.15s, border-color 0.15s;
   }
 
   li.expanded .row {
-    background: #1a2a33;
-    border-color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    border-color: var(--accent);
   }
 
   .chevron {
     background: transparent;
     border: none;
-    color: #6dd6ff;
+    color: var(--accent);
     cursor: pointer;
     padding: 4px 6px 4px 10px;
     font-family: inherit;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     line-height: 1;
     border-radius: 14px 0 0 14px;
   }
 
   .chevron:hover {
-    background: rgba(109, 214, 255, 0.12);
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
   }
 
   .chip {
     background: transparent;
     border: none;
-    color: #6dd6ff;
+    color: var(--accent);
     padding: 4px 12px 4px 4px;
     cursor: pointer;
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     border-radius: 0 14px 14px 0;
     transition: background 0.15s, color 0.15s;
   }
 
   .chip:hover {
-    background: #2d4a5a;
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
   }
 
   .snippet-box {
     margin-top: 6px;
     margin-left: 22px;
     padding: 8px 12px;
-    background: #1a1a1a;
-    border-left: 2px solid #6dd6ff;
-    border-radius: 0 4px 4px 0;
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -196,19 +196,19 @@
 
   .snippet {
     margin: 0;
-    color: #ccc;
-    font-size: 12px;
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
     line-height: 1.5;
   }
 
   .snippet.no-match {
-    color: #888;
+    color: var(--text-muted);
     font-style: italic;
   }
 
   .placeholder {
-    color: #666;
-    font-size: 14px;
+    color: var(--text-muted);
+    font-size: var(--fs-md);
     letter-spacing: 0.2em;
   }
 
@@ -216,15 +216,15 @@
     align-self: flex-start;
     background: transparent;
     border: none;
-    color: #6dd6ff;
+    color: var(--accent);
     font-family: inherit;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     padding: 2px 0;
     cursor: pointer;
   }
 
   .open-link:hover {
-    color: #fff;
+    color: var(--text-primary);
     text-decoration: underline;
   }
 </style>

@@ -10,6 +10,13 @@
     applyBackupKeep,
     clampBackupKeep,
   } from "$lib/stores/settings";
+  import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
+
+  const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+    { value: "system", label: "시스템" },
+    { value: "light", label: "라이트" },
+    { value: "dark", label: "다크" },
+  ];
 
   // 확인 다이얼로그 분기: null | "enable" | "disable"
   let confirmMode = $state<null | "enable" | "disable">(null);
@@ -115,6 +122,32 @@
       </header>
 
       <div class="settings-body">
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">테마</span>
+              <span class="label-desc">
+                앱 색상 테마. "시스템"은 macOS 라이트/다크 설정을 따릅니다.
+              </span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label="테마 선택">
+              {#each THEME_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$themeMode === opt.value}
+                  aria-pressed={$themeMode === opt.value}
+                  onclick={() => setTheme(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+
         <section class="setting-row">
           <label class="setting-label">
             <input
@@ -227,7 +260,7 @@
   .confirm-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--backdrop);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -240,11 +273,11 @@
 
   .settings-modal,
   .confirm-modal {
-    background: #232323;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    color: #e8e8e8;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-overlay);
+    color: var(--text-primary);
     width: 100%;
     max-width: 540px;
     display: flex;
@@ -261,38 +294,38 @@
     align-items: center;
     gap: 10px;
     padding: 14px 18px;
-    border-bottom: 1px solid #333;
-    background: #2a2a2a;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-overlay);
   }
   .settings-head h2 {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--fs-md);
     font-weight: 600;
     flex: 1;
   }
   .confirm-head {
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
   }
   .icon {
-    color: #6dd6ff;
-    font-size: 16px;
+    color: var(--accent);
+    font-size: var(--fs-lg);
   }
   .icon.warn {
-    color: #f7c947;
+    color: var(--warning);
   }
 
   .close-btn {
     background: transparent;
     border: none;
-    color: #999;
+    color: var(--text-muted);
     cursor: pointer;
-    font-size: 20px;
+    font-size: var(--fs-xl);
     line-height: 1;
     padding: 2px 6px;
   }
   .close-btn:hover {
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .settings-body {
@@ -306,8 +339,8 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px;
-    background: #1e1e1e;
-    border: 1px solid #2f2f2f;
+    background: var(--surface-base);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
   }
 
@@ -328,28 +361,28 @@
     gap: 4px;
   }
   .label-title {
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
   .label-desc {
     font-size: 11.5px;
-    color: #999;
+    color: var(--text-muted);
     line-height: 1.5;
   }
   .setting-status {
     font-size: 10px;
     font-weight: 700;
     padding: 3px 8px;
-    border-radius: 10px;
-    background: #2a2a2a;
-    color: #888;
+    border-radius: var(--r-lg);
+    background: var(--surface-overlay);
+    color: var(--text-muted);
     align-self: flex-start;
     letter-spacing: 0.05em;
   }
   .setting-status.on {
-    background: #2d4a36;
-    color: #5ad469;
+    background: var(--success-bg-subtle);
+    color: var(--success);
   }
 
   .setting-label.number {
@@ -365,17 +398,16 @@
   .number-input {
     width: 64px;
     padding: 4px 8px;
-    background: #1a1a1a;
-    border: 1px solid #444;
-    color: #e8e8e8;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
     border-radius: 5px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
     text-align: right;
   }
   .number-input:focus {
-    outline: none;
-    border-color: #6dd6ff;
+    border-color: var(--accent);
   }
   .number-input:disabled {
     opacity: 0.5;
@@ -383,15 +415,15 @@
   }
   .label-hint {
     margin-top: 6px;
-    font-size: 11px;
-    color: #6dd6ff;
+    font-size: var(--fs-xs);
+    color: var(--accent);
   }
   .label-text code {
-    background: #1a1a1a;
+    background: var(--surface-sunken);
     padding: 1px 5px;
-    border-radius: 3px;
-    font-size: 11px;
-    color: #f7c947;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-xs);
+    color: var(--warning);
   }
 
   .settings-foot,
@@ -400,14 +432,14 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 12px 18px;
-    border-top: 1px solid #333;
-    background: #1e1e1e;
+    border-top: 1px solid var(--border-default);
+    background: var(--surface-base);
   }
 
   .confirm-body {
     padding: 14px 18px;
     font-size: 12.5px;
-    color: #ccc;
+    color: var(--text-secondary);
     line-height: 1.6;
   }
   .confirm-body p {
@@ -418,34 +450,34 @@
     padding-left: 22px;
   }
   .confirm-body ul.preserve li {
-    color: #9adff7;
+    color: var(--accent-hover);
   }
   .confirm-body code {
-    background: #1a1a1a;
+    background: var(--surface-sunken);
     padding: 1px 5px;
-    border-radius: 3px;
-    font-size: 11px;
-    color: #f7c947;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-xs);
+    color: var(--warning);
   }
   .confirm-body .hint {
-    color: #888;
+    color: var(--text-muted);
     font-size: 11.5px;
     margin-top: 8px;
   }
 
   .btn {
-    background: #2a2a2a;
-    border: 1px solid #444;
-    color: #ddd;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
     border-radius: 5px;
     padding: 6px 14px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     cursor: pointer;
     font-family: inherit;
   }
   .btn:hover:not(:disabled) {
-    border-color: #6dd6ff;
-    background: #333;
+    border-color: var(--accent);
+    background: var(--surface-sunken);
   }
   .btn:disabled {
     opacity: 0.5;
@@ -455,11 +487,40 @@
     background: transparent;
   }
   .btn.primary {
-    background: #2d4a5a;
-    border-color: #6dd6ff;
-    color: #6dd6ff;
+    background: var(--accent-bg-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .btn.primary:hover:not(:disabled) {
-    background: #3a5d70;
+    background: var(--accent-border);
+  }
+
+  /* 테마 세그먼트 컨트롤 (디자인 토큰 사용) */
+  .segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+  }
+  .segment {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    padding: 4px 12px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--dur-fast), color var(--dur-fast);
+  }
+  .segment:hover {
+    color: var(--text-primary);
+  }
+  .segment.active {
+    background: var(--accent-bg-subtle);
+    color: var(--accent);
   }
 </style>

@@ -148,31 +148,31 @@
 <style>
   .empty {
     padding: 30px 16px;
-    color: #666;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     text-align: center;
     line-height: 1.6;
   }
 
   .empty.small {
     padding: 16px 14px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
   }
 
   .empty code {
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     padding: 1px 5px;
     border-radius: 3px;
-    color: #aaa;
+    color: var(--text-secondary);
   }
 
   .empty .hint {
     margin-top: 8px;
-    color: #555;
+    color: var(--text-disabled);
   }
 
   .facet-area {
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid var(--border-subtle);
     padding: 6px 0 4px 0;
   }
 
@@ -187,12 +187,12 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #888;
+    color: var(--text-muted);
     padding: 0 2px 4px 2px;
   }
 
   .facet-meta {
-    color: #555;
+    color: var(--text-disabled);
   }
 
   .chip-row {
@@ -206,44 +206,44 @@
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     background: transparent;
-    border: 1px solid #3a3a3a;
-    color: #aaa;
-    font-size: 11px;
+    border: 1px solid var(--border-default);
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
     cursor: pointer;
     font-family: inherit;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
 
   .facet-chip:hover {
-    border-color: #555;
-    color: #ddd;
+    border-color: var(--border-strong);
+    color: var(--text-secondary);
   }
 
   .facet-chip .count {
-    color: #666;
+    color: var(--text-muted);
     font-size: 10px;
   }
 
   /* doc_kind 활성 — 청록 */
   .kind-chip.active {
-    background: #2d4a5a;
-    border-color: #6dd6ff;
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    border-color: var(--accent);
+    color: var(--text-primary);
   }
   .kind-chip.active .count {
-    color: #9adff7;
+    color: var(--accent-hover);
   }
 
   /* topic 활성 — 보라 (graph related와 같은 톤) */
   .topic-chip.active {
-    background: #3d2d5a;
-    border-color: #9b6dd6;
-    color: #fff;
+    background: var(--violet-bg-subtle);
+    border-color: var(--violet);
+    color: var(--text-primary);
   }
   .topic-chip.active .count {
-    color: #c5a3ed;
+    color: var(--violet);
   }
 
   .action-bar {
@@ -255,22 +255,22 @@
   }
 
   .match-count {
-    color: #aaa;
+    color: var(--text-secondary);
   }
 
   .clear-btn {
     background: transparent;
     border: none;
-    color: #6dd6ff;
+    color: var(--accent);
     cursor: pointer;
     font-family: inherit;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     text-decoration: underline;
     padding: 0;
   }
 
   .clear-btn:hover {
-    color: #fff;
+    color: var(--accent-hover);
   }
 
   .note-list {
@@ -292,23 +292,23 @@
     padding: 5px 10px;
     background: transparent;
     border: none;
-    color: #ccc;
-    font-size: 13px;
+    color: var(--text-secondary);
+    font-size: var(--fs-base);
     text-align: left;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     font-family: inherit;
   }
 
   .note-row:hover {
-    background: #2f2f2f;
+    background: var(--surface-overlay);
   }
 
   .note-row.active {
-    background: #2d4a5a;
-    color: #fff;
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 #6dd6ff;
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .name {
@@ -332,12 +332,12 @@
   }
 
   .meta.kind {
-    background: rgba(109, 214, 255, 0.15);
-    color: #9adff7;
+    background: var(--accent-bg-subtle);
+    color: var(--accent-hover);
   }
 
   .meta.topic {
-    background: rgba(155, 109, 214, 0.15);
-    color: #c5a3ed;
+    background: var(--violet-bg-subtle);
+    color: var(--violet);
   }
 </style>

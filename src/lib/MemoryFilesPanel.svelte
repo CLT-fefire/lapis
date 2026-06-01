@@ -101,7 +101,7 @@
 <style>
   .mem-files {
     margin-top: 20px;
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid var(--border-subtle);
     padding-top: 14px;
   }
 
@@ -114,20 +114,20 @@
   }
 
   .caret {
-    color: #888;
+    color: var(--text-muted);
     font-size: 10px;
     width: 12px;
   }
 
   .title {
-    color: #c9a4ff;
+    color: var(--violet);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-base);
   }
 
   .meta {
-    color: #777;
-    font-size: 11px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
   }
 
   .group {
@@ -147,15 +147,15 @@
   }
 
   .grp-label.edited {
-    background: rgba(247, 201, 71, 0.12);
-    color: #f7c947;
-    border: 1px solid rgba(247, 201, 71, 0.3);
+    background: var(--warning-bg-subtle);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
   }
 
   .grp-label.read {
-    background: rgba(201, 164, 255, 0.12);
-    color: #c9a4ff;
-    border: 1px solid rgba(201, 164, 255, 0.3);
+    background: var(--violet-bg-subtle);
+    color: var(--violet);
+    border: 1px solid var(--violet-border);
   }
 
   .files {
@@ -165,18 +165,18 @@
   }
 
   .chip {
-    font-size: 11px;
-    color: #6dd6ff;
-    background: rgba(109, 214, 255, 0.08);
-    border: 1px solid rgba(109, 214, 255, 0.25);
-    border-radius: 4px;
+    font-size: var(--fs-xs);
+    color: var(--accent);
+    background: var(--accent-bg-subtle);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--r-sm);
     padding: 1px 6px;
     cursor: pointer;
-    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
   }
 
   .chip:hover {
-    background: rgba(109, 214, 255, 0.18);
-    color: #aaeaff;
+    background: var(--accent-bg-subtle);
+    color: var(--accent-hover);
   }
 </style>

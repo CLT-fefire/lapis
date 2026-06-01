@@ -99,13 +99,13 @@
     list-style: none;
     margin: 0;
     padding: 4px 0;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
     z-index: 1500;
     min-width: 180px;
-    font-size: 13px;
+    font-size: var(--fs-base);
   }
 
   .context-menu li {
@@ -114,7 +114,7 @@
 
   .context-menu li.sep {
     height: 1px;
-    background: #3a3a3a;
+    background: var(--border-default);
     margin: 4px 0;
   }
 
@@ -124,25 +124,25 @@
     padding: 6px 14px;
     background: transparent;
     border: none;
-    color: #ddd;
+    color: var(--text-secondary);
     cursor: pointer;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-base);
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
   .context-menu button:hover {
-    background: #3a3a3a;
-    color: #fff;
+    background: var(--surface-sunken);
+    color: var(--text-primary);
   }
 
   .context-menu button.danger {
-    color: #f47174;
+    color: var(--danger);
   }
 
   .context-menu button.danger:hover {
-    background: rgba(244, 113, 116, 0.15);
+    background: var(--danger-bg-subtle);
   }
 </style>

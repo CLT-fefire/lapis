@@ -60,6 +60,7 @@
     toggleSidebar,
     restorePaneState,
   } from "$lib/stores/layout";
+  import { restoreTheme } from "$lib/stores/theme";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { renderMermaidIn } from "$lib/mermaid-runtime";
@@ -759,6 +760,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   let appVersion = $state<string>("");
 
   onMount(() => {
+    restoreTheme();
     void restoreSettings();
     restorePaneState();
     restoreLastVault();
@@ -1032,16 +1034,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 </div>
 
 <style>
-  :global(html, body) {
-    margin: 0;
-    padding: 0;
-    height: 100vh;
-    overflow: hidden;
-    background: #1e1e1e;
-    color: #e8e8e8;
-    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Apple SD Gothic Neo", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
+  /* 베이스 리셋(html/body, box-sizing)·focus·reduced-motion은 src/app.css가 소유 */
 
   /* in-document search Preview 하이라이트 (Phase 5.0) — <mark> 삽입 방식 */
   :global(.preview-pane mark.lapis-search-match) {
@@ -1060,10 +1053,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   /* Editor 측 cm-searchMatch는 Editor.svelte의 EditorView.theme()에서 override (specificity 문제로 일반 CSS는 안 통함) */
 
-  :global(*, *::before, *::after) {
-    box-sizing: border-box;
-  }
-
   .app {
     display: flex;
     flex-direction: column;
@@ -1075,25 +1064,25 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    border-bottom: 1px solid #333;
-    background: #252526;
-    font-size: 13px;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-raised);
+    font-size: var(--fs-base);
   }
 
   .brand {
     font-weight: 700;
     letter-spacing: 0.04em;
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   .phase {
-    color: #aaa;
+    color: var(--text-secondary);
   }
 
   .meta {
     margin-left: auto;
-    color: #777;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1104,51 +1093,51 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .save-badge {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     padding: 2px 7px;
-    border-radius: 10px;
+    border-radius: var(--r-lg);
     font-weight: 500;
     flex-shrink: 0;
   }
 
   .save-badge.dirty {
-    color: #f7c947;
-    background: rgba(247, 201, 71, 0.12);
-    border: 1px solid rgba(247, 201, 71, 0.3);
+    color: var(--warning);
+    background: var(--warning-bg-subtle);
+    border: 1px solid var(--warning-border);
   }
 
   .save-badge.saving {
-    color: #6dd6ff;
-    background: rgba(109, 214, 255, 0.12);
-    border: 1px solid rgba(109, 214, 255, 0.3);
+    color: var(--accent);
+    background: var(--accent-bg-subtle);
+    border: 1px solid var(--accent-border);
   }
 
   .save-badge.error {
-    color: #f47174;
-    background: rgba(244, 113, 116, 0.12);
-    border: 1px solid rgba(244, 113, 116, 0.4);
+    color: var(--danger);
+    background: var(--danger-bg-subtle);
+    border: 1px solid var(--danger-border);
   }
 
   /* 외부 변경 충돌 다이얼로그 */
   .conflict-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--backdrop);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1100;
+    z-index: var(--z-modal);
     padding: 32px;
   }
 
   .conflict-modal {
     width: min(520px, 92vw);
-    background: #1f1f1f;
-    border: 1px solid #4a3a3a;
-    border-radius: 10px;
+    background: var(--surface-raised);
+    border: 1px solid var(--danger-border);
+    border-radius: var(--r-lg);
     overflow: hidden;
-    color: #e8e8e8;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-overlay);
   }
 
   .conflict-head {
@@ -1156,37 +1145,37 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     gap: 10px;
     padding: 14px 18px;
-    background: #2d1f1f;
-    border-bottom: 1px solid #4a3a3a;
+    background: var(--danger-bg-subtle);
+    border-bottom: 1px solid var(--danger-border);
     font-weight: 600;
-    color: #f7c8c8;
+    color: var(--danger);
   }
 
   .conflict-icon {
     font-size: 18px;
-    color: #f47174;
+    color: var(--danger);
   }
 
   .conflict-body {
     padding: 16px 18px;
     line-height: 1.6;
-    font-size: 14px;
-    color: #ddd;
+    font-size: var(--fs-md);
+    color: var(--text-secondary);
   }
 
   .conflict-body .path {
     margin: 8px 0;
     padding: 6px 10px;
-    background: #2a2a2a;
-    border-radius: 4px;
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 12px;
-    color: #aaa;
+    background: var(--surface-overlay);
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
     word-break: break-all;
   }
 
   .conflict-body .hint {
-    color: #aaa;
+    color: var(--text-secondary);
     margin-top: 12px;
   }
 
@@ -1194,8 +1183,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     gap: 8px;
     padding: 12px 14px;
-    background: #252526;
-    border-top: 1px solid #4a3a3a;
+    background: var(--surface-raised);
+    border-top: 1px solid var(--danger-border);
   }
 
   .conflict-foot .btn {
@@ -1205,41 +1194,41 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     gap: 4px;
     padding: 10px 12px;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    color: #ddd;
-    border-radius: 6px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--r-md);
     cursor: pointer;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
   }
 
   .conflict-foot .btn:hover {
-    background: #333;
+    background: var(--surface-sunken);
   }
 
   .conflict-foot .btn.keep {
-    border-color: #f7c947;
-    color: #f7c947;
+    border-color: var(--warning);
+    color: var(--warning);
   }
   .conflict-foot .btn.keep:hover {
-    background: rgba(247, 201, 71, 0.1);
+    background: var(--warning-bg-subtle);
   }
 
   .conflict-foot .btn.accept {
-    border-color: #6dd6ff;
-    color: #6dd6ff;
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .conflict-foot .btn.accept:hover {
-    background: rgba(109, 214, 255, 0.1);
+    background: var(--accent-bg-subtle);
   }
 
   .conflict-foot .btn .hint {
     font-size: 10px;
     font-weight: 400;
-    color: #777;
+    color: var(--text-muted);
   }
 
   .topbar-actions {
@@ -1252,43 +1241,44 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .watcher-dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
-    background: #555;
+    border-radius: var(--r-full);
+    background: var(--text-disabled);
     margin-right: 4px;
-    transition: background 0.2s, box-shadow 0.2s;
+    transition: background var(--dur-slow), box-shadow var(--dur-slow);
   }
 
   .watcher-dot.watching {
-    background: #6dd6a4;
-    box-shadow: 0 0 6px rgba(109, 214, 164, 0.5);
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success-border);
   }
 
   .watcher-dot.error {
-    background: #f47174;
-    box-shadow: 0 0 6px rgba(244, 113, 116, 0.5);
+    background: var(--danger);
+    box-shadow: 0 0 6px var(--danger-border);
   }
 
   .topbar-btn {
     width: 28px;
     height: 24px;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    color: #ccc;
-    border-radius: 4px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--fs-base);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
-    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    transition: background var(--dur-fast), border-color var(--dur-fast),
+      color var(--dur-fast);
   }
 
   .topbar-btn:hover {
-    background: #333;
-    border-color: #6dd6ff;
-    color: #fff;
+    background: var(--surface-sunken);
+    border-color: var(--accent);
+    color: var(--text-primary);
   }
 
   .workspace {
@@ -1309,7 +1299,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .sidebar-resizer:hover,
   .sidebar-resizer:active {
-    background: #6dd6ff;
+    background: var(--accent);
   }
 
   /* 사이드바 접힘 시 resizer는 0px 컬럼 — 드래그 비활성화 */
@@ -1327,25 +1317,25 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     justify-content: flex-start;
     gap: 12px;
     padding: 14px 0;
-    background: #252526;
+    background: var(--surface-raised);
     border: none;
-    border-right: 1px solid #333;
-    color: #888;
+    border-right: 1px solid var(--border-default);
+    color: var(--text-muted);
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.15s, color 0.15s;
+    transition: background var(--dur-base), color var(--dur-base);
   }
 
   .sidebar-collapsed-strip:hover {
-    background: #2f2f2f;
-    color: #6dd6ff;
+    background: var(--surface-overlay);
+    color: var(--accent);
   }
 
   .pane {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid #333;
+    border-right: 1px solid var(--border-default);
   }
 
   .pane:last-child {
@@ -1358,49 +1348,50 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     justify-content: space-between;
     gap: 8px;
     padding: 4px 8px 4px 14px;
-    font-size: 11px;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #888;
-    background: #2a2a2a;
-    border-bottom: 1px solid #333;
+    color: var(--text-muted);
+    background: var(--surface-overlay);
+    border-bottom: 1px solid var(--border-default);
     min-height: 30px;
   }
 
   .copy-btn {
     padding: 3px 10px;
-    font-size: 11px;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    color: #ccc;
-    border-radius: 4px;
+    font-size: var(--fs-xs);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
     text-transform: none;
     letter-spacing: normal;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    transition: background var(--dur-base), border-color var(--dur-base),
+      color var(--dur-base);
   }
 
   .copy-btn:hover {
-    background: #333;
-    border-color: #6dd6ff;
-    color: #fff;
+    background: var(--surface-sunken);
+    border-color: var(--accent);
+    color: var(--text-primary);
   }
 
   .copy-btn.done {
-    background: #1f3a2a;
-    border-color: #4caf7d;
-    color: #8ee5b1;
+    background: var(--success-bg-subtle);
+    border-color: var(--success);
+    color: var(--success);
   }
 
   /* 경로 복사 버튼 — 마크다운/리치 복사와 시각 구분 위해 약간 톤 다름 */
   .copy-btn.path {
-    color: #aac6e6;
+    color: var(--accent);
   }
 
   .copy-btn.path:hover:not(:disabled) {
-    border-color: #88a8d0;
-    color: #cfe2f5;
+    border-color: var(--accent);
+    color: var(--accent-hover);
   }
 
   .copy-btn:disabled {
@@ -1409,9 +1400,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .copy-btn:disabled:hover {
-    background: #2a2a2a;
-    border-color: #444;
-    color: #ccc;
+    background: var(--surface-overlay);
+    border-color: var(--border-strong);
+    color: var(--text-secondary);
   }
 
   .pane-actions {
@@ -1427,32 +1418,33 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     justify-content: center;
     padding: 0;
-    font-size: 11px;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    color: #ccc;
-    border-radius: 4px;
+    font-size: var(--fs-xs);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
     text-transform: none;
     letter-spacing: normal;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    transition: background var(--dur-base), border-color var(--dur-base),
+      color var(--dur-base);
   }
 
   .collapse-btn:hover {
-    background: #333;
-    border-color: #6dd6ff;
-    color: #fff;
+    background: var(--surface-sunken);
+    border-color: var(--accent);
+    color: var(--text-primary);
   }
 
   /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침 */
   .pane.collapsed {
-    border-right: 1px solid #333;
+    border-right: 1px solid var(--border-default);
   }
 
   .pane.collapsed:last-child {
     border-right: none;
-    border-left: 1px solid #333;
+    border-left: 1px solid var(--border-default);
   }
 
   .collapsed-strip {
@@ -1464,28 +1456,28 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     justify-content: flex-start;
     gap: 12px;
     padding: 14px 0;
-    background: #2a2a2a;
+    background: var(--surface-overlay);
     border: none;
-    color: #888;
+    color: var(--text-muted);
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.15s, color 0.15s;
+    transition: background var(--dur-base), color var(--dur-base);
   }
 
   .collapsed-strip:hover {
-    background: #333;
-    color: #6dd6ff;
+    background: var(--surface-sunken);
+    color: var(--accent);
   }
 
   .strip-icon {
-    font-size: 13px;
+    font-size: var(--fs-base);
     line-height: 1;
   }
 
   .strip-label {
     writing-mode: vertical-rl;
     transform: rotate(180deg);
-    font-size: 11px;
+    font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     user-select: none;
@@ -1509,7 +1501,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .rendered :global(h1) {
     font-size: 1.8em;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-default);
     padding-bottom: 6px;
     margin-top: 0;
   }
@@ -1517,37 +1509,37 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .rendered :global(h2) {
     font-size: 1.35em;
     margin-top: 1.6em;
-    color: #e8e8e8;
+    color: var(--text-primary);
   }
 
   .rendered :global(h3) {
     font-size: 1.1em;
-    color: #ccc;
+    color: var(--text-secondary);
   }
 
   .rendered :global(a) {
-    color: #6dd6ff;
+    color: var(--accent);
   }
 
   .rendered :global(code) {
-    background: #2d2d2d;
+    background: var(--surface-sunken);
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--r-sm);
     font-size: 0.9em;
-    color: #f0a;
+    color: var(--violet);
   }
 
   .rendered :global(pre) {
-    background: #161616;
+    background: var(--surface-sunken);
     padding: 12px;
-    border-radius: 6px;
+    border-radius: var(--r-md);
     overflow-x: auto;
-    border: 1px solid #2a2a2a;
+    border: 1px solid var(--border-subtle);
   }
 
   .rendered :global(pre code) {
     background: transparent;
-    color: #e8e8e8;
+    color: var(--text-primary);
     padding: 0;
   }
 
@@ -1564,15 +1556,15 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     top: 8px;
     right: 8px;
     padding: 4px 8px;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     line-height: 1;
-    color: #e8e8e8;
-    background: #2a2a2a;
-    border: 1px solid #444;
-    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--dur-base) ease;
     z-index: 2;
   }
 
@@ -1581,14 +1573,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .rendered :global(.mermaid-export-btn:hover) {
-    background: #3a3a3a;
-    border-color: #666;
+    background: var(--surface-sunken);
+    border-color: var(--border-strong);
   }
 
   .rendered :global(.mermaid-host[data-rendered="pending"]) {
     min-height: 80px;
-    background: #1a1a1a;
-    border-radius: 4px;
+    background: var(--surface-sunken);
+    border-radius: var(--r-sm);
   }
 
   .rendered :global(.mermaid-host svg) {
@@ -1597,22 +1589,22 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .rendered :global(.mermaid-error) {
-    background: rgba(244, 113, 116, 0.08);
-    border: 1px solid rgba(244, 113, 116, 0.4);
-    color: #f47174;
+    background: var(--danger-bg-subtle);
+    border: 1px solid var(--danger-border);
+    color: var(--danger);
     padding: 12px;
-    border-radius: 4px;
+    border-radius: var(--r-sm);
     white-space: pre-wrap;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--fs-sm);
     line-height: 1.5;
   }
 
   .rendered :global(blockquote) {
-    border-left: 3px solid #6dd6ff;
+    border-left: 3px solid var(--accent);
     margin: 1em 0;
     padding: 0 14px;
-    color: #bbb;
+    color: var(--text-secondary);
   }
 
   .rendered :global(table) {
@@ -1622,12 +1614,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .rendered :global(th),
   .rendered :global(td) {
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-default);
     padding: 6px 12px;
   }
 
   .rendered :global(th) {
-    background: #2a2a2a;
+    background: var(--surface-overlay);
   }
 
   .rendered :global(ul),
@@ -1641,32 +1633,32 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   /* Wikilink 스타일 (span 기반 — 안전한 navigation) */
   .rendered :global(.wikilink) {
-    color: #6dd6ff;
+    color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px dashed rgba(109, 214, 255, 0.6);
+    border-bottom: 1px dashed var(--accent-border);
     cursor: pointer;
     padding: 0 1px;
-    border-radius: 2px;
-    transition: background 0.1s;
+    border-radius: var(--r-sm);
+    transition: background var(--dur-fast);
   }
 
   .rendered :global(.wikilink:hover) {
-    background: rgba(109, 214, 255, 0.12);
+    background: var(--accent-bg-subtle);
   }
 
   .rendered :global(.wikilink:focus-visible) {
-    outline: 2px solid #6dd6ff;
+    outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
   }
 
   .rendered :global(.wikilink.unresolved) {
-    color: #f47174;
-    border-bottom-color: rgba(244, 113, 116, 0.6);
+    color: var(--danger);
+    border-bottom-color: var(--danger-border);
     border-bottom-style: dotted;
   }
 
   .rendered :global(.wikilink.unresolved:hover) {
-    background: rgba(244, 113, 116, 0.12);
+    background: var(--danger-bg-subtle);
   }
 
   /* 백링크 패널 CSS는 src/lib/Backlinks.svelte로 이전 (Phase 4.5.c) */

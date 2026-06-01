@@ -1,0 +1,312 @@
+/* =============================================================================
+ * Lapis 디자인 시스템 — 토큰 토대 (Slate Pro · light/dark/system)
+ * 계획: docs/plans/design-system-overhaul-20260529.md §3.5
+ *
+ * 사용 규칙:
+ *  - 컴포넌트는 시맨틱 토큰(--surface-*, --text-*, --accent*, --danger 등)만 사용.
+ *  - 원시 램프(--n-*)는 시맨틱 매핑 전용. 컴포넌트에서 직접 쓰지 말 것.
+ *  - 스케일(--sp-* / --r-* / --fs-* / --z-* / --dur-* / --shadow-*)은 테마 무관.
+ * ========================================================================== */
+
+/* --- 테마 무관 스케일 + 다크(기본) 색상 ----------------------------------- */
+:root {
+  /* 원시 중립 슬레이트 램프 */
+  --n-0: #0b0d11;
+  --n-50: #0f1115;
+  --n-100: #171a21;
+  --n-150: #1c2129;
+  --n-200: #222834;
+  --n-300: #2a313f;
+  --n-400: #3a4354;
+  --n-500: #566072;
+  --n-600: #828c9e;
+  --n-700: #9aa3b2;
+  --n-800: #c3c9d4;
+  --n-900: #e6e9ef;
+  --n-1000: #f5f7fa;
+
+  /* 시맨틱 — Surface */
+  --surface-base: var(--n-50);
+  --surface-raised: var(--n-100);
+  --surface-overlay: var(--n-150);
+  --surface-sunken: var(--n-200);
+
+  /* 시맨틱 — Border */
+  --border-subtle: var(--n-200);
+  --border-default: var(--n-300);
+  --border-strong: var(--n-400);
+
+  /* 시맨틱 — Text */
+  --text-primary: var(--n-900);
+  --text-secondary: var(--n-700);
+  --text-muted: var(--n-600);
+  --text-disabled: var(--n-500);
+
+  /* 시맨틱 — Accent (정제 시안) */
+  --accent: #5cc8ff;
+  --accent-hover: #7ad4ff;
+  --accent-fg: #0b0d11;
+  --accent-bg-subtle: rgba(92, 200, 255, 0.12);
+  --accent-border: rgba(92, 200, 255, 0.32);
+
+  /* 시맨틱 — 상태색 */
+  --danger: #f47174;
+  --danger-bg-subtle: rgba(244, 113, 116, 0.12);
+  --danger-border: rgba(244, 113, 116, 0.35);
+  --warning: #f5c451;
+  --warning-bg-subtle: rgba(245, 196, 81, 0.12);
+  --warning-border: rgba(245, 196, 81, 0.3);
+  --success: #58d089;
+  --success-bg-subtle: rgba(88, 208, 137, 0.12);
+  --success-border: rgba(88, 208, 137, 0.3);
+  --info: var(--accent);
+
+  /* 확장 팔레트 — 분류용 색 (memory/AI = violet+teal, 태그 heat = lime) */
+  --violet: #c4a3ff;
+  --violet-bg-subtle: rgba(168, 119, 232, 0.16);
+  --violet-border: rgba(168, 119, 232, 0.35);
+  --teal: #5fd4bd;
+  --teal-bg-subtle: rgba(73, 216, 196, 0.16);
+  --teal-border: rgba(73, 216, 196, 0.35);
+  --lime: #c3d96b;
+  --lime-bg-subtle: rgba(212, 232, 142, 0.12);
+
+  /* Focus */
+  --focus-ring: var(--accent);
+
+  /* 모달/오버레이 배경 스크림 */
+  --backdrop: rgba(0, 0, 0, 0.6);
+
+  /* 시맨틱 — CodeMirror 에디터 (chrome은 적응형 토큰 참조 → 라이트 자동 반영) */
+  --cm-bg: var(--surface-base);
+  --cm-fg: var(--text-primary);
+  --cm-caret: var(--accent);
+  --cm-selection: rgba(92, 200, 255, 0.2);
+  --cm-active-line: rgba(255, 255, 255, 0.045);
+  --cm-gutter-fg: var(--text-disabled);
+  --cm-gutter-active-fg: var(--text-secondary);
+  /* CM 마크다운 syntax 색 (고정 hue — 라이트 블록에서 오버라이드) */
+  --cm-heading: #7ad4ff;
+  --cm-strong: var(--text-primary);
+  --cm-emphasis: var(--text-secondary);
+  --cm-link: var(--accent);
+  --cm-quote: var(--text-muted);
+  --cm-list: #f5c451;
+  --cm-code: #58d089;
+  --cm-meta: var(--text-muted);
+  --cm-keyword: #c792ea;
+  --cm-string: #89d08a;
+  --cm-number: #f5c451;
+  --cm-comment: var(--text-muted);
+
+  /* --- Spacing (4/8 기반) --- */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-8: 24px;
+  --sp-10: 32px;
+
+  /* --- Radius --- */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-full: 9999px;
+
+  /* --- Font size 스케일 --- */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 22px;
+
+  /* --- Font family --- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    "Apple SD Gothic Neo", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* --- z-index 척도 --- */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 1000;
+  --z-modal: 1100;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
+
+  /* --- Motion --- */
+  --dur-fast: 100ms;
+  --dur-base: 150ms;
+  --dur-slow: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Elevation (그림자, 다크 기본) --- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-overlay: 0 20px 50px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+/* --- 라이트 오버라이드 (명시 선택) ---------------------------------------- */
+:root[data-theme="light"] {
+  --surface-base: #f4f6f9;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-sunken: #eef1f5;
+
+  --border-subtle: #e7eaf0;
+  --border-default: #d7dce4;
+  --border-strong: #c2c9d4;
+
+  --text-primary: #1a1f29;
+  --text-secondary: #4b5565;
+  --text-muted: #6b7585;
+  --text-disabled: #9aa3b2;
+
+  --accent: #0a78c2;
+  --accent-hover: #0a6aad;
+  --accent-fg: #ffffff;
+  --accent-bg-subtle: rgba(10, 120, 194, 0.1);
+  --accent-border: rgba(10, 120, 194, 0.3);
+
+  --danger: #d83a3d;
+  --danger-bg-subtle: rgba(216, 58, 61, 0.1);
+  --danger-border: rgba(216, 58, 61, 0.3);
+  --warning: #b7791f;
+  --warning-bg-subtle: rgba(183, 121, 31, 0.1);
+  --warning-border: rgba(183, 121, 31, 0.3);
+  --success: #1f9d57;
+  --success-bg-subtle: rgba(31, 157, 87, 0.1);
+  --success-border: rgba(31, 157, 87, 0.3);
+
+  --violet: #7c3aed;
+  --violet-bg-subtle: rgba(124, 58, 237, 0.1);
+  --violet-border: rgba(124, 58, 237, 0.3);
+  --teal: #0d9488;
+  --teal-bg-subtle: rgba(13, 148, 136, 0.1);
+  --teal-border: rgba(13, 148, 136, 0.3);
+  --lime: #6c8a1f;
+  --lime-bg-subtle: rgba(108, 138, 31, 0.12);
+
+  --backdrop: rgba(16, 24, 40, 0.4);
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.1);
+  --shadow-overlay: 0 20px 50px rgba(16, 24, 40, 0.18);
+
+  /* CodeMirror — 라이트 syntax 오버라이드 (chrome 토큰은 적응형이라 불필요) */
+  --cm-selection: rgba(10, 120, 194, 0.18);
+  --cm-active-line: rgba(10, 30, 60, 0.05);
+  --cm-heading: #0a6aad;
+  --cm-list: #b7791f;
+  --cm-code: #1f9d57;
+  --cm-keyword: #8a3fc0;
+  --cm-string: #1f7a3f;
+  --cm-number: #b7791f;
+
+  color-scheme: light;
+}
+
+/* --- 시스템 추종 (OS가 라이트일 때만 라이트 적용) ------------------------- */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --surface-base: #f4f6f9;
+    --surface-raised: #ffffff;
+    --surface-overlay: #ffffff;
+    --surface-sunken: #eef1f5;
+
+    --border-subtle: #e7eaf0;
+    --border-default: #d7dce4;
+    --border-strong: #c2c9d4;
+
+    --text-primary: #1a1f29;
+    --text-secondary: #4b5565;
+    --text-muted: #6b7585;
+    --text-disabled: #9aa3b2;
+
+    --accent: #0a78c2;
+    --accent-hover: #0a6aad;
+    --accent-fg: #ffffff;
+    --accent-bg-subtle: rgba(10, 120, 194, 0.1);
+    --accent-border: rgba(10, 120, 194, 0.3);
+
+    --danger: #d83a3d;
+    --danger-bg-subtle: rgba(216, 58, 61, 0.1);
+    --danger-border: rgba(216, 58, 61, 0.3);
+    --warning: #b7791f;
+    --warning-bg-subtle: rgba(183, 121, 31, 0.1);
+    --warning-border: rgba(183, 121, 31, 0.3);
+    --success: #1f9d57;
+    --success-bg-subtle: rgba(31, 157, 87, 0.1);
+    --success-border: rgba(31, 157, 87, 0.3);
+
+    --violet: #7c3aed;
+    --violet-bg-subtle: rgba(124, 58, 237, 0.1);
+    --violet-border: rgba(124, 58, 237, 0.3);
+    --teal: #0d9488;
+    --teal-bg-subtle: rgba(13, 148, 136, 0.1);
+    --teal-border: rgba(13, 148, 136, 0.3);
+    --lime: #6c8a1f;
+    --lime-bg-subtle: rgba(108, 138, 31, 0.12);
+
+    --backdrop: rgba(16, 24, 40, 0.4);
+
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+    --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.1);
+    --shadow-overlay: 0 20px 50px rgba(16, 24, 40, 0.18);
+
+    /* CodeMirror — 라이트 syntax 오버라이드 */
+    --cm-selection: rgba(10, 120, 194, 0.18);
+    --cm-active-line: rgba(10, 30, 60, 0.05);
+    --cm-heading: #0a6aad;
+    --cm-list: #b7791f;
+    --cm-code: #1f9d57;
+    --cm-keyword: #8a3fc0;
+    --cm-string: #1f7a3f;
+    --cm-number: #b7791f;
+
+    color-scheme: light;
+  }
+}
+
+/* --- 베이스 리셋 ----------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- 접근성: 가시적 focus 링 ---------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- 접근성: reduced-motion ----------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
