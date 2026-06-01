@@ -60,10 +60,10 @@
     toggleSidebar,
     restorePaneState,
   } from "$lib/stores/layout";
-  import { restoreTheme } from "$lib/stores/theme";
+  import { restoreTheme, themeMode } from "$lib/stores/theme";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
-  import { renderMermaidIn } from "$lib/mermaid-runtime";
+  import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
   import { exportMermaidHostToPng } from "$lib/mermaidExport";
   import { rewriteImageSources } from "$lib/assetPath";
   import type { LinkInfo } from "$lib/tauri/notes";
@@ -322,6 +322,18 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     if (!previewBodyEl) return;
     tick().then(() => {
       if (!previewBodyEl) return;
+      renderMermaidIn(previewBodyEl);
+    });
+  });
+
+  // 테마 전환 시 mermaid 재렌더 — SVG는 테마별로 baked되어 토큰처럼 자동 적응 못 함.
+  // $themeMode 변경을 추적해 렌더 가드를 풀고 현재 테마로 다시 그린다.
+  $effect(() => {
+    const _mode = $themeMode;
+    if (!previewBodyEl) return;
+    tick().then(() => {
+      if (!previewBodyEl) return;
+      resetMermaidHosts(previewBodyEl);
       renderMermaidIn(previewBodyEl);
     });
   });

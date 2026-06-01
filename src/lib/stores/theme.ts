@@ -26,6 +26,22 @@ export function setTheme(mode: ThemeMode): void {
   }
 }
 
+/**
+ * 현재 적용 중인 "실효 테마"(명/암)를 해석한다.
+ * data-theme가 light/dark면 그대로, "system"(또는 미설정)이면 OS 선호를 따른다.
+ * CSS는 토큰으로 자동 적응하지만, mermaid 등 JS로 렌더되는 자원은 이 값을 참조해야 한다.
+ */
+export function resolveEffectiveTheme(): "light" | "dark" {
+  if (typeof document === "undefined") return "dark";
+  const attr = document.documentElement.dataset.theme;
+  if (attr === "light") return "light";
+  if (attr === "dark") return "dark";
+  const prefersLight =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: light)").matches;
+  return prefersLight ? "light" : "dark";
+}
+
 /** 시동 시 1회 호출 — localStorage 값을 store + data-theme에 반영. */
 export function restoreTheme(): void {
   if (typeof localStorage === "undefined") return;
