@@ -21,6 +21,7 @@
   import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
   import { parseNote } from "$lib/markdown";
+  import { computeTextStats, readingTimeLabel } from "$lib/textStats";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { peekLastClosed } from "$lib/stores/recent";
   import { openNewNote } from "$lib/stores/tree-ui";
@@ -177,6 +178,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   });
 
   const parsed = $derived(parseNote(previewRaw));
+
+  // 현재 노트 본문 통계 (단어 / 글자 / 읽기시간) — topbar 표시용.
+  const docStats = $derived(computeTextStats(raw));
 
   function noteDisplayName(path: string): string {
     const segments = path.split("/").filter(Boolean);
@@ -849,6 +853,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         Welcome
       {/if}
     </span>
+    {#if $currentNotePath}
+      <span class="doc-stats" title="단어 · 글자(공백 제외) · 예상 읽기 시간">
+        {docStats.words.toLocaleString()}단어 · {docStats.charsNoSpaces.toLocaleString()}자 · {readingTimeLabel(docStats.readingMinutes)}
+      </span>
+    {/if}
     <div class="topbar-actions">
       <span
         class="watcher-dot"
@@ -1102,6 +1111,13 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: inline-flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .doc-stats {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .save-badge {
