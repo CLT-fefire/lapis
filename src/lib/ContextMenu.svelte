@@ -103,7 +103,7 @@
     border: 1px solid var(--border-strong);
     border-radius: var(--r-md);
     box-shadow: var(--shadow-md);
-    z-index: 1500;
+    z-index: var(--z-context-menu);
     min-width: 180px;
     font-size: var(--fs-base);
   }

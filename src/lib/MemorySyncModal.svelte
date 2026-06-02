@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ModalShell from "$lib/ModalShell.svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { memorySyncOpen, closeMemorySync } from "$lib/stores/memorySync";
   import { vaultPath, reloadNotes } from "$lib/stores/vault";
@@ -244,15 +245,10 @@
     obsProgress = null;
   }
 
-  function onBackdrop(e: MouseEvent) {
-    // exporting / indexing 동안엔 backdrop 클릭 닫기 차단 (진행 중)
-    if (
-      e.target === e.currentTarget &&
-      stage !== "exporting" &&
-      stage !== "indexing"
-    ) {
-      close();
-    }
+  function tryClose() {
+    // exporting / indexing 동안엔 닫기 차단 (진행 중) — ESC·backdrop 공통.
+    if (stage === "exporting" || stage === "indexing") return;
+    close();
   }
 
   function projectsLabel(filter: string[]): string {
@@ -269,9 +265,7 @@
 </script>
 
 {#if $memorySyncOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" onclick={onBackdrop}>
+  <ModalShell onClose={tryClose} label="Memory Sync">
     <div class="modal" role="dialog" aria-modal="true">
       <header>
         <span class="title">Memory · Sync</span>
@@ -488,20 +482,10 @@
         {/if}
       </footer>
     </div>
-  </div>
+  </ModalShell>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: var(--backdrop);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1100;
-    padding: var(--sp-10);
-  }
 
   .modal {
     width: min(520px, 92vw);

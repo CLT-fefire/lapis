@@ -83,7 +83,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 980;
+    z-index: var(--z-overlay);
   }
   .cleanup-card {
     display: flex;
