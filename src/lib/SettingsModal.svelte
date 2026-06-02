@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ModalShell from "$lib/ModalShell.svelte";
   import {
     settingsOpen,
     closeSettings,
@@ -96,25 +97,13 @@
     confirmMode = null;
   }
 
-  function onBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget && !busy) closeSettings();
-  }
-
-  function onKeydown(e: KeyboardEvent) {
-    if (busy) return;
-    if (e.key === "Escape") {
-      if (confirmMode) confirmMode = null;
-      else closeSettings();
-    }
+  function closeSettingsGuarded() {
+    if (!busy) closeSettings();
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
-
 {#if $settingsOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="settings-backdrop" onclick={onBackdropClick}>
+  <ModalShell onClose={closeSettingsGuarded} label="설정">
     <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <header class="settings-head">
         <h2 id="settings-title">설정</h2>
@@ -204,12 +193,10 @@
         <button class="btn btn--ghost" onclick={closeSettings} disabled={busy}>닫기</button>
       </footer>
     </div>
-  </div>
+  </ModalShell>
 
   {#if confirmMode}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="confirm-backdrop" onclick={(e) => e.target === e.currentTarget && cancelConfirm()}>
+    <ModalShell onClose={cancelConfirm} z="modal-nested" label="확인">
       <div class="confirm-modal" role="dialog" aria-modal="true">
         <header class="confirm-head">
           {#if confirmMode === "enable"}
@@ -251,26 +238,11 @@
           </button>
         </footer>
       </div>
-    </div>
+    </ModalShell>
   {/if}
 {/if}
 
 <style>
-  .settings-backdrop,
-  .confirm-backdrop {
-    position: fixed;
-    inset: 0;
-    background: var(--backdrop);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 900;
-    padding: var(--sp-10);
-  }
-  .confirm-backdrop {
-    z-index: 950;
-  }
-
   .settings-modal,
   .confirm-modal {
     background: var(--surface-raised);

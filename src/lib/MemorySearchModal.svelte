@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import ModalShell from "$lib/ModalShell.svelte";
   import { memorySearchOpen, closeMemorySearch } from "$lib/stores/memorySearch";
   import { vaultPath, selectNote } from "$lib/stores/vault";
   import { loadVaultConfig } from "$lib/vaultConfig";
   import { memoryFindExportedNote } from "$lib/tauri/memory";
   import { mirrorQueryMemories, type MirrorSearchHit } from "$lib/tauri/mirror";
 
-  let inputEl: HTMLInputElement | undefined = $state();
   let resultsEl: HTMLDivElement | undefined = $state();
   let query = $state("");
   let hits: MirrorSearchHit[] = $state([]);
@@ -35,7 +34,6 @@
       errorMsg = "";
       keyboardNavMode = false;
       lastMouseXY = { x: -1, y: -1 };
-      void tick().then(() => inputEl?.focus());
     } else {
       if (debounceTimer) {
         clearTimeout(debounceTimer);
@@ -147,10 +145,8 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeMemorySearch();
-    } else if (e.key === "ArrowDown") {
+    // Escape는 ModalShell이 처리.
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       keyboardNavMode = true;
       if (hits.length > 0) activeIndex = (activeIndex + 1) % hits.length;
@@ -176,23 +172,17 @@
     el.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 
-  function onBackdrop(e: MouseEvent) {
-    if (e.target === e.currentTarget) closeMemorySearch();
-  }
-
   function shortDate(iso: string): string {
     return iso.length >= 10 ? iso.slice(0, 10) : iso;
   }
 </script>
 
 {#if $memorySearchOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" onclick={onBackdrop}>
+  <ModalShell onClose={closeMemorySearch} align="top" label="메모리 검색">
     <div class="modal" role="dialog" aria-modal="true">
       <header>
         <input
-          bind:this={inputEl}
+          data-autofocus
           type="text"
           placeholder="메모리 검색 (FTS5 풀텍스트)"
           bind:value={query}
@@ -254,21 +244,10 @@
         ↑↓ 이동 · ↵ 열기 · Esc 닫기 · FTS5 풀텍스트 검색 (한국어는 어절 단위)
       </footer>
     </div>
-  </div>
+  </ModalShell>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: var(--backdrop);
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    z-index: 1100;
-    padding-top: 12vh;
-  }
-
   .modal {
     width: min(640px, 92vw);
     max-height: 76vh;
