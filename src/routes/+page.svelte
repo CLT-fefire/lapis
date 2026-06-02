@@ -951,7 +951,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             : "Watcher 대기"}
       ></span>
       <button
-        class="topbar-btn"
+        class="btn btn--icon btn--sm"
         title="Command palette (Cmd+K)"
         onclick={() => openPalette("all")}
       >🔎</button>
@@ -1027,7 +1027,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             </button>
             {#if !$previewCollapsed}
               <button
-                class="collapse-btn"
+                class="btn btn--icon btn--sm"
                 title="에디터 접기"
                 aria-label="에디터 접기"
                 onclick={toggleEditor}
@@ -1090,7 +1090,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             </button>
             {#if !$editorCollapsed}
               <button
-                class="collapse-btn"
+                class="btn btn--icon btn--sm"
                 title="프리뷰 접기"
                 aria-label="프리뷰 접기"
                 onclick={togglePreview}
@@ -1366,30 +1366,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     box-shadow: 0 0 6px var(--danger-border);
   }
 
-  .topbar-btn {
-    width: 28px;
-    height: var(--control-h-sm);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: var(--fs-base);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    transition: background var(--dur-fast), border-color var(--dur-fast),
-      color var(--dur-fast);
-  }
-
-  .topbar-btn:hover {
-    background: var(--surface-sunken);
-    border-color: var(--accent);
-    color: var(--text-primary);
-  }
-
   .workspace {
     flex: 1;
     display: grid;
@@ -1518,32 +1494,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-  }
-
-  .collapse-btn {
-    width: 26px;
-    height: var(--control-h-sm);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    font-size: var(--fs-xs);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-family: inherit;
-    text-transform: none;
-    letter-spacing: normal;
-    transition: background var(--dur-base), border-color var(--dur-base),
-      color var(--dur-base);
-  }
-
-  .collapse-btn:hover {
-    background: var(--surface-sunken);
-    border-color: var(--accent);
-    color: var(--text-primary);
   }
 
   /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침 */

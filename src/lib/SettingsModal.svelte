@@ -107,7 +107,7 @@
     <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <header class="settings-head">
         <h2 id="settings-title">설정</h2>
-        <button class="close-btn" aria-label="닫기" onclick={closeSettings}>×</button>
+        <button class="btn btn--icon btn--sm btn--plain" aria-label="닫기" onclick={closeSettings}>×</button>
       </header>
 
       <div class="settings-body">
@@ -285,19 +285,6 @@
   }
   .icon.warn {
     color: var(--warning);
-  }
-
-  .close-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: var(--fs-xl);
-    line-height: 1;
-    padding: var(--sp-1) var(--sp-3);
-  }
-  .close-btn:hover {
-    color: var(--text-primary);
   }
 
   .settings-body {
