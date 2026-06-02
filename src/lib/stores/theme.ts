@@ -1,4 +1,4 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 
 // 테마는 순수 UI 선호 → 백엔드 JSON SOT(settings.ts)가 아닌 localStorage 사용.
 // app.html의 인라인 스크립트가 first-paint 전에 data-theme를 읽어 적용(FOUC 방지)하고,
@@ -40,6 +40,23 @@ export function resolveEffectiveTheme(): "light" | "dark" {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-color-scheme: light)").matches;
   return prefersLight ? "light" : "dark";
+}
+
+/**
+ * "system" 모드에서 OS 외관(prefers-color-scheme) 변경을 구독한다.
+ * light/dark 명시 모드는 OS 변경과 무관하므로 콜백을 부르지 않는다.
+ * data-theme 속성은 "system" 그대로라 $themeMode 추적만으로는 감지 못 하고,
+ * CSS는 prefers-color-scheme로 자동 적응하지만 mermaid처럼 JS로 baked되는
+ * 자원은 이 시점에 명시적 재렌더가 필요하다. 반환값은 구독 해제 함수.
+ */
+export function onSystemThemeChange(cb: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const handler = () => {
+    if (get(themeMode) === "system") cb();
+  };
+  mq.addEventListener("change", handler);
+  return () => mq.removeEventListener("change", handler);
 }
 
 /** 시동 시 1회 호출 — localStorage 값을 store + data-theme에 반영. */

@@ -67,7 +67,7 @@
     toggleSidebar,
     restorePaneState,
   } from "$lib/stores/layout";
-  import { restoreTheme, themeMode } from "$lib/stores/theme";
+  import { onSystemThemeChange, restoreTheme, themeMode } from "$lib/stores/theme";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
@@ -342,6 +342,17 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     const _mode = $themeMode;
     if (!previewBodyEl) return;
     tick().then(() => {
+      if (!previewBodyEl) return;
+      resetMermaidHosts(previewBodyEl);
+      renderMermaidIn(previewBodyEl);
+    });
+  });
+
+  // "system" 모드에서 OS 외관이 런타임에 바뀌면 $themeMode는 "system" 그대로라
+  // 위 effect가 안 돌고 mermaid만 stale로 남는다. matchMedia 변경을 구독해
+  // 그때만 재렌더한다. (CSS는 prefers-color-scheme로 자동 적응)
+  $effect(() => {
+    return onSystemThemeChange(() => {
       if (!previewBodyEl) return;
       resetMermaidHosts(previewBodyEl);
       renderMermaidIn(previewBodyEl);
