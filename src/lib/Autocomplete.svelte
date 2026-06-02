@@ -187,7 +187,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--accent);
     color: var(--text-primary);
-    padding: 3px 6px;
+    padding: 3px var(--sp-3);
     border-radius: var(--r-xs);
     font-family: inherit;
     font-size: var(--fs-base);
@@ -198,7 +198,7 @@
   }
 
   .hint {
-    margin-top: 2px;
+    margin-top: var(--sp-1);
     font-size: var(--fs-xs);
     color: var(--text-muted);
   }
@@ -212,8 +212,8 @@
     top: 100%;
     left: 0;
     right: 0;
-    margin: 2px 0 0 0;
-    padding: 4px 0;
+    margin: var(--sp-1) 0 0 0;
+    padding: var(--sp-2) 0;
     list-style: none;
     background: var(--surface-overlay);
     border: 1px solid var(--border-default);
@@ -225,7 +225,7 @@
   }
 
   .item {
-    padding: 4px 10px;
+    padding: var(--sp-2) 10px;
     font-size: var(--fs-sm);
     color: var(--text-secondary);
     cursor: pointer;

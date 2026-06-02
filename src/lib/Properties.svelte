@@ -376,17 +376,17 @@
     background: var(--surface-raised);
     border: 1px solid var(--border-default);
     border-radius: var(--r-md);
-    padding: 8px 12px;
-    margin-bottom: 24px;
+    padding: var(--sp-4) var(--sp-5);
+    margin-bottom: var(--sp-8);
   }
 
   .properties-empty {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    margin-bottom: 24px;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
+    margin-bottom: var(--sp-8);
     background: var(--surface-raised);
     border: 1px dashed var(--border-default);
     border-radius: var(--r-md);
@@ -399,7 +399,7 @@
     border: 1px solid var(--border-strong);
     color: var(--accent-hover);
     border-radius: var(--r-sm);
-    padding: 5px 12px;
+    padding: 5px var(--sp-5);
     font-size: var(--fs-sm);
     cursor: pointer;
     font-family: inherit;
@@ -411,7 +411,7 @@
 
   .picker-label {
     color: var(--text-muted);
-    margin-right: 4px;
+    margin-right: var(--sp-2);
   }
 
   .add-chip {
@@ -436,8 +436,8 @@
     font-size: var(--fs-xs);
     cursor: pointer;
     font-family: inherit;
-    padding: 3px 8px;
-    margin-left: 4px;
+    padding: 3px var(--sp-4);
+    margin-left: var(--sp-2);
   }
   .picker-cancel:hover {
     color: var(--text-secondary);
@@ -452,7 +452,7 @@
   }
 
   .auto-tag {
-    margin-left: 6px;
+    margin-left: var(--sp-3);
     color: var(--text-muted);
     font-weight: 400;
     font-size: var(--fs-xs);
@@ -470,14 +470,14 @@
   .properties th {
     text-align: left;
     color: var(--text-muted);
-    padding: 4px 12px 4px 0;
+    padding: var(--sp-2) var(--sp-5) var(--sp-2) 0;
     font-weight: 500;
     width: 110px;
     vertical-align: top;
   }
 
   .properties td {
-    padding: 4px 0;
+    padding: var(--sp-2) 0;
     color: var(--text-secondary);
   }
 
@@ -487,7 +487,7 @@
     color: inherit;
     font: inherit;
     text-align: left;
-    padding: 2px 6px;
+    padding: var(--sp-1) var(--sp-3);
     margin: -2px -6px;
     border-radius: var(--r-xs);
     cursor: text;
@@ -495,7 +495,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 6px;
+    gap: var(--sp-3);
   }
 
   .edit-trigger:hover {
@@ -525,7 +525,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--accent);
     color: var(--text-primary);
-    padding: 3px 6px;
+    padding: 3px var(--sp-3);
     border-radius: var(--r-xs);
     font-family: inherit;
     font-size: var(--fs-base);
@@ -537,8 +537,8 @@
 
   .chip {
     display: inline-block;
-    padding: 1px 8px;
-    margin: 2px 4px 2px 0;
+    padding: 1px var(--sp-4);
+    margin: var(--sp-1) var(--sp-2) var(--sp-1) 0;
     background: var(--accent-bg-subtle);
     border-radius: var(--r-lg);
     font-size: var(--fs-sm);
@@ -565,7 +565,7 @@
     background: var(--surface-overlay);
     border: 1px solid var(--accent);
     color: var(--text-secondary);
-    padding: 10px 16px;
+    padding: 10px var(--sp-6);
     border-radius: var(--r-md);
     font-size: var(--fs-sm);
     max-width: var(--modal-w-sm);

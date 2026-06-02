@@ -513,8 +513,8 @@ graph LR
   .sidebar-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: var(--sp-4);
+    padding: 10px var(--sp-5);
     border-bottom: 1px solid var(--border-default);
     background: var(--surface-raised);
     min-height: 42px;
@@ -538,7 +538,7 @@ graph LR
     background: var(--accent);
     animation: pulse-dot 0.9s ease-in-out infinite;
     flex-shrink: 0;
-    margin-right: 4px;
+    margin-right: var(--sp-2);
   }
 
   @keyframes pulse-dot {
@@ -567,7 +567,7 @@ graph LR
 
   .actions {
     display: flex;
-    gap: 4px;
+    gap: var(--sp-2);
   }
 
   .icon-btn,
@@ -605,7 +605,7 @@ graph LR
     border-radius: 50%;
     border: none;
     padding: 0;
-    margin: 0 4px 0 0;
+    margin: 0 var(--sp-2) 0 0;
     cursor: pointer;
     box-shadow: 0 0 0 1px var(--surface-sunken);
   }
@@ -636,7 +636,7 @@ graph LR
 
   .open-btn {
     width: 100%;
-    padding: 6px 10px;
+    padding: var(--sp-3) 10px;
     font-size: var(--fs-base);
     background: var(--surface-overlay);
   }
@@ -656,7 +656,7 @@ graph LR
   .tab {
     flex: 1;
     min-width: 0;
-    padding: 8px 6px;
+    padding: var(--sp-4) var(--sp-3);
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
@@ -669,7 +669,7 @@ graph LR
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: var(--sp-2);
     transition: color var(--dur-fast), border-color var(--dur-fast);
     overflow: hidden;
   }
@@ -731,8 +731,8 @@ graph LR
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 4px;
-    padding: 6px 10px;
+    gap: var(--sp-2);
+    padding: var(--sp-3) 10px;
     border-top: 1px solid var(--border-subtle);
     background: var(--surface-raised);
     flex-shrink: 0;
@@ -766,7 +766,7 @@ graph LR
   .index-overlay-card {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--sp-5);
     background: var(--surface-overlay);
     border: 1px solid var(--border-default);
     border-radius: var(--r-lg);
@@ -792,7 +792,7 @@ graph LR
   .index-overlay-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--sp-1);
     min-width: 0;
   }
 
@@ -811,12 +811,12 @@ graph LR
     color: var(--text-muted);
     font-size: var(--fs-sm);
     text-align: center;
-    padding: 30px 16px;
+    padding: 30px var(--sp-6);
     line-height: 1.6;
   }
 
   .empty p {
-    margin: 0 0 12px 0;
+    margin: 0 0 var(--sp-5) 0;
   }
 
   .empty .empty-hint {
@@ -845,8 +845,8 @@ graph LR
   .tree-filter {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px 4px 10px;
+    gap: var(--sp-3);
+    padding: var(--sp-3) 10px var(--sp-2) 10px;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--surface-raised);
   }
@@ -857,7 +857,7 @@ graph LR
     background: var(--surface-sunken);
     border: 1px solid var(--border-default);
     color: var(--text-primary);
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     border-radius: var(--r-sm);
     font-family: inherit;
     font-size: var(--fs-sm);
@@ -880,7 +880,7 @@ graph LR
     color: var(--text-muted);
     cursor: pointer;
     font-size: var(--fs-sm);
-    padding: 0 4px;
+    padding: 0 var(--sp-2);
     line-height: 1;
     flex-shrink: 0;
   }
@@ -890,7 +890,7 @@ graph LR
   }
 
   .filter-empty {
-    padding: 12px;
+    padding: var(--sp-5);
     color: var(--text-muted);
     font-size: var(--fs-sm);
     text-align: center;

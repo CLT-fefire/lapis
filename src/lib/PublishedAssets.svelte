@@ -80,21 +80,21 @@
   .thumbs {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: var(--sp-5);
   }
 
   .thumb {
     background: var(--surface-sunken);
     border: 1px solid var(--accent-border);
     border-radius: var(--r-md);
-    padding: 8px;
+    padding: var(--sp-4);
     cursor: pointer;
     font-family: inherit;
     color: var(--text-secondary);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-3);
     max-width: 160px;
     transition: border-color 0.15s, background 0.15s;
   }

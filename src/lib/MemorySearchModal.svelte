@@ -286,7 +286,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
+    padding: 10px var(--sp-5);
     border-bottom: 1px solid var(--border-default);
   }
 
@@ -296,7 +296,7 @@
     border: 1px solid var(--border-default);
     border-radius: var(--r-md);
     color: var(--text-primary);
-    padding: 6px 10px;
+    padding: var(--sp-3) 10px;
     font-size: var(--fs-base);
     outline: none;
   }
@@ -313,7 +313,7 @@
   }
 
   .err {
-    padding: 8px 12px;
+    padding: var(--sp-4) var(--sp-5);
     color: var(--danger);
     font-size: var(--fs-sm);
     border-bottom: 1px solid var(--danger-border);
@@ -326,7 +326,7 @@
   }
 
   .hit {
-    padding: 10px 12px;
+    padding: 10px var(--sp-5);
     border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
   }
@@ -338,8 +338,8 @@
   .hit-head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-2);
   }
 
   /* kind 배지 — MemorySyncModal과 톤 통일 */
@@ -349,7 +349,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
     border-radius: var(--r-xs);
     flex-shrink: 0;
   }
@@ -369,7 +369,7 @@
   .filters {
     display: flex;
     gap: 14px;
-    padding: 6px 12px;
+    padding: var(--sp-3) var(--sp-5);
     border-bottom: 1px solid var(--border-subtle);
     font-size: var(--fs-xs);
     background: var(--surface-sunken);
@@ -424,7 +424,7 @@
   }
 
   footer.hint {
-    padding: 6px 12px;
+    padding: var(--sp-3) var(--sp-5);
     border-top: 1px solid var(--border-default);
     color: var(--text-muted);
     font-size: var(--fs-xs);

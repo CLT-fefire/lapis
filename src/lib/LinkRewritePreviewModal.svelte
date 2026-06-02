@@ -103,21 +103,21 @@
     color: var(--text-secondary);
     font-size: var(--fs-md);
     cursor: pointer;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
   }
   .x:hover {
     color: var(--text-primary);
   }
 
   .summary {
-    margin: 14px 18px 4px;
+    margin: 14px 18px var(--sp-2);
     font-size: var(--fs-base);
     line-height: 1.5;
   }
 
   .summary code {
     background: var(--surface-sunken);
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
     border-radius: var(--r-xs);
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: var(--fs-sm);
@@ -141,7 +141,7 @@
   .affected {
     list-style: none;
     margin: 0;
-    padding: 8px 18px;
+    padding: var(--sp-4) 18px;
     overflow: auto;
     flex: 1;
     min-height: 80px;
@@ -153,8 +153,8 @@
   .affected li {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    padding: 4px 0;
+    gap: var(--sp-5);
+    padding: var(--sp-2) 0;
     font-size: var(--fs-sm);
     border-bottom: 1px solid var(--border-subtle);
   }
@@ -185,7 +185,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    padding: 12px 18px;
+    padding: var(--sp-5) 18px;
   }
 
   /* 푸터 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn--ghost / .btn--primary) */

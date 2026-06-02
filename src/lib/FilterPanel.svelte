@@ -147,7 +147,7 @@
 
 <style>
   .empty {
-    padding: 30px 16px;
+    padding: 30px var(--sp-6);
     color: var(--text-muted);
     font-size: var(--fs-sm);
     text-align: center;
@@ -155,7 +155,7 @@
   }
 
   .empty.small {
-    padding: 16px 14px;
+    padding: var(--sp-6) 14px;
     font-size: var(--fs-xs);
   }
 
@@ -167,17 +167,17 @@
   }
 
   .empty .hint {
-    margin-top: 8px;
+    margin-top: var(--sp-4);
     color: var(--text-disabled);
   }
 
   .facet-area {
     border-bottom: 1px solid var(--border-subtle);
-    padding: 6px 0 4px 0;
+    padding: var(--sp-3) 0 var(--sp-2) 0;
   }
 
   .facet {
-    padding: 6px 10px;
+    padding: var(--sp-3) 10px;
   }
 
   .facet-header {
@@ -188,7 +188,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
-    padding: 0 2px 4px 2px;
+    padding: 0 var(--sp-1) var(--sp-2) var(--sp-1);
   }
 
   .facet-meta {
@@ -198,14 +198,14 @@
   .chip-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--sp-2);
   }
 
   .facet-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-4);
     border-radius: var(--r-lg);
     background: transparent;
     border: 1px solid var(--border-default);
@@ -250,7 +250,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 12px 2px 12px;
+    padding: var(--sp-3) var(--sp-5) var(--sp-1) var(--sp-5);
     font-size: 11px;
   }
 
@@ -276,7 +276,7 @@
   .note-list {
     list-style: none;
     margin: 0;
-    padding: 8px 6px;
+    padding: var(--sp-4) var(--sp-3);
   }
 
   .note-list li {
@@ -287,7 +287,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: var(--sp-1);
     width: 100%;
     padding: 5px 10px;
     background: transparent;
