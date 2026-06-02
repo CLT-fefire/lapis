@@ -156,8 +156,8 @@
     z-index: 5;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
     background: var(--surface-raised);
     border-bottom: 1px solid var(--border-default);
     font-size: var(--fs-sm);
@@ -167,7 +167,7 @@
   input {
     flex: 1;
     min-width: 0;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     background: var(--surface-base);
     border: 1px solid var(--border-default);
     border-radius: var(--r-sm);
@@ -199,7 +199,7 @@
     flex-shrink: 0;
     height: var(--control-h-sm);
     min-width: 26px;
-    padding: 0 6px;
+    padding: 0 var(--sp-3);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -252,7 +252,7 @@
   }
 
   .close {
-    margin-left: 2px;
+    margin-left: var(--sp-1);
     color: var(--text-muted);
   }
 </style>

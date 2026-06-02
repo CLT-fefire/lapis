@@ -93,15 +93,15 @@
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
+    gap: var(--sp-2);
     width: 100%;
   }
 
   .chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 1px 4px 1px 8px;
+    gap: var(--sp-2);
+    padding: 1px var(--sp-2) 1px var(--sp-4);
     background: var(--accent-bg-subtle);
     border-radius: var(--r-lg);
     font-size: var(--fs-sm);
@@ -116,7 +116,7 @@
     cursor: pointer;
     font-size: var(--fs-md);
     line-height: 1;
-    padding: 0 2px;
+    padding: 0 var(--sp-1);
     border-radius: var(--r-full);
     opacity: 0.7;
   }

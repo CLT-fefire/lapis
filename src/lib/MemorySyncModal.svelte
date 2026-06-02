@@ -500,7 +500,7 @@
     align-items: center;
     justify-content: center;
     z-index: 1100;
-    padding: 32px;
+    padding: var(--sp-10);
   }
 
   .modal {
@@ -517,7 +517,7 @@
   header {
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: var(--sp-5) var(--sp-6);
     border-bottom: 1px solid var(--border-default);
   }
 
@@ -533,7 +533,7 @@
     color: var(--text-muted);
     font-size: var(--fs-md);
     cursor: pointer;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
   }
 
   .close:hover {
@@ -541,13 +541,13 @@
   }
 
   .body {
-    padding: 16px;
+    padding: var(--sp-6);
     font-size: var(--fs-base);
     line-height: 1.6;
   }
 
   .body p {
-    margin: 0 0 8px;
+    margin: 0 0 var(--sp-4);
   }
 
   .body .hint {
@@ -566,11 +566,11 @@
   .counts {
     list-style: none;
     padding: 0;
-    margin: 8px 0;
+    margin: var(--sp-4) 0;
   }
 
   .counts li {
-    padding: 4px 0;
+    padding: var(--sp-2) 0;
   }
 
   .counts .new {
@@ -584,9 +584,9 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
     border-radius: var(--r-xs);
-    margin-right: 8px;
+    margin-right: var(--sp-4);
     vertical-align: 1px;
   }
 
@@ -604,8 +604,8 @@
 
   .toggles {
     display: flex;
-    gap: 16px;
-    margin: 10px 0 4px;
+    gap: var(--sp-6);
+    margin: 10px 0 var(--sp-2);
     font-size: var(--fs-sm);
     color: var(--text-secondary);
   }
@@ -613,7 +613,7 @@
   .toggles label {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-3);
     cursor: pointer;
     user-select: none;
   }
@@ -625,14 +625,14 @@
 
   /* exporting stage progress bar */
   .prog-row {
-    margin: 12px 0;
+    margin: var(--sp-5) 0;
   }
 
   .prog-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-2);
     font-size: var(--fs-sm);
   }
 
@@ -667,8 +667,8 @@
   .indexing-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 4px;
+    gap: var(--sp-5);
+    padding: var(--sp-6) var(--sp-2);
   }
 
   .spinner {
@@ -690,7 +690,7 @@
   .indexing-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--sp-1);
     min-width: 0;
   }
 
@@ -719,7 +719,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--border-subtle);
     border-radius: var(--r-md);
-    padding: 8px;
+    padding: var(--sp-4);
     overflow: auto;
     max-height: 180px;
     color: var(--text-secondary);
@@ -736,8 +736,8 @@
   footer {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 10px 16px;
+    gap: var(--sp-4);
+    padding: 10px var(--sp-6);
     border-top: 1px solid var(--border-default);
   }
 
@@ -752,14 +752,14 @@
   .mirror {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--sp-3);
   }
 
   .mirror-head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--sp-5);
   }
 
   .mirror-title {
@@ -770,21 +770,21 @@
   .mirror-result {
     color: var(--accent-hover);
     font-size: 0.85em;
-    margin: 2px 0 0;
+    margin: var(--sp-1) 0 0;
   }
 
   .mirror-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 4px;
+    gap: var(--sp-4);
+    margin-top: var(--sp-2);
   }
 
   .reindex-row {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin-top: 6px;
-    padding-top: 6px;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    padding-top: var(--sp-3);
     border-top: 1px dashed var(--border-subtle);
   }
 

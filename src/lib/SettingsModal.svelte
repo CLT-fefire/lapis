@@ -265,7 +265,7 @@
     align-items: center;
     justify-content: center;
     z-index: 900;
-    padding: 32px;
+    padding: var(--sp-10);
   }
   .confirm-backdrop {
     z-index: 950;
@@ -322,14 +322,14 @@
     cursor: pointer;
     font-size: var(--fs-xl);
     line-height: 1;
-    padding: 2px 6px;
+    padding: var(--sp-1) var(--sp-3);
   }
   .close-btn:hover {
     color: var(--text-primary);
   }
 
   .settings-body {
-    padding: 16px 18px;
+    padding: var(--sp-6) 18px;
     max-height: 60vh;
     overflow-y: auto;
   }
@@ -337,8 +337,8 @@
   .setting-row {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 12px;
+    gap: var(--sp-5);
+    padding: var(--sp-5);
     background: var(--surface-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--r-lg);
@@ -358,7 +358,7 @@
   .label-text {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--sp-2);
   }
   .label-title {
     font-size: var(--fs-base);
@@ -373,7 +373,7 @@
   .setting-status {
     font-size: 10px;
     font-weight: 700;
-    padding: 3px 8px;
+    padding: 3px var(--sp-4);
     border-radius: var(--r-lg);
     background: var(--surface-overlay);
     color: var(--text-muted);
@@ -397,7 +397,7 @@
   }
   .number-input {
     width: 64px;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     background: var(--surface-sunken);
     border: 1px solid var(--border-strong);
     color: var(--text-primary);
@@ -414,7 +414,7 @@
     cursor: not-allowed;
   }
   .label-hint {
-    margin-top: 6px;
+    margin-top: var(--sp-3);
     font-size: var(--fs-xs);
     color: var(--accent);
   }
@@ -430,8 +430,8 @@
   .confirm-foot {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 18px;
+    gap: var(--sp-4);
+    padding: var(--sp-5) 18px;
     border-top: 1px solid var(--border-default);
     background: var(--surface-base);
   }
@@ -446,7 +446,7 @@
     margin: 0 0 10px 0;
   }
   .confirm-body ul {
-    margin: 0 0 12px 0;
+    margin: 0 0 var(--sp-5) 0;
     padding-left: 22px;
   }
   .confirm-body ul.preserve li {
@@ -462,7 +462,7 @@
   .confirm-body .hint {
     color: var(--text-muted);
     font-size: 11.5px;
-    margin-top: 8px;
+    margin-top: var(--sp-4);
   }
 
   /* 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn / .btn--ghost / .btn--primary) */
@@ -470,8 +470,8 @@
   /* 테마 세그먼트 컨트롤 (디자인 토큰 사용) */
   .segmented {
     display: inline-flex;
-    gap: 2px;
-    padding: 2px;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
     background: var(--surface-sunken);
     border: 1px solid var(--border-default);
     border-radius: var(--r-md);
@@ -483,7 +483,7 @@
     color: var(--text-muted);
     font-family: inherit;
     font-size: var(--fs-sm);
-    padding: 4px 12px;
+    padding: var(--sp-2) var(--sp-5);
     border-radius: var(--r-sm);
     cursor: pointer;
     transition: background var(--dur-fast), color var(--dur-fast);

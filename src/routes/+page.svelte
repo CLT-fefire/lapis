@@ -1153,8 +1153,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .topbar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
+    gap: var(--sp-5);
+    padding: 10px var(--sp-6);
     border-bottom: 1px solid var(--border-default);
     background: var(--surface-raised);
     font-size: var(--fs-base);
@@ -1180,7 +1180,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     max-width: 40%;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-4);
   }
 
   .doc-stats {
@@ -1192,7 +1192,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .save-badge {
     font-size: var(--fs-xs);
-    padding: 2px 7px;
+    padding: var(--sp-1) 7px;
     border-radius: var(--r-lg);
     font-weight: 500;
     flex-shrink: 0;
@@ -1225,7 +1225,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     justify-content: center;
     z-index: var(--z-modal);
-    padding: 32px;
+    padding: var(--sp-10);
   }
 
   .conflict-modal {
@@ -1255,15 +1255,15 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .conflict-body {
-    padding: 16px 18px;
+    padding: var(--sp-6) 18px;
     line-height: 1.6;
     font-size: var(--fs-md);
     color: var(--text-secondary);
   }
 
   .conflict-body .path {
-    margin: 8px 0;
-    padding: 6px 10px;
+    margin: var(--sp-4) 0;
+    padding: var(--sp-3) 10px;
     background: var(--surface-overlay);
     border-radius: var(--r-sm);
     font-family: var(--font-mono);
@@ -1274,13 +1274,13 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .conflict-body .hint {
     color: var(--text-secondary);
-    margin-top: 12px;
+    margin-top: var(--sp-5);
   }
 
   .conflict-foot {
     display: flex;
-    gap: 8px;
-    padding: 12px 14px;
+    gap: var(--sp-4);
+    padding: var(--sp-5) 14px;
     background: var(--surface-raised);
     border-top: 1px solid var(--danger-border);
   }
@@ -1290,8 +1290,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 10px 12px;
+    gap: var(--sp-2);
+    padding: 10px var(--sp-5);
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     color: var(--text-secondary);
@@ -1331,8 +1331,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .topbar-actions {
     display: flex;
-    gap: 4px;
-    margin-left: 8px;
+    gap: var(--sp-2);
+    margin-left: var(--sp-4);
     align-items: center;
   }
 
@@ -1341,7 +1341,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     height: 8px;
     border-radius: var(--r-full);
     background: var(--text-disabled);
-    margin-right: 4px;
+    margin-right: var(--sp-2);
     transition: background var(--dur-slow), box-shadow var(--dur-slow);
   }
 
@@ -1413,7 +1413,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 12px;
+    gap: var(--sp-5);
     padding: 14px 0;
     background: var(--surface-raised);
     border: none;
@@ -1444,8 +1444,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 4px 8px 4px 14px;
+    gap: var(--sp-4);
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) 14px;
     font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1506,7 +1506,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .pane-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-3);
   }
 
   .collapse-btn {
@@ -1552,7 +1552,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 12px;
+    gap: var(--sp-5);
     padding: 14px 0;
     background: var(--surface-overlay);
     border: none;
@@ -1600,7 +1600,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .rendered :global(h1) {
     font-size: 1.8em;
     border-bottom: 1px solid var(--border-default);
-    padding-bottom: 6px;
+    padding-bottom: var(--sp-3);
     margin-top: 0;
   }
 
@@ -1621,7 +1621,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .rendered :global(code) {
     background: var(--surface-sunken);
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
     border-radius: var(--r-sm);
     font-size: 0.9em;
     color: var(--violet);
@@ -1629,7 +1629,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .rendered :global(pre) {
     background: var(--surface-sunken);
-    padding: 12px;
+    padding: var(--sp-5);
     border-radius: var(--r-md);
     overflow-x: auto;
     border: 1px solid var(--border-subtle);
@@ -1653,7 +1653,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     position: absolute;
     top: 8px;
     right: 8px;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     font-size: var(--fs-sm);
     line-height: 1;
     color: var(--text-primary);
@@ -1690,7 +1690,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     background: var(--danger-bg-subtle);
     border: 1px solid var(--danger-border);
     color: var(--danger);
-    padding: 12px;
+    padding: var(--sp-5);
     border-radius: var(--r-sm);
     white-space: pre-wrap;
     text-align: left;
@@ -1713,7 +1713,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .rendered :global(th),
   .rendered :global(td) {
     border: 1px solid var(--border-default);
-    padding: 6px 12px;
+    padding: var(--sp-3) var(--sp-5);
   }
 
   .rendered :global(th) {

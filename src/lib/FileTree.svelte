@@ -366,10 +366,10 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-3);
     width: 100%;
     height: 28px;
-    padding-right: 8px;
+    padding-right: var(--sp-4);
     background: transparent;
     border: none;
     text-align: left;
@@ -468,7 +468,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--accent);
     color: var(--text-primary);
-    padding: 2px 6px;
+    padding: var(--sp-1) var(--sp-3);
     border-radius: var(--r-xs);
     font-family: inherit;
     font-size: var(--fs-base);

@@ -120,7 +120,7 @@
   .text {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--sp-2);
     min-width: 0;
   }
   .title {
@@ -135,7 +135,7 @@
   }
   /* .dismiss는 app.css .btn 프리미티브(.btn--ghost.btn--sm) 사용 + 레이아웃만 로컬 */
   .dismiss {
-    margin-top: 8px;
+    margin-top: var(--sp-4);
     align-self: flex-start;
   }
 </style>

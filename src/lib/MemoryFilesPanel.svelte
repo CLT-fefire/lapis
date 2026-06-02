@@ -108,7 +108,7 @@
   .head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--sp-4);
     cursor: pointer;
     user-select: none;
   }
@@ -134,16 +134,16 @@
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    padding: 8px 0 4px 20px;
+    padding: var(--sp-4) 0 var(--sp-2) 20px;
   }
 
   .grp-label {
     flex-shrink: 0;
     font-size: 10px;
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
     border-radius: var(--r-md);
     height: fit-content;
-    margin-top: 2px;
+    margin-top: var(--sp-1);
   }
 
   .grp-label.edited {
@@ -161,7 +161,7 @@
   .files {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--sp-2);
   }
 
   .chip {
@@ -170,7 +170,7 @@
     background: var(--accent-bg-subtle);
     border: 1px solid var(--accent-border);
     border-radius: var(--r-sm);
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
     cursor: pointer;
     font-family: var(--font-mono);
   }
