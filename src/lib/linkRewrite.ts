@@ -10,6 +10,26 @@
  */
 
 import { splitFrontmatter } from "$lib/frontmatter";
+import MarkdownIt from "markdown-it";
+
+// 코드 블록(fence / 들여쓰기 code block) 라인 범위를 정확히 식별하기 위한 markdown-it 인스턴스.
+// 렌더는 하지 않고 블록 토큰의 map(라인 범위)만 사용 → 코드 영역 마스킹(AST 기반).
+const codeMd = new MarkdownIt({ html: false });
+
+/**
+ * body에서 코드 블록(fence/code_block)에 속한 0-based 라인 인덱스 집합.
+ * markdown-it 블록 파스의 token.map(=[startLine, endLine), end 제외)을 펼친다.
+ * naive `startsWith("```")` 토글이 놓치던 들여쓰기 코드블록·인용 내부 펜스도 정확히 포함.
+ */
+function computeCodeLineSet(body: string): Set<number> {
+  const set = new Set<number>();
+  for (const tok of codeMd.parse(body, {})) {
+    if ((tok.type === "fence" || tok.type === "code_block") && tok.map) {
+      for (let i = tok.map[0]; i < tok.map[1]; i++) set.add(i);
+    }
+  }
+  return set;
+}
 
 export interface RewriteResult {
   changed: boolean;
@@ -166,7 +186,9 @@ function rewriteLinksInBody(
 ): { text: string; count: number } {
   let count = 0;
   const lines = body.split("\n");
-  let inFence = false;
+  // 코드 블록(fence / 들여쓰기 코드블록) 라인을 markdown-it 블록 파스로 정확히 식별.
+  // 기존 naive ``` 라인 토글이 놓치던 들여쓰기 코드블록·인용 내부 펜스 등도 보호.
+  const codeLines = computeCodeLineSet(body);
 
   // 정규식 escape
   const escapedOld = escapeRegex(oldStem);
@@ -178,16 +200,9 @@ function rewriteLinksInBody(
     "gi",
   );
 
-  const newLines = lines.map((line) => {
-    const trimmed = line.trim();
-    // CommonMark fence: ``` 또는 ~~~ (둘 다 line의 시작에서 3개 이상).
-    // 정밀한 fence pairing(opening/closing char 일치)까진 안 가지만,
-    // 실용적으로 ``` ↔ ``` 또는 ~~~ ↔ ~~~ 토글로 충분.
-    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
-      inFence = !inFence;
-      return line;
-    }
-    if (inFence) return line;
+  const newLines = lines.map((line, idx) => {
+    // 코드 블록 라인은 통째로 보호 (AST 기반 식별).
+    if (codeLines.has(idx)) return line;
 
     // 인라인 코드 영역 보호: backtick run 단위로 정확히 매칭.
     const segments = splitByInlineCode(line);

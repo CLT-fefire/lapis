@@ -316,3 +316,23 @@ describe("computeLinkRewritePreview", () => {
     expect(p.items[0].newContent).toContain("`[[oldStem]]`");
   });
 });
+
+describe("rewriteLinksInNote — AST 코드 블록 보호 (옵션 3)", () => {
+  it("들여쓰기(4-space) 코드 블록 안 wikilink 보호", () => {
+    const raw =
+      "real [[oldStem]]\n\n    [[oldStem]] indented code\n\nafter [[oldStem]]";
+    const r = rewriteLinksInNote(raw, "oldStem", "newStem");
+    // 들여쓰기 코드블록 1건 보호 → 프로즈 2건만 치환 (naive ``` 토글로는 3건 오탐).
+    expect(r.occurrences).toBe(2);
+    expect(r.newContent).toContain("    [[oldStem]] indented code");
+    expect((r.newContent.match(/\[\[newStem\]\]/g) ?? []).length).toBe(2);
+  });
+
+  it("들여쓰기 코드 블록 안 md link 보호", () => {
+    const raw = "[text](oldStem.md)\n\n    [text](oldStem.md)\n";
+    const r = rewriteLinksInNote(raw, "oldStem", "newStem");
+    expect(r.occurrences).toBe(1);
+    expect(r.newContent).toContain("    [text](oldStem.md)");
+    expect(r.newContent).toContain("[text](newStem.md)");
+  });
+});
