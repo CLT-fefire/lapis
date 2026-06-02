@@ -49,7 +49,7 @@
     <div class="modal" role="dialog" aria-modal="true" aria-label="New note">
       <header class="modal-head">
         <span>New Note</span>
-        <button class="close-btn" onclick={closeNewNote} title="닫기 (Esc)">×</button>
+        <button class="btn btn--icon btn--sm btn--plain" onclick={closeNewNote} title="닫기 (Esc)">×</button>
       </header>
       <div class="modal-body">
         <div class="row">
@@ -104,20 +104,6 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
-  }
-
-  .close-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    font-size: var(--fs-lg);
-    cursor: pointer;
-    padding: 0 var(--sp-2);
-    line-height: 1;
-  }
-
-  .close-btn:hover {
-    color: var(--text-primary);
   }
 
   .modal-body {
