@@ -146,8 +146,10 @@
   --z-sticky: 200;
   --z-overlay: 1000;
   --z-modal: 1100;
+  --z-modal-nested: 1150;
   --z-toast: 1200;
   --z-tooltip: 1300;
+  --z-context-menu: 1400;
 
   /* --- Motion --- */
   --dur-fast: 100ms;

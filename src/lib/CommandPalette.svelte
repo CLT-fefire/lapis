@@ -430,7 +430,7 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 10vh;
-    z-index: 1000;
+    z-index: var(--z-modal);
   }
 
   .modal {

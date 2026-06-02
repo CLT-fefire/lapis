@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ModalShell from "$lib/ModalShell.svelte";
   import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
 
   const req = $derived($linkRewritePreviewRequest);
@@ -10,21 +11,11 @@
     linkRewritePreviewRequest.set(null);
   }
 
-  function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      close(false);
-    }
-  }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
 {#if req}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" onclick={() => close(false)}>
-    <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+  <ModalShell onClose={() => close(false)} label="링크 자동 갱신">
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <header>
         <h2>링크 자동 갱신</h2>
         <button class="x" onclick={() => close(false)} aria-label="닫기">✕</button>
@@ -52,24 +43,14 @@
       </ul>
 
       <footer>
-        <button class="btn btn--ghost" onclick={() => close(false)}>취소</button>
+        <button class="btn btn--ghost" data-autofocus onclick={() => close(false)}>취소</button>
         <button class="btn btn--primary" onclick={() => close(true)}>적용</button>
       </footer>
     </div>
-  </div>
+  </ModalShell>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: var(--backdrop);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-  }
-
   .modal {
     background: var(--surface-overlay);
     color: var(--text-primary);

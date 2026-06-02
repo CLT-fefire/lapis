@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import ModalShell from "$lib/ModalShell.svelte";
   import { newNoteRequest, closeNewNote } from "$lib/stores/tree-ui";
   import { createNewNote, vaultPath } from "$lib/stores/vault";
 
-  let inputEl: HTMLInputElement | null = $state(null);
   let fileName = $state("");
   let error = $state<string | null>(null);
 
@@ -11,7 +10,6 @@
     if ($newNoteRequest) {
       fileName = "";
       error = null;
-      tick().then(() => inputEl?.focus());
     }
   });
 
@@ -40,22 +38,14 @@
     if (e.key === "Enter") {
       e.preventDefault();
       void submit();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      closeNewNote();
     }
-  }
-
-  function onBackdrop(e: MouseEvent) {
-    if (e.target === e.currentTarget) closeNewNote();
+    // Escape/backdrop 닫기는 ModalShell이 처리.
   }
 </script>
 
 {#if $newNoteRequest}
   {@const req = $newNoteRequest}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" onclick={onBackdrop}>
+  <ModalShell onClose={closeNewNote} align="top" label="New note">
     <div class="modal" role="dialog" aria-modal="true" aria-label="New note">
       <header class="modal-head">
         <span>New Note</span>
@@ -70,7 +60,7 @@
           <label for="newnote-name">File name</label>
           <input
             id="newnote-name"
-            bind:this={inputEl}
+            data-autofocus
             bind:value={fileName}
             type="text"
             placeholder="example or example.md"
@@ -88,21 +78,10 @@
         <button class="btn btn--primary" onclick={submit}>Create &amp; Open</button>
       </footer>
     </div>
-  </div>
+  </ModalShell>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: var(--backdrop);
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 16vh;
-    z-index: 1200;
-  }
-
   .modal {
     width: min(520px, 92vw);
     background: var(--surface-overlay);
