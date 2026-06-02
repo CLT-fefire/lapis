@@ -98,7 +98,7 @@
     position: fixed;
     list-style: none;
     margin: 0;
-    padding: 4px 0;
+    padding: var(--sp-2) 0;
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     border-radius: var(--r-md);
@@ -115,13 +115,13 @@
   .context-menu li.sep {
     height: 1px;
     background: var(--border-default);
-    margin: 4px 0;
+    margin: var(--sp-2) 0;
   }
 
   .context-menu button {
     width: 100%;
     text-align: left;
-    padding: 6px 14px;
+    padding: var(--sp-3) 14px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
@@ -130,7 +130,7 @@
     font-size: var(--fs-base);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-4);
   }
 
   .context-menu button:hover {

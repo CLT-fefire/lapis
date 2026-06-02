@@ -117,7 +117,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px;
+    padding: 10px var(--sp-6);
     background: var(--surface-overlay);
     border-bottom: 1px solid var(--border-default);
     font-weight: 600;
@@ -133,7 +133,7 @@
     color: var(--text-secondary);
     font-size: var(--fs-lg);
     cursor: pointer;
-    padding: 0 4px;
+    padding: 0 var(--sp-2);
     line-height: 1;
   }
 
@@ -142,7 +142,7 @@
   }
 
   .modal-body {
-    padding: 16px 18px;
+    padding: var(--sp-6) 18px;
   }
 
   .row {
@@ -161,7 +161,7 @@
 
   .folder {
     background: var(--surface-overlay);
-    padding: 4px 10px;
+    padding: var(--sp-2) 10px;
     border-radius: var(--r-sm);
     color: var(--text-secondary);
     font-family: "SF Mono", Menlo, monospace;
@@ -173,7 +173,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--border-strong);
     color: var(--text-primary);
-    padding: 6px 10px;
+    padding: var(--sp-3) 10px;
     border-radius: var(--r-sm);
     font-family: inherit;
     font-size: var(--fs-base);
@@ -186,13 +186,13 @@
   .error {
     color: var(--danger);
     font-size: var(--fs-sm);
-    padding: 6px 0 0 88px;
+    padding: var(--sp-3) 0 0 88px;
   }
 
   .modal-foot {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--sp-4);
     padding: 10px 14px;
     background: var(--surface-overlay);
     border-top: 1px solid var(--border-default);

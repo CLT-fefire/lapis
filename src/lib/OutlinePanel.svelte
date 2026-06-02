@@ -31,7 +31,7 @@
   .outline {
     display: flex;
     flex-direction: column;
-    padding: 4px 0;
+    padding: var(--sp-2) 0;
     overflow-y: auto;
   }
 
@@ -45,8 +45,8 @@
     color: var(--text-secondary);
     font-family: inherit;
     font-size: var(--fs-sm);
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: var(--sp-2);
+    padding-bottom: var(--sp-2);
     padding-right: 10px;
     cursor: pointer;
     white-space: nowrap;
@@ -79,14 +79,14 @@
   }
 
   .outline-empty {
-    padding: 24px 16px;
+    padding: var(--sp-8) var(--sp-6);
     color: var(--text-muted);
     font-size: var(--fs-sm);
     text-align: center;
     line-height: 1.6;
   }
   .outline-empty p {
-    margin: 0 0 8px 0;
+    margin: 0 0 var(--sp-4) 0;
   }
   .outline-empty .hint {
     font-size: var(--fs-xs);
@@ -94,7 +94,7 @@
   .outline-empty code {
     font-family: var(--font-mono);
     background: var(--surface-sunken);
-    padding: 1px 4px;
+    padding: 1px var(--sp-2);
     border-radius: var(--r-xs);
   }
 </style>

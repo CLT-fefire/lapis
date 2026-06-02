@@ -474,7 +474,7 @@
     border: 1px solid var(--border-strong);
     border-radius: var(--r-xs);
     padding: 1px 5px;
-    margin: 0 2px;
+    margin: 0 var(--sp-1);
     color: var(--text-secondary);
     font-family: "SF Mono", Menlo, monospace;
     font-size: var(--fs-xs);
@@ -483,14 +483,14 @@
   .results {
     overflow-y: auto;
     flex: 1;
-    padding-bottom: 4px;
+    padding-bottom: var(--sp-2);
   }
 
   .group-header {
     position: sticky;
     top: 0;
     background: var(--surface-overlay);
-    padding: 8px 18px 4px;
+    padding: var(--sp-4) 18px var(--sp-2);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -510,7 +510,7 @@
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--sp-1);
     position: relative;
   }
 
@@ -527,7 +527,7 @@
     text-overflow: ellipsis;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--sp-4);
   }
 
   .sub {
@@ -576,14 +576,14 @@
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     border-radius: var(--r-xs);
-    padding: 1px 6px;
+    padding: 1px var(--sp-3);
   }
 
   .palette-foot {
     display: flex;
-    gap: 16px;
+    gap: var(--sp-6);
     justify-content: flex-end;
-    padding: 8px 14px;
+    padding: var(--sp-4) 14px;
     background: var(--surface-overlay);
     border-top: 1px solid var(--border-default);
     font-size: var(--fs-xs);

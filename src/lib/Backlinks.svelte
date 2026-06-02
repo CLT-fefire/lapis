@@ -126,7 +126,7 @@
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--sp-3);
   }
 
   .backlinks li {
@@ -136,7 +136,7 @@
   .row {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--sp-2);
     border: 1px solid var(--accent-border);
     border-radius: var(--r-full);
     background: transparent;
@@ -153,7 +153,7 @@
     border: none;
     color: var(--accent);
     cursor: pointer;
-    padding: 4px 6px 4px 10px;
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) 10px;
     font-family: inherit;
     font-size: var(--fs-xs);
     line-height: 1;
@@ -169,7 +169,7 @@
     background: transparent;
     border: none;
     color: var(--accent);
-    padding: 4px 12px 4px 4px;
+    padding: var(--sp-2) var(--sp-5) var(--sp-2) var(--sp-2);
     cursor: pointer;
     font-family: inherit;
     font-size: var(--fs-sm);
@@ -183,15 +183,15 @@
   }
 
   .snippet-box {
-    margin-top: 6px;
+    margin-top: var(--sp-3);
     margin-left: 22px;
-    padding: 8px 12px;
+    padding: var(--sp-4) var(--sp-5);
     background: var(--surface-sunken);
     border-left: 2px solid var(--accent);
     border-radius: 0 var(--r-sm) var(--r-sm) 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--sp-3);
   }
 
   .snippet {
@@ -219,7 +219,7 @@
     color: var(--accent);
     font-family: inherit;
     font-size: var(--fs-xs);
-    padding: 2px 0;
+    padding: var(--sp-1) 0;
     cursor: pointer;
   }
 

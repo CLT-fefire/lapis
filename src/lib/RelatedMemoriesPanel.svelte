@@ -134,7 +134,7 @@
 
 <style>
   .related {
-    margin-top: 24px;
+    margin-top: var(--sp-8);
     border-top: 1px solid var(--border-subtle);
     padding-top: 14px;
   }
@@ -142,7 +142,7 @@
   .head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--sp-4);
     cursor: pointer;
     user-select: none;
   }
@@ -167,23 +167,23 @@
   .err {
     color: var(--danger);
     font-size: var(--fs-sm);
-    padding: 8px 0 0 20px;
+    padding: var(--sp-4) 0 0 20px;
   }
 
   .empty {
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    padding: 8px 0 0 20px;
+    padding: var(--sp-4) 0 0 20px;
   }
 
   ul {
     list-style: none;
-    margin: 8px 0 0;
+    margin: var(--sp-4) 0 0;
     padding: 0 0 0 20px;
   }
 
   li {
-    padding: 6px 0;
+    padding: var(--sp-3) 0;
     border-bottom: 1px dashed var(--border-subtle);
     cursor: pointer;
   }
@@ -199,8 +199,8 @@
   .li-head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin-bottom: 2px;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-1);
   }
 
   .li-title {

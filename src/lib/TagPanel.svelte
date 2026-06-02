@@ -147,7 +147,7 @@
 
 <style>
   .empty {
-    padding: 30px 16px;
+    padding: 30px var(--sp-6);
     color: var(--text-muted);
     font-size: var(--fs-sm);
     text-align: center;
@@ -155,7 +155,7 @@
   }
 
   .empty .hint {
-    margin-top: 8px;
+    margin-top: var(--sp-4);
     color: var(--text-disabled);
   }
 
@@ -167,18 +167,18 @@
   }
 
   .filter-bar {
-    padding: 6px 8px;
+    padding: var(--sp-3) var(--sp-4);
     border-bottom: 1px solid var(--border-default);
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--sp-3);
   }
 
   .filter-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px 4px 10px;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) 10px;
     border-radius: var(--r-lg);
     background: var(--accent-bg-subtle);
     color: var(--text-primary);
@@ -209,7 +209,7 @@
     cursor: pointer;
     font-size: var(--fs-md);
     line-height: 1;
-    padding: 0 2px;
+    padding: 0 var(--sp-1);
     font-family: inherit;
   }
 
@@ -219,7 +219,7 @@
 
   /* 트리 */
   .tag-tree {
-    padding: 6px 0;
+    padding: var(--sp-3) 0;
   }
 
   .prefix-group {
@@ -237,7 +237,7 @@
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    padding: 4px 4px 4px 10px;
+    padding: var(--sp-2) var(--sp-2) var(--sp-2) 10px;
     font-family: inherit;
     display: inline-flex;
     align-items: center;
@@ -262,13 +262,13 @@
     font-size: var(--fs-base);
     font-weight: 600;
     text-align: left;
-    padding: 4px 10px 4px 4px;
+    padding: var(--sp-2) 10px var(--sp-2) var(--sp-2);
     cursor: pointer;
     font-family: inherit;
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
-    gap: 6px;
+    gap: var(--sp-3);
     border-radius: var(--r-sm);
   }
 
@@ -285,18 +285,18 @@
 
   .child-list {
     list-style: none;
-    margin: 0 0 4px 0;
-    padding: 0 6px 0 24px;
+    margin: 0 0 var(--sp-2) 0;
+    padding: 0 var(--sp-3) 0 var(--sp-8);
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--sp-2);
   }
 
   .child-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-4);
     border-radius: var(--r-lg);
     background: transparent;
     border: 1px solid var(--accent-border);
@@ -330,13 +330,13 @@
   }
 
   .flat-section {
-    margin-top: 12px;
-    padding-top: 8px;
+    margin-top: var(--sp-5);
+    padding-top: var(--sp-4);
     border-top: 1px solid var(--border-subtle);
   }
 
   .flat-header {
-    padding: 4px 14px;
+    padding: var(--sp-2) 14px;
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -346,17 +346,17 @@
   .flat-list {
     list-style: none;
     margin: 0;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--sp-2);
   }
 
   .flat-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-4);
     border-radius: var(--r-lg);
     background: transparent;
     border: 1px solid var(--accent-border);
@@ -382,7 +382,7 @@
   .note-list {
     list-style: none;
     margin: 0;
-    padding: 8px 6px;
+    padding: var(--sp-4) var(--sp-3);
   }
 
   .note-list li {
@@ -392,9 +392,9 @@
   .note-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-3);
     width: 100%;
-    padding: 4px 8px;
+    padding: var(--sp-2) var(--sp-4);
     background: transparent;
     border: none;
     color: var(--text-secondary);
