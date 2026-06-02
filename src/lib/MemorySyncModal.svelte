@@ -270,7 +270,7 @@
       <header>
         <span class="title">Memory · Sync</span>
         {#if stage !== "exporting" && stage !== "indexing"}
-          <button class="close" onclick={close} aria-label="닫기">✕</button>
+          <button class="btn btn--icon btn--sm btn--plain close" onclick={close} aria-label="닫기">✕</button>
         {/if}
       </header>
 
@@ -512,16 +512,7 @@
 
   .close {
     margin-left: auto;
-    background: transparent;
-    border: none;
     color: var(--text-muted);
-    font-size: var(--fs-md);
-    cursor: pointer;
-    padding: var(--sp-2) var(--sp-4);
-  }
-
-  .close:hover {
-    color: var(--text-primary);
   }
 
   .body {

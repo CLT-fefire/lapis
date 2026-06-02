@@ -229,31 +229,33 @@
   });
 </script>
 
+{#snippet addEntry()}
+  {#if addPickerOpen}
+    <span class="picker-label">추가할 필드:</span>
+    {#each ADDABLE_FIELDS as field}
+      <button
+        type="button"
+        class="add-chip"
+        onclick={() => addField(field.key, field.defaultValue)}
+      >+ {field.label}</button>
+    {/each}
+    <button
+      type="button"
+      class="picker-cancel"
+      onclick={() => (addPickerOpen = false)}
+    >취소</button>
+  {:else}
+    <button
+      type="button"
+      class="add-properties-btn"
+      onclick={() => (addPickerOpen = true)}
+      title="이 노트에 frontmatter 필드를 추가합니다"
+    >＋ Properties 추가</button>
+  {/if}
+{/snippet}
+
 {#if Object.keys(data).length === 0 && !isAuto}
-  <div class="properties-empty">
-    {#if addPickerOpen}
-      <span class="picker-label">추가할 필드:</span>
-      {#each ADDABLE_FIELDS as field}
-        <button
-          type="button"
-          class="add-chip"
-          onclick={() => addField(field.key, field.defaultValue)}
-        >+ {field.label}</button>
-      {/each}
-      <button
-        type="button"
-        class="picker-cancel"
-        onclick={() => (addPickerOpen = false)}
-      >취소</button>
-    {:else}
-      <button
-        type="button"
-        class="add-properties-btn"
-        onclick={() => (addPickerOpen = true)}
-        title="이 노트에 frontmatter 필드를 추가합니다"
-      >＋ Properties 추가</button>
-    {/if}
-  </div>
+  <div class="properties-empty">{@render addEntry()}</div>
 {/if}
 
 {#if Object.keys(data).length > 0}
@@ -360,6 +362,10 @@
         {/each}
       </tbody>
     </table>
+    {#if isAuto}
+      <!-- 합성(auto) properties 표시 중 — 실제 frontmatter가 없으므로 추가 진입점 노출 -->
+      <div class="properties-add-footer">{@render addEntry()}</div>
+    {/if}
   </details>
 {/if}
 
@@ -392,6 +398,16 @@
     border-radius: var(--r-md);
     font-size: var(--fs-sm);
     color: var(--text-muted);
+  }
+
+  .properties-add-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: 1px dashed var(--border-default);
   }
 
   .add-properties-btn {

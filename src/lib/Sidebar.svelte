@@ -354,9 +354,9 @@ graph LR
             onclick={openMemorySync}
           ></button>
         {/if}
-        <button class="icon-btn" title="새로고침" onclick={reloadNotes}>↻</button>
-        <button class="icon-btn" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
-        <button class="icon-btn" title="사이드바 접기 (⌘B)" aria-label="사이드바 접기" onclick={toggleSidebar}>◀</button>
+        <button class="btn btn--icon btn--sm btn--plain" title="새로고침" onclick={reloadNotes}>↻</button>
+        <button class="btn btn--icon btn--sm btn--plain" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
+        <button class="btn btn--icon btn--sm btn--plain" title="사이드바 접기 (⌘B)" aria-label="사이드바 접기" onclick={toggleSidebar}>◀</button>
       </div>
     {:else}
       <button class="open-btn" onclick={pickAndOpenVault}>Vault 열기…</button>
@@ -490,7 +490,7 @@ graph LR
 
   <footer class="sidebar-foot">
     <button
-      class="icon-btn settings-btn"
+      class="btn btn--icon btn--sm btn--plain settings-btn"
       title="설정"
       aria-label="설정 열기"
       onclick={openSettings}
@@ -570,7 +570,6 @@ graph LR
     gap: var(--sp-2);
   }
 
-  .icon-btn,
   .open-btn,
   .link-btn {
     background: transparent;
@@ -579,22 +578,6 @@ graph LR
     border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
-  }
-
-  .icon-btn {
-    width: 26px;
-    height: var(--control-h-sm);
-    font-size: var(--fs-base);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-color: transparent;
-    background: var(--surface-overlay);
-  }
-
-  .icon-btn:hover {
-    border-color: var(--accent);
-    background: var(--surface-sunken);
   }
 
   /* Mirror status indicator — 점만 노출, 클릭 시 MemorySyncModal 오픈 */
@@ -739,9 +722,6 @@ graph LR
   }
 
   .settings-btn {
-    width: 26px;
-    height: var(--control-h-sm);
-    font-size: var(--fs-md);
     color: var(--text-muted);
   }
   .settings-btn:hover {

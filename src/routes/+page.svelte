@@ -67,7 +67,7 @@
     toggleSidebar,
     restorePaneState,
   } from "$lib/stores/layout";
-  import { restoreTheme, themeMode } from "$lib/stores/theme";
+  import { onSystemThemeChange, restoreTheme, themeMode } from "$lib/stores/theme";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
@@ -342,6 +342,17 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     const _mode = $themeMode;
     if (!previewBodyEl) return;
     tick().then(() => {
+      if (!previewBodyEl) return;
+      resetMermaidHosts(previewBodyEl);
+      renderMermaidIn(previewBodyEl);
+    });
+  });
+
+  // "system" 모드에서 OS 외관이 런타임에 바뀌면 $themeMode는 "system" 그대로라
+  // 위 effect가 안 돌고 mermaid만 stale로 남는다. matchMedia 변경을 구독해
+  // 그때만 재렌더한다. (CSS는 prefers-color-scheme로 자동 적응)
+  $effect(() => {
+    return onSystemThemeChange(() => {
       if (!previewBodyEl) return;
       resetMermaidHosts(previewBodyEl);
       renderMermaidIn(previewBodyEl);
@@ -940,7 +951,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             : "Watcher 대기"}
       ></span>
       <button
-        class="topbar-btn"
+        class="btn btn--icon btn--sm"
         title="Command palette (Cmd+K)"
         onclick={() => openPalette("all")}
       >🔎</button>
@@ -1016,7 +1027,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             </button>
             {#if !$previewCollapsed}
               <button
-                class="collapse-btn"
+                class="btn btn--icon btn--sm"
                 title="에디터 접기"
                 aria-label="에디터 접기"
                 onclick={toggleEditor}
@@ -1079,7 +1090,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             </button>
             {#if !$editorCollapsed}
               <button
-                class="collapse-btn"
+                class="btn btn--icon btn--sm"
                 title="프리뷰 접기"
                 aria-label="프리뷰 접기"
                 onclick={togglePreview}
@@ -1355,30 +1366,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     box-shadow: 0 0 6px var(--danger-border);
   }
 
-  .topbar-btn {
-    width: 28px;
-    height: var(--control-h-sm);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: var(--fs-base);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    transition: background var(--dur-fast), border-color var(--dur-fast),
-      color var(--dur-fast);
-  }
-
-  .topbar-btn:hover {
-    background: var(--surface-sunken);
-    border-color: var(--accent);
-    color: var(--text-primary);
-  }
-
   .workspace {
     flex: 1;
     display: grid;
@@ -1507,32 +1494,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-  }
-
-  .collapse-btn {
-    width: 26px;
-    height: var(--control-h-sm);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    font-size: var(--fs-xs);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-family: inherit;
-    text-transform: none;
-    letter-spacing: normal;
-    transition: background var(--dur-base), border-color var(--dur-base),
-      color var(--dur-base);
-  }
-
-  .collapse-btn:hover {
-    background: var(--surface-sunken);
-    border-color: var(--accent);
-    color: var(--text-primary);
   }
 
   /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침 */
