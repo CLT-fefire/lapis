@@ -29,14 +29,19 @@
 
   function onDragStart(e: DragEvent, i: number) {
     dragIndex = i;
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      // WebKit/WKWebView는 dataTransfer에 데이터가 있어야 드래그를 유효로 보고 drop 허용.
+      e.dataTransfer.setData("text/plain", String(i));
+    }
   }
   function onDragOver(e: DragEvent, i: number) {
     e.preventDefault(); // drop 허용
     if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
     dragOverIndex = i;
   }
-  function onDrop(i: number) {
+  function onDrop(e: DragEvent, i: number) {
+    e.preventDefault(); // 기본 드롭 동작(텍스트 등) 방지
     if (dragIndex !== null && dragIndex !== i) moveTab(dragIndex, i);
     dragIndex = null;
     dragOverIndex = null;
@@ -105,7 +110,7 @@
         draggable="true"
         ondragstart={(e) => onDragStart(e, i)}
         ondragover={(e) => onDragOver(e, i)}
-        ondrop={() => onDrop(i)}
+        ondrop={(e) => onDrop(e, i)}
         ondragend={onDragEnd}
         oncontextmenu={(e) => onContextMenu(e, path)}
         onclick={() => onTabClick(path)}
