@@ -15,10 +15,13 @@ export interface BacklinkContext {
 
 /**
  * 메모리 캐시 — 같은 (source, target stem) 쌍은 한 번만 fetch.
- * key 형식: `${sourcePath}::${targetStem}`
+ * key 형식: `${sourcePath}::${targetStem}` (source 본문 발췌라 source 변경에만 의존).
  *
- * 외부 변경 / rename 시점에 invalidate. 본 phase에선 단순화 — 캐시 stale 가능성 인정,
- * 다음 세션에서 fresh.
+ * 무효화 경로 (모두 연결됨):
+ * - 외부 변경: watcher `onPathChanged`/`onPathRemoved` → `invalidateCacheBySource(path)`
+ * - 앱 내 편집: `saveCurrentNote` → `reloadNotes` → `clearBacklinkCache()`
+ * - 앱 내 rename/delete/move: 각 함수가 `refreshTreeOnly` 직후 `clearBacklinkCache()` 호출
+ *   (watcher 디바운스/활성 여부와 무관하게 즉시 무효화)
  */
 const snippetCache = new Map<string, BacklinkContext>();
 
