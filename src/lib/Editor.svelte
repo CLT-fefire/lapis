@@ -25,12 +25,19 @@
 
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { get } from "svelte/store";
   import { EditorState } from "@codemirror/state";
   import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
   import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
   import { markdown } from "@codemirror/lang-markdown";
   import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
   import { tags as t } from "@lezer/highlight";
+  import { linkIndex } from "$lib/stores/vault";
+  import type { LinkIndex } from "$lib/linkIndex";
+  import {
+    wikilinkCompletionExtension,
+    type WikilinkCandidate,
+  } from "$lib/wikilinkComplete";
   import {
     search,
     setSearchQuery,
@@ -71,6 +78,44 @@
       ".cm-activeLineGutter": {
         backgroundColor: "var(--cm-active-line)",
         color: "var(--cm-gutter-active-fg)",
+      },
+      // 위키링크 자동완성 드롭다운 — 디자인 토큰으로 라이트/다크 자동 적응
+      // (기본 드롭다운은 흰 배경 고정이라 다크모드 부조화).
+      ".cm-tooltip.cm-tooltip-autocomplete": {
+        border: "1px solid var(--border-strong)",
+        borderRadius: "var(--r-sm)",
+        backgroundColor: "var(--surface-overlay)",
+        boxShadow: "var(--shadow-md)",
+        overflow: "hidden",
+      },
+      ".cm-tooltip-autocomplete > ul": {
+        fontFamily: "var(--font-sans)",
+        maxHeight: "16em",
+      },
+      ".cm-tooltip-autocomplete > ul > li": {
+        padding: "var(--sp-1) var(--sp-3)",
+        color: "var(--text-primary)",
+      },
+      ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+        backgroundColor: "var(--accent)",
+        color: "var(--accent-fg)",
+      },
+      ".cm-completionDetail": {
+        marginLeft: "var(--sp-3)",
+        color: "var(--text-muted)",
+        fontStyle: "italic",
+      },
+      ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail": {
+        color: "var(--accent-fg)",
+        opacity: "0.85",
+      },
+      ".cm-completionMatchedText": {
+        color: "var(--accent)",
+        textDecoration: "none",
+        fontWeight: "600",
+      },
+      ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText": {
+        color: "inherit",
       },
     },
     { dark: false },
@@ -123,6 +168,23 @@
 
   let host: HTMLDivElement;
   let view: EditorView | undefined;
+
+  /** linkIndex의 모든 노트 → 위키링크 자동완성 후보. 동일 stem은 부모 폴더명으로 구분. */
+  function buildCandidates(idx: LinkIndex | null): WikilinkCandidate[] {
+    if (!idx) return [];
+    const out: WikilinkCandidate[] = [];
+    for (const info of idx.byPath.values()) {
+      const segs = info.source_path.split("/").filter(Boolean);
+      const parent = segs.length >= 2 ? segs[segs.length - 2] : undefined;
+      out.push({
+        stem: info.source_name,
+        title: info.title,
+        aliases: info.aliases,
+        rel: parent,
+      });
+    }
+    return out;
+  }
 
   function getMatchInfo(view: EditorView): EditorMatchInfo {
     const sq = getSearchQuery(view.state);
@@ -212,6 +274,7 @@
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         markdown(),
+        wikilinkCompletionExtension(() => buildCandidates(get(linkIndex))),
         lapisTheme,
         syntaxHighlighting(lapisHighlight),
         searchHighlightTheme, // 테마 이후에 → cm-searchMatch override
