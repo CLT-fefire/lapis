@@ -975,6 +975,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     </div>
     <span class="meta">
       {#if $currentNotePath}
+        <button
+          class="btn btn--icon btn--sm btn--plain pin-toggle"
+          class:pin-on={currentPinned}
+          title={currentPinned ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
+          aria-label={currentPinned ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
+          aria-pressed={currentPinned}
+          onclick={() => $currentNotePath && togglePin($currentNotePath)}
+        >{currentPinned ? "★" : "☆"}</button>
         {noteDisplayName($currentNotePath)}
         {#if $isSaving}
           <span class="save-badge saving">saving…</span>
@@ -995,16 +1003,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       </span>
     {/if}
     <div class="topbar-actions">
-      {#if $currentNotePath}
-        <button
-          class="btn btn--icon btn--sm btn--plain"
-          class:pin-on={currentPinned}
-          title={currentPinned ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
-          aria-label={currentPinned ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
-          aria-pressed={currentPinned}
-          onclick={() => $currentNotePath && togglePin($currentNotePath)}
-        >{currentPinned ? "★" : "☆"}</button>
-      {/if}
       <span
         class="watcher-dot"
         class:watching={$watcherStatus === "watching"}
