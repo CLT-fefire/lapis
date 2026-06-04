@@ -47,7 +47,6 @@
   } from "$lib/stores/vault";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
   import { openTabs, tabPathForShortcut } from "$lib/stores/tabs";
-  import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
   import { noteDisplayName } from "$lib/notePath";
   import {
     editorContent,
@@ -199,11 +198,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   // 노트 히스토리 드롭다운 열림 상태 (topbar ▾ 토글).
   let historyMenuOpen = $state(false);
-
-  // 현재 노트가 즐겨찾기에 핀됐는지 (topbar ★/☆ 토글). $derived로 reactive 보장.
-  const currentPinned = $derived(
-    !!$currentNotePath && $pinnedNotePaths.includes($currentNotePath),
-  );
 
   // 현재 노트의 백링크 (다른 노트에서 이 노트를 [[wikilink]]로 가리키는 항목들)
   const currentBacklinks = $derived.by<LinkInfo[]>(() => {
@@ -975,14 +969,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     </div>
     <span class="meta">
       {#if $currentNotePath}
-        <button
-          class="btn btn--icon btn--sm btn--plain pin-toggle"
-          class:pin-on={currentPinned}
-          title={currentPinned ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
-          aria-label={currentPinned ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
-          aria-pressed={currentPinned}
-          onclick={() => $currentNotePath && togglePin($currentNotePath)}
-        >{currentPinned ? "★" : "☆"}</button>
         {noteDisplayName($currentNotePath)}
         {#if $isSaving}
           <span class="save-badge saving">saving…</span>
@@ -1250,11 +1236,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: inline-flex;
     align-items: center;
     gap: var(--sp-1);
-  }
-
-  /* topbar 즐겨찾기 토글 — 핀된 상태는 accent 별로 강조 */
-  .pin-on {
-    color: var(--accent);
   }
 
   .meta {

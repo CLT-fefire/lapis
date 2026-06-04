@@ -2,6 +2,7 @@
   import { openTabs } from "$lib/stores/tabs";
   import { currentNotePath, selectNote, closeTab } from "$lib/stores/vault";
   import { isDirty } from "$lib/stores/editor";
+  import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
   import { noteStem } from "$lib/notePath";
 
   let barEl: HTMLDivElement | undefined = $state();
@@ -24,6 +25,11 @@
     e.stopPropagation(); // 탭 클릭(활성화)과 분리
     void closeTab(path);
   }
+
+  function onPinToggle(e: MouseEvent, path: string) {
+    e.stopPropagation(); // 탭 활성화와 분리
+    togglePin(path);
+  }
 </script>
 
 {#if $openTabs.length > 0}
@@ -32,6 +38,7 @@
       <div
         class="tab"
         class:active={path === $currentNotePath}
+        class:pinned={$pinnedNotePaths.includes(path)}
         role="tab"
         tabindex="0"
         aria-selected={path === $currentNotePath}
@@ -44,6 +51,13 @@
           }
         }}
       >
+        <button
+          class="pin-icon"
+          title={$pinnedNotePaths.includes(path) ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
+          aria-label="즐겨찾기 토글"
+          aria-pressed={$pinnedNotePaths.includes(path)}
+          onclick={(e) => onPinToggle(e, path)}
+        >{$pinnedNotePaths.includes(path) ? "★" : "☆"}</button>
         {#if path === $currentNotePath && $isDirty}
           <span class="dirty" aria-label="저장되지 않음">●</span>
         {/if}
@@ -109,6 +123,36 @@
     flex-shrink: 0;
     color: var(--accent);
     font-size: var(--fs-xs);
+  }
+
+  /* 핀 아이콘 — 미핀은 평소 숨김, 탭 hover 시 ☆ 노출 / 핀되면 ★ 항상 표시. */
+  .pin-icon {
+    flex-shrink: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none; /* 숨김 상태에선 클릭 불가 — 투명 버튼 오클릭 방지 */
+    transition: opacity var(--dur-fast);
+  }
+
+  .tab:hover .pin-icon {
+    opacity: 0.55;
+    pointer-events: auto;
+  }
+
+  .pin-icon:hover {
+    opacity: 1;
+  }
+
+  .tab.pinned .pin-icon {
+    opacity: 1;
+    pointer-events: auto;
+    color: var(--accent);
   }
 
   .tab .close {
