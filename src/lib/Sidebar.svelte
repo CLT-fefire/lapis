@@ -3,6 +3,7 @@
   import TagPanel from "./TagPanel.svelte";
   import FilterPanel from "./FilterPanel.svelte";
   import OutlinePanel from "./OutlinePanel.svelte";
+  import FavoritesPanel from "./FavoritesPanel.svelte";
   import { outlineHeadings } from "$lib/stores/outline";
   import {
     vaultPath,
@@ -22,7 +23,8 @@
     collectLeafPaths,
   } from "$lib/stores/treeFilter";
   import { tick } from "svelte";
-  import { sidebarTab, showFilesTab, showOutlineTab, showTagsTab, tagIndex } from "$lib/stores/tags";
+  import { sidebarTab, showFilesTab, showOutlineTab, showTagsTab, showFavoritesTab, tagIndex } from "$lib/stores/tags";
+  import { pinnedNotePaths } from "$lib/stores/pins";
   import {
     docKindCounts,
     topicCounts,
@@ -410,6 +412,17 @@ graph LR
           <span class="badge">{compactCount($docKindCounts.size + $topicCounts.size)}</span>
         {/if}
       </button>
+      <button
+        class="tab"
+        class:active={$sidebarTab === "favorites"}
+        onclick={showFavoritesTab}
+        title="즐겨찾기 · 최근"
+      >
+        ⭐
+        {#if $pinnedNotePaths.length > 0}
+          <span class="badge">{compactCount($pinnedNotePaths.length)}</span>
+        {/if}
+      </button>
     </nav>
   {/if}
 
@@ -470,6 +483,8 @@ graph LR
       <OutlinePanel />
     {:else if $sidebarTab === "tags"}
       <TagPanel />
+    {:else if $sidebarTab === "favorites"}
+      <FavoritesPanel />
     {:else}
       <FilterPanel />
     {/if}

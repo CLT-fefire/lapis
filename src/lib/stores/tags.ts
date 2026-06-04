@@ -30,7 +30,7 @@ export interface TagIndex {
   sortedTags: string[];
 }
 
-export type SidebarTab = "files" | "outline" | "tags" | "filters";
+export type SidebarTab = "files" | "outline" | "tags" | "filters" | "favorites";
 export type SelectedTagKind = "leaf" | "prefix";
 
 export const tagIndex = writable<TagIndex | null>(null);
@@ -177,6 +177,10 @@ export function showFilesTab(): void {
 
 export function showOutlineTab(): void {
   sidebarTab.set("outline");
+}
+
+export function showFavoritesTab(): void {
+  sidebarTab.set("favorites");
 }
 
 export function clearTagIndex(): void {

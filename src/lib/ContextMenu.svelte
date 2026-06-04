@@ -6,8 +6,9 @@
     requestRename,
   } from "$lib/stores/tree-ui";
   import { deletePath, createNewFolder } from "$lib/stores/vault";
+  import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
 
-  async function onAction(action: "new-note" | "new-folder" | "rename" | "delete" | "copy-path") {
+  async function onAction(action: "new-note" | "new-folder" | "rename" | "delete" | "copy-path" | "pin") {
     const target = $contextTarget;
     if (!target) return;
     closeContextMenu();
@@ -35,6 +36,9 @@
         break;
       case "copy-path":
         await copyToClipboard(entry.path);
+        break;
+      case "pin":
+        togglePin(entry.path);
         break;
     }
   }
@@ -89,6 +93,13 @@
     <li><button onclick={() => onAction("rename")}>✏️ Rename</button></li>
     <li><button onclick={() => onAction("delete")} class="danger">🗑 Delete (휴지통)</button></li>
     <li class="sep"></li>
+    {#if !isDir}
+      <li>
+        <button onclick={() => onAction("pin")}>
+          {$pinnedNotePaths.includes(target.entry.path) ? "📌 Unpin (즐겨찾기 해제)" : "📌 Pin (즐겨찾기)"}
+        </button>
+      </li>
+    {/if}
     <li><button onclick={() => onAction("copy-path")}>📋 Copy Path</button></li>
   </ul>
 {/if}
