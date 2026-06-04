@@ -19,6 +19,8 @@
   import CleanupOverlay from "$lib/CleanupOverlay.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
+  import ReadingControls from "$lib/ReadingControls.svelte";
+  import { readingFontSize } from "$lib/stores/reading";
   import { openMemorySearch } from "$lib/stores/memorySearch";
   import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
@@ -1121,6 +1123,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <div class="pane-title">
           <span>Preview</span>
           <div class="pane-actions">
+            <ReadingControls />
             <button
               class="copy-btn path"
               class:done={pathCopied}
@@ -1162,7 +1165,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick} onscroll={handlePreviewScroll}>
         <Properties data={effectiveProperties} isAuto={propertiesAuto} rawNote={raw} />
-        <article class="rendered">
+        <article class="rendered" style="--reading-font-size: {$readingFontSize}px">
           {@html parsed.html}
         </article>
 
@@ -1612,7 +1615,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .rendered {
     line-height: 1.65;
-    font-size: 15px;
+    /* 프리뷰 글꼴 크기(줌) — ReadingControls가 --reading-font-size로 주입. 헤딩은 em이라 비례. */
+    font-size: var(--reading-font-size, 15px);
   }
 
   .rendered :global(h1) {
