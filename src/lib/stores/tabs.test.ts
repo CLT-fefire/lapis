@@ -53,18 +53,16 @@ describe("removeTabEntry", () => {
 describe("tabPathForShortcut", () => {
   const tabs = ["a", "b", "c"];
 
-  it("1~N번째 탭(1-based)", () => {
+  it("1~9번째 탭(1-based)", () => {
     expect(tabPathForShortcut(tabs, 1)).toBe("a");
     expect(tabPathForShortcut(tabs, 3)).toBe("c");
+    const nine = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    expect(tabPathForShortcut(nine, 9)).toBe("9");
   });
 
-  it("9 = 마지막 탭", () => {
-    expect(tabPathForShortcut(tabs, 9)).toBe("c");
-    expect(tabPathForShortcut(["a", "b", "c", "d", "e"], 9)).toBe("e");
-  });
-
-  it("탭 수 초과 index는 null", () => {
+  it("탭 수 초과 index는 null (9번째 탭이 없으면 null)", () => {
     expect(tabPathForShortcut(tabs, 5)).toBeNull();
+    expect(tabPathForShortcut(tabs, 9)).toBeNull();
   });
 
   it("빈 목록은 null", () => {

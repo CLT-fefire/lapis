@@ -53,14 +53,11 @@ export function unregisterTab(path: string, activePath: string | null): string |
 
 /**
  * Cmd+1~9 단축키 → 활성화할 탭 path.
- * - 1~8: 해당 번째(1-based) 탭. 탭 수보다 크면 null.
- * - 9: 마지막 탭(VS Code/브라우저 관례).
+ * - 1~9: 해당 번째(1-based) 탭. 탭 수보다 크면 null.
  * - 그 외/빈 목록: null.
  */
 export function tabPathForShortcut(tabs: string[], digit: number): string | null {
-  if (tabs.length === 0) return null;
-  if (digit === 9) return tabs[tabs.length - 1];
-  if (digit >= 1 && digit <= 8) return tabs[digit - 1] ?? null;
+  if (digit >= 1 && digit <= 9) return tabs[digit - 1] ?? null;
   return null;
 }
 

@@ -856,7 +856,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       const cur = $currentNotePath;
       if (cur) void closeTab(cur);
     } else if (/^[1-9]$/.test(key) && !e.shiftKey) {
-      // Cmd+1~8 — N번째 탭, Cmd+9 — 마지막 탭
+      // Cmd+1~9 — N번째 탭
       const path = tabPathForShortcut(get(openTabs), Number(key));
       if (path) {
         e.preventDefault();
