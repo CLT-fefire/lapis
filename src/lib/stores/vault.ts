@@ -471,6 +471,7 @@ export async function deletePath(path: string): Promise<boolean> {
     // 탭에서 제거 + 활성이었으면 인접 탭으로(또는 빈 상태).
     await closeTab(path);
     await refreshTreeOnly();
+    clearBacklinkCache(); // 백링크 스니펫 즉시 무효화 (watcher 디바운스 갭 제거)
     return true;
   } catch (e) {
     console.error("deletePath failed", e);
@@ -496,6 +497,7 @@ export async function renamePath(oldPath: string, newName: string): Promise<stri
       currentNotePath.set(newPath);
     }
     await refreshTreeOnly();
+    clearBacklinkCache(); // rename/링크갱신 전후 백링크 스니펫 즉시 무효화 (watcher 갭 제거)
 
     // 링크 자동 갱신 — preview 모달 → confirm → backup → write.
     // 비동기 백그라운드: rename 자체는 UI 차단 X, 모달은 별도 흐름.
@@ -520,6 +522,7 @@ export async function movePath(path: string, newParentDir: string): Promise<stri
       currentNotePath.set(newPath);
     }
     await refreshTreeOnly();
+    clearBacklinkCache(); // source path 변경 → 백링크 캐시 키 무효화
     return newPath;
   } catch (e) {
     console.error("movePath failed", e);
