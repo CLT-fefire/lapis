@@ -61,6 +61,34 @@ export function tabPathForShortcut(tabs: string[], digit: number): string | null
   return null;
 }
 
+/** from 위치의 탭을 to 위치로 이동(드래그 재정렬). 범위 밖/동일이면 그대로. */
+export function reorderTabs(tabs: string[], from: number, to: number): string[] {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= tabs.length ||
+    to >= tabs.length
+  ) {
+    return tabs;
+  }
+  const next = [...tabs];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/** path만 남기고 모두 제거(다른 탭 닫기). path가 없으면 그대로. */
+export function closeOthers(tabs: string[], path: string): string[] {
+  return tabs.includes(path) ? [path] : tabs;
+}
+
+/** path까지 유지하고 오른쪽 전부 제거(오른쪽 탭 닫기). path가 없으면 그대로. */
+export function keepUpTo(tabs: string[], path: string): string[] {
+  const idx = tabs.indexOf(path);
+  return idx === -1 ? tabs : tabs.slice(0, idx + 1);
+}
+
 /** vault 전환 시 초기화. */
 export function clearTabs(): void {
   openTabs.set([]);
