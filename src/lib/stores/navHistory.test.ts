@@ -4,6 +4,7 @@ import {
   pushEntry,
   goBack,
   goForward,
+  goTo,
   currentPath,
   canBack,
   canForward,
@@ -68,6 +69,32 @@ describe("goBack / goForward", () => {
   it("맨 끝에서 앞으로는 변화 없음", () => {
     const s = visit(["a", "b"]);
     expect(goForward(s)).toEqual(s);
+  });
+});
+
+describe("goTo", () => {
+  it("범위 내 index로 cursor 이동, entries 보존", () => {
+    const s = visit(["a", "b", "c"]);
+    expect(goTo(s, 0)).toEqual({ entries: ["a", "b", "c"], cursor: 0 });
+  });
+
+  it("현재 cursor와 같으면 변화 없음", () => {
+    const s = visit(["a", "b", "c"]); // cursor=2
+    expect(goTo(s, 2)).toBe(s);
+  });
+
+  it("범위 밖 index는 no-op", () => {
+    const s = visit(["a", "b"]);
+    expect(goTo(s, 5)).toBe(s);
+    expect(goTo(s, -1)).toBe(s);
+  });
+
+  it("점프는 forward 분기를 폐기하지 않음 (단순 이동)", () => {
+    const s = visit(["a", "b", "c"]);
+    const jumped = goTo(s, 0);
+    // 다시 끝으로 이동 가능해야 함 (entries 그대로)
+    expect(jumped.entries).toEqual(["a", "b", "c"]);
+    expect(goTo(jumped, 2)).toEqual({ entries: ["a", "b", "c"], cursor: 2 });
   });
 });
 
