@@ -55,7 +55,14 @@ import {
   navJumpTo,
   clearNavHistory,
 } from "$lib/stores/navHistory";
-import { registerTab, unregisterTab, clearTabs } from "$lib/stores/tabs";
+import {
+  registerTab,
+  unregisterTab,
+  clearTabs,
+  openTabs,
+  loadTabsFor,
+  saveTabsFor,
+} from "$lib/stores/tabs";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -90,6 +97,18 @@ export async function openVault(path: string): Promise<void> {
   clearNavHistory();
   clearTabs();
   await reloadNotes();
+
+  // 탭 복원 — reloadNotes로 linkIndex가 준비된 뒤, 현재 vault에 저장된 탭 중
+  // 실제 존재하는 노트만 살리고 마지막 활성 노트를 연다(없으면 빈 상태 유지).
+  const savedTabs = loadTabsFor(path);
+  const idx = get(linkIndex);
+  const liveTabs = idx ? savedTabs.tabs.filter((p) => idx.byPath.has(p)) : [];
+  if (liveTabs.length > 0) {
+    openTabs.set(liveTabs);
+    if (savedTabs.active && liveTabs.includes(savedTabs.active)) {
+      await selectNote(savedTabs.active);
+    }
+  }
 
   // 파일 watcher 시작 — circular import 회피 위해 lazy import
   try {
@@ -695,6 +714,7 @@ export async function selectNote(
     if (editor) editor.markSaved(content);
     pushRecent(path);
     registerTab(path);
+    persistTabs();
     // 뒤로/앞으로 이동(fromHistory)이 아닌 일반 열기만 히스토리에 기록.
     if (!opts.fromHistory) recordNavigation(path);
   } catch (e) {
@@ -732,13 +752,22 @@ export async function closeTab(path: string): Promise<void> {
   if (!path) return;
   const wasActive = get(currentNotePath) === path;
   const nextActive = unregisterTab(path, get(currentNotePath));
-  if (!wasActive) return; // 비활성 탭 닫기 — 활성 노트 그대로
+  if (!wasActive) {
+    persistTabs(); // 비활성 탭 닫기 — 목록만 변경, 저장
+    return;
+  }
   if (nextActive) {
-    await selectNote(nextActive, { fromHistory: true });
+    await selectNote(nextActive, { fromHistory: true }); // selectNote가 persistTabs 호출
   } else {
     currentNotePath.set(null);
     currentNoteContent.set("");
+    persistTabs();
   }
+}
+
+/** 현재 vault의 열린 탭 + 활성 노트를 localStorage에 저장. */
+function persistTabs(): void {
+  saveTabsFor(get(vaultPath) ?? "", get(openTabs), get(currentNotePath));
 }
 
 export async function restoreLastVault(): Promise<void> {
