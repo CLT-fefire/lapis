@@ -7,6 +7,7 @@ import {
   currentNotePath,
   linkIndex,
   reloadNotes,
+  closeTab,
 } from "./vault";
 
 export type WatcherStatus = "idle" | "watching" | "error";
@@ -136,10 +137,8 @@ function onPathRemoved(path: string): void {
     return idx;
   });
 
-  // 현재 노트가 사라졌으면 빈 상태로
-  if (get(currentNotePath) === path) {
-    currentNotePath.set(null);
-  }
+  // 외부 삭제 — 탭에서 제거(열려 있었다면) + 활성이었으면 인접 탭으로/빈 상태.
+  void closeTab(path);
 
   // notes 트리는 reloadNotes로 정확히 정정됨 (scheduleFullReload)
 }

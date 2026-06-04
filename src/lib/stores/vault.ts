@@ -55,6 +55,7 @@ import {
   navJumpTo,
   clearNavHistory,
 } from "$lib/stores/navHistory";
+import { registerTab, unregisterTab, clearTabs } from "$lib/stores/tabs";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -87,6 +88,7 @@ export async function openVault(path: string): Promise<void> {
   currentNotePath.set(null);
   currentNoteContent.set("");
   clearNavHistory();
+  clearTabs();
   await reloadNotes();
 
   // 파일 watcher 시작 — circular import 회피 위해 lazy import
@@ -444,10 +446,8 @@ export async function deletePath(path: string): Promise<boolean> {
   if (!vault) return false;
   try {
     await deleteNoteTauri(vault, path);
-    if (get(currentNotePath) === path) {
-      currentNotePath.set(null);
-      currentNoteContent.set("");
-    }
+    // 탭에서 제거 + 활성이었으면 인접 탭으로(또는 빈 상태).
+    await closeTab(path);
     await refreshTreeOnly();
     return true;
   } catch (e) {
@@ -694,6 +694,7 @@ export async function selectNote(
     // editor 상태 동기화 — 새 노트 기준으로 dirty 해제
     if (editor) editor.markSaved(content);
     pushRecent(path);
+    registerTab(path);
     // 뒤로/앞으로 이동(fromHistory)이 아닌 일반 열기만 히스토리에 기록.
     if (!opts.fromHistory) recordNavigation(path);
   } catch (e) {
@@ -721,6 +722,23 @@ export async function goToHistory(index: number): Promise<void> {
   const cur = get(currentNotePath);
   const path = navJumpTo(index);
   if (path && path !== cur) await selectNote(path, { fromHistory: true });
+}
+
+/**
+ * 탭 닫기 — 목록에서 제거하고, 닫은 게 활성 탭이면 인접 탭으로 전환.
+ * 마지막 탭을 닫으면 빈 상태.
+ */
+export async function closeTab(path: string): Promise<void> {
+  if (!path) return;
+  const wasActive = get(currentNotePath) === path;
+  const nextActive = unregisterTab(path, get(currentNotePath));
+  if (!wasActive) return; // 비활성 탭 닫기 — 활성 노트 그대로
+  if (nextActive) {
+    await selectNote(nextActive, { fromHistory: true });
+  } else {
+    currentNotePath.set(null);
+    currentNoteContent.set("");
+  }
 }
 
 export async function restoreLastVault(): Promise<void> {

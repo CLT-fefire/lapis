@@ -18,6 +18,7 @@
   import SettingsModal from "$lib/SettingsModal.svelte";
   import CleanupOverlay from "$lib/CleanupOverlay.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
+  import TabBar from "$lib/TabBar.svelte";
   import { openMemorySearch } from "$lib/stores/memorySearch";
   import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
@@ -42,6 +43,7 @@
     deletePath,
     goBackNote,
     goForwardNote,
+    closeTab,
   } from "$lib/stores/vault";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
   import { noteDisplayName } from "$lib/notePath";
@@ -847,6 +849,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       if (key === "arrowleft") void goBackNote();
       else void goForwardNote();
+    } else if (key === "w" && !e.shiftKey) {
+      // Cmd+W — 활성 탭 닫기
+      e.preventDefault();
+      const cur = $currentNotePath;
+      if (cur) void closeTab(cur);
     }
   }
 
@@ -1039,6 +1046,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
           <span class="strip-label">Editor</span>
         </button>
       {:else}
+        <TabBar />
         <div class="pane-title">
           <span>Editor</span>
           <div class="pane-actions">
