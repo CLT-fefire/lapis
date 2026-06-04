@@ -170,7 +170,7 @@
   {@const menu = ctxMenu}
   <ul class="tab-ctx-menu" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
     <li>
-      <button role="menuitem" onclick={() => { closeCtxMenu(); void closeTab(menu.path); }}>
+      <button role="menuitem" onclick={() => { const p = menu.path; closeCtxMenu(); void closeTab(p); }}>
         탭 닫기
       </button>
     </li>
@@ -178,14 +178,14 @@
       <button
         role="menuitem"
         disabled={$openTabs.length <= 1}
-        onclick={() => { closeCtxMenu(); void closeOtherTabs(menu.path); }}
+        onclick={() => { const p = menu.path; closeCtxMenu(); void closeOtherTabs(p); }}
       >다른 탭 닫기</button>
     </li>
     <li>
       <button
         role="menuitem"
         disabled={!hasRight}
-        onclick={() => { closeCtxMenu(); void closeTabsToRight(menu.path); }}
+        onclick={() => { const p = menu.path; closeCtxMenu(); void closeTabsToRight(p); }}
       >오른쪽 탭 닫기</button>
     </li>
   </ul>
