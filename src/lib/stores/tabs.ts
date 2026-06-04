@@ -65,3 +65,61 @@ export function tabPathForShortcut(tabs: string[], digit: number): string | null
 export function clearTabs(): void {
   openTabs.set([]);
 }
+
+// === vault별 영속화 (localStorage) ===
+
+const TABS_KEY = "lapis.open-tabs";
+
+/** vault path → 열린 탭 + 활성 노트. */
+export interface VaultTabs {
+  tabs: string[];
+  active: string | null;
+}
+export type TabsMap = Record<string, VaultTabs>;
+
+/** 맵에서 특정 vault의 탭 상태 읽기(없으면 빈 상태). 순수. */
+export function readVaultTabs(map: TabsMap, vaultPath: string): VaultTabs {
+  return map[vaultPath] ?? { tabs: [], active: null };
+}
+
+/** 맵에 특정 vault의 탭 상태를 갱신한 새 맵 반환. 순수. */
+export function upsertVaultTabs(
+  map: TabsMap,
+  vaultPath: string,
+  tabs: string[],
+  active: string | null,
+): TabsMap {
+  return { ...map, [vaultPath]: { tabs, active } };
+}
+
+// localStorage 래퍼 — 미지원/비정상 환경(vitest stub 등)에서도 안전하도록 try/catch.
+function loadTabsMap(): TabsMap {
+  try {
+    const raw = localStorage.getItem(TABS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as TabsMap;
+  } catch (e) {
+    // 미지원/파싱 실패 — 빈 맵
+  }
+  return {};
+}
+
+function saveTabsMap(map: TabsMap): void {
+  try {
+    localStorage.setItem(TABS_KEY, JSON.stringify(map));
+  } catch (e) {
+    // 미지원 — 영속화 생략
+  }
+}
+
+/** 특정 vault의 저장된 탭 상태 로드. */
+export function loadTabsFor(vaultPath: string): VaultTabs {
+  return readVaultTabs(loadTabsMap(), vaultPath);
+}
+
+/** 특정 vault의 탭 상태 저장(다른 vault 항목은 보존). */
+export function saveTabsFor(vaultPath: string, tabs: string[], active: string | null): void {
+  if (!vaultPath) return;
+  saveTabsMap(upsertVaultTabs(loadTabsMap(), vaultPath, tabs, active));
+}
