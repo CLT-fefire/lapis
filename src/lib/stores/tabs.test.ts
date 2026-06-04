@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { addTabEntry, removeTabEntry, tabPathForShortcut } from "./tabs";
+import {
+  addTabEntry,
+  removeTabEntry,
+  tabPathForShortcut,
+  readVaultTabs,
+  upsertVaultTabs,
+  type TabsMap,
+} from "./tabs";
 
 describe("addTabEntry", () => {
   it("새 path를 끝에 추가", () => {
@@ -68,5 +75,29 @@ describe("tabPathForShortcut", () => {
   it("빈 목록은 null", () => {
     expect(tabPathForShortcut([], 1)).toBeNull();
     expect(tabPathForShortcut([], 9)).toBeNull();
+  });
+});
+
+describe("readVaultTabs / upsertVaultTabs", () => {
+  it("빈 맵에서 read → 기본 빈 상태", () => {
+    expect(readVaultTabs({}, "/vault/a")).toEqual({ tabs: [], active: null });
+  });
+
+  it("upsert 후 read 왕복", () => {
+    const map = upsertVaultTabs({}, "/vault/a", ["x", "y"], "y");
+    expect(readVaultTabs(map, "/vault/a")).toEqual({ tabs: ["x", "y"], active: "y" });
+  });
+
+  it("다른 vault는 격리(서로 영향 없음)", () => {
+    let map: TabsMap = upsertVaultTabs({}, "/vault/a", ["a1"], "a1");
+    map = upsertVaultTabs(map, "/vault/b", ["b1", "b2"], "b2");
+    expect(readVaultTabs(map, "/vault/a")).toEqual({ tabs: ["a1"], active: "a1" });
+    expect(readVaultTabs(map, "/vault/b")).toEqual({ tabs: ["b1", "b2"], active: "b2" });
+  });
+
+  it("같은 vault upsert는 덮어씀", () => {
+    let map = upsertVaultTabs({}, "/vault/a", ["x"], "x");
+    map = upsertVaultTabs(map, "/vault/a", ["y", "z"], null);
+    expect(readVaultTabs(map, "/vault/a")).toEqual({ tabs: ["y", "z"], active: null });
   });
 });
