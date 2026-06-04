@@ -46,6 +46,7 @@
     closeTab,
   } from "$lib/stores/vault";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
+  import { openTabs, tabPathForShortcut } from "$lib/stores/tabs";
   import { noteDisplayName } from "$lib/notePath";
   import {
     editorContent,
@@ -854,6 +855,13 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       const cur = $currentNotePath;
       if (cur) void closeTab(cur);
+    } else if (/^[1-9]$/.test(key) && !e.shiftKey) {
+      // Cmd+1~8 — N번째 탭, Cmd+9 — 마지막 탭
+      const path = tabPathForShortcut(get(openTabs), Number(key));
+      if (path) {
+        e.preventDefault();
+        if (path !== $currentNotePath) void selectNote(path);
+      }
     }
   }
 
