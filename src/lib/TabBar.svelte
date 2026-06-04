@@ -17,13 +17,12 @@
 {#if $openTabs.length > 0}
   <div class="tab-bar" role="tablist">
     {#each $openTabs as path (path)}
-      {@const active = path === $currentNotePath}
       <div
         class="tab"
-        class:active
+        class:active={path === $currentNotePath}
         role="tab"
         tabindex="0"
-        aria-selected={active}
+        aria-selected={path === $currentNotePath}
         title={path}
         onclick={() => onTabClick(path)}
         onkeydown={(e) => {
@@ -33,7 +32,7 @@
           }
         }}
       >
-        {#if active && $isDirty}
+        {#if path === $currentNotePath && $isDirty}
           <span class="dirty" aria-label="저장되지 않음">●</span>
         {/if}
         <span class="label">{noteStem(path)}</span>
