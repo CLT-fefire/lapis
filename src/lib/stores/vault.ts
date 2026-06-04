@@ -48,6 +48,12 @@ import {
   clearFilters,
 } from "$lib/stores/filters";
 import { pushRecent, rememberLastClosed } from "$lib/stores/recent";
+import {
+  recordNavigation,
+  navBack,
+  navForward,
+  clearNavHistory,
+} from "$lib/stores/navHistory";
 
 const STORAGE_KEY = "lapis.last-vault-path";
 
@@ -79,6 +85,7 @@ export async function openVault(path: string): Promise<void> {
   }
   currentNotePath.set(null);
   currentNoteContent.set("");
+  clearNavHistory();
   await reloadNotes();
 
   // 파일 watcher 시작 — circular import 회피 위해 lazy import
@@ -650,7 +657,10 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
   return true;
 }
 
-export async function selectNote(path: string): Promise<void> {
+export async function selectNote(
+  path: string,
+  opts: { fromHistory?: boolean } = {},
+): Promise<void> {
   // editor 모듈을 lazy import — circular import 회피
   // (editor가 vault store를 import하므로 직접 top-level import 시 초기화 순서 위험)
   let editor: typeof import("./editor") | null = null;
@@ -683,10 +693,26 @@ export async function selectNote(path: string): Promise<void> {
     // editor 상태 동기화 — 새 노트 기준으로 dirty 해제
     if (editor) editor.markSaved(content);
     pushRecent(path);
+    // 뒤로/앞으로 이동(fromHistory)이 아닌 일반 열기만 히스토리에 기록.
+    if (!opts.fromHistory) recordNavigation(path);
   } catch (e) {
     console.error("read_note failed", e);
     currentNoteContent.set("");
   }
+}
+
+/** 뒤로 가기 — 직전 방문 노트로. 히스토리엔 재기록하지 않음. */
+export async function goBackNote(): Promise<void> {
+  const cur = get(currentNotePath);
+  const path = navBack();
+  if (path && path !== cur) await selectNote(path, { fromHistory: true });
+}
+
+/** 앞으로 가기 — 뒤로 갔다가 되돌아온 노트로. 히스토리엔 재기록하지 않음. */
+export async function goForwardNote(): Promise<void> {
+  const cur = get(currentNotePath);
+  const path = navForward();
+  if (path && path !== cur) await selectNote(path, { fromHistory: true });
 }
 
 export async function restoreLastVault(): Promise<void> {

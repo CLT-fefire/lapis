@@ -39,7 +39,10 @@
     selectNote,
     jumpToWikilink,
     deletePath,
+    goBackNote,
+    goForwardNote,
   } from "$lib/stores/vault";
+  import { canGoBack, canGoForward } from "$lib/stores/navHistory";
   import {
     editorContent,
     isDirty,
@@ -839,6 +842,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       if (get(sidebarCollapsed)) toggleSidebar();
       showOutlineTab();
+    } else if ((key === "arrowleft" || key === "arrowright") && e.metaKey && e.ctrlKey) {
+      // Cmd+Ctrl+← / → — 노트 뒤로/앞으로 가기 (Xcode 동일)
+      e.preventDefault();
+      if (key === "arrowleft") void goBackNote();
+      else void goForwardNote();
     }
   }
 
@@ -918,6 +926,22 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     {#if appVersion}
       <span class="phase">v{appVersion}</span>
     {/if}
+    <div class="nav-history">
+      <button
+        class="btn btn--icon btn--sm"
+        title="뒤로 (⌘⌃←)"
+        aria-label="뒤로 가기"
+        disabled={!$canGoBack}
+        onclick={() => void goBackNote()}
+      >◀</button>
+      <button
+        class="btn btn--icon btn--sm"
+        title="앞으로 (⌘⌃→)"
+        aria-label="앞으로 가기"
+        disabled={!$canGoForward}
+        onclick={() => void goForwardNote()}
+      >▶</button>
+    </div>
     <span class="meta">
       {#if $currentNotePath}
         {noteDisplayName($currentNotePath)}
@@ -1179,6 +1203,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .phase {
     color: var(--text-secondary);
+  }
+
+  .nav-history {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
   }
 
   .meta {
