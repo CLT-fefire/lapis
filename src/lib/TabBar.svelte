@@ -121,7 +121,8 @@
         class="tab"
         class:active={path === $currentNotePath}
         class:pinned={$pinnedNotePaths.includes(path)}
-        class:drag-over={dragOverIndex === i && dragIndex !== i}
+        class:drag-over-before={dragOverIndex === i && dragIndex !== null && dragIndex > i}
+        class:drag-over-after={dragOverIndex === i && dragIndex !== null && dragIndex < i}
         class:dragging={dragIndex === i}
         role="tab"
         tabindex="0"
@@ -236,8 +237,13 @@
     opacity: 0.4;
   }
 
-  .tab.drag-over {
+  /* 드롭 가이드 — 이동 방향에 맞춰: 왼쪽으로 옮기면 대상 탭 앞(좌), 오른쪽이면 뒤(우) */
+  .tab.drag-over-before {
     box-shadow: inset 2px 0 0 0 var(--accent);
+  }
+
+  .tab.drag-over-after {
+    box-shadow: inset -2px 0 0 0 var(--accent);
   }
 
   .tab .label {
