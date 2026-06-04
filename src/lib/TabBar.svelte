@@ -42,11 +42,23 @@
   }
   function onDrop(e: DragEvent, i: number) {
     e.preventDefault(); // 기본 드롭 동작(텍스트 등) 방지
+    e.stopPropagation(); // 컨테이너의 "맨 끝으로" 핸들러로 버블 방지
     if (dragIndex !== null && dragIndex !== i) moveTab(dragIndex, i);
     dragIndex = null;
     dragOverIndex = null;
   }
   function onDragEnd() {
+    dragIndex = null;
+    dragOverIndex = null;
+  }
+
+  // 탭 바 빈 영역(마지막 탭 오른쪽)에 드롭 → 맨 끝으로 이동.
+  function onBarDragOver(e: DragEvent) {
+    e.preventDefault();
+  }
+  function onBarDrop(e: DragEvent) {
+    e.preventDefault();
+    if (dragIndex !== null) moveTab(dragIndex, $openTabs.length - 1);
     dragIndex = null;
     dragOverIndex = null;
   }
@@ -95,7 +107,15 @@
 </script>
 
 {#if $openTabs.length > 0}
-  <div class="tab-bar" role="tablist" bind:this={barEl}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="tab-bar"
+    role="tablist"
+    tabindex="-1"
+    bind:this={barEl}
+    ondragover={onBarDragOver}
+    ondrop={onBarDrop}
+  >
     {#each $openTabs as path, i (path)}
       <div
         class="tab"
