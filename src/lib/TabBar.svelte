@@ -4,6 +4,18 @@
   import { isDirty } from "$lib/stores/editor";
   import { noteStem } from "$lib/notePath";
 
+  let barEl: HTMLDivElement | undefined = $state();
+
+  // 활성 탭이 가로 스크롤 영역 밖이면 보이도록 스크롤.
+  // $currentNotePath 변경 → class:active DOM 반영 후 $effect 실행 → 활성 탭 가시화.
+  // block:nearest 로 세로(페이지) 점프 방지, inline:nearest 로 가로만 최소 이동.
+  $effect(() => {
+    void $currentNotePath; // 의존성 추적
+    if (!barEl) return;
+    const el = barEl.querySelector<HTMLElement>(".tab.active");
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+
   function onTabClick(path: string) {
     if (path !== $currentNotePath) void selectNote(path);
   }
@@ -15,7 +27,7 @@
 </script>
 
 {#if $openTabs.length > 0}
-  <div class="tab-bar" role="tablist">
+  <div class="tab-bar" role="tablist" bind:this={barEl}>
     {#each $openTabs as path (path)}
       <div
         class="tab"
