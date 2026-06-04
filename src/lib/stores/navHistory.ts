@@ -43,6 +43,12 @@ export function goForward(state: NavState): NavState {
   return { ...state, cursor: state.cursor + 1 };
 }
 
+/** 특정 index로 직접 이동(히스토리 목록 점프). 범위 밖이면 변화 없음. entries 보존. */
+export function goTo(state: NavState, index: number): NavState {
+  if (index < 0 || index >= state.entries.length || index === state.cursor) return state;
+  return { ...state, cursor: index };
+}
+
 /** 현재 위치의 path. 비어 있으면 null. */
 export function currentPath(state: NavState): string | null {
   return state.cursor >= 0 ? state.entries[state.cursor] : null;
@@ -59,6 +65,9 @@ export function canForward(state: NavState): boolean {
 // === store (세션성 — localStorage 영속화 X) ===
 
 const navState = writable<NavState>(EMPTY_NAV);
+
+/** 목록 UI 구독용 readonly 뷰 (entries+cursor). set은 내부 함수만. */
+export const navView = derived(navState, (s) => s);
 
 export const canGoBack = derived(navState, canBack);
 export const canGoForward = derived(navState, canForward);
@@ -84,6 +93,17 @@ export function navForward(): string | null {
   let result: string | null = null;
   navState.update((s) => {
     const next = goForward(s);
+    result = currentPath(next);
+    return next;
+  });
+  return result;
+}
+
+/** 히스토리 목록에서 특정 index로 점프 후 현재 path 반환(없으면 null). */
+export function navJumpTo(index: number): string | null {
+  let result: string | null = null;
+  navState.update((s) => {
+    const next = goTo(s, index);
     result = currentPath(next);
     return next;
   });

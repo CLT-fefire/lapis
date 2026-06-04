@@ -52,6 +52,7 @@ import {
   recordNavigation,
   navBack,
   navForward,
+  navJumpTo,
   clearNavHistory,
 } from "$lib/stores/navHistory";
 
@@ -712,6 +713,13 @@ export async function goBackNote(): Promise<void> {
 export async function goForwardNote(): Promise<void> {
   const cur = get(currentNotePath);
   const path = navForward();
+  if (path && path !== cur) await selectNote(path, { fromHistory: true });
+}
+
+/** 히스토리 목록에서 특정 index로 점프. 히스토리엔 재기록하지 않음. */
+export async function goToHistory(index: number): Promise<void> {
+  const cur = get(currentNotePath);
+  const path = navJumpTo(index);
   if (path && path !== cur) await selectNote(path, { fromHistory: true });
 }
 

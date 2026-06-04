@@ -17,6 +17,7 @@
   import MemoryFilesPanel from "$lib/MemoryFilesPanel.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
   import CleanupOverlay from "$lib/CleanupOverlay.svelte";
+  import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import { openMemorySearch } from "$lib/stores/memorySearch";
   import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
@@ -43,6 +44,7 @@
     goForwardNote,
   } from "$lib/stores/vault";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
+  import { noteDisplayName } from "$lib/notePath";
   import {
     editorContent,
     isDirty,
@@ -191,10 +193,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // 현재 노트 본문 통계 (단어 / 글자 / 읽기시간) — topbar 표시용.
   const docStats = $derived(computeTextStats(raw));
 
-  function noteDisplayName(path: string): string {
-    const segments = path.split("/").filter(Boolean);
-    return segments.slice(-2).join(" / ");
-  }
+  // 노트 히스토리 드롭다운 열림 상태 (topbar ▾ 토글).
+  let historyMenuOpen = $state(false);
 
   // 현재 노트의 백링크 (다른 노트에서 이 노트를 [[wikilink]]로 가리키는 항목들)
   const currentBacklinks = $derived.by<LinkInfo[]>(() => {
@@ -941,6 +941,16 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         disabled={!$canGoForward}
         onclick={() => void goForwardNote()}
       >▶</button>
+      <button
+        class="btn btn--icon btn--sm nav-history-toggle"
+        class:active={historyMenuOpen}
+        title="방문 기록"
+        aria-label="방문 기록 목록"
+        aria-expanded={historyMenuOpen}
+        disabled={!($canGoBack || $canGoForward)}
+        onclick={() => (historyMenuOpen = !historyMenuOpen)}
+      >▾</button>
+      <NavHistoryMenu open={historyMenuOpen} onClose={() => (historyMenuOpen = false)} />
     </div>
     <span class="meta">
       {#if $currentNotePath}
@@ -1206,6 +1216,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .nav-history {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: var(--sp-1);
