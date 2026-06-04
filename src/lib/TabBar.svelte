@@ -1,11 +1,68 @@
 <script lang="ts">
   import { openTabs } from "$lib/stores/tabs";
-  import { currentNotePath, selectNote, closeTab } from "$lib/stores/vault";
+  import {
+    currentNotePath,
+    selectNote,
+    closeTab,
+    moveTab,
+    closeOtherTabs,
+    closeTabsToRight,
+  } from "$lib/stores/vault";
   import { isDirty } from "$lib/stores/editor";
   import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
   import { noteStem } from "$lib/notePath";
 
   let barEl: HTMLDivElement | undefined = $state();
+
+  // 드래그 재정렬 상태
+  let dragIndex: number | null = $state(null);
+  let dragOverIndex: number | null = $state(null);
+
+  // 우클릭 컨텍스트 메뉴 상태
+  let ctxMenu: { path: string; x: number; y: number } | null = $state(null);
+  // 우클릭한 탭의 오른쪽에 탭이 있는지(오른쪽 닫기 활성화 판단)
+  const hasRight = $derived.by(() => {
+    const m = ctxMenu;
+    if (!m) return false;
+    return $openTabs.indexOf(m.path) < $openTabs.length - 1;
+  });
+
+  function onDragStart(e: DragEvent, i: number) {
+    dragIndex = i;
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }
+  function onDragOver(e: DragEvent, i: number) {
+    e.preventDefault(); // drop 허용
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    dragOverIndex = i;
+  }
+  function onDrop(i: number) {
+    if (dragIndex !== null && dragIndex !== i) moveTab(dragIndex, i);
+    dragIndex = null;
+    dragOverIndex = null;
+  }
+  function onDragEnd() {
+    dragIndex = null;
+    dragOverIndex = null;
+  }
+
+  function onContextMenu(e: MouseEvent, path: string) {
+    e.preventDefault();
+    ctxMenu = { path, x: e.clientX, y: e.clientY };
+  }
+  function closeCtxMenu() {
+    ctxMenu = null;
+  }
+  function onWindowMouseDown(e: MouseEvent) {
+    if (e.button !== 0 || !ctxMenu) return;
+    if (!(e.target as HTMLElement | null)?.closest(".tab-ctx-menu")) closeCtxMenu();
+  }
+  function onWindowKey(e: KeyboardEvent) {
+    if (e.key === "Escape" && ctxMenu) {
+      e.preventDefault();
+      closeCtxMenu();
+    }
+  }
 
   // 활성 탭이 가로 스크롤 영역 밖이면 보이도록 스크롤.
   // $currentNotePath 변경 → class:active DOM 반영 후 $effect 실행 → 활성 탭 가시화.
@@ -34,15 +91,23 @@
 
 {#if $openTabs.length > 0}
   <div class="tab-bar" role="tablist" bind:this={barEl}>
-    {#each $openTabs as path (path)}
+    {#each $openTabs as path, i (path)}
       <div
         class="tab"
         class:active={path === $currentNotePath}
         class:pinned={$pinnedNotePaths.includes(path)}
+        class:drag-over={dragOverIndex === i && dragIndex !== i}
+        class:dragging={dragIndex === i}
         role="tab"
         tabindex="0"
         aria-selected={path === $currentNotePath}
         title={path}
+        draggable="true"
+        ondragstart={(e) => onDragStart(e, i)}
+        ondragover={(e) => onDragOver(e, i)}
+        ondrop={() => onDrop(i)}
+        ondragend={onDragEnd}
+        oncontextmenu={(e) => onContextMenu(e, path)}
         onclick={() => onTabClick(path)}
         onkeydown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -71,6 +136,33 @@
       </div>
     {/each}
   </div>
+{/if}
+
+<svelte:window onmousedown={onWindowMouseDown} onkeydown={onWindowKey} />
+
+{#if ctxMenu}
+  {@const menu = ctxMenu}
+  <ul class="tab-ctx-menu" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
+    <li>
+      <button role="menuitem" onclick={() => { closeCtxMenu(); void closeTab(menu.path); }}>
+        탭 닫기
+      </button>
+    </li>
+    <li>
+      <button
+        role="menuitem"
+        disabled={$openTabs.length <= 1}
+        onclick={() => { closeCtxMenu(); void closeOtherTabs(menu.path); }}
+      >다른 탭 닫기</button>
+    </li>
+    <li>
+      <button
+        role="menuitem"
+        disabled={!hasRight}
+        onclick={() => { closeCtxMenu(); void closeTabsToRight(menu.path); }}
+      >오른쪽 탭 닫기</button>
+    </li>
+  </ul>
 {/if}
 
 <style>
@@ -112,6 +204,15 @@
     background: var(--surface-base);
     color: var(--text-primary);
     border-color: var(--border-strong);
+  }
+
+  /* 드래그 중인 탭은 흐리게, 드롭 대상은 좌측 보더로 삽입 위치 표시 */
+  .tab.dragging {
+    opacity: 0.4;
+  }
+
+  .tab.drag-over {
+    box-shadow: inset 2px 0 0 0 var(--accent);
   }
 
   .tab .label {
@@ -163,5 +264,46 @@
 
   .tab .close:hover {
     opacity: 1;
+  }
+
+  /* 탭 우클릭 컨텍스트 메뉴 (ContextMenu 패턴 차용) */
+  .tab-ctx-menu {
+    position: fixed;
+    list-style: none;
+    margin: 0;
+    padding: var(--sp-2) 0;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+    z-index: var(--z-context-menu);
+    min-width: 160px;
+    font-size: var(--fs-base);
+  }
+
+  .tab-ctx-menu li {
+    margin: 0;
+  }
+
+  .tab-ctx-menu button {
+    width: 100%;
+    text-align: left;
+    padding: var(--sp-3) 14px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--fs-base);
+  }
+
+  .tab-ctx-menu button:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
+
+  .tab-ctx-menu button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 </style>

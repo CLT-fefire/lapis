@@ -5,6 +5,9 @@ import {
   tabPathForShortcut,
   readVaultTabs,
   upsertVaultTabs,
+  reorderTabs,
+  closeOthers,
+  keepUpTo,
   type TabsMap,
 } from "./tabs";
 
@@ -99,5 +102,53 @@ describe("readVaultTabs / upsertVaultTabs", () => {
     let map = upsertVaultTabs({}, "/vault/a", ["x"], "x");
     map = upsertVaultTabs(map, "/vault/a", ["y", "z"], null);
     expect(readVaultTabs(map, "/vault/a")).toEqual({ tabs: ["y", "z"], active: null });
+  });
+});
+
+describe("reorderTabs", () => {
+  it("앞 → 뒤 이동", () => {
+    expect(reorderTabs(["a", "b", "c"], 0, 2)).toEqual(["b", "c", "a"]);
+  });
+
+  it("뒤 → 앞 이동", () => {
+    expect(reorderTabs(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
+  });
+
+  it("인접 교환", () => {
+    expect(reorderTabs(["a", "b", "c"], 1, 2)).toEqual(["a", "c", "b"]);
+  });
+
+  it("동일 위치는 그대로", () => {
+    const t = ["a", "b", "c"];
+    expect(reorderTabs(t, 1, 1)).toBe(t);
+  });
+
+  it("범위 밖은 그대로", () => {
+    const t = ["a", "b"];
+    expect(reorderTabs(t, 0, 5)).toBe(t);
+    expect(reorderTabs(t, -1, 0)).toBe(t);
+  });
+});
+
+describe("closeOthers", () => {
+  it("path만 남김", () => {
+    expect(closeOthers(["a", "b", "c"], "b")).toEqual(["b"]);
+  });
+  it("path 없으면 그대로", () => {
+    const t = ["a", "b"];
+    expect(closeOthers(t, "z")).toBe(t);
+  });
+});
+
+describe("keepUpTo", () => {
+  it("중간 path까지 유지(오른쪽 제거)", () => {
+    expect(keepUpTo(["a", "b", "c", "d"], "b")).toEqual(["a", "b"]);
+  });
+  it("마지막 path면 변화 없음(오른쪽 없음)", () => {
+    expect(keepUpTo(["a", "b", "c"], "c")).toEqual(["a", "b", "c"]);
+  });
+  it("path 없으면 그대로", () => {
+    const t = ["a", "b"];
+    expect(keepUpTo(t, "z")).toBe(t);
   });
 });

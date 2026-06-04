@@ -62,6 +62,9 @@ import {
   openTabs,
   loadTabsFor,
   saveTabsFor,
+  reorderTabs,
+  closeOthers,
+  keepUpTo,
 } from "$lib/stores/tabs";
 
 const STORAGE_KEY = "lapis.last-vault-path";
@@ -768,6 +771,34 @@ export async function closeTab(path: string): Promise<void> {
 /** 현재 vault의 열린 탭 + 활성 노트를 localStorage에 저장. */
 function persistTabs(): void {
   saveTabsFor(get(vaultPath) ?? "", get(openTabs), get(currentNotePath));
+}
+
+/** 탭 드래그 재정렬 — from 위치 탭을 to로 이동. */
+export function moveTab(from: number, to: number): void {
+  openTabs.update((t) => reorderTabs(t, from, to));
+  persistTabs();
+}
+
+/** 다른 탭 모두 닫기 — path만 남기고 그 탭을 활성화. */
+export async function closeOtherTabs(path: string): Promise<void> {
+  openTabs.set(closeOthers(get(openTabs), path));
+  if (get(currentNotePath) !== path) {
+    await selectNote(path, { fromHistory: true }); // selectNote가 persistTabs 호출
+  } else {
+    persistTabs();
+  }
+}
+
+/** 오른쪽 탭 모두 닫기 — path까지 유지. 활성이 잘려나갔으면 path로 전환. */
+export async function closeTabsToRight(path: string): Promise<void> {
+  const kept = keepUpTo(get(openTabs), path);
+  openTabs.set(kept);
+  const active = get(currentNotePath);
+  if (active && !kept.includes(active)) {
+    await selectNote(path, { fromHistory: true });
+  } else {
+    persistTabs();
+  }
 }
 
 export async function restoreLastVault(): Promise<void> {
