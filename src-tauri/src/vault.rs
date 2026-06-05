@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -524,6 +525,12 @@ pub struct LinkInfo {
     pub doc_kind: Option<String>, // requirements | spec | plan | solution | analysis | brainstorm | howto | reference | meeting-notes
     pub topic: Option<String>,    // kebab-case 단일
     pub related: Vec<String>,     // 파일 stem 배열 (cross-ref)
+    /// Phase A 지식 그래프 — 모든 top-level frontmatter 키 → 값 목록 (generic).
+    /// scalar→1원소, block/flow list→N원소. 인라인 콤마 split·경로 정규화는
+    /// frontend(normalizeRef)가 담당 — 여기선 원형 보존. 중첩 객체(nested)는 skip.
+    /// `#[serde(default)]` — 구 캐시(props 없는 v4 이하) 역직렬화 graceful.
+    #[serde(default)]
+    pub props: BTreeMap<String, Vec<String>>,
 }
 
 // `scan_links` Tauri 명령은 `read_vault_bundle` 도입 후 호출자 0 → 본 chore에서 제거.
@@ -785,6 +792,7 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
     let mut doc_kind: Option<String> = None;
     let mut topic: Option<String> = None;
     let mut related: Vec<String> = Vec::new();
+    let mut props: BTreeMap<String, Vec<String>> = BTreeMap::new();
     if let Some(yaml) = yaml_opt {
         parse_simple_frontmatter(
             yaml,
@@ -795,6 +803,7 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
             &mut topic,
             &mut related,
         );
+        collect_all_props(yaml, &mut props);
     }
 
     let mut targets = extract_wikilinks(body);
@@ -817,6 +826,7 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
         doc_kind,
         topic,
         related,
+        props,
     }
 }
 
@@ -939,6 +949,85 @@ fn strip_quotes(s: &str) -> &str {
     } else {
         s
     }
+}
+
+/// Phase A 지식 그래프 — 모든 top-level frontmatter 키를 generic하게 수집.
+/// 그룹핑(필드 렌즈, A-1)과 관계 감지(A-2)의 원천.
+///
+/// 규칙:
+/// - **col 0(들여쓰기 없음) `key: ...` 라인만** 키로 인정. 들여쓴 줄(중첩/연속)·빈 줄·
+///   `#` 주석·`-` 고아 list 항목은 skip → 중첩 객체(`metadata:` 하위)는 자동 제외.
+/// - 값: 인라인 `[a, b]` → comma split / scalar → 1원소(원형 보존) / 빈 값 → 뒤따르는 `- ` block list.
+/// - 인라인 콤마 scalar(`a.md, b.md`)는 **split 안 함**(1원소) — 경로/콤마/꼬리주석 정규화는
+///   frontend `normalizeRef`가 담당(거짓 split 방지). 빈 값+list 없음 → 미수집.
+fn collect_all_props(yaml: &str, props: &mut BTreeMap<String, Vec<String>>) {
+    let lines: Vec<&str> = yaml.lines().collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        // 들여쓴 줄(nested/continuation)은 top-level 키 아님
+        if line.starts_with(' ') || line.starts_with('\t') {
+            i += 1;
+            continue;
+        }
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('-') {
+            i += 1;
+            continue;
+        }
+        let Some(colon) = line.find(':') else {
+            i += 1;
+            continue;
+        };
+        let key = line[..colon].trim();
+        if key.is_empty() {
+            i += 1;
+            continue;
+        }
+        let (values, next_i) = collect_prop_values(&line[colon + 1..], &lines, i);
+        if !values.is_empty() {
+            props.entry(key.to_string()).or_default().extend(values);
+        }
+        i = next_i;
+    }
+}
+
+/// `collect_all_props`용 값 수집. 반환: (값 목록, 다음에 처리할 line index).
+fn collect_prop_values(after_key: &str, lines: &[&str], start_line: usize) -> (Vec<String>, usize) {
+    let rest = after_key.trim();
+    // 인라인 flow list `[a, b]`
+    if let Some(inner) = rest.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let mut out = Vec::new();
+        for item in inner.split(',') {
+            let v = strip_quotes(item.trim());
+            if !v.is_empty() {
+                out.push(v.to_string());
+            }
+        }
+        return (out, start_line + 1);
+    }
+    // scalar — 원형 보존 (콤마 split·경로 정규화는 frontend)
+    if !rest.is_empty() {
+        let v = strip_quotes(rest);
+        let out = if v.is_empty() { Vec::new() } else { vec![v.to_string()] };
+        return (out, start_line + 1);
+    }
+    // 빈 값 → 뒤따르는 들여쓴 `- item` block list
+    let mut out = Vec::new();
+    let mut i = start_line + 1;
+    while i < lines.len() {
+        let lt = lines[i].trim_start();
+        if let Some(item) = lt.strip_prefix('-') {
+            let v = strip_quotes(item.trim());
+            if !v.is_empty() {
+                out.push(v.to_string());
+            }
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    (out, i)
 }
 
 // 본문에서 `#tag` 추출. 다음은 모두 무시:
@@ -1227,4 +1316,99 @@ fn walk_dir(root: &Path, current: &Path) -> std::io::Result<Vec<NoteEntry>> {
     });
 
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn props_of(yaml: &str) -> BTreeMap<String, Vec<String>> {
+        let mut p = BTreeMap::new();
+        collect_all_props(yaml, &mut p);
+        p
+    }
+
+    #[test]
+    fn props_block_list() {
+        let p = props_of("related:\n  - plans/a.md\n  - plans/b.md");
+        assert_eq!(
+            p.get("related").unwrap(),
+            &vec!["plans/a.md".to_string(), "plans/b.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn props_inline_bracket_list() {
+        let p = props_of("depends_on: [phase-5.1.md]");
+        assert_eq!(p.get("depends_on").unwrap(), &vec!["phase-5.1.md".to_string()]);
+    }
+
+    #[test]
+    fn props_inline_comma_scalar_not_split() {
+        // 콤마 split은 frontend(normalizeRef) 책임 — 파서는 원형 1원소 보존.
+        let p = props_of("supersedes: a.md, b.md");
+        assert_eq!(p.get("supersedes").unwrap(), &vec!["a.md, b.md".to_string()]);
+    }
+
+    #[test]
+    fn props_scalar_path_and_annotation_preserved() {
+        let p = props_of(
+            "status: in-progress\nparent_plan: phase-4.3-x.md\nrelated: brainstorms/x.md (deferred)",
+        );
+        assert_eq!(p.get("status").unwrap(), &vec!["in-progress".to_string()]);
+        assert_eq!(
+            p.get("parent_plan").unwrap(),
+            &vec!["phase-4.3-x.md".to_string()]
+        );
+        // 경로 + 꼬리 주석은 원형 보존 — 정규화는 frontend.
+        assert_eq!(
+            p.get("related").unwrap(),
+            &vec!["brainstorms/x.md (deferred)".to_string()]
+        );
+    }
+
+    #[test]
+    fn props_strip_quotes() {
+        let p = props_of("title: \"Hello World\"");
+        assert_eq!(p.get("title").unwrap(), &vec!["Hello World".to_string()]);
+    }
+
+    #[test]
+    fn props_skips_nested_objects() {
+        // 중첩 객체(들여쓴 child)는 top-level 아님 → 미수집. 빈 값 부모도 미수집.
+        let p = props_of("metadata:\n  type: feedback\n  scope: x");
+        assert!(p.get("metadata").is_none());
+        assert!(p.get("type").is_none());
+        assert!(p.get("scope").is_none());
+    }
+
+    #[test]
+    fn props_skips_comments_and_blanks() {
+        let p = props_of("# comment\n\nstatus: done");
+        assert_eq!(p.get("status").unwrap(), &vec!["done".to_string()]);
+        assert!(p.get("# comment").is_none());
+    }
+
+    #[test]
+    fn props_empty_value_then_next_key() {
+        // 빈 값 키(`related_brainstorm:`) 다음 줄이 또 다른 top-level 키면 미수집 + 다음 키 정상 처리.
+        let p = props_of("related_brainstorm:\ndepends_on: [x.md]");
+        assert!(p.get("related_brainstorm").is_none());
+        assert_eq!(p.get("depends_on").unwrap(), &vec!["x.md".to_string()]);
+    }
+
+    #[test]
+    fn extract_link_info_typed_fields_coexist_with_props() {
+        let content = "---\ntitle: My Note\ntags: [alpha, beta]\nrelated:\n  - other-note\ntype: brainstorm\nstatus: draft\n---\n\nbody [[wiki-target]]";
+        let info = extract_link_info(&PathBuf::from("/v/my.md"), content);
+        // typed 필드 back-compat — 기존 인덱스 소비자 무영향.
+        assert_eq!(info.title.as_deref(), Some("My Note"));
+        assert_eq!(info.tags, vec!["alpha".to_string(), "beta".to_string()]);
+        assert_eq!(info.related, vec!["other-note".to_string()]);
+        // generic props 동시 수집 (그룹핑용 type/status 포함).
+        assert_eq!(info.props.get("type").unwrap(), &vec!["brainstorm".to_string()]);
+        assert_eq!(info.props.get("status").unwrap(), &vec!["draft".to_string()]);
+        // 본문 wikilink는 targets (props 아님).
+        assert!(info.targets.iter().any(|t| t == "wiki-target"));
+    }
 }
