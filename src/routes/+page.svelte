@@ -8,7 +8,7 @@
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
-  import Backlinks from "$lib/Backlinks.svelte";
+  import Neighborhood from "$lib/Neighborhood.svelte";
   import Properties from "$lib/Properties.svelte";
   import PublishedAssets from "$lib/PublishedAssets.svelte";
   import MemorySyncModal from "$lib/MemorySyncModal.svelte";
@@ -80,6 +80,7 @@
   import { onSystemThemeChange, restoreTheme, themeMode } from "$lib/stores/theme";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
+  import { groupRelations, type RelationGroup } from "$lib/relations";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
   import { exportMermaidHostToPng } from "$lib/mermaidExport";
   import { rewriteImageSources } from "$lib/assetPath";
@@ -215,6 +216,20 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     const path = $currentNotePath;
     if (!idx || !path) return null;
     return idx.byPath.get(path) ?? null;
+  });
+
+  // Phase A-2 — 현재 노트의 frontmatter 관계 (타입별 그룹). Neighborhood 패널이 소비.
+  const currentOutgoing = $derived.by<RelationGroup[]>(() => {
+    const idx = $linkIndex;
+    const path = $currentNotePath;
+    if (!idx || !path) return [];
+    return groupRelations(idx.relations.outgoing.get(path) ?? [], idx.byPath);
+  });
+  const currentIncoming = $derived.by<RelationGroup[]>(() => {
+    const idx = $linkIndex;
+    const path = $currentNotePath;
+    if (!idx || !path) return [];
+    return groupRelations(idx.relations.incoming.get(path) ?? [], idx.byPath);
   });
 
   // Properties: frontmatter 있으면 그대로, 없으면 합성 정보(file/path/tags/backlinks).
@@ -1176,7 +1191,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
               filesEdited={parsed.data.files_edited}
             />
           {/if}
-          <Backlinks targetNote={currentNoteInfo} backlinks={currentBacklinks} />
+          <Neighborhood
+            targetNote={currentNoteInfo}
+            outgoing={currentOutgoing}
+            incoming={currentIncoming}
+            backlinks={currentBacklinks}
+          />
           {#if $claudeMemEnabled}
             <RelatedMemoriesPanel />
           {/if}
@@ -1781,5 +1801,5 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     background: var(--danger-bg-subtle);
   }
 
-  /* 백링크 패널 CSS는 src/lib/Backlinks.svelte로 이전 (Phase 4.5.c) */
+  /* 이웃(관계+백링크) 패널 CSS는 src/lib/Neighborhood.svelte로 이전 (Phase A-2) */
 </style>

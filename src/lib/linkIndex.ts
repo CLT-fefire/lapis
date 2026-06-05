@@ -1,11 +1,15 @@
 import type { LinkInfo } from "$lib/tauri/notes";
+import { buildRelationIndex, type RelationIndex } from "$lib/relations";
 
 export interface LinkIndex {
   byPath: Map<string, LinkInfo>;
   // 키: 소문자 문자열 (alias / title / file stem) → 노트 path
   resolver: Map<string, string>;
-  // 키: 노트 path → 그 노트를 wikilink로 가리키는 소스 path 집합
+  // 키: 노트 path → 그 노트를 **본문** wikilink/md-link로 가리키는 소스 path 집합.
+  // (frontmatter cross-ref는 backlinks가 아니라 relations가 타입별로 담당 — Phase A-2)
   backlinks: Map<string, Set<string>>;
+  // frontmatter 기반 타입 있는 관계(parent_plan/depends_on/related/…) 양방향 인덱스.
+  relations: RelationIndex;
 }
 
 /**
@@ -48,8 +52,8 @@ export function buildIndex(infos: LinkInfo[]): LinkIndex {
     if (!resolver.has(key)) resolver.set(key, info.source_path);
   }
 
-  // backlinks 계산 — wikilink/md link + related 모두 포함
-  // SharedDocs 가이드 §4.3: related는 source→target 단방향이지만 그래프 탐색은 양방향이 자연스러움
+  // backlinks 계산 — **본문** wikilink/md-link만. frontmatter cross-ref(related 등)는
+  // buildRelationIndex가 관계 타입을 보존해 별도로 인덱싱(중복 표시 방지).
   const backlinks = new Map<string, Set<string>>();
   function addBacklink(targetPath: string, sourcePath: string) {
     if (targetPath === sourcePath) return;
@@ -67,14 +71,11 @@ export function buildIndex(infos: LinkInfo[]): LinkIndex {
       if (!resolvedPath) continue;
       addBacklink(resolvedPath, info.source_path);
     }
-    for (const stem of info.related) {
-      const resolvedPath = resolver.get(stem.toLowerCase());
-      if (!resolvedPath) continue;
-      addBacklink(resolvedPath, info.source_path);
-    }
   }
 
-  return { byPath, resolver, backlinks };
+  const relations = buildRelationIndex(infos, resolver);
+
+  return { byPath, resolver, backlinks, relations };
 }
 
 export function getBacklinks(targetPath: string, index: LinkIndex): LinkInfo[] {
