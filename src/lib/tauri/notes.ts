@@ -82,6 +82,9 @@ export interface LinkInfo {
   doc_kind: string | null; // requirements | spec | plan | solution | analysis | brainstorm | howto | reference | meeting-notes
   topic: string | null;    // kebab-case 단일 도메인
   related: string[];       // 파일 stem 배열 (cross-ref)
+  // Phase A 지식 그래프 — 모든 top-level frontmatter 키 → 값 목록 (generic).
+  // 그룹핑(필드 렌즈)·관계 감지의 원천. 값 정규화(경로/콤마/꼬리주석)는 normalizeRef에서.
+  props: Record<string, string[]>;
 }
 
 // `scanLinks` / `readAllNotes` wrapper는 `readVaultBundle` 도입 후 호출자 0 → 제거.
