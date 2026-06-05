@@ -8,6 +8,7 @@
   import {
     vaultPath,
     notes,
+    linkIndex,
     pickAndOpenVault,
     reloadNotes,
     treeLoading,
@@ -15,6 +16,8 @@
     createNewNote,
     selectNote,
   } from "$lib/stores/vault";
+  import { groupingField, setGroupingField } from "$lib/stores/lens";
+  import { groupingCandidates, groupNotesByField } from "$lib/lens";
   import {
     treeFilterQuery,
     clearTreeFilter,
@@ -51,6 +54,13 @@
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
   }
+
+  // Phase A-1 — 필드 렌즈 그룹핑. 폴더 트리는 기본값, 필드 선택 시 값별 합성 그룹으로.
+  const allInfos = $derived($linkIndex ? [...$linkIndex.byPath.values()] : []);
+  const groupingCandidatesList = $derived(groupingCandidates(allInfos));
+  const groupedEntries = $derived(
+    $groupingField ? groupNotesByField(allInfos, $groupingField) : [],
+  );
 
   // tree filter — 매 입력 keystroke마다 filterEntries(11924 노트 재귀 walk) + DOM 재렌더
   // 비용이 누적되어 UI 멈춤 발생. `$treeFilterQuery`(store)는 input value 즉시 반영하되,
@@ -433,6 +443,29 @@ graph LR
       </div>
     {:else if $sidebarTab === "files"}
       {#if $notes.length > 0}
+        <div class="lens-bar">
+          <span class="lens-label">보기</span>
+          <select
+            class="lens-select"
+            value={$groupingField ?? ""}
+            onchange={(e) => setGroupingField(e.currentTarget.value || null)}
+            title="frontmatter 필드 값으로 그룹핑 (폴더 트리는 '폴더')"
+          >
+            <option value="">폴더</option>
+            {#each groupingCandidatesList as c (c.field)}
+              <option value={c.field}>{c.field} · {c.noteCount}</option>
+            {/each}
+          </select>
+        </div>
+        {#if $groupingField}
+          {#if groupedEntries.length > 0}
+            <div class="files-pane">
+              <FileTree entries={groupedEntries} disableDnd />
+            </div>
+          {:else}
+            <div class="filter-empty">이 필드를 가진 노트가 없습니다</div>
+          {/if}
+        {:else}
         <div class="tree-filter">
           <input
             type="text"
@@ -464,6 +497,7 @@ graph LR
               activePath={activeFilterPath}
             />
           </div>
+        {/if}
         {/if}
       {:else}
         <div class="empty">
@@ -834,6 +868,42 @@ graph LR
     font-size: var(--fs-sm);
     padding: 0;
     cursor: pointer;
+  }
+
+  /* 필드 렌즈 그룹핑 바 — Files 탭 상단 (폴더 / 필드값 그룹 전환) */
+  .lens-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) 10px var(--sp-2) 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-raised);
+  }
+
+  .lens-label {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+
+  .lens-select {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-sm);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    cursor: pointer;
+  }
+
+  .lens-select:focus {
+    border-color: var(--accent);
+    outline: none;
   }
 
   /* tree filter — 파일 트리 상단 검색 input */
