@@ -40,9 +40,11 @@
     forceExpand?: boolean;
     /** 필터 ↑↓ 키보드 순회로 활성화된 leaf path. row.keyboard-active 강조. */
     activePath?: string | null;
+    /** 렌즈 그룹핑(합성 NoteEntry) 렌더 시 true — 합성 그룹엔 DnD/컨텍스트 메뉴가 무의미하므로 비활성. */
+    disableDnd?: boolean;
   }
 
-  let { entries, forceExpand = false, activePath = null }: Props = $props();
+  let { entries, forceExpand = false, activePath = null, disableDnd = false }: Props = $props();
 
   // 폴더 펼침 상태 — 본 컴포넌트가 SOT. 컴포넌트 인스턴스가 한 개라 vault 전환해도 reset.
   // `expanded.has(path)`면 사용자가 명시적으로 toggle한 상태 → 그 값이 우선.
@@ -188,6 +190,7 @@
   function openContextMenu(e: MouseEvent, entry: NoteEntry) {
     e.preventDefault();
     e.stopPropagation();
+    if (disableDnd) return; // 렌즈 그룹(합성 항목)에선 rename/delete/move 무의미
     contextTarget.set({
       x: e.clientX,
       y: e.clientY,
@@ -200,6 +203,7 @@
   let dropTarget = $state<string | null>(null);
 
   function onDragStart(e: DragEvent, entry: NoteEntry) {
+    if (disableDnd) return;
     if (!e.dataTransfer) return;
     dragging = entry.path;
     e.dataTransfer.effectAllowed = "move";
@@ -207,6 +211,7 @@
   }
 
   function onDragOver(e: DragEvent, entry: NoteEntry) {
+    if (disableDnd) return;
     if (!entry.is_dir) return;
     e.preventDefault();
     if (dragging && dragging !== entry.path) {
@@ -220,6 +225,7 @@
   }
 
   async function onDrop(e: DragEvent, entry: NoteEntry) {
+    if (disableDnd) return;
     e.preventDefault();
     e.stopPropagation();
     const src = e.dataTransfer?.getData("text/plain");
