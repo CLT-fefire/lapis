@@ -1,0 +1,285 @@
+import { describe, it, expect } from "vitest";
+import { buildIndex } from "./linkIndex";
+import {
+  buildDocumentGraph,
+  projectOf,
+  mulberry32,
+  DEFAULT_EXCLUDED_FOLDERS,
+  type DocGraphNode,
+} from "./documentGraph";
+import type { LinkInfo } from "./tauri/notes";
+
+function mkInfo(
+  path: string,
+  opts: {
+    targets?: string[];
+    props?: Record<string, string[]>;
+    title?: string | null;
+  } = {},
+): LinkInfo {
+  const stem = path.split("/").pop()!.replace(/\.md$/, "");
+  return {
+    source_path: path,
+    source_name: stem,
+    title: opts.title ?? null,
+    aliases: [],
+    targets: opts.targets ?? [],
+    tags: [],
+    doc_kind: null,
+    topic: null,
+    related: [],
+    props: opts.props ?? {},
+  };
+}
+
+function nodeById(nodes: DocGraphNode[], id: string): DocGraphNode | undefined {
+  return nodes.find((n) => n.id === id);
+}
+
+describe("projectOf", () => {
+  it("최상위 폴더 추출", () => {
+    expect(projectOf("/root/lapis/plans/foo.md", "/root")).toBe("lapis");
+  });
+  it("루트 직속 노트는 null", () => {
+    expect(projectOf("/root/foo.md", "/root")).toBeNull();
+  });
+  it("vault 밖 / vaultRoot 미지정은 null", () => {
+    expect(projectOf("/other/x.md", "/root")).toBeNull();
+    expect(projectOf("/root/lapis/foo.md", "")).toBeNull();
+  });
+});
+
+describe("mulberry32 결정론", () => {
+  it("같은 seed → 같은 수열", () => {
+    const a = mulberry32(123);
+    const b = mulberry32(123);
+    const seqA = [a(), a(), a()];
+    const seqB = [b(), b(), b()];
+    expect(seqA).toEqual(seqB);
+  });
+  it("다른 seed → 다른 수열", () => {
+    const a = mulberry32(1);
+    const b = mulberry32(2);
+    expect(a()).not.toBe(b());
+  });
+  it("[0,1) 범위", () => {
+    const r = mulberry32(999);
+    for (let i = 0; i < 50; i++) {
+      const v = r();
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+});
+
+describe("buildDocumentGraph — 노드/엣지 기본", () => {
+  // A -parent_plan-> B, A -본문링크-> C, B -본문링크-> C
+  const idx = buildIndex([
+    mkInfo("/root/lapis/a.md", { props: { parent_plan: ["b"] }, targets: ["c"] }),
+    mkInfo("/root/lapis/b.md", { targets: ["c"] }),
+    mkInfo("/root/lapis/c.md"),
+  ]);
+
+  it("모든 노트가 노드 (고립 제거 없음 — G3′ 필터 책임)", () => {
+    const g = buildDocumentGraph(idx);
+    expect(g.nodes.map((n) => n.id).sort()).toEqual([
+      "/root/lapis/a.md",
+      "/root/lapis/b.md",
+      "/root/lapis/c.md",
+    ]);
+  });
+
+  it("엣지는 방향 보존 + weight", () => {
+    const g = buildDocumentGraph(idx);
+    const find = (s: string, t: string) =>
+      g.edges.find((e) => e.source === s && e.target === t);
+    expect(find("/root/lapis/a.md", "/root/lapis/b.md")?.weight).toBe(1);
+    expect(find("/root/lapis/a.md", "/root/lapis/c.md")?.weight).toBe(1);
+    expect(find("/root/lapis/b.md", "/root/lapis/c.md")?.weight).toBe(1);
+    // 반대 방향은 없음
+    expect(find("/root/lapis/b.md", "/root/lapis/a.md")).toBeUndefined();
+  });
+
+  it("degree = in+out", () => {
+    const g = buildDocumentGraph(idx);
+    // C는 A·B에서 들어오는 2개(in), out 0 → degree 2
+    expect(nodeById(g.nodes, "/root/lapis/c.md")?.degree).toBe(2);
+    // A는 out 2(B,C), in 0 → degree 2
+    expect(nodeById(g.nodes, "/root/lapis/a.md")?.degree).toBe(2);
+    // B는 out 1(C), in 1(A) → degree 2
+    expect(nodeById(g.nodes, "/root/lapis/b.md")?.degree).toBe(2);
+  });
+
+  it("label = title ?? source_name", () => {
+    const idx2 = buildIndex([mkInfo("/r/x.md", { title: "엑스 문서" }), mkInfo("/r/y.md")]);
+    const g = buildDocumentGraph(idx2);
+    expect(nodeById(g.nodes, "/r/x.md")?.label).toBe("엑스 문서");
+    expect(nodeById(g.nodes, "/r/y.md")?.label).toBe("y");
+  });
+});
+
+describe("weight 집계 — 관계 + 본문링크 같은 pair", () => {
+  it("A가 B를 관계+본문 둘 다 가리키면 weight 2 (1 엣지로 집계)", () => {
+    const idx = buildIndex([
+      mkInfo("/r/a.md", { props: { depends_on: ["b"] }, targets: ["b"] }),
+      mkInfo("/r/b.md"),
+    ]);
+    const g = buildDocumentGraph(idx);
+    const ab = g.edges.filter((e) => e.source === "/r/a.md" && e.target === "/r/b.md");
+    expect(ab).toHaveLength(1);
+    expect(ab[0].weight).toBe(2);
+  });
+});
+
+describe("노이즈 폴더 제외 (_memories)", () => {
+  const idx = buildIndex([
+    mkInfo("/root/lapis/a.md", { targets: ["mem", "b"] }),
+    mkInfo("/root/lapis/b.md"),
+    mkInfo("/root/lapis/_memories/mem.md"),
+  ]);
+
+  it("기본으로 _memories 노드 제외 + excludedCount", () => {
+    const g = buildDocumentGraph(idx);
+    expect(g.excludedCount).toBe(1);
+    expect(nodeById(g.nodes, "/root/lapis/_memories/mem.md")).toBeUndefined();
+  });
+
+  it("제외 노드로 향하는 엣지도 빠짐", () => {
+    const g = buildDocumentGraph(idx);
+    expect(g.edges.some((e) => e.target.includes("_memories"))).toBe(false);
+    // A→B 본문링크는 남음
+    expect(g.edges.some((e) => e.source === "/root/lapis/a.md" && e.target === "/root/lapis/b.md")).toBe(true);
+  });
+
+  it("excludeFolders 빈 배열이면 제외 안 함", () => {
+    const g = buildDocumentGraph(idx, { excludeFolders: [] });
+    expect(g.excludedCount).toBe(0);
+    expect(nodeById(g.nodes, "/root/lapis/_memories/mem.md")).toBeDefined();
+  });
+
+  it("기본 제외 목록은 _memories", () => {
+    expect(DEFAULT_EXCLUDED_FOLDERS).toContain("_memories");
+  });
+});
+
+describe("folder 추출 (vaultRoot)", () => {
+  it("vaultRoot 주면 최상위 폴더, 안 주면 null", () => {
+    const idx = buildIndex([mkInfo("/root/lapis/plans/a.md"), mkInfo("/root/other/b.md")]);
+    const withRoot = buildDocumentGraph(idx, { vaultRoot: "/root" });
+    expect(nodeById(withRoot.nodes, "/root/lapis/plans/a.md")?.folder).toBe("lapis");
+    expect(nodeById(withRoot.nodes, "/root/other/b.md")?.folder).toBe("other");
+
+    const noRoot = buildDocumentGraph(idx);
+    expect(nodeById(noRoot.nodes, "/root/lapis/plans/a.md")?.folder).toBeNull();
+  });
+});
+
+describe("community — 분리된 두 클러스터", () => {
+  // 클러스터1: a↔b↔c (삼각형), 클러스터2: x↔y↔z (삼각형), 둘 사이 연결 없음
+  const idx = buildIndex([
+    mkInfo("/r/a.md", { targets: ["b", "c"] }),
+    mkInfo("/r/b.md", { targets: ["c", "a"] }),
+    mkInfo("/r/c.md", { targets: ["a", "b"] }),
+    mkInfo("/r/x.md", { targets: ["y", "z"] }),
+    mkInfo("/r/y.md", { targets: ["z", "x"] }),
+    mkInfo("/r/z.md", { targets: ["x", "y"] }),
+  ]);
+
+  it("분리된 컴포넌트는 반드시 다른 community (연결요소 split 보장)", () => {
+    const g = buildDocumentGraph(idx);
+    const c1 = nodeById(g.nodes, "/r/a.md")!.community;
+    const cb = nodeById(g.nodes, "/r/b.md")!.community;
+    const cc = nodeById(g.nodes, "/r/c.md")!.community;
+    const c2 = nodeById(g.nodes, "/r/x.md")!.community;
+    // 클러스터1 내부는 같은 community
+    expect(cb).toBe(c1);
+    expect(cc).toBe(c1);
+    // 두 클러스터는 다른 community
+    expect(c2).not.toBe(c1);
+    expect(g.communityCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("community 번호는 0..count-1 연속", () => {
+    const g = buildDocumentGraph(idx);
+    const comms = new Set(g.nodes.map((n) => n.community));
+    expect(comms.size).toBe(g.communityCount);
+    for (let i = 0; i < g.communityCount; i++) expect(comms.has(i)).toBe(true);
+  });
+
+  it("큰 community가 작은 것보다 낮은 번호 (크기 내림차순 재번호)", () => {
+    // 클러스터1(3노드) + 고립노드 1개 → 0=3노드, 1=고립
+    const idx2 = buildIndex([
+      mkInfo("/r/a.md", { targets: ["b", "c"] }),
+      mkInfo("/r/b.md", { targets: ["c", "a"] }),
+      mkInfo("/r/c.md", { targets: ["a", "b"] }),
+      mkInfo("/r/lonely.md"),
+    ]);
+    const g = buildDocumentGraph(idx2);
+    expect(nodeById(g.nodes, "/r/a.md")!.community).toBe(0);
+    expect(nodeById(g.nodes, "/r/lonely.md")!.community).toBe(1);
+  });
+});
+
+describe("결정론 — seed 고정", () => {
+  const infos = [
+    mkInfo("/r/a.md", { targets: ["b", "c"] }),
+    mkInfo("/r/b.md", { targets: ["c", "a"] }),
+    mkInfo("/r/c.md", { targets: ["a", "b"] }),
+    mkInfo("/r/x.md", { targets: ["y", "z"] }),
+    mkInfo("/r/y.md", { targets: ["z", "x"] }),
+    mkInfo("/r/z.md", { targets: ["x", "y"] }),
+  ];
+
+  it("같은 입력·seed → 같은 community 매핑", () => {
+    const g1 = buildDocumentGraph(buildIndex(infos));
+    const g2 = buildDocumentGraph(buildIndex(infos));
+    const map1 = Object.fromEntries(g1.nodes.map((n) => [n.id, n.community]));
+    const map2 = Object.fromEntries(g2.nodes.map((n) => [n.id, n.community]));
+    expect(map1).toEqual(map2);
+  });
+});
+
+describe("PageRank", () => {
+  it("여러 노트가 가리키는 허브가 더 높은 PageRank", () => {
+    // hub ← a, b, c (모두 hub를 본문링크)
+    const idx = buildIndex([
+      mkInfo("/r/hub.md"),
+      mkInfo("/r/a.md", { targets: ["hub"] }),
+      mkInfo("/r/b.md", { targets: ["hub"] }),
+      mkInfo("/r/c.md", { targets: ["hub"] }),
+    ]);
+    const g = buildDocumentGraph(idx);
+    const hub = nodeById(g.nodes, "/r/hub.md")!.pagerank;
+    const a = nodeById(g.nodes, "/r/a.md")!.pagerank;
+    expect(hub).toBeGreaterThan(a);
+  });
+});
+
+describe("엣지 케이스 가드", () => {
+  it("빈 인덱스 → 빈 그래프", () => {
+    const g = buildDocumentGraph(buildIndex([]));
+    expect(g.nodes).toHaveLength(0);
+    expect(g.edges).toHaveLength(0);
+    expect(g.communityCount).toBe(0);
+  });
+
+  it("엣지 없는 노드들 → 각자 단독 community, pagerank 0", () => {
+    const idx = buildIndex([mkInfo("/r/a.md"), mkInfo("/r/b.md")]);
+    const g = buildDocumentGraph(idx);
+    expect(g.edges).toHaveLength(0);
+    expect(g.communityCount).toBe(2);
+    expect(nodeById(g.nodes, "/r/a.md")!.community).not.toBe(
+      nodeById(g.nodes, "/r/b.md")!.community,
+    );
+    expect(nodeById(g.nodes, "/r/a.md")!.pagerank).toBe(0);
+  });
+
+  it("graph 인스턴스 노출 + 노드 attribute에 메트릭 기록", () => {
+    const idx = buildIndex([mkInfo("/r/a.md", { targets: ["b"] }), mkInfo("/r/b.md")]);
+    const g = buildDocumentGraph(idx);
+    expect(g.graph.order).toBe(2);
+    expect(g.graph.size).toBe(1);
+    expect(g.graph.getNodeAttribute("/r/a.md", "degree")).toBe(1);
+    expect(g.graph.getNodeAttribute("/r/b.md", "degree")).toBe(1);
+  });
+});
