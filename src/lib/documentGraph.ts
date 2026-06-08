@@ -45,6 +45,8 @@ export interface DocGraphNode {
   pagerank: number;
   /** Louvain community(연결요소 split + 크기 내림차순 안정 재번호) — 색 community 토글용. */
   community: number;
+  /** 노드 type(doc_kind ?? props.type 첫값) — 색 type 토글 + 필터용. 없으면 null. */
+  type: string | null;
 }
 
 export interface DocGraphEdge {
@@ -71,6 +73,7 @@ export interface DocGraph {
 export interface DocNodeAttributes extends Attributes {
   label: string;
   folder: string | null;
+  type: string | null;
   degree: number;
   pagerank: number;
   community: number;
@@ -89,6 +92,8 @@ export interface BuildDocGraphOptions {
   seed?: number;
   /** 최상위 폴더 추출용 vault 루트 절대 경로. 미지정 시 folder=null. */
   vaultRoot?: string;
+  /** 지정 시 해당 최상위 폴더(프로젝트)에 속한 노트만 포함(Global 프로젝트 스코프). vaultRoot 필요. */
+  scopeFolders?: string[];
 }
 
 /**
@@ -102,6 +107,14 @@ export function projectOf(path: string, vaultRoot: string): string | null {
   const slash = rel.indexOf("/");
   if (slash === -1) return null; // 루트 직속 — 프로젝트 폴더 없음
   return rel.slice(0, slash);
+}
+
+/** 노드 type — doc_kind 우선, 없으면 frontmatter `type` 첫값. 색 type 토글 + 필터용. */
+export function nodeType(info: LinkInfo | undefined): string | null {
+  if (!info) return null;
+  if (info.doc_kind) return info.doc_kind;
+  const t = info.props?.type?.[0]?.trim();
+  return t || null;
 }
 
 /** 경로 세그먼트 중 제외 폴더가 하나라도 있으면 true. ego 모드와 공유. */
@@ -229,7 +242,11 @@ export function buildDocumentGraph(
   const seed = opts.seed ?? DEFAULT_SEED;
   const vaultRoot = opts.vaultRoot ?? "";
 
-  // 1) 포함 노드 결정 (노이즈 폴더 제외). 첨부는 .md만 스캔되므로 byPath에 애초에 없음.
+  // 1) 포함 노드 결정 (노이즈 폴더 제외 + 선택적 프로젝트 스코프).
+  const scope =
+    opts.scopeFolders && opts.scopeFolders.length > 0
+      ? new Set(opts.scopeFolders)
+      : null;
   const included = new Set<string>();
   let excludedCount = 0;
   for (const path of idx.byPath.keys()) {
@@ -237,6 +254,8 @@ export function buildDocumentGraph(
       excludedCount++;
       continue;
     }
+    // 스코프 지정 시 해당 프로젝트(최상위 폴더) 밖은 조용히 제외(노이즈 카운트엔 미포함).
+    if (scope && !scope.has(projectOf(path, vaultRoot) ?? "")) continue;
     included.add(path);
   }
 
@@ -252,6 +271,7 @@ export function buildDocumentGraph(
     graph.addNode(path, {
       label: info?.title ?? info?.source_name ?? path,
       folder: projectOf(path, vaultRoot),
+      type: nodeType(info),
       degree: 0,
       pagerank: 0,
       community: 0,
@@ -304,6 +324,7 @@ export function buildDocumentGraph(
       id: path,
       label: attr.label,
       folder: attr.folder,
+      type: attr.type,
       degree,
       pagerank: pagerankScore,
       community: comm,
@@ -316,4 +337,67 @@ export function buildDocumentGraph(
   });
 
   return { graph, nodes, edges, communityCount, excludedCount };
+}
+
+export interface FilterOptions {
+  /** 살아남은 엣지 기준 연결 0인 노드 숨김(고아 OFF). */
+  hideOrphans?: boolean;
+  /** min-weight 백본 — weight 미만 엣지 제거. 기본 0(전체). */
+  minWeight?: number;
+  /** degree-cap — 전역 degree가 cap 초과인 허브 노드 숨김(원기옥 억제). null=무제한. */
+  degreeCap?: number | null;
+  /** 지정 시 해당 type만(type null 노드는 제외). */
+  types?: ReadonlySet<string> | null;
+  /** 지정 시 해당 folder만(folder null 노드는 제외). */
+  folders?: ReadonlySet<string> | null;
+}
+
+export interface FilteredGraph {
+  nodes: DocGraphNode[];
+  edges: DocGraphEdge[];
+  /** 필터 전 노드 수. */
+  totalNodes: number;
+  /** 필터 후 표시 노드 수. */
+  shownNodes: number;
+}
+
+/**
+ * 빌드된 문서 그래프에 런타임 필터 적용(Global 모드). 순수·멱등.
+ * degree/community 등 메트릭은 **전역 값 유지**(필터해도 중심성은 전체 기준).
+ *
+ * 순서: 노드 필터(degree-cap·type·folder) → 엣지 필터(min-weight 백본 + 양끝 생존)
+ * → 고아 정리(hideOrphans, 살아남은 엣지 기준).
+ */
+export function filterDocGraph(
+  source: { nodes: DocGraphNode[]; edges: DocGraphEdge[] },
+  opts: FilterOptions = {},
+): FilteredGraph {
+  const minW = opts.minWeight ?? 0;
+  const cap = opts.degreeCap ?? null;
+  const types = opts.types ?? null;
+  const folders = opts.folders ?? null;
+
+  const kept = new Set<string>();
+  for (const n of source.nodes) {
+    if (cap != null && n.degree > cap) continue;
+    if (types && (n.type == null || !types.has(n.type))) continue;
+    if (folders && (n.folder == null || !folders.has(n.folder))) continue;
+    kept.add(n.id);
+  }
+
+  const edges = source.edges.filter(
+    (e) => e.weight >= minW && kept.has(e.source) && kept.has(e.target),
+  );
+
+  let nodes = source.nodes.filter((n) => kept.has(n.id));
+  if (opts.hideOrphans) {
+    const connected = new Set<string>();
+    for (const e of edges) {
+      connected.add(e.source);
+      connected.add(e.target);
+    }
+    nodes = nodes.filter((n) => connected.has(n.id));
+  }
+
+  return { nodes, edges, totalNodes: source.nodes.length, shownNodes: nodes.length };
 }

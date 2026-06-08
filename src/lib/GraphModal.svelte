@@ -6,26 +6,50 @@
     setGraphDepth,
     toggleExpanded,
     recenterGraph,
+    setGraphMode,
+    setGraphColorMode,
+    setGraphFilters,
     MIN_DEPTH,
     MAX_DEPTH,
+    type GraphColorMode,
   } from "$lib/stores/graph";
   import { linkIndex, vaultPath, selectNote } from "$lib/stores/vault";
-  import { buildEgoGraph, type EgoNode } from "$lib/egoGraph";
-  import type { DocGraphEdge } from "$lib/documentGraph";
-  import { forceManyBody, forceCollide } from "d3-force";
+  import { buildEgoGraph } from "$lib/egoGraph";
+  import {
+    buildDocumentGraph,
+    filterDocGraph,
+    projectOf,
+    type DocGraphNode,
+    type DocGraphEdge,
+  } from "$lib/documentGraph";
+  import { forceManyBody, forceCollide, forceX, forceY } from "d3-force";
   import type ForceGraphType from "force-graph";
   import type { NodeObject, LinkObject } from "force-graph";
 
   /**
-   * PR-G2′ — Local/ego 그래프 (ADR-003). force-graph canvas 렌더 + 인터랙션.
-   * 데이터는 egoGraph(순수, vitest 커버). 렌더/인터랙션은 Tauri webview라 사용자 dev 육안검증.
-   * - hover = 이웃 강조 · 외 dim · focus 링.
-   * - depth 슬라이더(1~2), 노드 클릭 = expand-on-demand(전체 이웃 펼침), ⌘+클릭 = 이 노트로 이동.
-   * - "+N more" 배지 = 표시 안 된 이웃 수.
+   * 그래프 모달 (ADR-003). 두 모드:
+   * - **Local/ego**(G2′): 현재 노트 이웃. depth + expand-on-demand + hover.
+   * - **Global**(G3′): 현재 노트의 프로젝트 스코프 풀스택. community 색 + per-community
+   *   클러스터힘 + 필터(고아/min-weight 백본/degree-cap) + 색 3-way 토글.
+   * 데이터는 순수(egoGraph/documentGraph, vitest). 렌더/인터랙션은 사용자 dev 육안검증.
    */
 
-  type FGNode = NodeObject & EgoNode;
+  type FGNode = NodeObject & DocGraphNode & { depth?: number; hiddenNeighbors?: number };
   type FGLink = LinkObject<FGNode> & DocGraphEdge;
+
+  // 색맹 안전 팔레트(Okabe-Ito) + 8색 초과 중립.
+  const OKABE_ITO = [
+    "#0072B2",
+    "#E69F00",
+    "#009E73",
+    "#CC79A7",
+    "#56B4E9",
+    "#D55E00",
+    "#F0E442",
+    "#999999",
+  ];
+  const NEUTRAL = "#9aa0a8";
+  const NODE_WARN = 150;
 
   let containerEl = $state<HTMLDivElement | null>(null);
   let fg = $state<ForceGraphType<FGNode, FGLink> | null>(null);
@@ -33,38 +57,91 @@
 
   const gs = $derived($graphView);
 
-  // ego 데이터 — 모달 열림 + linkIndex + center + depth + expanded 의존 (hover는 미포함).
-  const ego = $derived.by(() => {
+  // Global 베이스 그래프 — center/mode/scope에만 의존(필터 무관 → 필터 바꿔도 재빌드 X).
+  const globalBase = $derived.by(() => {
+    const idx = $linkIndex;
+    if (!gs.open || gs.mode !== "global" || !gs.centerPath || !idx) return null;
+    const root = $vaultPath ?? "";
+    const proj = projectOf(gs.centerPath, root);
+    return buildDocumentGraph(idx, {
+      vaultRoot: root,
+      scopeFolders: proj ? [proj] : undefined,
+    });
+  });
+
+  // 표시 데이터 — local: ego, global: filterDocGraph(globalBase). 통일 {nodes,edges,...}.
+  const view = $derived.by(() => {
     const idx = $linkIndex;
     if (!gs.open || !gs.centerPath || !idx) return null;
-    return buildEgoGraph(idx, gs.centerPath, {
-      depth: gs.depth,
-      expanded: gs.expanded,
-      vaultRoot: $vaultPath ?? "",
-    });
+    if (gs.mode === "local") {
+      const ego = buildEgoGraph(idx, gs.centerPath, {
+        depth: gs.depth,
+        expanded: gs.expanded,
+        vaultRoot: $vaultPath ?? "",
+      });
+      return {
+        nodes: ego.nodes as DocGraphNode[],
+        edges: ego.edges,
+        total: ego.nodes.length,
+        shown: ego.nodes.length,
+        truncated: ego.truncated,
+      };
+    }
+    if (!globalBase) return null;
+    const f = filterDocGraph(globalBase, gs.filters);
+    return {
+      nodes: f.nodes,
+      edges: f.edges,
+      total: f.totalNodes,
+      shown: f.shownNodes,
+      truncated: false,
+    };
   });
 
   // hover 강조용 무방향 인접.
   const adjacency = $derived.by(() => {
     const m = new Map<string, Set<string>>();
-    if (!ego) return m;
+    if (!view) return m;
     const link = (a: string, b: string) => {
       let s = m.get(a);
       if (!s) m.set(a, (s = new Set()));
       s.add(b);
     };
-    for (const e of ego.edges) {
+    for (const e of view.edges) {
       link(e.source, e.target);
       link(e.target, e.source);
     }
     return m;
   });
 
-  const centerLabel = $derived(
-    ego?.nodes.find((n) => n.id === ego.center)?.label ?? "—",
+  // [global] folder/type 값 → 색(정렬 안정, 8색 초과 중립). community는 번호로 직접.
+  const colorMap = $derived.by(() => {
+    const m = new Map<string, string>();
+    if (gs.mode !== "global" || !view || gs.colorMode === "community") return m;
+    const vals = new Set<string>();
+    for (const n of view.nodes) {
+      const v = gs.colorMode === "folder" ? n.folder : n.type;
+      if (v) vals.add(v);
+    }
+    [...vals].sort().forEach((v, i) => m.set(v, i < OKABE_ITO.length ? OKABE_ITO[i] : NEUTRAL));
+    return m;
+  });
+
+  // [global] per-community 클러스터 개수.
+  const communityCount = $derived(
+    gs.mode === "global" && view
+      ? view.nodes.reduce((mx, n) => Math.max(mx, n.community ?? 0), 0) + 1
+      : 1,
   );
 
-  // === 테마 색 (getComputedStyle로 CSS 토큰 읽기) ===
+  const centerLabel = $derived(
+    view?.nodes.find((n) => n.id === gs.centerPath)?.label ??
+      gs.centerPath?.split("/").pop()?.replace(/\.md$/, "") ??
+      "—",
+  );
+  const projectName = $derived(projectOf(gs.centerPath ?? "", $vaultPath ?? "") ?? "(루트)");
+
+  // === 테마 색 ===
   let colors = {
     node: "#8a8f98",
     center: "#4a90d9",
@@ -93,19 +170,26 @@
     return 3 + Math.sqrt(n.degree ?? 0) * 1.5;
   }
 
+  function baseFill(n: FGNode): string {
+    if (gs.mode === "local") return n.id === gs.centerPath ? colors.center : colors.node;
+    if (gs.colorMode === "community") {
+      return OKABE_ITO[(n.community ?? 0) % OKABE_ITO.length];
+    }
+    const v = gs.colorMode === "folder" ? n.folder : n.type;
+    return (v && colorMap.get(v)) || NEUTRAL;
+  }
+
   function nodeFill(n: FGNode): string {
-    const isCenter = n.id === ego?.center;
-    if (!hoverId) return isCenter ? colors.center : colors.node;
+    if (!hoverId) return baseFill(n);
     if (n.id === hoverId) return colors.center;
-    if (adjacency.get(hoverId)?.has(n.id)) return colors.neighbor;
+    if (adjacency.get(hoverId)?.has(n.id)) return baseFill(n);
     return colors.dim;
   }
 
   function shouldLabel(n: FGNode, scale: number): boolean {
-    if (n.id === ego?.center) return true;
+    if (n.id === gs.centerPath) return true;
     if (hoverId && (n.id === hoverId || adjacency.get(hoverId)?.has(n.id))) return true;
-    // 노드가 많으면(펼친 직후 등) 라벨 폭주 → hover/center만, 크게 확대했을 때만 노출.
-    const total = ego?.nodes.length ?? 0;
+    const total = view?.nodes.length ?? 0;
     if (total > 60) return scale > 3;
     if (total > 30) return scale > 2;
     return scale > 1.4;
@@ -120,7 +204,7 @@
     ctx.fillStyle = nodeFill(n);
     ctx.fill();
 
-    if (n.id === ego?.center) {
+    if (n.id === gs.centerPath) {
       ctx.lineWidth = 1.5 / scale;
       ctx.strokeStyle = colors.center;
       ctx.beginPath();
@@ -155,11 +239,11 @@
   }
 
   function onNodeClick(n: FGNode, ev: MouseEvent) {
-    if (ev.metaKey || ev.ctrlKey) {
+    if (gs.mode === "local" && !ev.metaKey && !ev.ctrlKey) {
+      toggleExpanded(n.id);
+    } else {
       void selectNote(n.id);
       recenterGraph(n.id);
-    } else {
-      toggleExpanded(n.id);
     }
   }
 
@@ -169,7 +253,7 @@
     }
   }
 
-  // === force-graph 인스턴스 (동적 import — SSR 회피 + lazy) ===
+  // === force-graph 인스턴스 (동적 import) ===
   $effect(() => {
     if (!containerEl) return;
     let disposed = false;
@@ -197,15 +281,11 @@
         .onBackgroundClick(() => {
           hoverId = null;
         })
-        .cooldownTicks(120)
+        .cooldownTicks(140)
         .d3VelocityDecay(0.3);
       fg = inst;
-      // 노드 분산 — 펼친 그래프에서 노드/라벨 겹침 완화. 강한 척력 + degree-aware 충돌 반경.
       inst.d3Force("charge", forceManyBody<FGNode>().strength(-180).distanceMax(420));
-      inst.d3Force(
-        "collide",
-        forceCollide<FGNode>((n) => nodeRadius(n) + 18).iterations(2),
-      );
+      inst.d3Force("collide", forceCollide<FGNode>((n) => nodeRadius(n) + 18).iterations(2));
       sizeToContainer();
     })();
     return () => {
@@ -216,7 +296,6 @@
     };
   });
 
-  // 컨테이너 리사이즈 추적.
   $effect(() => {
     if (!containerEl) return;
     const ro = new ResizeObserver(() => sizeToContainer());
@@ -224,15 +303,15 @@
     return () => ro.disconnect();
   });
 
-  // 데이터 push — fg 준비 + ego 변경 시. force-graph가 좌표를 mutate하므로 복제 전달.
+  // 데이터 push — fg 준비 + view 변경 시.
   let fitPending = false;
   $effect(() => {
-    const data = ego;
+    const data = view;
     if (!fg) return;
     if (data) {
       fg.graphData({
-        nodes: data.nodes.map((n) => ({ ...n })),
-        links: data.edges.map((e) => ({ ...e })),
+        nodes: data.nodes.map((n) => ({ ...n }) as FGNode),
+        links: data.edges.map((e) => ({ ...e }) as FGLink),
       });
       fitPending = true;
       setTimeout(() => {
@@ -246,34 +325,85 @@
     }
   });
 
-  // hover 변경 시 정지된 캔버스 강제 redraw (drawNode 재설정 → 내부 flush).
+  // [global] per-community 클러스터힘 — community 별자리. local이면 해제.
+  $effect(() => {
+    if (!fg) return;
+    if (gs.mode === "global" && view && view.nodes.length > 0) {
+      const count = communityCount;
+      const radius = 80 + count * 28;
+      const cx = (c: number) => radius * Math.cos((2 * Math.PI * c) / count);
+      const cy = (c: number) => radius * Math.sin((2 * Math.PI * c) / count);
+      fg.d3Force("x", forceX<FGNode>((n) => cx(n.community ?? 0)).strength(0.14));
+      fg.d3Force("y", forceY<FGNode>((n) => cy(n.community ?? 0)).strength(0.14));
+    } else {
+      fg.d3Force("x", null);
+      fg.d3Force("y", null);
+    }
+    fg.d3ReheatSimulation();
+  });
+
+  // hover 변경 시 정지된 캔버스 강제 redraw.
   $effect(() => {
     void hoverId;
     fg?.nodeCanvasObject(drawNode);
   });
+
+  const COLOR_MODES: { key: GraphColorMode; label: string }[] = [
+    { key: "community", label: "커뮤니티" },
+    { key: "folder", label: "폴더" },
+    { key: "type", label: "타입" },
+  ];
 </script>
 
 {#if gs.open}
-  <ModalShell onClose={closeGraph} label="Local graph">
-    <div class="graph-modal" role="dialog" aria-modal="true" aria-label="Local graph">
+  <ModalShell onClose={closeGraph} label="Graph">
+    <div class="graph-modal" role="dialog" aria-modal="true" aria-label="Graph">
       <header class="graph-head">
         <div class="title">
-          <span class="kicker">Local Graph</span>
-          <span class="center-name" title={centerLabel}>{centerLabel}</span>
+          <div class="seg" role="tablist" aria-label="그래프 모드">
+            <button
+              class="seg-btn"
+              class:active={gs.mode === "local"}
+              onclick={() => setGraphMode("local")}
+              title="현재 노트 이웃">Local</button
+            >
+            <button
+              class="seg-btn"
+              class:active={gs.mode === "global"}
+              onclick={() => setGraphMode("global")}
+              title="프로젝트 전체">Global</button
+            >
+          </div>
+          <span class="center-name" title={gs.mode === "global" ? projectName : centerLabel}>
+            {gs.mode === "global" ? projectName : centerLabel}
+          </span>
         </div>
+
         <div class="controls">
-          <label class="depth">
-            <span>Depth</span>
-            <input
-              type="range"
-              min={MIN_DEPTH}
-              max={MAX_DEPTH}
-              step="1"
-              value={gs.depth}
-              oninput={(e) => setGraphDepth(+e.currentTarget.value)}
-            />
-            <span class="depth-val">{gs.depth}</span>
-          </label>
+          {#if gs.mode === "local"}
+            <label class="ctl">
+              <span>Depth</span>
+              <input
+                type="range"
+                min={MIN_DEPTH}
+                max={MAX_DEPTH}
+                step="1"
+                value={gs.depth}
+                oninput={(e) => setGraphDepth(+e.currentTarget.value)}
+              />
+              <span class="val">{gs.depth}</span>
+            </label>
+          {:else}
+            <div class="seg seg--sm" role="group" aria-label="색 기준">
+              {#each COLOR_MODES as cm}
+                <button
+                  class="seg-btn"
+                  class:active={gs.colorMode === cm.key}
+                  onclick={() => setGraphColorMode(cm.key)}>{cm.label}</button
+                >
+              {/each}
+            </div>
+          {/if}
           <button
             class="btn btn--icon btn--sm btn--plain"
             data-autofocus
@@ -283,18 +413,72 @@
         </div>
       </header>
 
+      {#if gs.mode === "global"}
+        <div class="filters">
+          <label class="chk">
+            <input
+              type="checkbox"
+              checked={gs.filters.hideOrphans}
+              onchange={(e) => setGraphFilters({ hideOrphans: e.currentTarget.checked })}
+            />
+            고아 숨김
+          </label>
+          <label class="ctl">
+            <span>최소 연결강도</span>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              value={gs.filters.minWeight}
+              oninput={(e) => setGraphFilters({ minWeight: +e.currentTarget.value })}
+            />
+            <span class="val">{gs.filters.minWeight}</span>
+          </label>
+          <label class="ctl">
+            <span>허브 숨김(degree&gt;)</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={gs.filters.degreeCap ?? 0}
+              oninput={(e) => {
+                const v = +e.currentTarget.value;
+                setGraphFilters({ degreeCap: v === 0 ? null : v });
+              }}
+            />
+            <span class="val">{gs.filters.degreeCap ?? "off"}</span>
+          </label>
+        </div>
+      {/if}
+
       <div class="graph-body">
         <div class="graph-canvas" bind:this={containerEl}></div>
-        {#if ego && ego.nodes.length <= 1}
-          <div class="empty">연결된 노트가 없습니다.</div>
+        {#if view && view.nodes.length <= 1}
+          <div class="overlay">
+            {gs.mode === "global" ? "표시할 노트가 없습니다 — 필터를 완화하세요." : "연결된 노트가 없습니다."}
+          </div>
+        {:else if gs.mode === "global" && view && view.shown > NODE_WARN}
+          <div class="warn">
+            노드 {view.shown}개 — 거미줄이 될 수 있습니다. 필터(고아·연결강도·허브)를 조이거나
+            <button class="linkbtn" onclick={() => setGraphMode("local")}>Local 모드</button>를 권장합니다.
+          </div>
         {/if}
       </div>
 
       <footer class="graph-foot">
-        <span class="hint">클릭 = 이웃 펼치기 · ⌘+클릭 = 이 노트로 이동 · 드래그/스크롤 = 이동·확대</span>
+        <span class="hint">
+          {#if gs.mode === "local"}
+            클릭 = 이웃 펼치기 · ⌘+클릭 = 이 노트로 이동
+          {:else}
+            클릭 = 이 노트로 이동 · 색 = {COLOR_MODES.find((c) => c.key === gs.colorMode)?.label}
+          {/if}
+          · 드래그/스크롤 = 이동·확대
+        </span>
         <span class="stat">
-          {#if ego}
-            {ego.nodes.length} notes · {ego.edges.length} links{#if ego.truncated} · 일부 생략됨{/if}
+          {#if view}
+            {#if gs.mode === "global"}{view.shown}/{view.total}{:else}{view.shown}{/if} notes · {view.edges.length} links{#if view.truncated} · 일부 생략{/if}
           {/if}
         </span>
       </footer>
@@ -328,18 +512,9 @@
 
   .title {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: var(--sp-4);
     min-width: 0;
-  }
-
-  .kicker {
-    font-weight: 600;
-    font-size: var(--fs-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--accent);
-    flex: none;
   }
 
   .center-name {
@@ -357,7 +532,37 @@
     flex: none;
   }
 
-  .depth {
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+  }
+
+  .seg-btn {
+    appearance: none;
+    border: none;
+    background: var(--surface-base);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    padding: var(--sp-2) 10px;
+    cursor: pointer;
+  }
+
+  .seg-btn + .seg-btn {
+    border-left: 1px solid var(--border-strong);
+  }
+
+  .seg-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .seg--sm .seg-btn {
+    padding: 3px var(--sp-3);
+  }
+
+  .ctl {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
@@ -365,15 +570,35 @@
     color: var(--text-muted);
   }
 
-  .depth input[type="range"] {
-    width: 80px;
+  .ctl input[type="range"] {
+    width: 96px;
     accent-color: var(--accent);
   }
 
-  .depth-val {
-    width: 1ch;
+  .val {
+    min-width: 2.4ch;
     text-align: center;
     color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-6);
+    padding: var(--sp-3) var(--sp-6);
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-default);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+
+  .chk {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    cursor: pointer;
   }
 
   .graph-body {
@@ -388,7 +613,7 @@
     inset: 0;
   }
 
-  .empty {
+  .overlay {
     position: absolute;
     inset: 0;
     display: flex;
@@ -397,6 +622,32 @@
     color: var(--text-muted);
     font-size: var(--fs-sm);
     pointer-events: none;
+  }
+
+  .warn {
+    position: absolute;
+    top: var(--sp-4);
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 90%;
+    padding: var(--sp-3) var(--sp-5);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+  }
+
+  .linkbtn {
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+    text-decoration: underline;
   }
 
   .graph-foot {
@@ -411,15 +662,15 @@
     color: var(--text-muted);
   }
 
-  .stat {
-    flex: none;
-    color: var(--text-secondary);
-    font-variant-numeric: tabular-nums;
-  }
-
   .hint {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .stat {
+    flex: none;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
   }
 </style>

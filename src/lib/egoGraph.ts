@@ -3,6 +3,7 @@ import {
   type DocGraphNode,
   type DocGraphEdge,
   projectOf,
+  nodeType,
   isExcluded,
   resolveBodyTargets,
   collectWeightedEdges,
@@ -187,6 +188,7 @@ export function buildEgoGraph(
       id: path,
       label: info?.title ?? info?.source_name ?? path,
       folder: projectOf(path, vaultRoot),
+      type: nodeType(info),
       degree: degree.get(path) ?? 0,
       pagerank: 0, // local 미계산 — Global(G3′) 전용
       community: 0, // local 미계산 — folder 색 사용
