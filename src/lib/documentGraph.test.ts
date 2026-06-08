@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildIndex } from "./linkIndex";
 import {
   buildDocumentGraph,
+  filterDocGraph,
   projectOf,
   mulberry32,
   DEFAULT_EXCLUDED_FOLDERS,
@@ -15,6 +16,7 @@ function mkInfo(
     targets?: string[];
     props?: Record<string, string[]>;
     title?: string | null;
+    docKind?: string;
   } = {},
 ): LinkInfo {
   const stem = path.split("/").pop()!.replace(/\.md$/, "");
@@ -25,7 +27,7 @@ function mkInfo(
     aliases: [],
     targets: opts.targets ?? [],
     tags: [],
-    doc_kind: null,
+    doc_kind: opts.docKind ?? null,
     topic: null,
     related: [],
     props: opts.props ?? {},
@@ -281,5 +283,96 @@ describe("엣지 케이스 가드", () => {
     expect(g.graph.size).toBe(1);
     expect(g.graph.getNodeAttribute("/r/a.md", "degree")).toBe(1);
     expect(g.graph.getNodeAttribute("/r/b.md", "degree")).toBe(1);
+  });
+});
+
+describe("노드 type (doc_kind ?? props.type)", () => {
+  it("doc_kind 우선 → props.type fallback → null", () => {
+    const g = buildDocumentGraph(
+      buildIndex([
+        mkInfo("/r/a.md", { docKind: "plan", props: { type: ["solution"] } }),
+        mkInfo("/r/b.md", { props: { type: ["solution"] } }),
+        mkInfo("/r/c.md"),
+      ]),
+    );
+    expect(nodeById(g.nodes, "/r/a.md")!.type).toBe("plan");
+    expect(nodeById(g.nodes, "/r/b.md")!.type).toBe("solution");
+    expect(nodeById(g.nodes, "/r/c.md")!.type).toBeNull();
+  });
+});
+
+describe("scopeFolders — 프로젝트 스코프", () => {
+  const infos = [
+    mkInfo("/root/lapis/a.md", { targets: ["b"] }),
+    mkInfo("/root/lapis/b.md"),
+    mkInfo("/root/other/c.md", { targets: ["a"] }),
+  ];
+
+  it("scope=lapis면 lapis 노트만 + 타 프로젝트 엣지 제외", () => {
+    const g = buildDocumentGraph(buildIndex(infos), {
+      vaultRoot: "/root",
+      scopeFolders: ["lapis"],
+    });
+    expect(g.nodes.map((n) => n.id).sort()).toEqual([
+      "/root/lapis/a.md",
+      "/root/lapis/b.md",
+    ]);
+    expect(g.edges.some((e) => e.source.includes("other") || e.target.includes("other"))).toBe(
+      false,
+    );
+  });
+
+  it("scope 미지정이면 전체", () => {
+    const g = buildDocumentGraph(buildIndex(infos), { vaultRoot: "/root" });
+    expect(g.nodes.length).toBe(3);
+  });
+});
+
+describe("filterDocGraph", () => {
+  // hub→a,b,c (hub degree 3), a→b, orphan 고립
+  const base = buildDocumentGraph(
+    buildIndex([
+      mkInfo("/r/hub.md", { targets: ["a", "b", "c"] }),
+      mkInfo("/r/a.md", { targets: ["b"] }),
+      mkInfo("/r/b.md"),
+      mkInfo("/r/c.md"),
+      mkInfo("/r/orphan.md"),
+    ]),
+  );
+
+  it("hideOrphans — 연결 0 노드 제거", () => {
+    const f = filterDocGraph(base, { hideOrphans: true });
+    expect(f.nodes.some((n) => n.id === "/r/orphan.md")).toBe(false);
+    expect(f.nodes.some((n) => n.id === "/r/hub.md")).toBe(true);
+    expect(f.totalNodes).toBe(5);
+    expect(f.shownNodes).toBe(4);
+  });
+
+  it("degreeCap — degree 초과 허브 + 그 엣지 숨김", () => {
+    const f = filterDocGraph(base, { degreeCap: 2 }); // hub degree 3 → 숨김
+    expect(f.nodes.some((n) => n.id === "/r/hub.md")).toBe(false);
+    expect(f.edges.some((e) => e.source === "/r/hub.md")).toBe(false);
+  });
+
+  it("minWeight — weight 미만 엣지 제거 (백본)", () => {
+    expect(filterDocGraph(base, { minWeight: 2 }).edges).toHaveLength(0); // 모든 weight 1
+    expect(filterDocGraph(base, { minWeight: 1 }).edges.length).toBeGreaterThan(0);
+  });
+
+  it("types — 해당 type만 (type null 노드 제외)", () => {
+    const typed = buildDocumentGraph(
+      buildIndex([
+        mkInfo("/r/p.md", { docKind: "plan", targets: ["s"] }),
+        mkInfo("/r/s.md", { docKind: "solution" }),
+      ]),
+    );
+    const f = filterDocGraph(typed, { types: new Set(["plan"]) });
+    expect(f.nodes.map((n) => n.id)).toEqual(["/r/p.md"]);
+  });
+
+  it("필터 없으면 원본 그대로", () => {
+    const f = filterDocGraph(base);
+    expect(f.nodes.length).toBe(base.nodes.length);
+    expect(f.edges.length).toBe(base.edges.length);
   });
 });
