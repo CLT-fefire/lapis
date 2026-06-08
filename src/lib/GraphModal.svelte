@@ -5,7 +5,6 @@
     closeGraph,
     setGraphDepth,
     toggleExpanded,
-    recenterGraph,
     setGraphMode,
     setGraphColorMode,
     setGraphFilters,
@@ -239,12 +238,13 @@
   }
 
   function onNodeClick(n: FGNode, ev: MouseEvent) {
-    if (gs.mode === "local" && !ev.metaKey && !ev.ctrlKey) {
+    // ⌥(Alt)+클릭(local) = 이웃 펼치기(탐색 유지). 그 외 클릭 = 그 노트로 이동 + 모달 닫기.
+    if (ev.altKey && gs.mode === "local") {
       toggleExpanded(n.id);
-    } else {
-      void selectNote(n.id);
-      recenterGraph(n.id);
+      return;
     }
+    void selectNote(n.id);
+    closeGraph();
   }
 
   function sizeToContainer() {
@@ -470,9 +470,9 @@
       <footer class="graph-foot">
         <span class="hint">
           {#if gs.mode === "local"}
-            클릭 = 이웃 펼치기 · ⌘+클릭 = 이 노트로 이동
+            클릭 = 노트 열기 · ⌥+클릭 = 이웃 펼치기
           {:else}
-            클릭 = 이 노트로 이동 · 색 = {COLOR_MODES.find((c) => c.key === gs.colorMode)?.label}
+            클릭 = 노트 열기 · 색 = {COLOR_MODES.find((c) => c.key === gs.colorMode)?.label}
           {/if}
           · 드래그/스크롤 = 이동·확대
         </span>
