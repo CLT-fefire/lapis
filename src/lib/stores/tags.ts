@@ -1,5 +1,7 @@
 import { writable } from "svelte/store";
 import type { LinkInfo } from "$lib/tauri/notes";
+import { ensureSectionOpen } from "./sidebar";
+import { expandSidebar } from "./layout";
 
 /**
  * 태그 인덱스 — leaf(정확) 매칭과 prefix(계층) 매칭을 모두 지원.
@@ -167,20 +169,26 @@ export function selectTag(tag: string | null, kind: SelectedTagKind = "leaf"): v
   selectedTagKind.set(kind);
 }
 
+// 구 가로 탭(sidebarTab)을 세로 아코디언(sidebar.ts)으로 리다이렉트 — 호출처 무변경.
+// 사이드바가 접혀(아이콘 레일) 있으면 펼치고, 해당 섹션을 연다.
 export function showTagsTab(): void {
-  sidebarTab.set("tags");
+  expandSidebar();
+  ensureSectionOpen("tags");
 }
 
 export function showFilesTab(): void {
-  sidebarTab.set("files");
+  expandSidebar();
+  ensureSectionOpen("files");
 }
 
 export function showOutlineTab(): void {
-  sidebarTab.set("outline");
+  expandSidebar();
+  ensureSectionOpen("outline");
 }
 
 export function showFavoritesTab(): void {
-  sidebarTab.set("favorites");
+  expandSidebar();
+  ensureSectionOpen("favorites");
 }
 
 export function clearTagIndex(): void {

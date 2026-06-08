@@ -121,6 +121,9 @@
   --control-h-md: 28px;
   --control-h-lg: 32px;
 
+  /* --- 사이드바 아이콘 레일 폭(접힘 모드) --- */
+  --rail-w: 52px;
+
   /* --- Modal 폭 (3단 표준; 기존 360/440/460/540 → 최대 +20px 수렴) --- */
   --modal-w-sm: 380px;
   --modal-w-md: 460px;
