@@ -12,6 +12,7 @@ import { toggleEditor, togglePreview, toggleSidebar } from "$lib/stores/layout";
 import { openMemorySync } from "$lib/stores/memorySync";
 import { openMemorySearch } from "$lib/stores/memorySearch";
 import { claudeMemEnabled } from "$lib/stores/settings";
+import { openGraph } from "$lib/stores/graph";
 
 export interface Command {
   id: string;
@@ -120,6 +121,16 @@ export const BUILTIN_COMMANDS: Command[] = [
       } catch (e) {
         console.error("copy current note path failed", e);
       }
+    },
+  },
+  {
+    id: "open-local-graph",
+    label: "Local Graph: 현재 노트 이웃",
+    shortcut: "⌘G",
+    disabled: () => !get(currentNotePath),
+    run() {
+      const cur = get(currentNotePath);
+      if (cur) openGraph(cur);
     },
   },
   {
