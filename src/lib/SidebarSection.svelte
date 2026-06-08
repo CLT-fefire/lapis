@@ -15,8 +15,6 @@
     count?: number | null;
     onToggle: () => void;
     children: Snippet;
-    /** 펼침 시 남은 공간을 채움(Files 트리 등 주 콘텐츠). */
-    grow?: boolean;
   }
   let {
     icon: Icon,
@@ -25,7 +23,6 @@
     count = null,
     onToggle,
     children,
-    grow = false,
   }: Props = $props();
 
   function compactCount(n: number): string {
@@ -33,7 +30,7 @@
   }
 </script>
 
-<section class="section" class:grow={grow && open}>
+<section class="section" class:open>
   <button class="section-header" aria-expanded={open} onclick={onToggle}>
     <span class="chevron" aria-hidden="true">
       {#if open}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}
@@ -59,9 +56,15 @@
     min-height: 0;
   }
 
-  /* 펼친 주 콘텐츠(Files)는 남은 세로 공간을 차지 */
-  .section.grow {
-    flex: 1;
+  /* 닫힌 섹션 = 헤더만(고정 높이). */
+  .section:not(.open) {
+    flex: 0 0 auto;
+  }
+
+  /* 펼친 섹션 = 가용 공간 분배(여러 개면 균등). 콘텐츠는 섹션 안에서 스크롤 →
+     섹션 간 겹침 차단(특히 Files 가상스크롤의 absolute 자식 격리). */
+  .section.open {
+    flex: 1 1 0;
     min-height: 0;
   }
 
@@ -125,13 +128,12 @@
   }
 
   .body {
+    flex: 1;
+    min-height: 0;
+    /* 가상스크롤 등 absolute 자식을 이 섹션 안에 가둠(섹션 간 겹침 방지). */
+    position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .section.grow > .body {
-    flex: 1;
+    overflow-y: auto;
   }
 </style>

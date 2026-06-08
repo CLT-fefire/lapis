@@ -391,7 +391,6 @@ graph LR
         label="Files"
         open={$sidebarNav.sectionOpen.files}
         onToggle={() => toggleSection("files")}
-        grow
       >
         {#snippet children()}
           {#if $notes.length > 0}
