@@ -6,6 +6,10 @@ import {
   toggleExpandedState,
   setDepthState,
   recenterState,
+  setModeState,
+  setColorModeState,
+  setSizeModeState,
+  setFiltersState,
   MIN_DEPTH,
   MAX_DEPTH,
   type GraphState,
@@ -74,5 +78,52 @@ describe("recenterState", () => {
   it("같은 중심이면 no-op", () => {
     const base: GraphState = { ...EMPTY_GRAPH, centerPath: "/a.md" };
     expect(recenterState(base, "/a.md")).toBe(base);
+  });
+});
+
+describe("setModeState", () => {
+  it("local↔global 전환 + expanded 초기화", () => {
+    const base: GraphState = { ...EMPTY_GRAPH, mode: "local", expanded: new Set(["/x.md"]) };
+    const s = setModeState(base, "global");
+    expect(s.mode).toBe("global");
+    expect(s.expanded.size).toBe(0);
+  });
+  it("같은 모드면 no-op", () => {
+    const base: GraphState = { ...EMPTY_GRAPH, mode: "local" };
+    expect(setModeState(base, "local")).toBe(base);
+  });
+});
+
+describe("setColorModeState", () => {
+  it("색 기준 변경", () => {
+    expect(setColorModeState(EMPTY_GRAPH, "folder").colorMode).toBe("folder");
+  });
+  it("같으면 no-op", () => {
+    const base: GraphState = { ...EMPTY_GRAPH, colorMode: "community" };
+    expect(setColorModeState(base, "community")).toBe(base);
+  });
+});
+
+describe("setSizeModeState", () => {
+  it("degree↔pagerank 변경", () => {
+    expect(setSizeModeState(EMPTY_GRAPH, "pagerank").sizeMode).toBe("pagerank");
+  });
+  it("같으면 no-op", () => {
+    const base: GraphState = { ...EMPTY_GRAPH, sizeMode: "degree" };
+    expect(setSizeModeState(base, "degree")).toBe(base);
+  });
+});
+
+describe("setFiltersState", () => {
+  it("부분 갱신 — 나머지 필터 보존", () => {
+    const s = setFiltersState(EMPTY_GRAPH, { hideOrphans: true });
+    expect(s.filters.hideOrphans).toBe(true);
+    expect(s.filters.minWeight).toBe(EMPTY_GRAPH.filters.minWeight);
+    expect(s.filters.degreeCap).toBeNull();
+  });
+  it("degreeCap·minWeight 설정", () => {
+    const s = setFiltersState(EMPTY_GRAPH, { degreeCap: 50, minWeight: 2 });
+    expect(s.filters.degreeCap).toBe(50);
+    expect(s.filters.minWeight).toBe(2);
   });
 });
