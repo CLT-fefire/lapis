@@ -7,6 +7,7 @@
     toggleExpanded,
     setGraphMode,
     setGraphColorMode,
+    setGraphSizeMode,
     setGraphFilters,
     MIN_DEPTH,
     MAX_DEPTH,
@@ -133,6 +134,28 @@
       : 1,
   );
 
+  // PageRank 크기 정규화용 max.
+  const maxPagerank = $derived(
+    gs.mode === "global" && view
+      ? view.nodes.reduce((mx, n) => Math.max(mx, n.pagerank ?? 0), 0)
+      : 0,
+  );
+
+  // [global] 색 범례 — community는 색 칩(#i), folder/type은 값-색 매핑(상위 8).
+  const legend = $derived.by(() => {
+    const out: { label: string; color: string }[] = [];
+    if (gs.mode !== "global" || !view) return out;
+    if (gs.colorMode === "community") {
+      const n = Math.min(communityCount, OKABE_ITO.length);
+      for (let i = 0; i < n; i++) out.push({ label: `#${i}`, color: OKABE_ITO[i] });
+    } else {
+      for (const [v, c] of [...colorMap.entries()].slice(0, OKABE_ITO.length)) {
+        out.push({ label: v, color: c });
+      }
+    }
+    return out;
+  });
+
   const centerLabel = $derived(
     view?.nodes.find((n) => n.id === gs.centerPath)?.label ??
       gs.centerPath?.split("/").pop()?.replace(/\.md$/, "") ??
@@ -166,6 +189,10 @@
   }
 
   function nodeRadius(n: FGNode): number {
+    if (gs.mode === "global" && gs.sizeMode === "pagerank") {
+      const mx = maxPagerank || 1;
+      return 3 + Math.sqrt((n.pagerank ?? 0) / mx) * 9;
+    }
     return 3 + Math.sqrt(n.degree ?? 0) * 1.5;
   }
 
@@ -348,6 +375,12 @@
     fg?.nodeCanvasObject(drawNode);
   });
 
+  // 크기 기준(degree↔PageRank) 변경 시 collide 반경 재초기화 + 재배치.
+  $effect(() => {
+    void gs.sizeMode;
+    fg?.d3ReheatSimulation();
+  });
+
   const COLOR_MODES: { key: GraphColorMode; label: string }[] = [
     { key: "community", label: "커뮤니티" },
     { key: "folder", label: "폴더" },
@@ -450,6 +483,23 @@
             />
             <span class="val">{gs.filters.degreeCap ?? "off"}</span>
           </label>
+          <div class="size-toggle">
+            <span>크기</span>
+            <div class="seg seg--sm" role="group" aria-label="크기 기준">
+              <button
+                class="seg-btn"
+                class:active={gs.sizeMode === "degree"}
+                onclick={() => setGraphSizeMode("degree")}
+                title="연결 수(degree)">연결수</button
+              >
+              <button
+                class="seg-btn"
+                class:active={gs.sizeMode === "pagerank"}
+                onclick={() => setGraphSizeMode("pagerank")}
+                title="PageRank(영향력)">PageRank</button
+              >
+            </div>
+          </div>
         </div>
       {/if}
 
@@ -463,6 +513,16 @@
           <div class="warn">
             노드 {view.shown}개 — 거미줄이 될 수 있습니다. 필터(고아·연결강도·허브)를 조이거나
             <button class="linkbtn" onclick={() => setGraphMode("local")}>Local 모드</button>를 권장합니다.
+          </div>
+        {/if}
+        {#if gs.mode === "global" && legend.length > 0}
+          <div class="legend" aria-label="색 범례">
+            {#each legend as item (item.label)}
+              <span class="legend-item">
+                <span class="legend-dot" style="background:{item.color}"></span>
+                <span class="legend-label" title={item.label}>{item.label}</span>
+              </span>
+            {/each}
           </div>
         {/if}
       </div>
@@ -648,6 +708,51 @@
     padding: 0;
     font: inherit;
     text-decoration: underline;
+  }
+
+  .size-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+
+  .legend {
+    position: absolute;
+    left: var(--sp-4);
+    bottom: var(--sp-4);
+    max-width: 38%;
+    max-height: 46%;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--fs-sm);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-width: 0;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: none;
+  }
+
+  .legend-label {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .graph-foot {

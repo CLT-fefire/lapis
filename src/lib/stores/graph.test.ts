@@ -8,6 +8,7 @@ import {
   recenterState,
   setModeState,
   setColorModeState,
+  setSizeModeState,
   setFiltersState,
   MIN_DEPTH,
   MAX_DEPTH,
@@ -100,6 +101,16 @@ describe("setColorModeState", () => {
   it("같으면 no-op", () => {
     const base: GraphState = { ...EMPTY_GRAPH, colorMode: "community" };
     expect(setColorModeState(base, "community")).toBe(base);
+  });
+});
+
+describe("setSizeModeState", () => {
+  it("degree↔pagerank 변경", () => {
+    expect(setSizeModeState(EMPTY_GRAPH, "pagerank").sizeMode).toBe("pagerank");
+  });
+  it("같으면 no-op", () => {
+    const base: GraphState = { ...EMPTY_GRAPH, sizeMode: "degree" };
+    expect(setSizeModeState(base, "degree")).toBe(base);
   });
 });
 

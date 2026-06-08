@@ -9,6 +9,7 @@ import { writable, derived } from "svelte/store";
  */
 export type GraphMode = "local" | "global";
 export type GraphColorMode = "folder" | "community" | "type";
+export type GraphSizeMode = "degree" | "pagerank";
 
 export interface GraphFilters {
   /** 고아(연결 0) 노드 숨김. */
@@ -30,6 +31,8 @@ export interface GraphState {
   expanded: Set<string>;
   /** [global] 색 기준. */
   colorMode: GraphColorMode;
+  /** [global] 노드 크기 기준 — degree(기본) 또는 PageRank. */
+  sizeMode: GraphSizeMode;
   /** [global] 필터. */
   filters: GraphFilters;
 }
@@ -51,6 +54,7 @@ export const EMPTY_GRAPH: GraphState = {
   depth: DEFAULT_DEPTH,
   expanded: new Set(),
   colorMode: "community",
+  sizeMode: "degree",
   filters: DEFAULT_FILTERS,
 };
 
@@ -100,6 +104,12 @@ export function setColorModeState(state: GraphState, colorMode: GraphColorMode):
   return { ...state, colorMode };
 }
 
+/** 크기 기준 변경(global) — degree↔PageRank. */
+export function setSizeModeState(state: GraphState, sizeMode: GraphSizeMode): GraphState {
+  if (sizeMode === state.sizeMode) return state;
+  return { ...state, sizeMode };
+}
+
 /** 필터 부분 갱신(global). */
 export function setFiltersState(state: GraphState, patch: Partial<GraphFilters>): GraphState {
   return { ...state, filters: { ...state.filters, ...patch } };
@@ -132,6 +142,9 @@ export function setGraphMode(mode: GraphMode): void {
 }
 export function setGraphColorMode(colorMode: GraphColorMode): void {
   graphState.update((s) => setColorModeState(s, colorMode));
+}
+export function setGraphSizeMode(sizeMode: GraphSizeMode): void {
+  graphState.update((s) => setSizeModeState(s, sizeMode));
 }
 export function setGraphFilters(patch: Partial<GraphFilters>): void {
   graphState.update((s) => setFiltersState(s, patch));
