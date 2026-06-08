@@ -19,6 +19,7 @@
   import CleanupOverlay from "$lib/CleanupOverlay.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
+  import GraphModal from "$lib/GraphModal.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
   import { readingFontSize } from "$lib/stores/reading";
   import { openMemorySearch } from "$lib/stores/memorySearch";
@@ -33,6 +34,7 @@
     headingJumpRequest,
   } from "$lib/stores/outline";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
+  import { openGraph } from "$lib/stores/graph";
   import { peekLastClosed } from "$lib/stores/recent";
   import { openNewNote } from "$lib/stores/tree-ui";
   import {
@@ -862,6 +864,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       if (get(sidebarCollapsed)) toggleSidebar();
       showOutlineTab();
+    } else if (key === "g" && e.shiftKey) {
+      // Cmd+Shift+G — 현재 노트 중심 Local 그래프 (ADR-003 PR-G2′)
+      e.preventDefault();
+      const cur = $currentNotePath;
+      if (cur) openGraph(cur);
     } else if ((key === "arrowleft" || key === "arrowright") && e.metaKey && e.ctrlKey) {
       // Cmd+Ctrl+← / → — 노트 뒤로/앞으로 가기 (Xcode 동일)
       e.preventDefault();
@@ -917,6 +924,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 <ContextMenu />
 <NewNoteModal />
 <SettingsModal />
+<GraphModal />
 <LinkRewritePreviewModal />
 <CleanupOverlay />
 {#if $claudeMemEnabled}
@@ -1016,6 +1024,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
             ? "Watcher 오류 — 외부 변경 자동 감지 불가"
             : "Watcher 대기"}
       ></span>
+      <button
+        class="btn btn--icon btn--sm"
+        title="Local 그래프 — 현재 노트 이웃 (⌘⇧G)"
+        disabled={!$currentNotePath}
+        onclick={() => $currentNotePath && openGraph($currentNotePath)}
+      >◉</button>
       <button
         class="btn btn--icon btn--sm"
         title="Command palette (Cmd+K)"
