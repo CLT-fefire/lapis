@@ -18,6 +18,14 @@ export function toggleSidebar(): void {
   persistSidebarCollapsed();
 }
 
+/** 접혀 있으면(아이콘 레일) 펼침. 펼쳐 있으면 no-op. */
+export function expandSidebar(): void {
+  if (get(sidebarCollapsed)) {
+    sidebarCollapsed.set(false);
+    persistSidebarCollapsed();
+  }
+}
+
 // 둘 다 접히는 상태는 의미 없으므로 가드. 다른 쪽이 이미 접혀 있으면 토글 거부.
 export function toggleEditor(): void {
   if (get(previewCollapsed)) return;

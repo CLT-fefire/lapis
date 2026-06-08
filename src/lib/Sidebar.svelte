@@ -26,7 +26,10 @@
     collectLeafPaths,
   } from "$lib/stores/treeFilter";
   import { tick } from "svelte";
-  import { sidebarTab, showFilesTab, showOutlineTab, showTagsTab, showFavoritesTab, tagIndex } from "$lib/stores/tags";
+  import { tagIndex } from "$lib/stores/tags";
+  import SidebarSection from "./SidebarSection.svelte";
+  import { sidebarNav, toggleSection } from "$lib/stores/sidebar";
+  import { FileText, ListTree, Hash, SlidersHorizontal, Star } from "@lucide/svelte";
   import { pinnedNotePaths } from "$lib/stores/pins";
   import {
     docKindCounts,
@@ -46,10 +49,6 @@
   } from "$lib/stores/settings";
   import { toggleSidebar } from "$lib/stores/layout";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-
-  function showFiltersTab() {
-    sidebarTab.set("filters");
-  }
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
@@ -381,146 +380,133 @@ graph LR
     </div>
   {/if}
 
-  {#if $vaultPath}
-    <nav class="tabs" aria-label="Sidebar tabs">
-      <button
-        class="tab"
-        class:active={$sidebarTab === "files"}
-        onclick={showFilesTab}
-      >
-        Files
-      </button>
-      <button
-        class="tab"
-        class:active={$sidebarTab === "outline"}
-        onclick={showOutlineTab}
-      >
-        Outline
-        {#if $outlineHeadings.length > 0}
-          <span class="badge">{compactCount($outlineHeadings.length)}</span>
-        {/if}
-      </button>
-      <button
-        class="tab"
-        class:active={$sidebarTab === "tags"}
-        onclick={showTagsTab}
-      >
-        Tags
-        {#if $tagIndex && $tagIndex.sortedTags.length > 0}
-          <span class="badge">{compactCount($tagIndex.sortedTags.length)}</span>
-        {/if}
-      </button>
-      <button
-        class="tab"
-        class:active={$sidebarTab === "filters"}
-        onclick={showFiltersTab}
-      >
-        Filters
-        {#if $selectedDocKinds.size + $selectedTopics.size > 0}
-          <span class="badge active">{compactCount($selectedDocKinds.size + $selectedTopics.size)}</span>
-        {:else if $docKindCounts.size + $topicCounts.size > 0}
-          <span class="badge">{compactCount($docKindCounts.size + $topicCounts.size)}</span>
-        {/if}
-      </button>
-      <button
-        class="tab"
-        class:active={$sidebarTab === "favorites"}
-        onclick={showFavoritesTab}
-        title="즐겨찾기 · 최근"
-      >
-        ⭐
-        {#if $pinnedNotePaths.length > 0}
-          <span class="badge">{compactCount($pinnedNotePaths.length)}</span>
-        {/if}
-      </button>
-    </nav>
-  {/if}
-
   <div class="sidebar-body">
     {#if !$vaultPath}
       <div class="empty">
         <p>vault 폴더를 선택하면<br />.md 파일들이 여기 표시됩니다.</p>
       </div>
-    {:else if $sidebarTab === "files"}
-      {#if $notes.length > 0}
-        <div class="lens-bar">
-          <span class="lens-label">보기</span>
-          <select
-            class="lens-select"
-            value={$groupingField ?? ""}
-            onchange={(e) => setGroupingField(e.currentTarget.value || null)}
-            title="frontmatter 필드 값으로 그룹핑 (폴더 트리는 '폴더')"
-          >
-            <option value="">폴더</option>
-            {#each groupingCandidatesList as c (c.field)}
-              <option value={c.field}>{c.field} · {c.noteCount}</option>
-            {/each}
-          </select>
-        </div>
-        {#if $groupingField}
-          {#if groupedEntries.length > 0}
-            <div class="files-pane">
-              <FileTree entries={groupedEntries} disableDnd />
-            </div>
-          {:else}
-            <div class="filter-empty">이 필드를 가진 노트가 없습니다</div>
-          {/if}
-        {:else}
-        <div class="tree-filter">
-          <input
-            type="text"
-            class="tree-filter-input"
-            placeholder="파일 필터…"
-            value={$treeFilterQuery}
-            oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
-            onkeydown={onTreeFilterKeydown}
-            spellcheck="false"
-            autocomplete="off"
-          />
-          {#if treeFilterActive}
-            <span class="match-count" title="매칭된 파일 수">{filteredMatchCount}</span>
-            <button
-              class="filter-clear"
-              onclick={clearTreeFilter}
-              title="필터 지우기 (Esc)"
-              aria-label="필터 지우기"
-            >✕</button>
-          {/if}
-        </div>
-        {#if treeFilterActive && filteredNotes.length === 0}
-          <div class="filter-empty">매칭되는 파일이 없습니다</div>
-        {:else}
-          <div class="files-pane" bind:this={filesPaneEl}>
-            <FileTree
-              entries={filteredNotes}
-              forceExpand={treeFilterActive}
-              activePath={activeFilterPath}
-            />
-          </div>
-        {/if}
-        {/if}
-      {:else}
-        <div class="empty">
-          <p>이 폴더에 .md 파일이 없습니다.</p>
-          <p class="empty-hint">처음이신가요? 단축키와 wikilink 예제가 담긴 샘플 노트로 시작해보세요.</p>
-          <button
-            class="btn btn--primary welcome-btn"
-            onclick={createWelcomeNote}
-            disabled={welcomeCreating}
-          >
-            {welcomeCreating ? "생성 중…" : "Welcome 샘플 만들기"}
-          </button>
-          <button class="link-btn" onclick={pickAndOpenVault}>다른 vault 선택</button>
-        </div>
-      {/if}
-    {:else if $sidebarTab === "outline"}
-      <OutlinePanel />
-    {:else if $sidebarTab === "tags"}
-      <TagPanel />
-    {:else if $sidebarTab === "favorites"}
-      <FavoritesPanel />
     {:else}
-      <FilterPanel />
+      <SidebarSection
+        icon={FileText}
+        label="Files"
+        open={$sidebarNav.sectionOpen.files}
+        onToggle={() => toggleSection("files")}
+        grow
+      >
+        {#snippet children()}
+          {#if $notes.length > 0}
+            <div class="lens-bar">
+              <span class="lens-label">보기</span>
+              <select
+                class="lens-select"
+                value={$groupingField ?? ""}
+                onchange={(e) => setGroupingField(e.currentTarget.value || null)}
+                title="frontmatter 필드 값으로 그룹핑 (폴더 트리는 '폴더')"
+              >
+                <option value="">폴더</option>
+                {#each groupingCandidatesList as c (c.field)}
+                  <option value={c.field}>{c.field} · {c.noteCount}</option>
+                {/each}
+              </select>
+            </div>
+            {#if $groupingField}
+              {#if groupedEntries.length > 0}
+                <div class="files-pane">
+                  <FileTree entries={groupedEntries} disableDnd />
+                </div>
+              {:else}
+                <div class="filter-empty">이 필드를 가진 노트가 없습니다</div>
+              {/if}
+            {:else}
+              <div class="tree-filter">
+                <input
+                  type="text"
+                  class="tree-filter-input"
+                  placeholder="파일 필터…"
+                  value={$treeFilterQuery}
+                  oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
+                  onkeydown={onTreeFilterKeydown}
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+                {#if treeFilterActive}
+                  <span class="match-count" title="매칭된 파일 수">{filteredMatchCount}</span>
+                  <button
+                    class="filter-clear"
+                    onclick={clearTreeFilter}
+                    title="필터 지우기 (Esc)"
+                    aria-label="필터 지우기"
+                  >✕</button>
+                {/if}
+              </div>
+              {#if treeFilterActive && filteredNotes.length === 0}
+                <div class="filter-empty">매칭되는 파일이 없습니다</div>
+              {:else}
+                <div class="files-pane" bind:this={filesPaneEl}>
+                  <FileTree
+                    entries={filteredNotes}
+                    forceExpand={treeFilterActive}
+                    activePath={activeFilterPath}
+                  />
+                </div>
+              {/if}
+            {/if}
+          {:else}
+            <div class="empty">
+              <p>이 폴더에 .md 파일이 없습니다.</p>
+              <p class="empty-hint">처음이신가요? 단축키와 wikilink 예제가 담긴 샘플 노트로 시작해보세요.</p>
+              <button
+                class="btn btn--primary welcome-btn"
+                onclick={createWelcomeNote}
+                disabled={welcomeCreating}
+              >
+                {welcomeCreating ? "생성 중…" : "Welcome 샘플 만들기"}
+              </button>
+              <button class="link-btn" onclick={pickAndOpenVault}>다른 vault 선택</button>
+            </div>
+          {/if}
+        {/snippet}
+      </SidebarSection>
+
+      <SidebarSection
+        icon={ListTree}
+        label="Outline"
+        open={$sidebarNav.sectionOpen.outline}
+        count={$outlineHeadings.length}
+        onToggle={() => toggleSection("outline")}
+      >
+        {#snippet children()}<OutlinePanel />{/snippet}
+      </SidebarSection>
+
+      <SidebarSection
+        icon={Hash}
+        label="Tags"
+        open={$sidebarNav.sectionOpen.tags}
+        count={$tagIndex?.sortedTags.length ?? 0}
+        onToggle={() => toggleSection("tags")}
+      >
+        {#snippet children()}<TagPanel />{/snippet}
+      </SidebarSection>
+
+      <SidebarSection
+        icon={SlidersHorizontal}
+        label="Filters"
+        open={$sidebarNav.sectionOpen.filters}
+        count={$selectedDocKinds.size + $selectedTopics.size || $docKindCounts.size + $topicCounts.size}
+        onToggle={() => toggleSection("filters")}
+      >
+        {#snippet children()}<FilterPanel />{/snippet}
+      </SidebarSection>
+
+      <SidebarSection
+        icon={Star}
+        label="Favorites"
+        open={$sidebarNav.sectionOpen.favorites}
+        count={$pinnedNotePaths.length}
+        onToggle={() => toggleSection("favorites")}
+      >
+        {#snippet children()}<FavoritesPanel />{/snippet}
+      </SidebarSection>
     {/if}
 
     {#if $indexBuilding}

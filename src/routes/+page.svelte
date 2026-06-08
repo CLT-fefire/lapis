@@ -4,6 +4,7 @@
   import { getVersion } from "@tauri-apps/api/app";
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
+  import SidebarRail from "$lib/SidebarRail.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
@@ -894,7 +895,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // sidebar / resizer / editor / preview 순. 클래스별 하드코딩 대신 derived로
   // 조합 폭발(사이드바×에디터×프리뷰)을 피한다.
   const gridCols = $derived(
-    `${$sidebarCollapsed ? "40px" : "var(--sidebar-w, 260px)"} ` +
+    `${$sidebarCollapsed ? "var(--rail-w, 52px)" : "var(--sidebar-w, 260px)"} ` +
       `${$sidebarCollapsed ? "0px" : "4px"} ` +
       `${$editorCollapsed ? "36px" : "1fr"} ` +
       `${$previewCollapsed ? "36px" : "1fr"}`,
@@ -1044,15 +1045,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     style="--sidebar-w: {$sidebarWidth}px; grid-template-columns: {gridCols};"
   >
     {#if $sidebarCollapsed}
-      <button
-        class="sidebar-collapsed-strip"
-        onclick={toggleSidebar}
-        title="사이드바 펼치기 (⌘B)"
-        aria-label="사이드바 펼치기"
-      >
-        <span class="strip-icon">▶</span>
-        <span class="strip-label">Explorer</span>
-      </button>
+      <SidebarRail />
     {:else}
       <Sidebar />
     {/if}
@@ -1487,29 +1480,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     pointer-events: none;
   }
 
-  /* 접힌 사이드바의 세로 띠 — 클릭하면 다시 펼침. .collapsed-strip과 동일 룩 */
-  .sidebar-collapsed-strip {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--sp-5);
-    padding: 14px 0;
-    background: var(--surface-raised);
-    border: none;
-    border-right: 1px solid var(--border-default);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-family: inherit;
-    transition: background var(--dur-base), color var(--dur-base);
-  }
-
-  .sidebar-collapsed-strip:hover {
-    background: var(--surface-overlay);
-    color: var(--accent);
-  }
+  /* 접힌 사이드바는 SidebarRail(아이콘 레일) 컴포넌트가 담당 — 구 strip 제거됨. */
 
   .pane {
     display: flex;
