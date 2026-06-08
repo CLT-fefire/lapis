@@ -864,8 +864,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       if (get(sidebarCollapsed)) toggleSidebar();
       showOutlineTab();
-    } else if (key === "g" && e.shiftKey) {
-      // Cmd+Shift+G — 현재 노트 중심 Local 그래프 (ADR-003 PR-G2′)
+    } else if (key === "g" && !e.shiftKey) {
+      // Cmd+G — 현재 노트 중심 Local 그래프 (ADR-003 PR-G2′).
+      // ⌘⇧G는 macOS Finder "폴더로 이동" 시스템 단축과 겹쳐 webview에 도달 못함.
       e.preventDefault();
       const cur = $currentNotePath;
       if (cur) openGraph(cur);
@@ -1026,7 +1027,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       ></span>
       <button
         class="btn btn--icon btn--sm"
-        title="Local 그래프 — 현재 노트 이웃 (⌘⇧G)"
+        title="Local 그래프 — 현재 노트 이웃 (⌘G)"
         disabled={!$currentNotePath}
         onclick={() => $currentNotePath && openGraph($currentNotePath)}
       >◉</button>

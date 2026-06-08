@@ -12,6 +12,7 @@
   import { linkIndex, vaultPath, selectNote } from "$lib/stores/vault";
   import { buildEgoGraph, type EgoNode } from "$lib/egoGraph";
   import type { DocGraphEdge } from "$lib/documentGraph";
+  import { forceManyBody, forceCollide } from "d3-force";
   import type ForceGraphType from "force-graph";
   import type { NodeObject, LinkObject } from "force-graph";
 
@@ -103,7 +104,11 @@
   function shouldLabel(n: FGNode, scale: number): boolean {
     if (n.id === ego?.center) return true;
     if (hoverId && (n.id === hoverId || adjacency.get(hoverId)?.has(n.id))) return true;
-    return scale > 1.6;
+    // 노드가 많으면(펼친 직후 등) 라벨 폭주 → hover/center만, 크게 확대했을 때만 노출.
+    const total = ego?.nodes.length ?? 0;
+    if (total > 60) return scale > 3;
+    if (total > 30) return scale > 2;
+    return scale > 1.4;
   }
 
   function drawNode(n: FGNode, ctx: CanvasRenderingContext2D, scale: number) {
@@ -133,12 +138,12 @@
     }
 
     if ((n.hiddenNeighbors ?? 0) > 0) {
-      const fontSize = 9 / scale;
-      ctx.font = `${fontSize}px -apple-system, sans-serif`;
+      const fontSize = 11 / scale;
+      ctx.font = `bold ${fontSize}px -apple-system, sans-serif`;
       ctx.fillStyle = colors.center;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`+${n.hiddenNeighbors}`, x, y - r - 5 / scale);
+      ctx.fillText(`+${n.hiddenNeighbors}`, x, y - r - 6 / scale);
     }
   }
 
@@ -195,6 +200,12 @@
         .cooldownTicks(120)
         .d3VelocityDecay(0.3);
       fg = inst;
+      // 노드 분산 — 펼친 그래프에서 노드/라벨 겹침 완화. 강한 척력 + degree-aware 충돌 반경.
+      inst.d3Force("charge", forceManyBody<FGNode>().strength(-180).distanceMax(420));
+      inst.d3Force(
+        "collide",
+        forceCollide<FGNode>((n) => nodeRadius(n) + 18).iterations(2),
+      );
       sizeToContainer();
     })();
     return () => {
@@ -293,8 +304,8 @@
 
 <style>
   .graph-modal {
-    width: min(960px, 94vw);
-    height: min(680px, 86vh);
+    width: min(1320px, 92vw);
+    height: min(900px, 88vh);
     display: flex;
     flex-direction: column;
     background: var(--surface-overlay);

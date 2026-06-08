@@ -126,7 +126,7 @@ export const BUILTIN_COMMANDS: Command[] = [
   {
     id: "open-local-graph",
     label: "Local Graph: 현재 노트 이웃",
-    shortcut: "⌘⇧G",
+    shortcut: "⌘G",
     disabled: () => !get(currentNotePath),
     run() {
       const cur = get(currentNotePath);
