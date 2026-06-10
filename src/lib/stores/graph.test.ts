@@ -10,6 +10,7 @@ import {
   setColorModeState,
   setSizeModeState,
   setFiltersState,
+  toggleTypeFilterState,
   MIN_DEPTH,
   MAX_DEPTH,
   type GraphState,
@@ -125,5 +126,25 @@ describe("setFiltersState", () => {
     const s = setFiltersState(EMPTY_GRAPH, { degreeCap: 50, minWeight: 2 });
     expect(s.filters.degreeCap).toBe(50);
     expect(s.filters.minWeight).toBe(2);
+  });
+  it("기본 types는 빈 배열(전체)", () => {
+    expect(EMPTY_GRAPH.filters.types).toEqual([]);
+  });
+});
+
+describe("toggleTypeFilterState", () => {
+  it("없으면 추가, 있으면 제거 (다른 필터 보존)", () => {
+    let s = toggleTypeFilterState(EMPTY_GRAPH, "plan");
+    expect(s.filters.types).toEqual(["plan"]);
+    expect(s.filters.hideOrphans).toBe(EMPTY_GRAPH.filters.hideOrphans); // 보존
+    s = toggleTypeFilterState(s, "solution");
+    expect(s.filters.types).toEqual(["plan", "solution"]);
+    s = toggleTypeFilterState(s, "plan");
+    expect(s.filters.types).toEqual(["solution"]);
+  });
+  it("불변 — 원본 배열 변경 안 함", () => {
+    const s0 = toggleTypeFilterState(EMPTY_GRAPH, "plan");
+    toggleTypeFilterState(s0, "spec");
+    expect(s0.filters.types).toEqual(["plan"]);
   });
 });

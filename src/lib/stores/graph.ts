@@ -24,6 +24,8 @@ export interface GraphFilters {
   disparityAlpha: number;
   /** degree-cap — 이 초과 degree 허브 숨김(원기옥 억제). null=무제한. */
   degreeCap: number | null;
+  /** type(doc_kind) 필터 — 선택된 type만 표시(OR). 빈 배열 = 전체. */
+  types: string[];
 }
 
 export interface GraphState {
@@ -53,6 +55,7 @@ export const DEFAULT_FILTERS: GraphFilters = {
   minWeight: 1,
   disparityAlpha: 0.3,
   degreeCap: null,
+  types: [],
 };
 
 export const EMPTY_GRAPH: GraphState = {
@@ -123,6 +126,15 @@ export function setFiltersState(state: GraphState, patch: Partial<GraphFilters>)
   return { ...state, filters: { ...state.filters, ...patch } };
 }
 
+/** type 필터 토글(global) — 있으면 제거, 없으면 추가. 빈 배열이면 전체 표시. */
+export function toggleTypeFilterState(state: GraphState, type: string): GraphState {
+  const has = state.filters.types.includes(type);
+  const types = has
+    ? state.filters.types.filter((t) => t !== type)
+    : [...state.filters.types, type];
+  return { ...state, filters: { ...state.filters, types } };
+}
+
 // === store (세션성 — localStorage 영속화 X) ===
 
 const graphState = writable<GraphState>(EMPTY_GRAPH);
@@ -156,4 +168,7 @@ export function setGraphSizeMode(sizeMode: GraphSizeMode): void {
 }
 export function setGraphFilters(patch: Partial<GraphFilters>): void {
   graphState.update((s) => setFiltersState(s, patch));
+}
+export function toggleGraphType(type: string): void {
+  graphState.update((s) => toggleTypeFilterState(s, type));
 }
