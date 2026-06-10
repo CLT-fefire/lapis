@@ -10,12 +10,18 @@ import { writable, derived } from "svelte/store";
 export type GraphMode = "local" | "global";
 export type GraphColorMode = "folder" | "community" | "type";
 export type GraphSizeMode = "degree" | "pagerank" | "betweenness";
+/** 백본 방식 — 전역 임계(minWeight) 또는 노드-로컬 통계(disparity filter). documentGraph.BackboneMode와 동형. */
+export type GraphBackboneMode = "minWeight" | "disparity";
 
 export interface GraphFilters {
   /** 고아(연결 0) 노드 숨김. */
   hideOrphans: boolean;
-  /** min-weight 백본 — 이 미만 weight 엣지 숨김. */
+  /** 백본 방식 — minWeight(기본) 또는 disparity. */
+  backboneMode: GraphBackboneMode;
+  /** min-weight 백본 — 이 미만 weight 엣지 숨김. backboneMode="minWeight"일 때. */
   minWeight: number;
+  /** disparity filter 유의수준(작을수록 sparse). backboneMode="disparity"일 때. */
+  disparityAlpha: number;
   /** degree-cap — 이 초과 degree 허브 숨김(원기옥 억제). null=무제한. */
   degreeCap: number | null;
 }
@@ -43,7 +49,9 @@ export const DEFAULT_DEPTH = 1;
 
 export const DEFAULT_FILTERS: GraphFilters = {
   hideOrphans: false,
+  backboneMode: "minWeight",
   minWeight: 1,
+  disparityAlpha: 0.3,
   degreeCap: null,
 };
 
