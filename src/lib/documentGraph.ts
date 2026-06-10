@@ -142,6 +142,17 @@ export function resolveBodyTargets(info: LinkInfo, idx: LinkIndex): string[] {
  * (frontmatter 관계 + 본문 링크)는 weight 합산해 1엣지로. buildDocumentGraph(전체)와
  * buildEgoGraph(국소)가 **같은 엣지 정의**를 쓰도록 공유한다.
  */
+/**
+ * directed 엣지 key. 구분자 = U+0000(경로엔 안 나타나는 제어문자 — 공백/슬래시 충돌 회피).
+ * 구분자를 String.fromCharCode(0)로 런타임 생성해 소스엔 raw NUL을 두지 않는다
+ * (raw NUL은 git이 binary 취급 — 과거 사고). 엣지 집계 · disparity 백본 · 필터가
+ * 같은 key를 쓰도록 단일 함수로 공유.
+ */
+const EDGE_SEP = String.fromCharCode(0);
+export function edgeKey(source: string, target: string): string {
+  return source + EDGE_SEP + target;
+}
+
 export function collectWeightedEdges(
   included: Set<string>,
   idx: LinkIndex,
@@ -150,7 +161,7 @@ export function collectWeightedEdges(
   const add = (source: string, target: string) => {
     if (source === target) return;
     if (!included.has(source) || !included.has(target)) return;
-    const key = `${source}\u0000${target}`;
+    const key = edgeKey(source, target);
     const cur = agg.get(key);
     if (cur) cur.weight += 1;
     else agg.set(key, { source, target, weight: 1 });
@@ -357,11 +368,84 @@ export function computeBetweenness(
   return betweenness(graph, { getEdgeWeight: null, normalized: true });
 }
 
+/** 백본 추출 방식 — 전역 임계(minWeight) 또는 노드-로컬 통계(disparity). */
+export type BackboneMode = "minWeight" | "disparity";
+
+/**
+ * disparity filter 백본 (Serrano, Boguñá & Vespignani 2009, PNAS).
+ *
+ * min-weight 백본은 전역 임계 하나로 약한 엣지를 자르므로, 허브의 (절대값은 크지만) 약한
+ * 엣지와 말단의 (절대값은 작지만 그 노드엔) 중요한 엣지를 구분하지 못한다. disparity filter는
+ * **각 노드의 로컬 weight 분포**로 통계적 유의성을 본다 — 노드 i의 엣지 weight를 정규화
+ * (p = w / strengthᵢ)하고 균등분포 귀무가설 대비 유의수준 αᵢⱼ = (1 − p)^(kᵢ − 1)을 구한 뒤,
+ * **양 끝점 중 한쪽에서라도 유의(α < alpha)하면 유지**(OR). degree 1 노드의 유일 엣지는
+ * 항상 유지(고아화 방지 — 표준 disparity filter 관행).
+ *
+ * 무방향 strength로 계산(지식 그래프 백본은 방향 무관). 같은 무방향 페어의 양방향 directed
+ * 엣지는 weight를 합산해 한 번 판정하고 운명을 공유한다. 순수·결정론적.
+ *
+ * @param edges directed 엣지(`collectWeightedEdges`/`DocGraphEdge`와 동형).
+ * @param alpha 유의수준(작을수록 백본이 sparse). 0~1.
+ * @returns 유지할 directed 엣지 key 집합(`edgeKey(source, target)` 형식).
+ */
+export function disparityBackbone(
+  edges: ReadonlyArray<{ source: string; target: string; weight: number }>,
+  alpha: number,
+): Set<string> {
+  // 1) 무방향 페어로 weight 합산 + 멤버 directed key 수집.
+  interface Pair {
+    a: string;
+    b: string;
+    weight: number;
+    members: string[];
+  }
+  const pairs = new Map<string, Pair>();
+  for (const e of edges) {
+    const [a, b] = e.source < e.target ? [e.source, e.target] : [e.target, e.source];
+    const pk = edgeKey(a, b);
+    let p = pairs.get(pk);
+    if (!p) pairs.set(pk, (p = { a, b, weight: 0, members: [] }));
+    p.weight += e.weight;
+    p.members.push(edgeKey(e.source, e.target));
+  }
+
+  // 2) 노드별 strength(무방향 weight 합) + degree(무방향 페어 수).
+  const strength = new Map<string, number>();
+  const degree = new Map<string, number>();
+  for (const p of pairs.values()) {
+    strength.set(p.a, (strength.get(p.a) ?? 0) + p.weight);
+    strength.set(p.b, (strength.get(p.b) ?? 0) + p.weight);
+    degree.set(p.a, (degree.get(p.a) ?? 0) + 1);
+    degree.set(p.b, (degree.get(p.b) ?? 0) + 1);
+  }
+
+  // 3) 한쪽이라도 유의(α<alpha)하거나 degree≤1이면 유지.
+  const significant = (node: string, w: number): boolean => {
+    const k = degree.get(node) ?? 0;
+    if (k <= 1) return true; // 유일 엣지 — 보존(고아화 방지)
+    const s = strength.get(node) ?? 0;
+    if (s <= 0) return true;
+    return Math.pow(1 - w / s, k - 1) < alpha;
+  };
+
+  const keep = new Set<string>();
+  for (const p of pairs.values()) {
+    if (significant(p.a, p.weight) || significant(p.b, p.weight)) {
+      for (const m of p.members) keep.add(m);
+    }
+  }
+  return keep;
+}
+
 export interface FilterOptions {
   /** 살아남은 엣지 기준 연결 0인 노드 숨김(고아 OFF). */
   hideOrphans?: boolean;
-  /** min-weight 백본 — weight 미만 엣지 제거. 기본 0(전체). */
+  /** 백본 방식 — "minWeight"(기본·전역 임계) 또는 "disparity"(노드-로컬 통계). */
+  backboneMode?: BackboneMode;
+  /** min-weight 백본 — weight 미만 엣지 제거. 기본 0(전체). backboneMode="minWeight"일 때. */
   minWeight?: number;
+  /** disparity filter 유의수준(작을수록 sparse). 기본 0.3. backboneMode="disparity"일 때. */
+  disparityAlpha?: number;
   /** degree-cap — 전역 degree가 cap 초과인 허브 노드 숨김(원기옥 억제). null=무제한. */
   degreeCap?: number | null;
   /** 지정 시 해당 type만(type null 노드는 제외). */
@@ -383,8 +467,11 @@ export interface FilteredGraph {
  * 빌드된 문서 그래프에 런타임 필터 적용(Global 모드). 순수·멱등.
  * degree/community 등 메트릭은 **전역 값 유지**(필터해도 중심성은 전체 기준).
  *
- * 순서: 노드 필터(degree-cap·type·folder) → 엣지 필터(min-weight 백본 + 양끝 생존)
+ * 순서: 노드 필터(degree-cap·type·folder) → 엣지 필터(백본 + 양끝 생존)
  * → 고아 정리(hideOrphans, 살아남은 엣지 기준).
+ *
+ * 백본 = backboneMode에 따라 **min-weight**(전역 임계) 또는 **disparity filter**(노드-로컬 통계).
+ * disparity는 노드 필터 후 살아남은 엣지 집합에 적용한다(중심성은 전역, 백본은 표시 부분그래프 기준).
  */
 export function filterDocGraph(
   source: { nodes: DocGraphNode[]; edges: DocGraphEdge[] },
@@ -394,6 +481,7 @@ export function filterDocGraph(
   const cap = opts.degreeCap ?? null;
   const types = opts.types ?? null;
   const folders = opts.folders ?? null;
+  const backbone = opts.backboneMode ?? "minWeight";
 
   const kept = new Set<string>();
   for (const n of source.nodes) {
@@ -403,9 +491,15 @@ export function filterDocGraph(
     kept.add(n.id);
   }
 
-  const edges = source.edges.filter(
-    (e) => e.weight >= minW && kept.has(e.source) && kept.has(e.target),
-  );
+  // 노드 필터 생존 엣지 → 백본 적용.
+  const candidate = source.edges.filter((e) => kept.has(e.source) && kept.has(e.target));
+  let edges: DocGraphEdge[];
+  if (backbone === "disparity") {
+    const keepKeys = disparityBackbone(candidate, opts.disparityAlpha ?? 0.3);
+    edges = candidate.filter((e) => keepKeys.has(edgeKey(e.source, e.target)));
+  } else {
+    edges = candidate.filter((e) => e.weight >= minW);
+  }
 
   let nodes = source.nodes.filter((n) => kept.has(n.id));
   if (opts.hideOrphans) {
