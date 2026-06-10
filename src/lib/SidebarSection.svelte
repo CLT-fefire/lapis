@@ -14,6 +14,14 @@
     /** 우측 카운트 배지(null/0이면 숨김). */
     count?: number | null;
     onToggle: () => void;
+    /** 고정 높이(px). null이면 가용 공간 균등 분배(flex). */
+    height?: number | null;
+    /** 하단 리사이즈 핸들 표시(마지막 펼친 섹션이 아닐 때). */
+    resizable?: boolean;
+    /** 핸들 드래그 — 새 절대 높이(px). 클램프는 store reducer가. */
+    onResize?: (height: number) => void;
+    /** 핸들 더블클릭 — 균등 분배로 리셋. */
+    onResizeReset?: () => void;
     children: Snippet;
   }
   let {
@@ -22,15 +30,49 @@
     open,
     count = null,
     onToggle,
+    height = null,
+    resizable = false,
+    onResize,
+    onResizeReset,
     children,
   }: Props = $props();
 
   function compactCount(n: number): string {
     return n > 99 ? "99+" : String(n);
   }
+
+  // === 리사이즈 핸들 드래그 ===
+  // 드래그 시작 시 섹션의 실제 렌더 높이를 측정해 절대 높이로 전환(미설정[flex]에서도 자연 연속).
+  let sectionEl = $state<HTMLElement | null>(null);
+  let dragStartY = 0;
+  let dragStartH = 0;
+  let dragging = $state(false);
+
+  function onHandleDown(e: PointerEvent) {
+    if (!sectionEl || !onResize) return;
+    dragging = true;
+    dragStartY = e.clientY;
+    dragStartH = sectionEl.getBoundingClientRect().height;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+  function onHandleMove(e: PointerEvent) {
+    if (!dragging) return;
+    onResize?.(dragStartH + (e.clientY - dragStartY));
+  }
+  function onHandleUp(e: PointerEvent) {
+    if (!dragging) return;
+    dragging = false;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  }
 </script>
 
-<section class="section" class:open>
+<section
+  class="section"
+  class:open
+  bind:this={sectionEl}
+  style={open && height != null ? `flex: 0 0 ${height}px` : ""}
+>
   <button class="section-header" aria-expanded={open} onclick={onToggle}>
     <span class="chevron" aria-hidden="true">
       {#if open}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}
@@ -45,6 +87,20 @@
     <div class="body">
       {@render children()}
     </div>
+    {#if resizable}
+      <div
+        class="resize-handle"
+        class:dragging
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="{label} 섹션 높이 조절"
+        title="드래그로 높이 조절 · 더블클릭 = 자동"
+        onpointerdown={onHandleDown}
+        onpointermove={onHandleMove}
+        onpointerup={onHandleUp}
+        ondblclick={() => onResizeReset?.()}
+      ></div>
+    {/if}
   {/if}
 </section>
 
@@ -135,5 +191,36 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+  }
+
+  /* 섹션 하단 리사이즈 핸들 — 펼친 섹션 사이 경계를 드래그해 높이 조절. */
+  .resize-handle {
+    flex: none;
+    height: 6px;
+    margin-top: -3px; /* 콘텐츠 영역과 겹쳐 두께 체감 줄이되 클릭 타겟은 유지 */
+    cursor: row-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    touch-action: none; /* pointer 드래그 중 스크롤 제스처 차단 */
+  }
+
+  /* 가운데 1px 가이드 — hover/드래그 시에만 강조해 평소엔 조용히. */
+  .resize-handle::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: var(--border-default);
+    transform: translateY(-50%);
+    transition: background var(--dur-fast);
+  }
+
+  .resize-handle:hover::after,
+  .resize-handle.dragging::after {
+    background: var(--accent);
+    height: 2px;
   }
 </style>
