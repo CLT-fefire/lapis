@@ -475,18 +475,50 @@
             />
             고아 숨김
           </label>
-          <label class="ctl">
-            <span>최소 연결강도</span>
-            <input
-              type="range"
-              min="1"
-              max="5"
-              step="1"
-              value={gs.filters.minWeight}
-              oninput={(e) => setGraphFilters({ minWeight: +e.currentTarget.value })}
-            />
-            <span class="val">{gs.filters.minWeight}</span>
-          </label>
+          <div class="size-toggle">
+            <span>백본</span>
+            <div class="seg seg--sm" role="group" aria-label="백본 방식">
+              <button
+                class="seg-btn"
+                class:active={gs.filters.backboneMode === "minWeight"}
+                onclick={() => setGraphFilters({ backboneMode: "minWeight" })}
+                title="전역 최소 연결강도로 약한 엣지 제거">강도</button
+              >
+              <button
+                class="seg-btn"
+                class:active={gs.filters.backboneMode === "disparity"}
+                onclick={() => setGraphFilters({ backboneMode: "disparity" })}
+                title="disparity filter — 노드별 weight 분포로 통계적으로 유의한 엣지만">disparity</button
+              >
+            </div>
+          </div>
+          {#if gs.filters.backboneMode === "minWeight"}
+            <label class="ctl">
+              <span>최소 연결강도</span>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value={gs.filters.minWeight}
+                oninput={(e) => setGraphFilters({ minWeight: +e.currentTarget.value })}
+              />
+              <span class="val">{gs.filters.minWeight}</span>
+            </label>
+          {:else}
+            <label class="ctl">
+              <span title="작을수록 백본이 sparse(엄격)">α</span>
+              <input
+                type="range"
+                min="0.05"
+                max="0.6"
+                step="0.05"
+                value={gs.filters.disparityAlpha}
+                oninput={(e) => setGraphFilters({ disparityAlpha: +e.currentTarget.value })}
+              />
+              <span class="val">{gs.filters.disparityAlpha.toFixed(2)}</span>
+            </label>
+          {/if}
           <label class="ctl">
             <span>허브 숨김(degree&gt;)</span>
             <input

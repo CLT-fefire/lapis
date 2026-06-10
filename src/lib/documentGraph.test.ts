@@ -4,6 +4,8 @@ import {
   buildDocumentGraph,
   filterDocGraph,
   computeBetweenness,
+  disparityBackbone,
+  edgeKey,
   projectOf,
   mulberry32,
   DEFAULT_EXCLUDED_FOLDERS,
@@ -422,5 +424,84 @@ describe("computeBetweenness — 다리 노트(온디맨드)", () => {
   it("빈 그래프 → 빈 맵", () => {
     const g = buildDocumentGraph(buildIndex([]));
     expect(computeBetweenness(g.graph)).toEqual({});
+  });
+});
+
+describe("disparityBackbone — 노드-로컬 통계 백본", () => {
+  it("삼각형에서 약한 변 제거, 강한 변 유지 (α=0.5)", () => {
+    // A-B(10), B-C(10) 강한 변 + A-C(1) 약한 변. 모든 노드 degree 2.
+    const keep = disparityBackbone(
+      [
+        { source: "A", target: "B", weight: 10 },
+        { source: "B", target: "C", weight: 10 },
+        { source: "A", target: "C", weight: 1 },
+      ],
+      0.5,
+    );
+    expect(keep.has(edgeKey("A", "B"))).toBe(true);
+    expect(keep.has(edgeKey("B", "C"))).toBe(true);
+    expect(keep.has(edgeKey("A", "C"))).toBe(false);
+  });
+
+  it("α를 크게 하면 약한 변도 유지(덜 엄격)", () => {
+    const edges = [
+      { source: "A", target: "B", weight: 10 },
+      { source: "B", target: "C", weight: 10 },
+      { source: "A", target: "C", weight: 1 },
+    ];
+    expect(disparityBackbone(edges, 0.95).has(edgeKey("A", "C"))).toBe(true);
+  });
+
+  it("degree 1 노드의 유일 엣지는 α가 아무리 작아도 보존(고아화 방지)", () => {
+    const keep = disparityBackbone([{ source: "A", target: "B", weight: 5 }], 0.01);
+    expect(keep.has(edgeKey("A", "B"))).toBe(true);
+  });
+
+  it("양방향 directed 엣지는 무방향 페어로 묶여 운명 공유", () => {
+    // A↔B 약한 양방향 + A-C, A-D 강한 변 → A 관점에서 A-B 약함.
+    const keep = disparityBackbone(
+      [
+        { source: "A", target: "B", weight: 1 },
+        { source: "B", target: "A", weight: 1 },
+        { source: "A", target: "C", weight: 10 },
+        { source: "A", target: "D", weight: 10 },
+        { source: "C", target: "X", weight: 5 },
+        { source: "D", target: "Y", weight: 5 },
+      ],
+      0.3,
+    );
+    // A↔B 두 방향은 함께 유지되거나 함께 제거됨(같은 무방향 페어).
+    expect(keep.has(edgeKey("A", "B"))).toBe(keep.has(edgeKey("B", "A")));
+  });
+
+  it("빈 엣지 → 빈 집합", () => {
+    expect(disparityBackbone([], 0.3).size).toBe(0);
+  });
+});
+
+describe("filterDocGraph — disparity 백본 모드", () => {
+  function mkNode(id: string): DocGraphNode {
+    return { id, label: id, folder: null, degree: 2, pagerank: 0, community: 0, type: null };
+  }
+  const src = {
+    nodes: ["A", "B", "C"].map(mkNode),
+    edges: [
+      { source: "A", target: "B", weight: 10 },
+      { source: "B", target: "C", weight: 10 },
+      { source: "A", target: "C", weight: 1 },
+    ],
+  };
+
+  it("backboneMode=disparity면 약한 변 A→C 제거", () => {
+    const f = filterDocGraph(src, { backboneMode: "disparity", disparityAlpha: 0.5 });
+    const keys = f.edges.map((e) => `${e.source}->${e.target}`);
+    expect(keys).toContain("A->B");
+    expect(keys).toContain("B->C");
+    expect(keys).not.toContain("A->C");
+  });
+
+  it("기본(minWeight) 모드는 disparity와 다름 — 모든 변 유지", () => {
+    const f = filterDocGraph(src, { minWeight: 1 });
+    expect(f.edges).toHaveLength(3);
   });
 });
