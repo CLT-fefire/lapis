@@ -28,7 +28,13 @@
   import { tick } from "svelte";
   import { tagIndex } from "$lib/stores/tags";
   import SidebarSection from "./SidebarSection.svelte";
-  import { sidebarNav, toggleSection } from "$lib/stores/sidebar";
+  import {
+    sidebarNav,
+    toggleSection,
+    setSectionHeight,
+    SECTION_KEYS,
+    type SidebarSectionKey,
+  } from "$lib/stores/sidebar";
   import { FileText, ListTree, Hash, SlidersHorizontal, Star } from "@lucide/svelte";
   import { pinnedNotePaths } from "$lib/stores/pins";
   import {
@@ -52,6 +58,18 @@
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
+  }
+
+  // === 펼친 섹션 리사이즈 ===
+  // 펼친 섹션을 위→아래 순서로 모은다. 마지막 펼친 섹션은 잔여 공간을 흡수(height=null·핸들 없음),
+  // 그 위 섹션들은 고정 px(미설정이면 균등) + 하단 리사이즈 핸들. (drag = 위 섹션 높이 조절)
+  const openKeys = $derived(SECTION_KEYS.filter((k) => $sidebarNav.sectionOpen[k]));
+  const lastOpenKey = $derived<SidebarSectionKey | null>(openKeys.at(-1) ?? null);
+  function sectionHeight(key: SidebarSectionKey): number | null {
+    return key === lastOpenKey ? null : ($sidebarNav.sectionHeights[key] ?? null);
+  }
+  function sectionResizable(key: SidebarSectionKey): boolean {
+    return openKeys.length > 1 && key !== lastOpenKey;
   }
 
   // Phase A-1 — 필드 렌즈 그룹핑. 폴더 트리는 기본값, 필드 선택 시 값별 합성 그룹으로.
@@ -391,6 +409,10 @@ graph LR
         label="Files"
         open={$sidebarNav.sectionOpen.files}
         onToggle={() => toggleSection("files")}
+        height={sectionHeight("files")}
+        resizable={sectionResizable("files")}
+        onResize={(h) => setSectionHeight("files", h)}
+        onResizeReset={() => setSectionHeight("files", null)}
       >
         {#snippet children()}
           {#if $notes.length > 0}
@@ -473,6 +495,10 @@ graph LR
         open={$sidebarNav.sectionOpen.outline}
         count={$outlineHeadings.length}
         onToggle={() => toggleSection("outline")}
+        height={sectionHeight("outline")}
+        resizable={sectionResizable("outline")}
+        onResize={(h) => setSectionHeight("outline", h)}
+        onResizeReset={() => setSectionHeight("outline", null)}
       >
         {#snippet children()}<OutlinePanel />{/snippet}
       </SidebarSection>
@@ -483,6 +509,10 @@ graph LR
         open={$sidebarNav.sectionOpen.tags}
         count={$tagIndex?.sortedTags.length ?? 0}
         onToggle={() => toggleSection("tags")}
+        height={sectionHeight("tags")}
+        resizable={sectionResizable("tags")}
+        onResize={(h) => setSectionHeight("tags", h)}
+        onResizeReset={() => setSectionHeight("tags", null)}
       >
         {#snippet children()}<TagPanel />{/snippet}
       </SidebarSection>
@@ -493,6 +523,10 @@ graph LR
         open={$sidebarNav.sectionOpen.filters}
         count={$selectedDocKinds.size + $selectedTopics.size || $docKindCounts.size + $topicCounts.size}
         onToggle={() => toggleSection("filters")}
+        height={sectionHeight("filters")}
+        resizable={sectionResizable("filters")}
+        onResize={(h) => setSectionHeight("filters", h)}
+        onResizeReset={() => setSectionHeight("filters", null)}
       >
         {#snippet children()}<FilterPanel />{/snippet}
       </SidebarSection>
@@ -503,6 +537,10 @@ graph LR
         open={$sidebarNav.sectionOpen.favorites}
         count={$pinnedNotePaths.length}
         onToggle={() => toggleSection("favorites")}
+        height={sectionHeight("favorites")}
+        resizable={sectionResizable("favorites")}
+        onResize={(h) => setSectionHeight("favorites", h)}
+        onResizeReset={() => setSectionHeight("favorites", null)}
       >
         {#snippet children()}<FavoritesPanel />{/snippet}
       </SidebarSection>
