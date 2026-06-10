@@ -9,6 +9,7 @@ import {
   setModeState,
   setColorModeState,
   setSizeModeState,
+  setBetweennessWeightedState,
   setFiltersState,
   toggleTypeFilterState,
   MIN_DEPTH,
@@ -129,6 +130,15 @@ describe("setFiltersState", () => {
   });
   it("기본 types는 빈 배열(전체)", () => {
     expect(EMPTY_GRAPH.filters.types).toEqual([]);
+  });
+});
+
+describe("setBetweennessWeightedState", () => {
+  it("토글 + 같으면 no-op(참조 유지)", () => {
+    const on = setBetweennessWeightedState(EMPTY_GRAPH, true);
+    expect(on.betweennessWeighted).toBe(true);
+    expect(EMPTY_GRAPH.betweennessWeighted).toBe(false); // 원본 불변
+    expect(setBetweennessWeightedState(on, true)).toBe(on); // no-op
   });
 });
 

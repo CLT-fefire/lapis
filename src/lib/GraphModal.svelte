@@ -8,6 +8,7 @@
     setGraphMode,
     setGraphColorMode,
     setGraphSizeMode,
+    setBetweennessWeighted,
     setGraphFilters,
     toggleGraphType,
     MIN_DEPTH,
@@ -56,6 +57,8 @@
   let containerEl = $state<HTMLDivElement | null>(null);
   let fg = $state<ForceGraphType<FGNode, FGLink> | null>(null);
   let hoverId = $state<string | null>(null);
+  // 분석 패널(다리 노트 등) 열림 — 세션성 로컬 상태. G9에서 MOC/고아 섹션 추가 예정.
+  let analysisOpen = $state(false);
 
   const gs = $derived($graphView);
 
@@ -146,17 +149,29 @@
       : 0,
   );
 
-  // betweenness("다리 노트") — 온디맨드. 크기 토글이 betweenness이고 global일 때만 계산.
-  // 전체(globalBase) 그래프 기준(필터해도 중심성은 전역값 유지 — degree/PageRank와 일관).
-  const betweennessMap = $derived.by(() => {
-    if (gs.mode !== "global" || gs.sizeMode !== "betweenness" || !globalBase) return null;
-    return computeBetweenness(globalBase.graph);
+  // betweenness("다리 노트") — 온디맨드. 크기 토글이 betweenness이거나 분석 패널이 열렸을 때
+  // global에서만 계산(둘 다 같은 점수 재사용). 전체(globalBase) 기준(필터해도 중심성은 전역값
+  // 유지 — degree/PageRank와 일관). 무방향 환산 + 가중 토글(gs.betweennessWeighted).
+  const betweennessScores = $derived.by(() => {
+    if (gs.mode !== "global" || !globalBase) return null;
+    if (gs.sizeMode !== "betweenness" && !analysisOpen) return null;
+    return computeBetweenness(globalBase.graph, { weighted: gs.betweennessWeighted });
   });
   const maxBetweenness = $derived(
-    betweennessMap
-      ? Object.values(betweennessMap).reduce((mx, v) => Math.max(mx, v), 0)
+    betweennessScores
+      ? Object.values(betweennessScores).reduce((mx, v) => Math.max(mx, v), 0)
       : 0,
   );
+
+  // [global] "다리 노트" Top-N — 분석 패널용. 현재 표시(view) 노드를 전역 betweenness로 랭킹.
+  const bridgeTop = $derived.by(() => {
+    if (!analysisOpen || !view || !betweennessScores) return [] as { node: DocGraphNode; score: number }[];
+    return view.nodes
+      .map((n) => ({ node: n, score: betweennessScores[n.id] ?? 0 }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12);
+  });
 
   // [global] 프로젝트 스코프의 type(doc_kind) 분포 — 필터 칩. globalBase(필터 전) 기준이라
   // type 필터로 숨겨도 칩은 유지되어 다시 켤 수 있다. count 내림차순.
@@ -222,9 +237,9 @@
         const mx = maxPagerank || 1;
         return 3 + Math.sqrt((n.pagerank ?? 0) / mx) * 9;
       }
-      if (gs.sizeMode === "betweenness" && betweennessMap) {
+      if (gs.sizeMode === "betweenness" && betweennessScores) {
         const mx = maxBetweenness || 1;
-        return 3 + Math.sqrt((betweennessMap[n.id] ?? 0) / mx) * 9;
+        return 3 + Math.sqrt((betweennessScores[n.id] ?? 0) / mx) * 9;
       }
     }
     return 3 + Math.sqrt(n.degree ?? 0) * 1.5;
@@ -409,9 +424,10 @@
     fg?.nodeCanvasObject(drawNode);
   });
 
-  // 크기 기준(degree↔PageRank) 변경 시 collide 반경 재초기화 + 재배치.
+  // 크기 기준(degree/PageRank/betweenness)·betweenness 가중 변경 시 collide 반경 재초기화 + 재배치.
   $effect(() => {
     void gs.sizeMode;
+    void gs.betweennessWeighted;
     fg?.d3ReheatSimulation();
   });
 
@@ -470,6 +486,14 @@
                 >
               {/each}
             </div>
+          {/if}
+          {#if gs.mode === "global"}
+            <button
+              class="analysis-toggle"
+              class:on={analysisOpen}
+              onclick={() => (analysisOpen = !analysisOpen)}
+              title="분석 패널 — 다리 노트 랭킹">분석</button
+            >
           {/if}
           <button
             class="btn btn--icon btn--sm btn--plain"
@@ -571,6 +595,16 @@
                 title="betweenness(군집을 잇는 다리 노트)">다리</button
               >
             </div>
+            {#if gs.sizeMode === "betweenness" || analysisOpen}
+              <label class="chk" title="weight를 강도로 — 거리=1/weight(강한 링크일수록 가까움)">
+                <input
+                  type="checkbox"
+                  checked={gs.betweennessWeighted}
+                  onchange={(e) => setBetweennessWeighted(e.currentTarget.checked)}
+                />
+                가중
+              </label>
+            {/if}
           </div>
           {#if availableTypes.length > 0}
             <div class="type-filter">
@@ -610,6 +644,42 @@
               </span>
             {/each}
           </div>
+        {/if}
+        {#if gs.mode === "global" && analysisOpen}
+          <aside class="analysis" aria-label="분석">
+            <header class="analysis-head">
+              <span class="analysis-title">다리 노트 <span class="analysis-sub">betweenness 상위</span></span>
+              <button
+                class="btn btn--icon btn--sm btn--plain"
+                onclick={() => (analysisOpen = false)}
+                title="분석 패널 닫기">×</button
+              >
+            </header>
+            {#if bridgeTop.length > 0}
+              <ul class="bridge-list">
+                {#each bridgeTop as item (item.node.id)}
+                  <li>
+                    <button
+                      class="bridge-item"
+                      onclick={() => {
+                        void selectNote(item.node.id);
+                        closeGraph();
+                      }}
+                      title="{item.node.label} — 클릭하면 노트 열기"
+                    >
+                      <span
+                        class="bridge-bar"
+                        style="width:{maxBetweenness ? (item.score / maxBetweenness) * 100 : 0}%"
+                      ></span>
+                      <span class="bridge-label">{item.node.label}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="analysis-empty">표시할 다리 노트가 없습니다 — 연결이 적거나 필터가 강합니다.</p>
+            {/if}
+          </aside>
         {/if}
       </div>
 
@@ -838,6 +908,119 @@
     font-variant-numeric: tabular-nums;
     opacity: 0.7;
     font-size: var(--fs-xs);
+  }
+
+  .analysis-toggle {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    background: var(--surface-base);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    padding: 3px var(--sp-3);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .analysis-toggle:hover {
+    border-color: var(--accent);
+    color: var(--text-secondary);
+  }
+  .analysis-toggle.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  /* 분석 패널 — 그래프 우측 오버레이. 다리 노트 랭킹(G8) + (G9 예정) MOC/고아. */
+  .analysis {
+    position: absolute;
+    top: var(--sp-4);
+    right: var(--sp-4);
+    width: 240px;
+    max-height: calc(100% - 2 * var(--sp-4));
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-overlay);
+    overflow: hidden;
+  }
+
+  .analysis-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .analysis-title {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .analysis-sub {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+  }
+
+  .bridge-list {
+    list-style: none;
+    margin: 0;
+    padding: var(--sp-2);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .bridge-item {
+    position: relative;
+    width: 100%;
+    text-align: left;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--fs-sm);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .bridge-item:hover {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
+
+  /* 점수 비례 막대 — 라벨 뒤 배경으로 깔림. */
+  .bridge-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--accent-bg-subtle);
+    z-index: 0;
+  }
+  .bridge-label {
+    position: relative;
+    z-index: 1;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .analysis-empty {
+    margin: 0;
+    padding: var(--sp-4);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
   }
 
   .legend {
