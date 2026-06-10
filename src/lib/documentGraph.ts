@@ -1,4 +1,4 @@
-import { DirectedGraph } from "graphology";
+import { DirectedGraph, UndirectedGraph } from "graphology";
 import louvain from "graphology-communities-louvain";
 import pagerank from "graphology-metrics/centrality/pagerank";
 import betweenness from "graphology-metrics/centrality/betweenness";
@@ -351,21 +351,43 @@ export function buildDocumentGraph(
   return { graph, nodes, edges, communityCount, excludedCount };
 }
 
+export interface BetweennessOptions {
+  /**
+   * weight를 **강도**로 해석해 거리 = 1/weight(강한 링크일수록 가깝다)로 가중 최단경로 기준.
+   * 기본 false = unweighted(hop 기반 구조적 다리). weight를 그대로 거리로 쓰면 "강도↑=거리↑"로
+   * 의미가 뒤집히므로 가중 모드에서도 역수를 쓴다.
+   */
+  weighted?: boolean;
+}
+
 /**
  * betweenness 중심성("다리 노트") — **온디맨드** 계산(ADR-003 결정표 #7).
  *
- * O(V·E)라 buildDocumentGraph에서 미리 계산하지 않고, 크기 토글이 betweenness일 때만
- * 호출한다. **unweighted**(getEdgeWeight: null) — weight를 거리로 쓰면 "강도↑ = 거리↑"로
- * 의미가 뒤집히므로, 구조적 최단경로(hop) 기준으로 군집 사이를 잇는 다리 노트를 본다.
- * graphology 표준 정규화(normalized) 적용. 노드/엣지 없으면 빈 맵.
- *
- * 크기 인코딩 max 정규화는 호출부(GraphModal)에서 degree/PageRank와 동일하게 처리.
+ * O(V·E)라 미리 계산하지 않고 필요할 때만 호출. 지식 그래프의 다리는 **방향 무관**이므로
+ * directed 그래프를 **무방향으로 환산**(양방향 기여 weight 합산)해 계산한다 — 군집과 군집을
+ * 잇는 노드를 대칭적으로 본다. weighted 옵션은 위 BetweennessOptions 참고. graphology 표준
+ * 정규화(normalized). 노드/엣지 없으면 빈 맵. 크기 max 정규화는 호출부에서.
  */
 export function computeBetweenness(
   graph: DirectedGraph<DocNodeAttributes, DocEdgeAttributes>,
+  opts: BetweennessOptions = {},
 ): Record<string, number> {
   if (graph.order === 0 || graph.size === 0) return {};
-  return betweenness(graph, { getEdgeWeight: null, normalized: true });
+  // directed → undirected(같은 페어 양방향 weight 합산). 다리는 방향 무관.
+  const u = new UndirectedGraph<{ weight: number }>();
+  graph.forEachNode((n) => u.addNode(n));
+  graph.forEachDirectedEdge((_e, attr, s, t) => {
+    if (s === t) return;
+    if (u.hasEdge(s, t)) {
+      u.updateEdgeAttribute(s, t, "weight", (w) => (w ?? 0) + attr.weight);
+    } else {
+      u.addEdge(s, t, { weight: attr.weight });
+    }
+  });
+  return betweenness(u, {
+    normalized: true,
+    getEdgeWeight: opts.weighted ? (_e, a) => 1 / (a.weight || 1) : null,
+  });
 }
 
 /** 백본 추출 방식 — 전역 임계(minWeight) 또는 노드-로컬 통계(disparity). */

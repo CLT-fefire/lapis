@@ -39,8 +39,10 @@ export interface GraphState {
   expanded: Set<string>;
   /** [global] 색 기준. */
   colorMode: GraphColorMode;
-  /** [global] 노드 크기 기준 — degree(기본) 또는 PageRank. */
+  /** [global] 노드 크기 기준 — degree(기본) / PageRank / betweenness. */
   sizeMode: GraphSizeMode;
+  /** [global] betweenness 가중 여부(거리=1/weight). sizeMode/분석패널 betweenness에 공통. */
+  betweennessWeighted: boolean;
   /** [global] 필터. */
   filters: GraphFilters;
 }
@@ -66,6 +68,7 @@ export const EMPTY_GRAPH: GraphState = {
   expanded: new Set(),
   colorMode: "community",
   sizeMode: "degree",
+  betweennessWeighted: false,
   filters: DEFAULT_FILTERS,
 };
 
@@ -115,10 +118,16 @@ export function setColorModeState(state: GraphState, colorMode: GraphColorMode):
   return { ...state, colorMode };
 }
 
-/** 크기 기준 변경(global) — degree↔PageRank. */
+/** 크기 기준 변경(global) — degree/PageRank/betweenness. */
 export function setSizeModeState(state: GraphState, sizeMode: GraphSizeMode): GraphState {
   if (sizeMode === state.sizeMode) return state;
   return { ...state, sizeMode };
+}
+
+/** betweenness 가중 토글(global). */
+export function setBetweennessWeightedState(state: GraphState, weighted: boolean): GraphState {
+  if (weighted === state.betweennessWeighted) return state;
+  return { ...state, betweennessWeighted: weighted };
 }
 
 /** 필터 부분 갱신(global). */
@@ -165,6 +174,9 @@ export function setGraphColorMode(colorMode: GraphColorMode): void {
 }
 export function setGraphSizeMode(sizeMode: GraphSizeMode): void {
   graphState.update((s) => setSizeModeState(s, sizeMode));
+}
+export function setBetweennessWeighted(weighted: boolean): void {
+  graphState.update((s) => setBetweennessWeightedState(s, weighted));
 }
 export function setGraphFilters(patch: Partial<GraphFilters>): void {
   graphState.update((s) => setFiltersState(s, patch));

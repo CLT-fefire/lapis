@@ -425,6 +425,38 @@ describe("computeBetweenness — 다리 노트(온디맨드)", () => {
     const g = buildDocumentGraph(buildIndex([]));
     expect(computeBetweenness(g.graph)).toEqual({});
   });
+
+  it("무방향 환산 — 방향상 sink여도 다리로 잡힘", () => {
+    // A→B, C→B (둘 다 B로 들어옴). directed betweenness면 B 통과 경로 0이지만
+    // 무방향(A-B-C)이면 B가 유일 다리 → betweenness > 0.
+    const g = buildDocumentGraph(
+      buildIndex([
+        mkInfo("/r/a.md", { targets: ["b"] }),
+        mkInfo("/r/b.md"),
+        mkInfo("/r/c.md", { targets: ["b"] }),
+      ]),
+    );
+    const bc = computeBetweenness(g.graph);
+    expect(bc["/r/b.md"]).toBeGreaterThan(0);
+    expect(bc["/r/a.md"]).toBe(0);
+    expect(bc["/r/c.md"]).toBe(0);
+  });
+
+  it("weighted 옵션 — 정규화 점수 반환(균등 weight면 랭킹 동일)", () => {
+    const g = buildDocumentGraph(
+      buildIndex([
+        mkInfo("/r/a.md", { targets: ["b"] }),
+        mkInfo("/r/b.md", { targets: ["c"] }),
+        mkInfo("/r/c.md", { targets: ["d"] }),
+        mkInfo("/r/d.md"),
+      ]),
+    );
+    const w = computeBetweenness(g.graph, { weighted: true });
+    expect(w["/r/b.md"]).toBeGreaterThan(0);
+    expect(w["/r/c.md"]).toBeGreaterThan(0);
+    expect(w["/r/a.md"]).toBe(0);
+    expect(w["/r/d.md"]).toBe(0);
+  });
 });
 
 describe("disparityBackbone — 노드-로컬 통계 백본", () => {
