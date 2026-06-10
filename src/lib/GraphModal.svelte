@@ -9,6 +9,7 @@
     setGraphColorMode,
     setGraphSizeMode,
     setGraphFilters,
+    toggleGraphType,
     MIN_DEPTH,
     MAX_DEPTH,
     type GraphColorMode,
@@ -89,7 +90,10 @@
       };
     }
     if (!globalBase) return null;
-    const f = filterDocGraph(globalBase, gs.filters);
+    const f = filterDocGraph(globalBase, {
+      ...gs.filters,
+      types: gs.filters.types.length > 0 ? new Set(gs.filters.types) : null,
+    });
     return {
       nodes: f.nodes,
       edges: f.edges,
@@ -153,6 +157,17 @@
       ? Object.values(betweennessMap).reduce((mx, v) => Math.max(mx, v), 0)
       : 0,
   );
+
+  // [global] 프로젝트 스코프의 type(doc_kind) 분포 — 필터 칩. globalBase(필터 전) 기준이라
+  // type 필터로 숨겨도 칩은 유지되어 다시 켤 수 있다. count 내림차순.
+  const availableTypes = $derived.by(() => {
+    if (gs.mode !== "global" || !globalBase) return [] as [string, number][];
+    const counts = new Map<string, number>();
+    for (const n of globalBase.nodes) {
+      if (n.type) counts.set(n.type, (counts.get(n.type) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  });
 
   // [global] 색 범례 — community는 색 칩(#i), folder/type은 값-색 매핑(상위 8).
   const legend = $derived.by(() => {
@@ -557,6 +572,20 @@
               >
             </div>
           </div>
+          {#if availableTypes.length > 0}
+            <div class="type-filter">
+              <span>type</span>
+              {#each availableTypes as [t, c] (t)}
+                <button
+                  class="chip"
+                  class:active={gs.filters.types.includes(t)}
+                  onclick={() => toggleGraphType(t)}
+                  title="{t} · {c}개{gs.filters.types.length > 0 ? '' : ' (전체 표시 중)'}"
+                  >{t}<span class="chip-count">{c}</span></button
+                >
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -771,6 +800,44 @@
     display: flex;
     align-items: center;
     gap: var(--sp-3);
+  }
+
+  .type-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    background: var(--surface-base);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    padding: 2px var(--sp-3);
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    border-color: var(--accent);
+    color: var(--text-secondary);
+  }
+
+  .chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .chip-count {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+    font-size: var(--fs-xs);
   }
 
   .legend {
