@@ -9,7 +9,7 @@ import { writable, derived } from "svelte/store";
  */
 export type GraphMode = "local" | "global";
 export type GraphColorMode = "folder" | "community" | "type";
-export type GraphSizeMode = "degree" | "pagerank";
+export type GraphSizeMode = "degree" | "pagerank" | "betweenness";
 
 export interface GraphFilters {
   /** 고아(연결 0) 노드 숨김. */
