@@ -3,6 +3,7 @@ import { buildIndex } from "./linkIndex";
 import {
   buildDocumentGraph,
   filterDocGraph,
+  computeBetweenness,
   projectOf,
   mulberry32,
   DEFAULT_EXCLUDED_FOLDERS,
@@ -374,5 +375,52 @@ describe("filterDocGraph", () => {
     const f = filterDocGraph(base);
     expect(f.nodes.length).toBe(base.nodes.length);
     expect(f.edges.length).toBe(base.edges.length);
+  });
+});
+
+describe("computeBetweenness — 다리 노트(온디맨드)", () => {
+  it("경로 그래프 A→B→C→D→E: 중앙 C가 최대, 양끝 0, B==D", () => {
+    const g = buildDocumentGraph(
+      buildIndex([
+        mkInfo("/r/a.md", { targets: ["b"] }),
+        mkInfo("/r/b.md", { targets: ["c"] }),
+        mkInfo("/r/c.md", { targets: ["d"] }),
+        mkInfo("/r/d.md", { targets: ["e"] }),
+        mkInfo("/r/e.md"),
+      ]),
+    );
+    const bc = computeBetweenness(g.graph);
+    // C는 가장 많은 최단경로가 통과 → 최대. 양끝(A=source, E=sink)은 0.
+    expect(bc["/r/c.md"]).toBeGreaterThan(bc["/r/b.md"]);
+    expect(bc["/r/c.md"]).toBeGreaterThan(bc["/r/d.md"]);
+    expect(bc["/r/b.md"]).toBeCloseTo(bc["/r/d.md"], 6);
+    expect(bc["/r/a.md"]).toBe(0);
+    expect(bc["/r/e.md"]).toBe(0);
+  });
+
+  it("두 군집을 잇는 다리 노트가 양 군집 내부 노드보다 높음", () => {
+    // 군집1: a1→a2→bridge, 군집2: bridge→b1→b2 — bridge가 유일한 통로.
+    const g = buildDocumentGraph(
+      buildIndex([
+        mkInfo("/r/a1.md", { targets: ["a2"] }),
+        mkInfo("/r/a2.md", { targets: ["bridge"] }),
+        mkInfo("/r/bridge.md", { targets: ["b1"] }),
+        mkInfo("/r/b1.md", { targets: ["b2"] }),
+        mkInfo("/r/b2.md"),
+      ]),
+    );
+    const bc = computeBetweenness(g.graph);
+    expect(bc["/r/bridge.md"]).toBeGreaterThan(bc["/r/a2.md"]);
+    expect(bc["/r/bridge.md"]).toBeGreaterThan(bc["/r/b1.md"]);
+  });
+
+  it("엣지 없는 그래프 → 빈 맵", () => {
+    const g = buildDocumentGraph(buildIndex([mkInfo("/r/a.md"), mkInfo("/r/b.md")]));
+    expect(computeBetweenness(g.graph)).toEqual({});
+  });
+
+  it("빈 그래프 → 빈 맵", () => {
+    const g = buildDocumentGraph(buildIndex([]));
+    expect(computeBetweenness(g.graph)).toEqual({});
   });
 });

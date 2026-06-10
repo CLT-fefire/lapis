@@ -1,6 +1,7 @@
 import { DirectedGraph } from "graphology";
 import louvain from "graphology-communities-louvain";
 import pagerank from "graphology-metrics/centrality/pagerank";
+import betweenness from "graphology-metrics/centrality/betweenness";
 import type { LinkIndex } from "$lib/linkIndex";
 import { targetName } from "$lib/linkIndex";
 import type { LinkInfo } from "$lib/tauri/notes";
@@ -337,6 +338,23 @@ export function buildDocumentGraph(
   });
 
   return { graph, nodes, edges, communityCount, excludedCount };
+}
+
+/**
+ * betweenness 중심성("다리 노트") — **온디맨드** 계산(ADR-003 결정표 #7).
+ *
+ * O(V·E)라 buildDocumentGraph에서 미리 계산하지 않고, 크기 토글이 betweenness일 때만
+ * 호출한다. **unweighted**(getEdgeWeight: null) — weight를 거리로 쓰면 "강도↑ = 거리↑"로
+ * 의미가 뒤집히므로, 구조적 최단경로(hop) 기준으로 군집 사이를 잇는 다리 노트를 본다.
+ * graphology 표준 정규화(normalized) 적용. 노드/엣지 없으면 빈 맵.
+ *
+ * 크기 인코딩 max 정규화는 호출부(GraphModal)에서 degree/PageRank와 동일하게 처리.
+ */
+export function computeBetweenness(
+  graph: DirectedGraph<DocNodeAttributes, DocEdgeAttributes>,
+): Record<string, number> {
+  if (graph.order === 0 || graph.size === 0) return {};
+  return betweenness(graph, { getEdgeWeight: null, normalized: true });
 }
 
 export interface FilterOptions {

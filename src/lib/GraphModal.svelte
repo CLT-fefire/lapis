@@ -18,6 +18,7 @@
   import {
     buildDocumentGraph,
     filterDocGraph,
+    computeBetweenness,
     projectOf,
     type DocGraphNode,
     type DocGraphEdge,
@@ -141,6 +142,18 @@
       : 0,
   );
 
+  // betweenness("다리 노트") — 온디맨드. 크기 토글이 betweenness이고 global일 때만 계산.
+  // 전체(globalBase) 그래프 기준(필터해도 중심성은 전역값 유지 — degree/PageRank와 일관).
+  const betweennessMap = $derived.by(() => {
+    if (gs.mode !== "global" || gs.sizeMode !== "betweenness" || !globalBase) return null;
+    return computeBetweenness(globalBase.graph);
+  });
+  const maxBetweenness = $derived(
+    betweennessMap
+      ? Object.values(betweennessMap).reduce((mx, v) => Math.max(mx, v), 0)
+      : 0,
+  );
+
   // [global] 색 범례 — community는 색 칩(#i), folder/type은 값-색 매핑(상위 8).
   const legend = $derived.by(() => {
     const out: { label: string; color: string }[] = [];
@@ -189,9 +202,15 @@
   }
 
   function nodeRadius(n: FGNode): number {
-    if (gs.mode === "global" && gs.sizeMode === "pagerank") {
-      const mx = maxPagerank || 1;
-      return 3 + Math.sqrt((n.pagerank ?? 0) / mx) * 9;
+    if (gs.mode === "global") {
+      if (gs.sizeMode === "pagerank") {
+        const mx = maxPagerank || 1;
+        return 3 + Math.sqrt((n.pagerank ?? 0) / mx) * 9;
+      }
+      if (gs.sizeMode === "betweenness" && betweennessMap) {
+        const mx = maxBetweenness || 1;
+        return 3 + Math.sqrt((betweennessMap[n.id] ?? 0) / mx) * 9;
+      }
     }
     return 3 + Math.sqrt(n.degree ?? 0) * 1.5;
   }
@@ -497,6 +516,12 @@
                 class:active={gs.sizeMode === "pagerank"}
                 onclick={() => setGraphSizeMode("pagerank")}
                 title="PageRank(영향력)">PageRank</button
+              >
+              <button
+                class="seg-btn"
+                class:active={gs.sizeMode === "betweenness"}
+                onclick={() => setGraphSizeMode("betweenness")}
+                title="betweenness(군집을 잇는 다리 노트)">다리</button
               >
             </div>
           </div>
