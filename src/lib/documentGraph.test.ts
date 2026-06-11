@@ -5,6 +5,8 @@ import {
   filterDocGraph,
   computeBetweenness,
   disparityBackbone,
+  topHubsByDegree,
+  orphanNodes,
   edgeKey,
   projectOf,
   mulberry32,
@@ -535,5 +537,41 @@ describe("filterDocGraph — disparity 백본 모드", () => {
   it("기본(minWeight) 모드는 disparity와 다름 — 모든 변 유지", () => {
     const f = filterDocGraph(src, { minWeight: 1 });
     expect(f.edges).toHaveLength(3);
+  });
+});
+
+describe("topHubsByDegree / orphanNodes (진단 패널)", () => {
+  // hub→a,b,c (hub deg 3), a→b (a deg 2, b deg 2), c deg 1, orphan deg 0.
+  const g = buildDocumentGraph(
+    buildIndex([
+      mkInfo("/r/hub.md", { targets: ["a", "b", "c"] }),
+      mkInfo("/r/a.md", { targets: ["b"] }),
+      mkInfo("/r/b.md"),
+      mkInfo("/r/c.md"),
+      mkInfo("/r/orphan.md"),
+    ]),
+  );
+
+  it("topHubsByDegree — degree 내림차순, degree 0 제외", () => {
+    const top = topHubsByDegree(g.nodes, 3);
+    expect(top[0].id).toBe("/r/hub.md"); // degree 3 최대
+    expect(top.every((n) => n.degree > 0)).toBe(true);
+    expect(top.some((n) => n.id === "/r/orphan.md")).toBe(false);
+  });
+
+  it("topHubsByDegree — limit + 동률은 label 사전순", () => {
+    const top = topHubsByDegree(g.nodes, 2);
+    expect(top).toHaveLength(2);
+    expect(top[0].id).toBe("/r/hub.md");
+    expect(top[1].id).toBe("/r/a.md"); // a,b degree 2 동률 → 'a' 먼저
+  });
+
+  it("orphanNodes — degree 0만", () => {
+    expect(orphanNodes(g.nodes).map((n) => n.id)).toEqual(["/r/orphan.md"]);
+  });
+
+  it("빈 입력 가드", () => {
+    expect(topHubsByDegree([], 5)).toEqual([]);
+    expect(orphanNodes([])).toEqual([]);
   });
 });

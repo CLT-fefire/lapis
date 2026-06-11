@@ -459,6 +459,27 @@ export function disparityBackbone(
   return keep;
 }
 
+/**
+ * MOC 후보 — degree 상위 허브(많은 노트와 이어진 노트 = 자연스러운 인덱스/MOC 후보).
+ * degree 0 제외, 동률은 label 사전순. 진단 패널(G9)용. 순수.
+ */
+export function topHubsByDegree(nodes: DocGraphNode[], limit: number): DocGraphNode[] {
+  return [...nodes]
+    .filter((n) => n.degree > 0)
+    .sort((a, b) => b.degree - a.degree || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0))
+    .slice(0, limit);
+}
+
+/**
+ * 고아 노트 — degree 0(프로젝트 내 어떤 노트와도 안 이어짐). MOC로 엮을 후보.
+ * label 사전순. 진단 패널(G9)용. 순수.
+ */
+export function orphanNodes(nodes: DocGraphNode[]): DocGraphNode[] {
+  return [...nodes]
+    .filter((n) => n.degree === 0)
+    .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+}
+
 export interface FilterOptions {
   /** 살아남은 엣지 기준 연결 0인 노드 숨김(고아 OFF). */
   hideOrphans?: boolean;
