@@ -5,6 +5,7 @@
   import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
   import SidebarRail from "$lib/SidebarRail.svelte";
+  import GitBanner from "$lib/GitBanner.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
@@ -1039,6 +1040,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       >🔎</button>
     </div>
   </header>
+
+  <GitBanner />
 
   <div
     class="workspace"

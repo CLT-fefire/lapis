@@ -121,6 +121,14 @@ export async function openVault(path: string): Promise<void> {
     console.warn("[vault] startWatching failed", e);
   }
 
+  // git 버전관리 상태 갱신(repo 여부 + "시작?" 배너 판단). lazy import로 circular 회피.
+  try {
+    const { refreshGitStatus } = await import("./git");
+    await refreshGitStatus(path);
+  } catch (e) {
+    console.warn("[vault] refreshGitStatus failed", e);
+  }
+
   // Lapis mirror DB 증분 sync (Phase 5.2 PR1). 백그라운드 IIFE — vault 열기 흐름 차단 X.
   // PR2 #12: vault path 전달로 mirror 삭제 시 .md 자동 정리(orphans.json 박제).
   void (async () => {
