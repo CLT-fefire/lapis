@@ -1,4 +1,5 @@
 mod cleanup;
+mod git;
 mod memory;
 mod mirror;
 mod search;
@@ -71,6 +72,12 @@ pub fn run() {
             vault::find_assets_for_note,
             vault::backup_notes,
             vault::prune_link_rewrite_backups,
+            git::git_is_repo,
+            git::git_init,
+            git::git_has_changes,
+            git::git_commit_all,
+            git::git_log,
+            git::git_show_diff,
             search_cache::read_search_cache_meta,
             search_cache::write_search_cache_meta,
             search_cache::read_search_cache_shard,
