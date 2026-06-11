@@ -21,6 +21,8 @@
     buildDocumentGraph,
     filterDocGraph,
     computeBetweenness,
+    topHubsByDegree,
+    orphanNodes,
     projectOf,
     type DocGraphNode,
     type DocGraphEdge,
@@ -163,15 +165,34 @@
       : 0,
   );
 
-  // [global] "다리 노트" Top-N — 분석 패널용. 현재 표시(view) 노드를 전역 betweenness로 랭킹.
+  // === [global] 진단 패널 (프로젝트 단위) ===
+  // 분석 패널은 현재 프로젝트(globalBase) 전체를 진단한다 — 캔버스 필터(고아 숨김/백본/degree-cap)와
+  // 무관하게 프로젝트 구조를 본다. 세 섹션 모두 클릭=노트 열기.
+
+  // 다리 노트 — betweenness 상위(군집을 잇는 연결 통로).
   const bridgeTop = $derived.by(() => {
-    if (!analysisOpen || !view || !betweennessScores) return [] as { node: DocGraphNode; score: number }[];
-    return view.nodes
+    if (!analysisOpen || gs.mode !== "global" || !globalBase || !betweennessScores)
+      return [] as { node: DocGraphNode; score: number }[];
+    return globalBase.nodes
       .map((n) => ({ node: n, score: betweennessScores[n.id] ?? 0 }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 12);
+      .slice(0, 8);
   });
+
+  // MOC 후보 — degree 상위 허브(많은 노트와 연결 = 자연스러운 인덱스/MOC 후보).
+  const mocCandidates = $derived(
+    analysisOpen && gs.mode === "global" && globalBase
+      ? topHubsByDegree(globalBase.nodes, 8)
+      : ([] as DocGraphNode[]),
+  );
+
+  // 고아 노트 — degree 0(프로젝트 내 무연결). 캔버스 "고아 숨김" 필터와 무관하게 항상 진단(globalBase).
+  const orphanNotes = $derived(
+    analysisOpen && gs.mode === "global" && globalBase
+      ? orphanNodes(globalBase.nodes)
+      : ([] as DocGraphNode[]),
+  );
 
   // [global] 프로젝트 스코프의 type(doc_kind) 분포 — 필터 칩. globalBase(필터 전) 기준이라
   // type 필터로 숨겨도 칩은 유지되어 다시 켤 수 있다. count 내림차순.
@@ -646,39 +667,100 @@
           </div>
         {/if}
         {#if gs.mode === "global" && analysisOpen}
-          <aside class="analysis" aria-label="분석">
+          <aside class="analysis" aria-label="진단">
             <header class="analysis-head">
-              <span class="analysis-title">다리 노트 <span class="analysis-sub">betweenness 상위</span></span>
+              <span class="analysis-title">진단 <span class="analysis-sub" title={projectName}>{projectName}</span></span>
               <button
                 class="btn btn--icon btn--sm btn--plain"
                 onclick={() => (analysisOpen = false)}
-                title="분석 패널 닫기">×</button
+                title="진단 패널 닫기">×</button
               >
             </header>
-            {#if bridgeTop.length > 0}
-              <ul class="bridge-list">
-                {#each bridgeTop as item (item.node.id)}
-                  <li>
-                    <button
-                      class="bridge-item"
-                      onclick={() => {
-                        void selectNote(item.node.id);
-                        closeGraph();
-                      }}
-                      title="{item.node.label} — 클릭하면 노트 열기"
-                    >
-                      <span
-                        class="bridge-bar"
-                        style="width:{maxBetweenness ? (item.score / maxBetweenness) * 100 : 0}%"
-                      ></span>
-                      <span class="bridge-label">{item.node.label}</span>
-                    </button>
-                  </li>
-                {/each}
-              </ul>
-            {:else}
-              <p class="analysis-empty">표시할 다리 노트가 없습니다 — 연결이 적거나 필터가 강합니다.</p>
-            {/if}
+            <div class="analysis-body">
+              <!-- MOC 후보 — degree 상위 허브 -->
+              <section class="diag-section">
+                <h4 class="diag-h">MOC 후보 <span class="diag-hint">연결 많은 허브</span></h4>
+                {#if mocCandidates.length > 0}
+                  <ul class="diag-list">
+                    {#each mocCandidates as n (n.id)}
+                      <li>
+                        <button
+                          class="diag-item"
+                          onclick={() => {
+                            void selectNote(n.id);
+                            closeGraph();
+                          }}
+                          title="{n.label} — 연결 {n.degree}{n.type ? ` · ${n.type}` : ''} · 클릭하면 노트 열기"
+                        >
+                          <span class="diag-label">{n.label}</span>
+                          {#if n.type}<span class="diag-type">{n.type}</span>{/if}
+                          <span class="diag-num">{n.degree}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <p class="analysis-empty">연결된 노트가 없습니다.</p>
+                {/if}
+              </section>
+
+              <!-- 다리 노트 — betweenness 상위 -->
+              <section class="diag-section">
+                <h4 class="diag-h">다리 노트 <span class="diag-hint">betweenness{gs.betweennessWeighted ? " · 가중" : ""}</span></h4>
+                {#if bridgeTop.length > 0}
+                  <ul class="diag-list">
+                    {#each bridgeTop as item (item.node.id)}
+                      <li>
+                        <button
+                          class="bridge-item"
+                          onclick={() => {
+                            void selectNote(item.node.id);
+                            closeGraph();
+                          }}
+                          title="{item.node.label} — 클릭하면 노트 열기"
+                        >
+                          <span
+                            class="bridge-bar"
+                            style="width:{maxBetweenness ? (item.score / maxBetweenness) * 100 : 0}%"
+                          ></span>
+                          <span class="bridge-label">{item.node.label}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <p class="analysis-empty">군집을 잇는 다리 노트가 없습니다.</p>
+                {/if}
+              </section>
+
+              <!-- 고아 노트 — degree 0 -->
+              <section class="diag-section">
+                <h4 class="diag-h">고아 노트 <span class="diag-hint">연결 0 · {orphanNotes.length}</span></h4>
+                {#if orphanNotes.length > 0}
+                  <ul class="diag-list">
+                    {#each orphanNotes.slice(0, 8) as n (n.id)}
+                      <li>
+                        <button
+                          class="diag-item diag-item--muted"
+                          onclick={() => {
+                            void selectNote(n.id);
+                            closeGraph();
+                          }}
+                          title="{n.label} — 연결 없음 · 클릭하면 노트 열기"
+                        >
+                          <span class="diag-label">{n.label}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                  {#if orphanNotes.length > 8}
+                    <p class="diag-more">…외 {orphanNotes.length - 8}개</p>
+                  {/if}
+                {:else}
+                  <p class="analysis-empty">고아 노트가 없습니다 — 모두 연결됨.</p>
+                {/if}
+              </section>
+            </div>
           </aside>
         {/if}
       </div>
@@ -967,14 +1049,99 @@
     font-size: var(--fs-xs);
   }
 
-  .bridge-list {
-    list-style: none;
-    margin: 0;
-    padding: var(--sp-2);
+  /* 진단 본문 — 섹션들을 세로로 쌓고 전체 스크롤. */
+  .analysis-body {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    padding: var(--sp-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .diag-section {
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .diag-h {
+    margin: 0;
+    padding: var(--sp-2) var(--sp-3) 0;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+  .diag-hint {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-muted);
+  }
+
+  .diag-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  /* MOC/고아 행 — 라벨 + (type badge) + degree 수. */
+  .diag-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    text-align: left;
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--fs-sm);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .diag-item:hover {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
+  .diag-item--muted {
+    color: var(--text-muted);
+  }
+  .diag-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .diag-type {
+    flex: none;
+    font-size: var(--fs-xs);
+    color: var(--accent-hover);
+    background: var(--accent-bg-subtle);
+    border-radius: var(--r-lg);
+    padding: 0 var(--sp-2);
+  }
+  .diag-num {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+  }
+  .diag-more {
+    margin: 0;
+    padding: 2px var(--sp-3);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
   }
 
   .bridge-item {
