@@ -2,6 +2,7 @@ import { writable, get } from "svelte/store";
 import { watchVault, unwatchVault, onVaultChange, type VaultChange } from "$lib/tauri/watcher";
 import { scanLinkSingle, readNote } from "$lib/tauri/notes";
 import { invalidateCacheBySource } from "$lib/backlinks";
+import { scheduleAutoCommit } from "./git";
 import {
   vaultPath,
   currentNotePath,
@@ -95,6 +96,9 @@ async function handleChange(change: VaultChange): Promise<void> {
 
   // 큰 변경 burst 시 정확성 위해 전체 재빌드를 약간 늦게 한 번 더 실행.
   scheduleFullReload();
+
+  // git 버전관리 켜진 vault면 변경 정착 후 자동 커밋 예약(내부에서 repo 여부 확인).
+  scheduleAutoCommit(root);
 }
 
 async function onPathChanged(path: string, mtimeMs: number): Promise<void> {
