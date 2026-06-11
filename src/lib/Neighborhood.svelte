@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { selectNote } from "$lib/stores/vault";
+  import { selectNote, vaultPath } from "$lib/stores/vault";
   import { fetchBacklinkContext, type BacklinkContext } from "$lib/backlinks";
+  import { gitRepo, formatCommitDate, diffLineClass } from "$lib/stores/git";
+  import { gitLog, gitShowDiff, type GitCommit } from "$lib/tauri/git";
   import type { LinkInfo } from "$lib/tauri/notes";
   import type { RelationGroup } from "$lib/relations";
 
@@ -67,8 +69,62 @@
     return s.length === 0 ? type : s.charAt(0).toUpperCase() + s.slice(1);
   }
 
+  // === git 이력(V3, ADR-004) — 현재 노트의 commit 목록 + diff. repo일 때만. ===
+  let commits = $state<GitCommit[]>([]);
+  let commitsLoading = $state(false);
+  let openCommit = $state<string | null>(null);
+  let diffs = $state<Map<string, string>>(new Map());
+
+  // targetNote/repo/vault 변경 시 이력 로드. (effect는 async 불가 → IIFE + cancel 플래그)
+  $effect(() => {
+    const path = targetNote?.source_path;
+    const repo = $gitRepo;
+    const vault = $vaultPath;
+    commits = [];
+    openCommit = null;
+    diffs = new Map();
+    if (!repo || !path || !vault) return;
+    let cancelled = false;
+    commitsLoading = true;
+    void (async () => {
+      try {
+        const log = await gitLog(vault, path, 25);
+        if (!cancelled) commits = log;
+      } catch (e) {
+        console.warn("[git] log 실패", e);
+      } finally {
+        if (!cancelled) commitsLoading = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  async function toggleCommit(hash: string) {
+    if (openCommit === hash) {
+      openCommit = null;
+      return;
+    }
+    openCommit = hash;
+    if (diffs.has(hash)) return;
+    const path = targetNote?.source_path;
+    const vault = $vaultPath;
+    if (!path || !vault) return;
+    try {
+      const d = await gitShowDiff(vault, path, hash);
+      const next = new Map(diffs);
+      next.set(hash, d);
+      diffs = next;
+    } catch (e) {
+      console.warn("[git] diff 실패", e);
+    }
+  }
+
+  const historyShown = $derived($gitRepo && (commits.length > 0 || commitsLoading));
+
   const hasAny = $derived(
-    outgoing.length > 0 || incoming.length > 0 || backlinks.length > 0,
+    outgoing.length > 0 || incoming.length > 0 || backlinks.length > 0 || historyShown,
   );
 </script>
 
@@ -167,6 +223,51 @@
             </li>
           {/each}
         </ul>
+      </div>
+    {/if}
+
+    {#if historyShown}
+      <div class="rel-block">
+        <h3>⟲ History · {commits.length}</h3>
+        {#if commitsLoading && commits.length === 0}
+          <span class="placeholder">…</span>
+        {:else}
+          <ul class="commit-list">
+            {#each commits as c (c.hash)}
+              {@const isOpen = openCommit === c.hash}
+              {@const diff = diffs.get(c.hash)}
+              <li class:expanded={isOpen}>
+                <button
+                  class="commit-row"
+                  type="button"
+                  aria-expanded={isOpen}
+                  title={`${c.short} · ${c.author} · 클릭하면 변경 내용`}
+                  onclick={() => toggleCommit(c.hash)}
+                >
+                  <span class="commit-chevron">{isOpen ? "▾" : "▸"}</span>
+                  <span class="commit-hash">{c.short}</span>
+                  <span class="commit-subject">{c.subject}</span>
+                  <span class="commit-date">{formatCommitDate(c.timestamp)}</span>
+                </button>
+                {#if isOpen}
+                  <div class="diff-box">
+                    {#if diff == null}
+                      <span class="placeholder">…</span>
+                    {:else if diff.trim() === ""}
+                      <span class="placeholder">이 커밋에 이 노트의 변경 없음</span>
+                    {:else}
+                      <div class="diff">
+                        {#each diff.split("\n") as ln}
+                          <div class="dl dl-{diffLineClass(ln)}">{ln || " "}</div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
       </div>
     {/if}
   </section>
@@ -333,5 +434,99 @@
   .open-link:hover {
     color: var(--text-primary);
     text-decoration: underline;
+  }
+
+  /* === git 이력 (History) === */
+  .commit-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .commit-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-xs);
+    cursor: pointer;
+  }
+
+  .commit-row:hover {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
+
+  .commit-chevron {
+    color: var(--accent);
+    flex-shrink: 0;
+    font-size: var(--fs-xs);
+  }
+
+  .commit-hash {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .commit-subject {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .commit-date {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .diff-box {
+    margin: var(--sp-2) 0 var(--sp-3) 18px;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+
+  .diff {
+    overflow-x: auto;
+    font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+  }
+
+  .dl {
+    display: block;
+    white-space: pre;
+  }
+
+  .dl-add {
+    color: var(--success, #2ea043);
+  }
+  .dl-del {
+    color: var(--danger, #d1242f);
+  }
+  .dl-hunk {
+    color: var(--accent);
+  }
+  .dl-meta {
+    color: var(--text-muted);
+  }
+  .dl-ctx {
+    color: var(--text-secondary);
   }
 </style>
