@@ -95,6 +95,35 @@ export function autoCommitMessage(d: Date): string {
   return `Lapis 자동 스냅샷 — ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// === 이력 뷰어(V3) 표시 헬퍼 — 순수 ===
+
+/** commit 시각(epoch seconds) → "YYYY-MM-DD HH:mm". 0이면 "—". */
+export function formatCommitDate(epochSec: number): string {
+  if (!epochSec) return "—";
+  const d = new Date(epochSec * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** unified diff 한 줄의 종류 — 색상 클래스용. 순수. */
+export type DiffLineKind = "add" | "del" | "hunk" | "meta" | "ctx";
+export function diffLineClass(line: string): DiffLineKind {
+  if (line.startsWith("+++") || line.startsWith("---")) return "meta";
+  if (line.startsWith("@@")) return "hunk";
+  if (
+    line.startsWith("diff ") ||
+    line.startsWith("index ") ||
+    line.startsWith("new file") ||
+    line.startsWith("deleted ") ||
+    line.startsWith("similarity ") ||
+    line.startsWith("rename ")
+  )
+    return "meta";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "del";
+  return "ctx";
+}
+
 /** 변경 발생 시 watcher가 호출 — repo면 debounce 후 1회 커밋 예약. */
 export function scheduleAutoCommit(vault: string | null): void {
   if (!vault || !get(gitRepo)) return;
