@@ -12,6 +12,9 @@
     clampBackupKeep,
   } from "$lib/stores/settings";
   import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
+  import { vaultPath } from "$lib/stores/vault";
+  import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
+  import { get } from "svelte/store";
 
   const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
     { value: "system", label: "시스템" },
@@ -100,6 +103,23 @@
   function closeSettingsGuarded() {
     if (!busy) closeSettings();
   }
+
+  // === Git 버전관리 (ADR-004) ===
+  // 설정 열릴 때 현재 vault의 repo 여부를 갱신(배너를 "나중에"로 닫았어도 여기서 항상 시작 가능).
+  let gitHint = $state("");
+  $effect(() => {
+    if ($settingsOpen) {
+      gitHint = "";
+      void refreshGitStatus(get(vaultPath));
+    }
+  });
+
+  async function onStartVersioning() {
+    const vault = get(vaultPath);
+    if (!vault || $gitBusy) return;
+    await startVersioning(vault);
+    gitHint = $gitRepo ? "버전관리를 시작했습니다 — 변경 시 자동으로 커밋됩니다." : "시작 실패 — 콘솔 확인";
+  }
 </script>
 
 {#if $settingsOpen}
@@ -185,6 +205,36 @@
               disabled={backupKeepSaving || busy}
               aria-label="링크 갱신 백업 보존 개수"
             />
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">Git 버전관리</span>
+              <span class="label-desc">
+                vault 변경을 자동으로 커밋해 이력을 남깁니다(노트 하단 <strong>History</strong>에서 확인).
+                <code>_memories</code> 등은 제외하고 로컬 <code>.git</code>만 생성합니다.
+              </span>
+              {#if gitHint}
+                <span class="label-hint">{gitHint}</span>
+              {/if}
+            </span>
+          </div>
+          <div class="setting-control">
+            {#if !$vaultPath}
+              <span class="setting-status">vault 없음</span>
+            {:else if $gitRepo}
+              <span class="setting-status on">활성</span>
+            {:else}
+              <button
+                class="btn btn--primary btn--sm"
+                disabled={$gitBusy}
+                onclick={onStartVersioning}
+              >
+                {$gitBusy ? "시작 중…" : "버전관리 시작"}
+              </button>
+            {/if}
           </div>
         </section>
       </div>
