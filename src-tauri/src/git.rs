@@ -4,6 +4,12 @@
 //! 회피 — Lapis "외부 crate 최소" 철학). 모든 호출은 인자 배열로 넘겨 shell을 거치지 않으므로
 //! injection이 없다. opt-in: `git_init`을 명시적으로 부를 때만 vault에 `.git` 생성.
 //!
+//! ⚠️ 모든 command는 **async fn + `spawn_blocking`**으로 무거운 git IO를 worker thread에 격리한다.
+//! sync `#[tauri::command]`로 두면 거대 vault의 `git init`/`add -A`가 main IPC 핸들러 스레드를
+//! 점유해 그동안 모든 invoke가 막혀 UI가 수십 초 freeze 된다
+//! ([solution](../../docs/solutions/tauri-issues/tauri-sync-command-emit-ipc-race-20260513.md)).
+//! 실제 로직은 sync `*_inner` 함수에 두어 단위 테스트가 가능하다.
+//!
 //! 노이즈(`_memories/` 등 claude-mem 자동 export)는 `.gitignore`로 제외 — 실제 대상은
 //! non-`_memories` 문서뿐이라 가볍다. 커밋은 user.name/email을 인라인(`-c`)으로 지정해
 //! 전역 git config에 의존하지 않는다.
@@ -11,6 +17,7 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tauri::async_runtime::spawn_blocking;
 
 /// vault 루트 canonicalize (존재해야 함).
 fn canon_vault(vault_path: &str) -> Result<PathBuf, String> {
@@ -62,19 +69,16 @@ pub struct GitCommit {
     pub subject: String,
 }
 
-/// vault가 git work tree인가(.git 존재 + rev-parse 성공).
-#[tauri::command]
-pub fn git_is_repo(vault_path: String) -> Result<bool, String> {
-    let vault = canon_vault(&vault_path)?;
+// ─── sync 구현 (`*_inner`) — 단위 테스트 대상 ───────────────────────────────
+
+fn git_is_repo_inner(vault_path: &str) -> Result<bool, String> {
+    let vault = canon_vault(vault_path)?;
     Ok(vault.join(".git").exists()
         && run_git(&vault, &["rev-parse", "--is-inside-work-tree"]).is_ok())
 }
 
-/// vault에 git 초기화 + `.gitignore`(없을 때만) + 초기 커밋.
-/// 이미 repo면 건드리지 않고 `false`. 새로 만들면 `true`.
-#[tauri::command]
-pub fn git_init(vault_path: String) -> Result<bool, String> {
-    let vault = canon_vault(&vault_path)?;
+fn git_init_inner(vault_path: &str) -> Result<bool, String> {
+    let vault = canon_vault(vault_path)?;
     if vault.join(".git").exists() {
         return Ok(false); // 기존 repo(중첩 가능성) — 건드리지 않음
     }
@@ -87,19 +91,15 @@ pub fn git_init(vault_path: String) -> Result<bool, String> {
     Ok(true)
 }
 
-/// 커밋할 변경(gitignore 반영)이 있는가 — auto-commit 트리거 판단용.
-#[tauri::command]
-pub fn git_has_changes(vault_path: String) -> Result<bool, String> {
-    let vault = canon_vault(&vault_path)?;
+fn git_has_changes_inner(vault_path: &str) -> Result<bool, String> {
+    let vault = canon_vault(vault_path)?;
     let out = run_git(&vault, &["status", "--porcelain"])?;
     Ok(!out.trim().is_empty())
 }
 
-/// 전체 변경 `add -A` 후 커밋. 스테이징할 변경이 없으면 커밋 안 하고 `false`.
-#[tauri::command]
-pub fn git_commit_all(vault_path: String, message: String) -> Result<bool, String> {
-    let vault = canon_vault(&vault_path)?;
-    commit_inner(&vault, &message)
+fn git_commit_all_inner(vault_path: &str, message: &str) -> Result<bool, String> {
+    let vault = canon_vault(vault_path)?;
+    commit_inner(&vault, message)
 }
 
 /// add -A → (스테이징 변경 있으면) commit. 빈 커밋 방지. user 식별자 인라인 지정.
@@ -124,11 +124,9 @@ fn commit_inner(vault: &Path, message: &str) -> Result<bool, String> {
     Ok(true)
 }
 
-/// 노트 1건의 commit 이력(최신순, `--follow`로 rename 추적). limit는 1~500로 clamp.
-#[tauri::command]
-pub fn git_log(vault_path: String, path: String, limit: u32) -> Result<Vec<GitCommit>, String> {
-    let vault = canon_vault(&vault_path)?;
-    let rel = rel_in_vault(&vault, &path)?;
+fn git_log_inner(vault_path: &str, path: &str, limit: u32) -> Result<Vec<GitCommit>, String> {
+    let vault = canon_vault(vault_path)?;
+    let rel = rel_in_vault(&vault, path)?;
     // 필드 구분 = git의 %x1f(출력에서 0x1F 바이트). 포맷 문자열 자체는 출력가능 ASCII만.
     let n = format!("-n{}", limit.clamp(1, 500));
     let out = run_git(
@@ -163,15 +161,63 @@ pub fn git_log(vault_path: String, path: String, limit: u32) -> Result<Vec<GitCo
     Ok(commits)
 }
 
-/// 특정 commit에서 그 노트의 diff(부모 대비). rev는 16진 hash만 허용.
-#[tauri::command]
-pub fn git_show_diff(vault_path: String, path: String, rev: String) -> Result<String, String> {
-    let vault = canon_vault(&vault_path)?;
-    let rel = rel_in_vault(&vault, &path)?;
+fn git_show_diff_inner(vault_path: &str, path: &str, rev: &str) -> Result<String, String> {
+    let vault = canon_vault(vault_path)?;
+    let rel = rel_in_vault(&vault, path)?;
     if rev.is_empty() || !rev.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("잘못된 rev (hash가 아님)".to_string());
     }
-    run_git(&vault, &["show", &rev, "--", &rel])
+    run_git(&vault, &["show", rev, "--", &rel])
+}
+
+// ─── Tauri commands — async + spawn_blocking(IPC 스레드 비점유) ──────────────
+
+/// vault가 git work tree인가.
+#[tauri::command]
+pub async fn git_is_repo(vault_path: String) -> Result<bool, String> {
+    spawn_blocking(move || git_is_repo_inner(&vault_path))
+        .await
+        .map_err(|e| format!("git_is_repo spawn_blocking join: {e}"))?
+}
+
+/// vault에 git 초기화(+`.gitignore`, 초기 커밋). 이미 repo면 false.
+#[tauri::command]
+pub async fn git_init(vault_path: String) -> Result<bool, String> {
+    spawn_blocking(move || git_init_inner(&vault_path))
+        .await
+        .map_err(|e| format!("git_init spawn_blocking join: {e}"))?
+}
+
+/// 커밋할 변경(gitignore 반영)이 있는가.
+#[tauri::command]
+pub async fn git_has_changes(vault_path: String) -> Result<bool, String> {
+    spawn_blocking(move || git_has_changes_inner(&vault_path))
+        .await
+        .map_err(|e| format!("git_has_changes spawn_blocking join: {e}"))?
+}
+
+/// 전체 변경 add -A 후 커밋. 변경 없으면 false.
+#[tauri::command]
+pub async fn git_commit_all(vault_path: String, message: String) -> Result<bool, String> {
+    spawn_blocking(move || git_commit_all_inner(&vault_path, &message))
+        .await
+        .map_err(|e| format!("git_commit_all spawn_blocking join: {e}"))?
+}
+
+/// 노트 1건의 commit 이력(최신순, `--follow`). limit는 1~500 clamp.
+#[tauri::command]
+pub async fn git_log(vault_path: String, path: String, limit: u32) -> Result<Vec<GitCommit>, String> {
+    spawn_blocking(move || git_log_inner(&vault_path, &path, limit))
+        .await
+        .map_err(|e| format!("git_log spawn_blocking join: {e}"))?
+}
+
+/// 특정 commit에서 그 노트의 diff. rev는 16진 hash만 허용.
+#[tauri::command]
+pub async fn git_show_diff(vault_path: String, path: String, rev: String) -> Result<String, String> {
+    spawn_blocking(move || git_show_diff_inner(&vault_path, &path, &rev))
+        .await
+        .map_err(|e| format!("git_show_diff spawn_blocking join: {e}"))?
 }
 
 #[cfg(test)]
@@ -206,12 +252,12 @@ mod tests {
         let dir = temp_dir();
         fs::write(dir.join("a.md"), "# A\n").unwrap();
 
-        assert!(!git_is_repo(s(&dir)).unwrap());
-        assert!(git_init(s(&dir)).unwrap()); // 새로 생성 → true
-        assert!(git_is_repo(s(&dir)).unwrap());
+        assert!(!git_is_repo_inner(&s(&dir)).unwrap());
+        assert!(git_init_inner(&s(&dir)).unwrap()); // 새로 생성 → true
+        assert!(git_is_repo_inner(&s(&dir)).unwrap());
         assert!(dir.join(".gitignore").exists());
         // 두 번째 init은 no-op
-        assert!(!git_init(s(&dir)).unwrap());
+        assert!(!git_init_inner(&s(&dir)).unwrap());
 
         fs::remove_dir_all(&dir).ok();
     }
@@ -221,18 +267,18 @@ mod tests {
         let dir = temp_dir();
         let note = dir.join("note.md");
         fs::write(&note, "v1\n").unwrap();
-        git_init(s(&dir)).unwrap();
+        git_init_inner(&s(&dir)).unwrap();
 
         // 초기 커밋 직후 — 변경 없음
-        assert!(!git_has_changes(s(&dir)).unwrap());
+        assert!(!git_has_changes_inner(&s(&dir)).unwrap());
 
         // 수정 → 변경 감지 → 커밋 → 다시 깨끗
         fs::write(&note, "v2\n").unwrap();
-        assert!(git_has_changes(s(&dir)).unwrap());
-        assert!(git_commit_all(s(&dir), "edit".into()).unwrap()); // 커밋함 → true
-        assert!(!git_has_changes(s(&dir)).unwrap());
+        assert!(git_has_changes_inner(&s(&dir)).unwrap());
+        assert!(git_commit_all_inner(&s(&dir), "edit").unwrap()); // 커밋함 → true
+        assert!(!git_has_changes_inner(&s(&dir)).unwrap());
         // 변경 없는데 커밋 시도 → false(빈 커밋 방지)
-        assert!(!git_commit_all(s(&dir), "noop".into()).unwrap());
+        assert!(!git_commit_all_inner(&s(&dir), "noop").unwrap());
 
         fs::remove_dir_all(&dir).ok();
     }
@@ -242,18 +288,18 @@ mod tests {
         let dir = temp_dir();
         let note = dir.join("note.md");
         fs::write(&note, "v1\n").unwrap();
-        git_init(s(&dir)).unwrap();
+        git_init_inner(&s(&dir)).unwrap();
         fs::write(&note, "v2\n").unwrap();
-        git_commit_all(s(&dir), "second".into()).unwrap();
+        git_commit_all_inner(&s(&dir), "second").unwrap();
 
-        let log = git_log(s(&dir), s(&note), 10).unwrap();
+        let log = git_log_inner(&s(&dir), &s(&note), 10).unwrap();
         assert_eq!(log.len(), 2); // 초기 + second
         assert_eq!(log[0].subject, "second"); // 최신순
         assert!(log[0].timestamp > 0);
         assert!(!log[0].short.is_empty());
 
         // diff(최신 commit) — 노트 내용 변화 포함
-        let diff = git_show_diff(s(&dir), s(&note), log[0].hash.clone()).unwrap();
+        let diff = git_show_diff_inner(&s(&dir), &s(&note), &log[0].hash).unwrap();
         assert!(diff.contains("v2"));
 
         fs::remove_dir_all(&dir).ok();
@@ -263,13 +309,13 @@ mod tests {
     fn memories_folder_is_ignored() {
         let dir = temp_dir();
         fs::write(dir.join("real.md"), "x\n").unwrap();
-        git_init(s(&dir)).unwrap();
-        assert!(!git_has_changes(s(&dir)).unwrap());
+        git_init_inner(&s(&dir)).unwrap();
+        assert!(!git_has_changes_inner(&s(&dir)).unwrap());
 
         // _memories 안 파일은 gitignore → 변경으로 안 잡힘
         fs::create_dir_all(dir.join("_memories")).unwrap();
         fs::write(dir.join("_memories/m.md"), "noise\n").unwrap();
-        assert!(!git_has_changes(s(&dir)).unwrap());
+        assert!(!git_has_changes_inner(&s(&dir)).unwrap());
 
         fs::remove_dir_all(&dir).ok();
     }
@@ -279,8 +325,8 @@ mod tests {
         let dir = temp_dir();
         let note = dir.join("n.md");
         fs::write(&note, "x\n").unwrap();
-        git_init(s(&dir)).unwrap();
-        assert!(git_show_diff(s(&dir), s(&note), "HEAD; rm -rf".into()).is_err());
+        git_init_inner(&s(&dir)).unwrap();
+        assert!(git_show_diff_inner(&s(&dir), &s(&note), "HEAD; rm -rf").is_err());
 
         fs::remove_dir_all(&dir).ok();
     }
