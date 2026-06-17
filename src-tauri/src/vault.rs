@@ -1157,19 +1157,18 @@ fn strip_inline_code(line: &str) -> String {
     out
 }
 
-// "name.md" / "name.MD" / "name.mmd" → "name". ASCII 확장자라 byte slice 안전.
+// "name.md" / "name.MD" / "name.mmd" → "name".
+// 확장자 검사는 바이트 슬라이스(&[u8])로 — char 경계와 무관하게 안전.
+// 한글 등 멀티바이트 글자로 끝나는 이름에서 str 슬라이스(`&name[len-4..]`)는 char
+// 경계를 침범해 panic하므로 검사용 슬라이스는 반드시 바이트로 한다.
+// 반환 슬라이스 len-4/len-3은 확장자가 ASCII로 매칭됐을 때만 도달 → '.' 위치(char 경계)라 안전.
 fn strip_md_extension(name: &str) -> &str {
-    if name.len() >= 4 {
-        let tail4 = &name[name.len() - 4..];
-        if tail4.eq_ignore_ascii_case(".mmd") {
-            return &name[..name.len() - 4];
-        }
+    let b = name.as_bytes();
+    if b.len() >= 4 && b[b.len() - 4..].eq_ignore_ascii_case(b".mmd") {
+        return &name[..name.len() - 4];
     }
-    if name.len() >= 3 {
-        let tail3 = &name[name.len() - 3..];
-        if tail3.eq_ignore_ascii_case(".md") {
-            return &name[..name.len() - 3];
-        }
+    if b.len() >= 3 && b[b.len() - 3..].eq_ignore_ascii_case(b".md") {
+        return &name[..name.len() - 3];
     }
     name
 }
@@ -1410,5 +1409,17 @@ mod tests {
         assert_eq!(info.props.get("status").unwrap(), &vec!["draft".to_string()]);
         // 본문 wikilink는 targets (props 아님).
         assert!(info.targets.iter().any(|t| t == "wiki-target"));
+    }
+
+    #[test]
+    fn strip_md_extension_handles_multibyte_before_ext() {
+        // 회귀: 한글 등 멀티바이트 글자로 끝나는 이름에서 char 경계 침범 panic 방지.
+        // (release `panic = "abort"`라 이 panic은 앱 전체 즉시 크래시였음 — vault.rs:1163)
+        assert_eq!(strip_md_extension("현황검토서.md"), "현황검토서");
+        assert_eq!(strip_md_extension("다이어그램.mmd"), "다이어그램");
+        assert_eq!(strip_md_extension("plan.MD"), "plan");
+        assert_eq!(strip_md_extension("note.md"), "note");
+        assert_eq!(strip_md_extension("서"), "서"); // 확장자보다 짧음 — panic 없어야
+        assert_eq!(strip_md_extension("noext"), "noext");
     }
 }
