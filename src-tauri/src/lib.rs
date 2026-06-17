@@ -10,6 +10,12 @@ mod watcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // release `panic = "abort"`라 패닉은 크래시 리포트로만 남아 진단이 어렵다.
+    // hook으로 패닉 메시지를 stderr에 박제 → 터미널/Console.app에서 즉시 원인 확인.
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("[lapis panic] {info}");
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
