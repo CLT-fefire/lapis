@@ -99,17 +99,34 @@ export async function openVault(path: string): Promise<void> {
   currentNoteContent.set("");
   clearNavHistory();
   clearTabs();
+
+  // 인덱스 빌드(큰 vault 1~3s) 전에 저장된 탭/활성 노트를 먼저 복원 → 빌드 중에도
+  // 마지막 보던 문서가 즉시 표시(빈 placeholder/welcome 대신). 노트 본문은 readNote
+  // 한 번이면 충분하고, linkIndex가 아직 없어도 열람 가능하다(위키링크 resolved 표시만
+  // 인덱스 준비 후 채워짐). 존재하지 않는(삭제·이동된) 탭은 인덱스 준비 후 정리한다.
+  const savedTabs = loadTabsFor(path);
+  if (savedTabs.tabs.length > 0) {
+    openTabs.set(savedTabs.tabs);
+    if (savedTabs.active && savedTabs.tabs.includes(savedTabs.active)) {
+      await selectNote(savedTabs.active);
+    }
+  }
+
   await reloadNotes();
 
-  // 탭 복원 — reloadNotes로 linkIndex가 준비된 뒤, 현재 vault에 저장된 탭 중
-  // 실제 존재하는 노트만 살리고 마지막 활성 노트를 연다(없으면 빈 상태 유지).
-  const savedTabs = loadTabsFor(path);
+  // 인덱스 준비 후 실제 존재하지 않는 탭 정리 (외부에서 삭제·이동된 노트).
   const idx = get(linkIndex);
-  const liveTabs = idx ? savedTabs.tabs.filter((p) => idx.byPath.has(p)) : [];
-  if (liveTabs.length > 0) {
-    openTabs.set(liveTabs);
-    if (savedTabs.active && liveTabs.includes(savedTabs.active)) {
-      await selectNote(savedTabs.active);
+  if (idx) {
+    const open = get(openTabs);
+    const liveTabs = open.filter((p) => idx.byPath.has(p));
+    if (liveTabs.length !== open.length) {
+      openTabs.set(liveTabs);
+      const active = get(currentNotePath);
+      if (active && !idx.byPath.has(active)) {
+        currentNotePath.set(null);
+        currentNoteContent.set("");
+      }
+      persistTabs();
     }
   }
 

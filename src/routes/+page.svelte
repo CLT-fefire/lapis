@@ -562,7 +562,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     if (previewBodyEl) clearHighlights(previewBodyEl);
   }
 
-  // 노트 전환 시 검색 상태 리셋
+  // 노트 전환 시 검색 상태 리셋 + 스크롤 맨 위로
   let lastNotePath: string | null = null;
   $effect(() => {
     const path = $currentNotePath;
@@ -576,6 +576,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       previewTotal = 0;
       previewCurrentIdx = -1;
       if (previewBodyEl) clearHighlights(previewBodyEl);
+
+      // 다른 문서로 바꿨으니 이전 문서의 스크롤 위치를 버리고 맨 위에서 시작.
+      // 새 본문이 DOM에 반영된 뒤(tick) 프리뷰·에디터 스크롤러를 모두 0으로.
+      void tick().then(() => {
+        if (previewBodyEl) previewBodyEl.scrollTop = 0;
+        const cm = document.querySelector<HTMLElement>(".editor-pane .cm-scroller");
+        if (cm) cm.scrollTop = 0;
+      });
     }
   });
 
