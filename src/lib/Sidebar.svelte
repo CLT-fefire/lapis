@@ -630,6 +630,9 @@ graph LR
     width: 35%;
     background: linear-gradient(90deg, transparent, var(--accent), transparent);
     animation: slide 1.2s ease-in-out infinite;
+    /* 컴포지터 레이어로 승격 → 인덱스 빌드가 메인 스레드를 점유해도(WKWebView)
+       transform 애니메이션이 별도 스레드에서 계속 돌아 멈추지 않음. */
+    will-change: transform;
   }
 
   @keyframes slide {
@@ -835,6 +838,8 @@ graph LR
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     flex-shrink: 0;
+    /* 컴포지터 레이어로 승격 → 인덱스 빌드가 메인 스레드를 점유해도 회전이 멈추지 않음. */
+    will-change: transform;
   }
 
   @keyframes spin {
