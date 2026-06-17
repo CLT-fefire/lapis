@@ -735,7 +735,7 @@ fn walk_md_stats(
         }
         if path.is_dir() {
             walk_md_stats(root, &path, out)?;
-        } else if path.extension().is_some_and(|e| e == "md") {
+        } else if path.extension().is_some_and(is_supported_note_ext) {
             let meta = entry.metadata()?;
             let mtime_ms = meta
                 .modified()
@@ -768,7 +768,7 @@ fn walk_md_files(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> 
         }
         if path.is_dir() {
             walk_md_files(&path, out)?;
-        } else if path.extension().is_some_and(|e| e == "md") {
+        } else if path.extension().is_some_and(is_supported_note_ext) {
             out.push(path);
         }
     }
@@ -1409,6 +1409,53 @@ mod tests {
         assert_eq!(info.props.get("status").unwrap(), &vec!["draft".to_string()]);
         // 본문 wikilink는 targets (props 아님).
         assert!(info.targets.iter().any(|t| t == "wiki-target"));
+    }
+
+    /// 고유 임시 디렉토리 생성 (pid + nanos). 테스트 종료 시 호출자가 remove_dir_all.
+    fn unique_tmp_dir(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("lapis-test-{tag}-{}-{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn walkers_count_md_and_mmd_consistently() {
+        // 회귀: 트리 워커(walk_dir)는 .mmd / 대문자 .MD를 포함하는데 fingerprint(walk_md_stats)
+        // 와 bundle(walk_md_files) 워커가 소문자 .md만 세면 → 그런 파일이 트리엔 보이지만
+        // fingerprint를 안 바꿔 stale 캐시 HIT → cmd+k 검색에서 누락(파일 필터엔 보임).
+        // 세 워커 모두 is_supported_note_ext로 통일됐는지 검증한다.
+        let dir = unique_tmp_dir("walkers");
+        fs::write(dir.join("a.md"), "# A").unwrap();
+        fs::write(dir.join("b.mmd"), "graph TD;").unwrap();
+        fs::write(dir.join("c.MD"), "# C").unwrap();
+        fs::write(dir.join(".hidden.md"), "# hidden").unwrap(); // dot-파일 제외
+        fs::write(dir.join("note.txt"), "plain").unwrap(); // 비지원 확장자 제외
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        fs::write(dir.join("node_modules/x.md"), "# skip").unwrap(); // SKIP_DIRS 제외
+
+        let dir_str = dir.to_string_lossy().to_string();
+
+        // fingerprint 워커: a.md / b.mmd / c.MD 3개 (hidden·txt·node_modules 제외)
+        let fp = vault_fingerprint_inner(&dir_str).unwrap();
+        assert_eq!(fp.file_count, 3, "fingerprint은 .md+.mmd(대소문자 무관) 3개를 세야 함");
+
+        // bundle 워커: 동일하게 3개 LinkInfo
+        let bundle = read_vault_bundle_inner(&dir_str).unwrap();
+        assert_eq!(bundle.links.len(), 3, "bundle도 .md+.mmd 3개를 인덱싱해야 함");
+
+        // .mmd 파일을 추가하면 fingerprint가 달라져야(=캐시 무효화) 한다.
+        let fp_before = fp.fingerprint.clone();
+        fs::write(dir.join("d.mmd"), "graph LR;").unwrap();
+        let fp_after = vault_fingerprint_inner(&dir_str).unwrap();
+        assert_ne!(fp_before, fp_after.fingerprint, ".mmd 추가 시 fingerprint 변경되어야 함");
+        assert_eq!(fp_after.file_count, 4);
+
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
