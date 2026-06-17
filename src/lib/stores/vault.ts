@@ -36,7 +36,7 @@ import {
   type LinkRewritePreviewItem,
 } from "$lib/linkRewrite";
 import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
-import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
+import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
 import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
@@ -318,7 +318,7 @@ async function reloadNotesInner(): Promise<void> {
       // cache hit. link_infos는 즉시 사용. fullTextIndex는 lazy — pendingFullTextVault에
       // vault path만 박고 idle 시점에 minisearch_json 받아 loadJSON.
       const links = meta.link_infos;
-      linkIndex.set(buildIndex(links));
+      linkIndex.set(await buildIndexChunked(links));
       await nextTick();
       tagIndex.set(buildTagIndex(links));
       await nextTick();
@@ -355,7 +355,7 @@ async function reloadNotesInner(): Promise<void> {
       const contents = bundle.contents;
       await nextTick();
 
-      linkIndex.set(buildIndex(links));
+      linkIndex.set(await buildIndexChunked(links));
       await nextTick();
 
       tagIndex.set(buildTagIndex(links));

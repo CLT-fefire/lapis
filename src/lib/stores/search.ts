@@ -1,7 +1,7 @@
 import { writable, get } from "svelte/store";
 import {
   buildQuickEntries,
-  workerAddAllShard,
+  workerAddToShard,
   workerReset,
   computeShardId,
   decideShardCount,
@@ -73,15 +73,24 @@ export async function rebuildIndexes(
       const s = computeShardId(n.path, shardCount);
       shards[s].push({ id: n.path, name: n.name, body: n.body });
     }
-    // 순차 addAll. 첫 shard 완료 시 partial ready set.
+    // 순차 빌드. 각 shard를 작은 배치로 나눠 worker에 전송 — 한 shard 전체(수천 doc ×
+    // body)를 한 번에 postMessage하면 WKWebView가 main thread structured clone에 수 초를
+    // 써 UI(인덱스 빌드 스피너)가 freeze된다. 배치마다 await(worker 왕복)로 main thread가
+    // 양보돼 스피너가 계속 돈다. 첫 shard 완료 시 partial ready set.
+    const POST_BATCH = 500;
     for (let i = 0; i < shardCount; i++) {
       const t0 = import.meta.env.DEV ? performance.now() : 0;
-      await workerAddAllShard(i, shards[i]);
+      const docs = shards[i];
+      // 첫 배치는 reset=true(새 인덱스). 빈 shard도 reset 1회로 초기화.
+      await workerAddToShard(i, docs.slice(0, POST_BATCH), true);
+      for (let off = POST_BATCH; off < docs.length; off += POST_BATCH) {
+        await workerAddToShard(i, docs.slice(off, off + POST_BATCH), false);
+      }
       if (i === 0) fullTextIndexReady.set(true);
       if (import.meta.env.DEV) {
         const dt = performance.now() - t0;
         console.debug(
-          `[lapis-perf] worker.shard${i} addAll docs=${shards[i].length} dt=${dt.toFixed(0)}ms`,
+          `[lapis-perf] worker.shard${i} build docs=${docs.length} dt=${dt.toFixed(0)}ms`,
         );
       }
     }

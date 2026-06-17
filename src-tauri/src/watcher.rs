@@ -244,8 +244,9 @@ fn is_relevant_path(path: &Path, root: &Path) -> bool {
     // 디렉토리 자체 이벤트는 통과 (rename 등 인지 위해)
     let is_dir_event = !path.has_extension() && !path.is_file();
     if !is_dir_event {
-        // 파일이면 .md 만
-        if path.extension().is_none_or(|e| !e.eq_ignore_ascii_case("md")) {
+        // 파일이면 지원 확장자(.md/.mmd)만 — 트리/인덱스 워커와 동일 술어 공유.
+        // (이전엔 .md만 감시 → .mmd 외부 생성/수정/삭제가 reindex를 안 깨움)
+        if path.extension().is_none_or(|e| !crate::vault::is_supported_note_ext(e)) {
             return false;
         }
     }

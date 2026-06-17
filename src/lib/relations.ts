@@ -104,39 +104,68 @@ function normalizeOne(raw: string): string | null {
  * 모든 노트의 `props`를 훑어 타입 있는 관계 인덱스를 빌드.
  * resolver는 `linkIndex.buildIndex`가 만든 것(alias>title>stem 우선순위) 그대로 사용.
  */
+function addRelation(map: Map<string, Relation[]>, key: string, rel: Relation) {
+  let arr = map.get(key);
+  if (!arr) {
+    arr = [];
+    map.set(key, arr);
+  }
+  if (!arr.some((r) => r.type === rel.type && r.path === rel.path)) {
+    arr.push(rel);
+  }
+}
+
+/** 한 노트의 props → outgoing/incoming 관계 적재. sync/chunked 빌더가 공유. */
+function collectRelationsForInfo(
+  info: LinkInfo,
+  resolver: Map<string, string>,
+  outgoing: Map<string, Relation[]>,
+  incoming: Map<string, Relation[]>,
+): void {
+  const src = info.source_path;
+  for (const [field, values] of Object.entries(info.props ?? {})) {
+    if (NON_RELATION_FIELDS.has(field.toLowerCase())) continue;
+    for (const value of values) {
+      for (const stem of normalizeRef(value)) {
+        const targetPath = resolver.get(stem.toLowerCase());
+        if (!targetPath || targetPath === src) continue;
+        addRelation(outgoing, src, { type: field, path: targetPath });
+        addRelation(incoming, targetPath, { type: field, path: src });
+      }
+    }
+  }
+}
+
 export function buildRelationIndex(
   infos: LinkInfo[],
   resolver: Map<string, string>,
 ): RelationIndex {
   const outgoing = new Map<string, Relation[]>();
   const incoming = new Map<string, Relation[]>();
-
-  function add(map: Map<string, Relation[]>, key: string, rel: Relation) {
-    let arr = map.get(key);
-    if (!arr) {
-      arr = [];
-      map.set(key, arr);
-    }
-    if (!arr.some((r) => r.type === rel.type && r.path === rel.path)) {
-      arr.push(rel);
-    }
-  }
-
   for (const info of infos) {
-    const src = info.source_path;
-    for (const [field, values] of Object.entries(info.props ?? {})) {
-      if (NON_RELATION_FIELDS.has(field.toLowerCase())) continue;
-      for (const value of values) {
-        for (const stem of normalizeRef(value)) {
-          const targetPath = resolver.get(stem.toLowerCase());
-          if (!targetPath || targetPath === src) continue;
-          add(outgoing, src, { type: field, path: targetPath });
-          add(incoming, targetPath, { type: field, path: src });
-        }
-      }
+    collectRelationsForInfo(info, resolver, outgoing, incoming);
+  }
+  return { outgoing, incoming };
+}
+
+/**
+ * `buildRelationIndex`의 청크 버전 — 큰 vault(12000+)에서 props 순회가 main thread를
+ * 수백 ms 점유해 인덱스 빌드 스피너가 freeze되는 것을 막는다. `yieldEvery`개 노트마다
+ * 이벤트 루프에 양보. 결과는 sync 버전과 동일(같은 inner 로직 공유).
+ */
+export async function buildRelationIndexChunked(
+  infos: LinkInfo[],
+  resolver: Map<string, string>,
+  yieldEvery = 1500,
+): Promise<RelationIndex> {
+  const outgoing = new Map<string, Relation[]>();
+  const incoming = new Map<string, Relation[]>();
+  for (let i = 0; i < infos.length; i++) {
+    collectRelationsForInfo(infos[i], resolver, outgoing, incoming);
+    if (i > 0 && i % yieldEvery === 0) {
+      await new Promise<void>((r) => setTimeout(r, 0));
     }
   }
-
   return { outgoing, incoming };
 }
 
