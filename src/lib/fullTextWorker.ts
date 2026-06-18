@@ -69,13 +69,16 @@ interface WorkerHit {
 type InMsg =
   | { type: "loadShard"; id: number; shardId: number; jsonBytes: ArrayBuffer }
   | {
-      type: "addAllShard";
+      type: "addToShard";
       id: number;
       shardId: number;
       docs: FullTextDoc[];
-      chunkSize?: number;
+      /** true면 shard 인덱스를 새로 만든 뒤 추가(첫 배치). false면 기존에 append. */
+      reset: boolean;
     }
   | { type: "toJSONShard"; id: number; shardId: number }
+  | { type: "updateDoc"; id: number; shardId: number; doc: FullTextDoc }
+  | { type: "removeDoc"; id: number; shardId: number; docId: string }
   | { type: "search"; id: number; query: string; limit: number }
   | { type: "resetAll"; id: number };
 
@@ -108,20 +111,19 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         post({ type: "ready", id: msg.id });
         break;
       }
-      case "addAllShard": {
+      case "addToShard": {
         if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
           throw new Error(`invalid shardId=${msg.shardId}`);
         }
-        const newIndex = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
-        const chunkSize = msg.chunkSize ?? 200;
-        for (let i = 0; i < msg.docs.length; i += chunkSize) {
-          const chunk = msg.docs.slice(i, i + chunkSize);
-          newIndex.addAll(chunk);
-          if (i + chunkSize < msg.docs.length) {
-            await new Promise<void>((r) => setTimeout(r, 0));
-          }
+        // reset=true(첫 배치)면 새 인덱스, 아니면 기존에 append. main thread가 docs를
+        // 작은 배치로 나눠 보내므로(cache-miss postMessage clone freeze 방지) 여기선
+        // 받은 배치를 그대로 addAll. 배치가 작아 worker thread 블록도 짧음.
+        if (msg.reset || !indexes[msg.shardId]) {
+          indexes[msg.shardId] = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
         }
-        indexes[msg.shardId] = newIndex;
+        if (msg.docs.length > 0) {
+          indexes[msg.shardId]!.addAll(msg.docs);
+        }
         post({ type: "ready", id: msg.id });
         break;
       }
@@ -137,6 +139,31 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         const jsonStr = JSON.stringify(idx);
         const bytes = textEncoder.encode(jsonStr);
         post({ type: "json", id: msg.id, jsonBytes: bytes.buffer }, [bytes.buffer]);
+        break;
+      }
+      case "updateDoc": {
+        // 증분 갱신 — 단일 노트 add/replace (vault 전체 재빌드 회피).
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
+          throw new Error(`invalid shardId=${msg.shardId}`);
+        }
+        let index = indexes[msg.shardId];
+        if (!index) {
+          index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
+          indexes[msg.shardId] = index;
+        }
+        if (index.has(msg.doc.id)) index.replace(msg.doc);
+        else index.add(msg.doc);
+        post({ type: "ready", id: msg.id });
+        break;
+      }
+      case "removeDoc": {
+        // 증분 삭제 — discard(lazy). 없으면 무시.
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
+          throw new Error(`invalid shardId=${msg.shardId}`);
+        }
+        const index = indexes[msg.shardId];
+        if (index && index.has(msg.docId)) index.discard(msg.docId);
+        post({ type: "ready", id: msg.id });
         break;
       }
       case "search": {

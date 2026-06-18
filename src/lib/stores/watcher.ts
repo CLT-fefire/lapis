@@ -1,14 +1,13 @@
 import { writable, get } from "svelte/store";
 import { watchVault, unwatchVault, onVaultChange, type VaultChange } from "$lib/tauri/watcher";
-import { scanLinkSingle, readNote } from "$lib/tauri/notes";
+import { readNote } from "$lib/tauri/notes";
 import { invalidateCacheBySource } from "$lib/backlinks";
 import { scheduleAutoCommit } from "./git";
 import {
   vaultPath,
   currentNotePath,
-  linkIndex,
-  reloadNotes,
   closeTab,
+  reindexIncremental,
 } from "./vault";
 
 export type WatcherStatus = "idle" | "watching" | "error";
@@ -65,86 +64,51 @@ export async function stopWatching(): Promise<void> {
 }
 
 /**
- * 이벤트 → 부분 인덱스 갱신.
- * - modified: scan_link_single로 LinkInfo만 받아 patch
- * - removed: 인덱스에서 삭제
- * - renamed: 삭제 + 추가
- *
- * 단순화를 위해 트리 + linkIndex만 patch. tagIndex/facetCounts/searchIndex는
- * 한 burst 묶음 처리 후 reloadNotes로 전체 재빌드 (cost 작음).
+ * 이벤트 → **증분 재인덱싱**. 변경/삭제 경로를 모았다가(디바운스 500ms) `reindexIncremental`로
+ * 바뀐 노트만 반영(vault 전체 재읽기 없음 → 인덱스 빌드 스피너 freeze 제거). 큰 burst /
+ * 인덱스 미준비 / shardCount 임계 변동은 reindexIncremental이 풀 빌드로 fallback.
  */
+const pendingChanged = new Set<string>();
+const pendingRemoved = new Set<string>();
+
 async function handleChange(change: VaultChange): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
 
   switch (change.kind) {
     case "modified":
-      await onPathChanged(change.path, change.mtime_ms);
-      break;
     case "created":
-      // 현재 정책상 emit 안 함 (Rust에서 Modified로 통합). future-proof.
-      await onPathChanged(change.path, Date.now());
+      pendingRemoved.delete(change.path);
+      pendingChanged.add(change.path);
+      // 본문이 바뀌었으니 이 path를 source로 하는 백링크 snippet 캐시는 stale.
+      invalidateCacheBySource(change.path);
+      // 현재 열린 노트가 영향 받으면 외부변경 충돌/리로드 즉시 처리.
+      if (get(currentNotePath) === change.path) {
+        const mtime = "mtime_ms" in change ? change.mtime_ms : Date.now();
+        await reconcileCurrentNote(change.path, mtime);
+      }
       break;
     case "removed":
-      onPathRemoved(change.path);
+      pendingChanged.delete(change.path);
+      pendingRemoved.add(change.path);
+      invalidateCacheBySource(change.path);
+      void closeTab(change.path); // 열려 있었다면 탭 제거
       break;
     case "renamed":
-      onPathRemoved(change.from);
-      await onPathChanged(change.to, Date.now());
+      pendingChanged.delete(change.from);
+      pendingRemoved.add(change.from);
+      pendingRemoved.delete(change.to);
+      pendingChanged.add(change.to);
+      invalidateCacheBySource(change.from);
+      invalidateCacheBySource(change.to);
+      void closeTab(change.from);
       break;
   }
 
-  // 큰 변경 burst 시 정확성 위해 전체 재빌드를 약간 늦게 한 번 더 실행.
-  scheduleFullReload();
+  scheduleIncrementalReindex();
 
   // git 버전관리 켜진 vault면 변경 정착 후 자동 커밋 예약(내부에서 repo 여부 확인).
   scheduleAutoCommit(root);
-}
-
-async function onPathChanged(path: string, mtimeMs: number): Promise<void> {
-  const root = get(vaultPath);
-  if (!root) return;
-
-  // 본문이 바뀌었으니 이 path를 source로 하는 백링크 snippet 캐시는 stale.
-  invalidateCacheBySource(path);
-
-  // 현재 노트가 영향 받으면 충돌 처리
-  const cur = get(currentNotePath);
-  if (cur === path) {
-    await reconcileCurrentNote(path, mtimeMs);
-  }
-
-  // 인덱스 patch
-  try {
-    const info = await scanLinkSingle(root, path);
-    linkIndex.update((idx) => {
-      if (!idx) return idx;
-      // byPath 갱신
-      idx.byPath.set(info.source_path, info);
-      // resolver/backlinks 재빌드는 비용 — burst 후 reloadNotes로 전체 재빌드 처리.
-      // 단일 patch만으론 일관성 미약하지만, scheduleFullReload가 곧 정정.
-      return idx;
-    });
-  } catch (e) {
-    console.warn("[watcher] scanLinkSingle failed:", e);
-  }
-}
-
-function onPathRemoved(path: string): void {
-  // 이 path를 source로 하는 백링크 snippet 캐시 정리. target으로 가리키는 항목들은
-  // linkIndex.byPath.delete 후 backlinks 패널이 더 이상 요청 안 함.
-  invalidateCacheBySource(path);
-
-  linkIndex.update((idx) => {
-    if (!idx) return idx;
-    idx.byPath.delete(path);
-    return idx;
-  });
-
-  // 외부 삭제 — 탭에서 제거(열려 있었다면) + 활성이었으면 인접 탭으로/빈 상태.
-  void closeTab(path);
-
-  // notes 트리는 reloadNotes로 정확히 정정됨 (scheduleFullReload)
 }
 
 /**
@@ -169,16 +133,35 @@ async function reconcileCurrentNote(path: string, mtimeMs: number): Promise<void
 }
 
 /**
- * 변경 burst 안정화 후 전체 reloadNotes 호출.
- * 같은 burst 안에서 여러 번 호출돼도 마지막 호출 기준 500ms 후 1회만 실행.
+ * 변경 burst 안정화 후(500ms) 모은 변경분을 증분 재인덱싱. 진행 중인 작업이 있으면
+ * 변경분을 보존한 채 재예약(누락 방지).
  */
-let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-function scheduleFullReload(): void {
-  if (reloadTimer) clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(() => {
-    reloadTimer = null;
-    void reloadNotes().catch((e) => console.warn("[watcher] reloadNotes failed:", e));
-  }, 500);
+let reindexTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleIncrementalReindex(): void {
+  if (reindexTimer) clearTimeout(reindexTimer);
+  reindexTimer = setTimeout(runReindex, 500);
+}
+
+async function runReindex(): Promise<void> {
+  reindexTimer = null;
+  if (pendingChanged.size === 0 && pendingRemoved.size === 0) return;
+  const changed = Array.from(pendingChanged);
+  const removed = Array.from(pendingRemoved);
+  pendingChanged.clear();
+  pendingRemoved.clear();
+  let handled = true;
+  try {
+    handled = await reindexIncremental(changed, removed);
+  } catch (e) {
+    console.warn("[watcher] 증분 재인덱싱 실패:", e);
+    handled = true; // 에러는 재시도 안 함(무한 루프 방지) — 다음 변경 때 정정
+  }
+  if (!handled) {
+    // 다른 reload/reindex 진행 중 — 변경분 복원 후 재예약.
+    changed.forEach((p) => pendingChanged.add(p));
+    removed.forEach((p) => pendingRemoved.add(p));
+    scheduleIncrementalReindex();
+  }
 }
 
 /** 충돌 해결 — 사용자가 "외부 변경 사용" 선택 */

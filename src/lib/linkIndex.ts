@@ -1,5 +1,9 @@
 import type { LinkInfo } from "$lib/tauri/notes";
-import { buildRelationIndex, type RelationIndex } from "$lib/relations";
+import {
+  buildRelationIndex,
+  buildRelationIndexChunked,
+  type RelationIndex,
+} from "$lib/relations";
 
 export interface LinkIndex {
   byPath: Map<string, LinkInfo>;
@@ -27,7 +31,11 @@ export function resolveTarget(target: string, index: LinkIndex): string | null {
   return index.resolver.get(target.toLowerCase()) ?? null;
 }
 
-export function buildIndex(infos: LinkInfo[]): LinkIndex {
+/** byPath + resolver(alias>title>stem 우선순위) 빌드. sync/chunked 빌더가 공유. */
+function buildResolverAndByPath(infos: LinkInfo[]): {
+  byPath: Map<string, LinkInfo>;
+  resolver: Map<string, string>;
+} {
   const byPath = new Map<string, LinkInfo>();
   const resolver = new Map<string, string>();
 
@@ -51,9 +59,17 @@ export function buildIndex(infos: LinkInfo[]): LinkIndex {
     const key = info.source_name.toLowerCase();
     if (!resolver.has(key)) resolver.set(key, info.source_path);
   }
+  return { byPath, resolver };
+}
 
-  // backlinks 계산 — **본문** wikilink/md-link만. frontmatter cross-ref(related 등)는
-  // buildRelationIndex가 관계 타입을 보존해 별도로 인덱싱(중복 표시 방지).
+/**
+ * backlinks 계산 — **본문** wikilink/md-link만. frontmatter cross-ref(related 등)는
+ * buildRelationIndex가 관계 타입을 보존해 별도로 인덱싱(중복 표시 방지).
+ */
+function buildBacklinks(
+  infos: LinkInfo[],
+  resolver: Map<string, string>,
+): Map<string, Set<string>> {
   const backlinks = new Map<string, Set<string>>();
   function addBacklink(targetPath: string, sourcePath: string) {
     if (targetPath === sourcePath) return;
@@ -72,9 +88,42 @@ export function buildIndex(infos: LinkInfo[]): LinkIndex {
       addBacklink(resolvedPath, info.source_path);
     }
   }
+  return backlinks;
+}
 
+/**
+ * 다음 paint 직전까지 양보 — `requestAnimationFrame` 우선(렌더 기회 보장 → 인덱스 빌드
+ * 오버레이 스피너가 청크 사이에 실제로 갱신/회전). rAF 없으면(worker/test) setTimeout(0).
+ */
+function yieldToPaint(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+export function buildIndex(infos: LinkInfo[]): LinkIndex {
+  const { byPath, resolver } = buildResolverAndByPath(infos);
+  const backlinks = buildBacklinks(infos, resolver);
   const relations = buildRelationIndex(infos, resolver);
+  return { byPath, resolver, backlinks, relations };
+}
 
+/**
+ * `buildIndex`의 청크 버전 — 큰 vault(12000+)에서 동기 빌드가 main thread를 수백 ms
+ * 점유해 인덱스 빌드 스피너가 freeze되는 것을 막는다. 각 phase 사이 + 관계 빌드 내부에서
+ * 이벤트 루프에 양보. 결과는 sync 버전과 **동일**(같은 inner 헬퍼 공유 → 테스트는 sync
+ * `buildIndex`로 검증). 프로덕션(`stores/vault.ts`)만 이쪽을 쓴다.
+ */
+export async function buildIndexChunked(infos: LinkInfo[]): Promise<LinkIndex> {
+  const { byPath, resolver } = buildResolverAndByPath(infos);
+  await yieldToPaint();
+  const backlinks = buildBacklinks(infos, resolver);
+  await yieldToPaint();
+  const relations = await buildRelationIndexChunked(infos, resolver);
   return { byPath, resolver, backlinks, relations };
 }
 
