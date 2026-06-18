@@ -44,7 +44,7 @@ export const fullTextLoading = writable<boolean>(false);
 
 /**
  * 풀텍스트 풀 빌드(cache-miss `rebuildIndexes`) 진행률 — 인덱싱된 doc 수 / 전체.
- * MemorySyncModal "인덱스 갱신 중" 단계에서 퍼센트+막대 표시. 빌드 외엔 null.
+ * 인덱스 빌드 오버레이에서 퍼센트+막대 표시. 빌드 외엔 null.
  */
 export const buildProgress = writable<{ done: number; total: number } | null>(null);
 

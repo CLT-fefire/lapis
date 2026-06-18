@@ -9,9 +9,6 @@ import {
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
 import { toggleEditor, togglePreview, toggleSidebar } from "$lib/stores/layout";
-import { openMemorySync } from "$lib/stores/memorySync";
-import { openMemorySearch } from "$lib/stores/memorySearch";
-import { claudeMemEnabled } from "$lib/stores/settings";
 import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
 
 export interface Command {
@@ -138,23 +135,6 @@ export const BUILTIN_COMMANDS: Command[] = [
         } satisfies Command,
       ]
     : []),
-  {
-    id: "memory-sync",
-    label: "Memory: Sync from claude-mem",
-    disabled: () => !get(vaultPath) || !get(claudeMemEnabled),
-    run() {
-      openMemorySync();
-    },
-  },
-  {
-    id: "memory-search",
-    label: "Memory: Search",
-    shortcut: "⌘⇧M",
-    disabled: () => !get(vaultPath) || !get(claudeMemEnabled),
-    run() {
-      openMemorySearch();
-    },
-  },
 ];
 
 /**

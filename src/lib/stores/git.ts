@@ -5,7 +5,7 @@ import { gitIsRepo, gitInit, gitCommitAll } from "$lib/tauri/git";
  * vault git 버전관리 상태 + 자동 커밋 (ADR-004 V2).
  *
  * 모델: `.git` 존재 자체가 vault의 버전관리 상태(별도 설정 플래그 없음). 사용자는 Lapis에서
- * 편집하지 않고 외부(claude-mem·타 도구)에서 문서가 바뀌므로, file watcher가 변경을 감지하면
+ * 편집하지 않고 외부 도구에서 문서가 바뀌므로, file watcher가 변경을 감지하면
  * **debounce 후 자동 커밋**한다(무손실 이력). 미설정 vault는 "버전관리 시작?" 배너로 권유(opt-in).
  *
  * vault 경로는 **인자로 받는다**(vault store를 import하지 않음) — 호출부가 이미 경로를 알고,

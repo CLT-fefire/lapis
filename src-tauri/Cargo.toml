@@ -25,13 +25,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 notify = "6"
 trash = "5"
-rusqlite = { version = "0.39.0", features = ["bundled"] }
-# Phase Search — tantivy(Rust 네이티브 Lucene-like) + lindera(한국어 형태소 토크나이저)
-# tantivy 0.25 + lindera 2.x: lindera-tantivy 2.0.0의 의존 버전과 일치 (0.26은 Tokenizer trait incompat)
-# embed-ko-dic: 한국어 사전을 binary에 임베디드 (외부 다운로드 불필요, dmg +~20MB)
-tantivy = "0.25"
-lindera = "2"
-lindera-tantivy = { version = "2", features = ["embed-ko-dic"] }
 # 병렬 iterator — vault read_vault_bundle에서 read_to_string 동시 다발 실행.
 # work-stealing scheduler라 thread pool 관리 신경 안 써도 됨. 바이너리 +~50KB.
 rayon = "1"

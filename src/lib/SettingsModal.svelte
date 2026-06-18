@@ -3,8 +3,6 @@
   import {
     settingsOpen,
     closeSettings,
-    claudeMemEnabled,
-    applyClaudeMemToggle,
     linkRewriteBackupKeep,
     LINK_REWRITE_BACKUP_KEEP_MIN,
     LINK_REWRITE_BACKUP_KEEP_MAX,
@@ -21,10 +19,6 @@
     { value: "light", label: "라이트" },
     { value: "dark", label: "다크" },
   ];
-
-  // 확인 다이얼로그 분기: null | "enable" | "disable"
-  let confirmMode = $state<null | "enable" | "disable">(null);
-  let busy = $state(false);
 
   // 백업 max_keep — 입력 중에는 local state, blur/Enter 시 적용
   let backupKeepInput = $state<number>($linkRewriteBackupKeep);
@@ -69,41 +63,6 @@
     }
   }
 
-  function onToggleClaudeMem(e: Event) {
-    const checked = (e.target as HTMLInputElement).checked;
-    // 사용자 의도를 confirmMode에 담고, 실제 store 변경은 확인 후
-    confirmMode = checked ? "enable" : "disable";
-    // 체크박스 자체는 원복 (모달 닫으면 원래 상태로)
-    (e.target as HTMLInputElement).checked = $claudeMemEnabled;
-  }
-
-  async function applyChange() {
-    if (busy || !confirmMode) return;
-    busy = true;
-    try {
-      const nextEnabled = confirmMode === "enable";
-      // 백엔드 동적 적용 — WAL watch / cleanup / 인덱스 빌드를 즉시 처리.
-      // 재시작 불필요, 로그 연속 유지.
-      await applyClaudeMemToggle(nextEnabled);
-      busy = false;
-      confirmMode = null;
-      closeSettings();
-    } catch (err) {
-      console.error("[Settings] apply failed", err);
-      busy = false;
-      confirmMode = null;
-    }
-  }
-
-  function cancelConfirm() {
-    if (busy) return;
-    confirmMode = null;
-  }
-
-  function closeSettingsGuarded() {
-    if (!busy) closeSettings();
-  }
-
   // === Git 버전관리 (ADR-004) ===
   // 설정 열릴 때 현재 vault의 repo 여부를 갱신(배너를 "나중에"로 닫았어도 여기서 항상 시작 가능).
   let gitHint = $state("");
@@ -123,7 +82,7 @@
 </script>
 
 {#if $settingsOpen}
-  <ModalShell onClose={closeSettingsGuarded} label="설정">
+  <ModalShell onClose={closeSettings} label="설정">
     <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <header class="settings-head">
         <h2 id="settings-title">설정</h2>
@@ -158,27 +117,6 @@
         </section>
 
         <section class="setting-row">
-          <label class="setting-label">
-            <input
-              type="checkbox"
-              checked={$claudeMemEnabled}
-              onchange={onToggleClaudeMem}
-              disabled={busy}
-            />
-            <span class="label-text">
-              <span class="label-title">claude-mem 통합</span>
-              <span class="label-desc">
-                AI 세션 메모리를 vault에 export하고 통합 검색·그래프에 표시합니다.
-                claude-mem을 사용하지 않는 팀원은 비활성 상태로 두세요.
-              </span>
-            </span>
-          </label>
-          <div class="setting-status" class:on={$claudeMemEnabled}>
-            {$claudeMemEnabled ? "ON" : "OFF"}
-          </div>
-        </section>
-
-        <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
               <span class="label-title">링크 갱신 백업 보존 개수</span>
@@ -202,7 +140,7 @@
               bind:value={backupKeepInput}
               onblur={commitBackupKeep}
               onkeydown={onBackupKeepKeydown}
-              disabled={backupKeepSaving || busy}
+              disabled={backupKeepSaving}
               aria-label="링크 갱신 백업 보존 개수"
             />
           </div>
@@ -240,61 +178,14 @@
       </div>
 
       <footer class="settings-foot">
-        <button class="btn btn--ghost" onclick={closeSettings} disabled={busy}>닫기</button>
+        <button class="btn btn--ghost" onclick={closeSettings}>닫기</button>
       </footer>
     </div>
   </ModalShell>
-
-  {#if confirmMode}
-    <ModalShell onClose={cancelConfirm} z="modal-nested" label="확인">
-      <div class="confirm-modal" role="dialog" aria-modal="true">
-        <header class="confirm-head">
-          {#if confirmMode === "enable"}
-            <span class="icon">✓</span>
-            <span>claude-mem 통합을 켜시겠어요?</span>
-          {:else}
-            <span class="icon warn">⚠</span>
-            <span>claude-mem 통합을 끄시겠어요?</span>
-          {/if}
-        </header>
-        <div class="confirm-body">
-          {#if confirmMode === "enable"}
-            <p>적용 후 다음 기능이 활성화됩니다:</p>
-            <ul>
-              <li>사이드바 mirror 상태 점 (Memory: Sync 진입)</li>
-              <li>Cmd+Shift+M 메모리 검색</li>
-              <li>그래프 메모리 노드 토글</li>
-              <li>현재 노트와 연관된 메모리 패널</li>
-            </ul>
-            <p class="hint">claude-mem이 설치되어 있어야 실제 데이터가 채워집니다. (<code>~/.claude-mem/claude-mem.db</code>)</p>
-          {:else}
-            <p>적용 즉시 다음 로컬 데이터가 <strong>삭제</strong>됩니다:</p>
-            <ul>
-              <li>mirror DB (<code>lapis-mem.db</code>)</li>
-              <li>검색 인덱스 — 다음에 다시 켤 때 vault만으로 재구축</li>
-            </ul>
-            <p>보존되는 항목:</p>
-            <ul class="preserve">
-              <li>vault 안 <code>_memories/</code> 폴더의 모든 .md 노트</li>
-              <li>claude-mem 원본 (<code>~/.claude-mem/claude-mem.db</code>)</li>
-            </ul>
-          {/if}
-          <p class="hint">변경은 즉시 적용됩니다 (재시작 불필요).</p>
-        </div>
-        <footer class="confirm-foot">
-          <button class="btn btn--ghost" onclick={cancelConfirm} disabled={busy}>취소</button>
-          <button class="btn btn--primary" onclick={applyChange} disabled={busy}>
-            {busy ? "적용 중…" : "지금 적용"}
-          </button>
-        </footer>
-      </div>
-    </ModalShell>
-  {/if}
 {/if}
 
 <style>
-  .settings-modal,
-  .confirm-modal {
+  .settings-modal {
     background: var(--surface-raised);
     border: 1px solid var(--border-default);
     border-radius: var(--r-lg);
@@ -306,12 +197,8 @@
     flex-direction: column;
     overflow: hidden;
   }
-  .confirm-modal {
-    max-width: var(--modal-w-md);
-  }
 
-  .settings-head,
-  .confirm-head {
+  .settings-head {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -324,17 +211,6 @@
     font-size: var(--fs-md);
     font-weight: 600;
     flex: 1;
-  }
-  .confirm-head {
-    font-size: var(--fs-base);
-    font-weight: 600;
-  }
-  .icon {
-    color: var(--accent);
-    font-size: var(--fs-lg);
-  }
-  .icon.warn {
-    color: var(--warning);
   }
 
   .settings-body {
@@ -353,17 +229,6 @@
     border-radius: var(--r-lg);
   }
 
-  .setting-label {
-    flex: 1;
-    display: flex;
-    gap: 10px;
-    cursor: pointer;
-    align-items: flex-start;
-  }
-  .setting-label input[type="checkbox"] {
-    margin-top: 3px;
-    cursor: pointer;
-  }
   .label-text {
     display: flex;
     flex-direction: column;
@@ -435,43 +300,13 @@
     color: var(--warning);
   }
 
-  .settings-foot,
-  .confirm-foot {
+  .settings-foot {
     display: flex;
     justify-content: flex-end;
     gap: var(--sp-4);
     padding: var(--sp-5) 18px;
     border-top: 1px solid var(--border-default);
     background: var(--surface-base);
-  }
-
-  .confirm-body {
-    padding: 14px 18px;
-    font-size: 12.5px;
-    color: var(--text-secondary);
-    line-height: 1.6;
-  }
-  .confirm-body p {
-    margin: 0 0 10px 0;
-  }
-  .confirm-body ul {
-    margin: 0 0 var(--sp-5) 0;
-    padding-left: 22px;
-  }
-  .confirm-body ul.preserve li {
-    color: var(--accent-hover);
-  }
-  .confirm-body code {
-    background: var(--surface-sunken);
-    padding: 1px 5px;
-    border-radius: var(--r-sm);
-    font-size: var(--fs-xs);
-    color: var(--warning);
-  }
-  .confirm-body .hint {
-    color: var(--text-muted);
-    font-size: 11.5px;
-    margin-top: var(--sp-4);
   }
 
   /* 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn / .btn--ghost / .btn--primary) */

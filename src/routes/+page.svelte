@@ -13,19 +13,13 @@
   import Neighborhood from "$lib/Neighborhood.svelte";
   import Properties from "$lib/Properties.svelte";
   import PublishedAssets from "$lib/PublishedAssets.svelte";
-  import MemorySyncModal from "$lib/MemorySyncModal.svelte";
-  import MemorySearchModal from "$lib/MemorySearchModal.svelte";
-  import RelatedMemoriesPanel from "$lib/RelatedMemoriesPanel.svelte";
-  import MemoryFilesPanel from "$lib/MemoryFilesPanel.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
-  import CleanupOverlay from "$lib/CleanupOverlay.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
   import GraphModal from "$lib/GraphModal.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
   import { readingFontSize } from "$lib/stores/reading";
-  import { openMemorySearch } from "$lib/stores/memorySearch";
-  import { claudeMemEnabled, restoreSettings } from "$lib/stores/settings";
+  import { restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
   import { parseNote } from "$lib/markdown";
   import { computeTextStats, readingTimeLabel } from "$lib/textStats";
@@ -817,10 +811,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
       openPalette("fulltext");
-    } else if (key === "m" && e.shiftKey) {
-      // Cmd+Shift+M — 메모리 검색 모달 (Phase 5.1.b, Phase 6.0 OFF 시 무시)
-      e.preventDefault();
-      if ($vaultPath && $claudeMemEnabled) openMemorySearch();
     } else if (key === "t" && e.shiftKey) {
       e.preventDefault();
       const path = peekLastClosed();
@@ -938,11 +928,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 <SettingsModal />
 {#if GRAPH_FEATURE_ENABLED}<GraphModal />{/if}
 <LinkRewritePreviewModal />
-<CleanupOverlay />
-{#if $claudeMemEnabled}
-  <MemorySyncModal />
-  <MemorySearchModal />
-{/if}
 
 {#if $externalConflict}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1207,21 +1192,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         </article>
 
         {#if $currentNotePath}
-          {#if $claudeMemEnabled && parsed.data.doc_kind === "memory" && parsed.data.source === "claude-mem"}
-            <MemoryFilesPanel
-              filesRead={parsed.data.files_read}
-              filesEdited={parsed.data.files_edited}
-            />
-          {/if}
           <Neighborhood
             targetNote={currentNoteInfo}
             outgoing={currentOutgoing}
             incoming={currentIncoming}
             backlinks={currentBacklinks}
           />
-          {#if $claudeMemEnabled}
-            <RelatedMemoriesPanel />
-          {/if}
           <PublishedAssets notePath={$currentNotePath} />
         {/if}
       </div>
