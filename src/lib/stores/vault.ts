@@ -173,21 +173,6 @@ export async function openVault(path: string): Promise<void> {
   } catch (e) {
     console.warn("[vault] refreshGitStatus failed", e);
   }
-
-  // Lapis mirror DB 증분 sync (Phase 5.2 PR1). 백그라운드 IIFE — vault 열기 흐름 차단 X.
-  // PR2 #12: vault path 전달로 mirror 삭제 시 .md 자동 정리(orphans.json 박제).
-  void (async () => {
-    try {
-      const { mirrorSyncNow } = await import("$lib/tauri/mirror");
-      const report = await mirrorSyncNow(false, path);
-      console.log(
-        `[mirror] sync: summaries ${report.summaries_upserted}, observations ${report.observations_upserted}, deleted ${report.deleted} · ${report.duration_ms}ms`,
-      );
-    } catch (e) {
-      // 실패는 silent — claude-mem.db 부재 등은 정상 시나리오. 사이드바 status indicator(PR2)가 surface.
-      console.warn("[mirror] sync failed:", e);
-    }
-  })();
 }
 
 /**
@@ -289,7 +274,7 @@ async function buildFullTextFromPending(): Promise<void> {
 
 /**
  * 진행 중 reloadNotes 중복 호출 guard.
- * 예: MemorySyncModal이 직접 await reloadNotes를 부르는 동안 file watcher의
+ * 예: 모달/액션이 직접 await reloadNotes를 부르는 동안 file watcher의
  * scheduleFullReload(500ms 디바운스)도 같은 burst 끝에 한 번 부른다 → guard로 중복 차단.
  */
 let reloadInFlight = false;
