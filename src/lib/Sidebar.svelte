@@ -803,13 +803,13 @@ graph LR
     color: var(--accent);
   }
 
-  /* 인덱스 빌드 중 dim overlay — 트리 영역 cover */
+  /* 인덱스 빌드 중 dim overlay — 트리 영역 cover.
+     ⚠️ backdrop-filter(blur) 금지: WKWebView에서 backdrop-filter 레이어가 빌드 중 고정돼
+     자식 스피너 애니메이션이 멈춘다(메인스레드 idle일 때도). dim은 불투명 배경으로 대체. */
   .index-overlay {
     position: absolute;
     inset: 0;
     background: var(--backdrop);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
     display: flex;
     align-items: flex-start;
     justify-content: center;
