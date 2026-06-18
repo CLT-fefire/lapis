@@ -1,6 +1,16 @@
 import { writable, derived } from "svelte/store";
 
 /**
+ * 그래프 기능 노출 플래그. `false`면 진입점(단축키 ⌘G / topbar ◉ 버튼 / Command Palette)을
+ * 전부 숨기고 `openGraph`도 no-op. 3D(인공신경망 스타일) 그래프로 재설계를 검토하는 동안
+ * 기존 2D force-graph UI를 **일시 비활성화**하는 스위치다.
+ *
+ * 기존 그래프 구현(GraphModal / documentGraph / egoGraph / 이 store의 reducer)은 모두
+ * 보존한다 — 재설계 시 재활용 가능하고, 이 플래그만 `true`로 되돌리면 즉시 복원된다.
+ */
+export const GRAPH_FEATURE_ENABLED = false;
+
+/**
  * PR-G2′/G3′ — 그래프 모달 상태 (ADR-003). 세션성(비영속).
  *
  * 두 모드: **Local**(ego, 현재 노트 이웃 — depth + expand-on-demand) ·
@@ -152,6 +162,7 @@ export const graphView = derived(graphState, (s) => s);
 export const graphOpen = derived(graphState, (s) => s.open);
 
 export function openGraph(centerPath: string): void {
+  if (!GRAPH_FEATURE_ENABLED) return; // 기능 비활성 — 어떤 경로로 호출돼도 열리지 않음(안전망)
   graphState.update((s) => openGraphState(s, centerPath));
 }
 export function closeGraph(): void {
