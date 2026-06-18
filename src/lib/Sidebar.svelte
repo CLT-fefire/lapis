@@ -4,6 +4,7 @@
   import FilterPanel from "./FilterPanel.svelte";
   import OutlinePanel from "./OutlinePanel.svelte";
   import FavoritesPanel from "./FavoritesPanel.svelte";
+  import { get } from "svelte/store";
   import { outlineHeadings } from "$lib/stores/outline";
   import {
     vaultPath,
@@ -205,6 +206,13 @@
   /** sync 진행 중 경과(초) — tooltip 표시용. 1초마다 갱신. */
   let mirrorSyncElapsedSec = $state(0);
   let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * done/error 이벤트 유실 self-heal — syncing이 이 시간(초)을 넘게 지속되면 백엔드 실제
+   * 상태로 reconcile. 정상 sync는 보통 수초, 큰 full sync는 더 길 수 있으나 self-heal은
+   * "last_*_sync_at이 startedAt 이후" 또는 last_failure 존재 시에만 clear → 진행 중엔 안전.
+   */
+  const SELF_HEAL_AFTER_SEC = 10;
+  let selfHealInFlight = false;
 
   // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
   $effect(() => {
@@ -215,7 +223,10 @@
     }
     // sync_now가 schema build 중이면 mirror_sync_status도 동시 schema build 시도 →
     // SQLITE_BUSY. mirror-sync-done 도착하면 어차피 refresh 다시 도니 effect-init은 skip.
-    if (!$mirrorSyncing) {
+    // ⚠️ get()으로 **비반응** 읽기 — $mirrorSyncing을 구독하면 sync 시작(true)이 이 effect를
+    //    재실행시켜 done/error 리스너를 unlisten→재등록하는 갭에 백엔드 mirror-sync-done이
+    //    유실된다(영구 syncing stuck). 리스너는 $claudeMemEnabled에만 묶여 안정 유지돼야 함.
+    if (!get(mirrorSyncing)) {
       void refreshMirrorStatus();
     }
     let u1: UnlistenFn | null = null;
@@ -242,6 +253,7 @@
     const startedAt = $mirrorSyncStartedAt;
     if (startedAt === null) {
       mirrorSyncElapsedSec = 0;
+      selfHealInFlight = false;
       if (elapsedTimer) {
         clearInterval(elapsedTimer);
         elapsedTimer = null;
@@ -251,6 +263,10 @@
     mirrorSyncElapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
     elapsedTimer = setInterval(() => {
       mirrorSyncElapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      // 이벤트 유실 보정 — 임계 후 5초마다 백엔드 실제 상태로 reconcile 시도.
+      if (mirrorSyncElapsedSec >= SELF_HEAL_AFTER_SEC && mirrorSyncElapsedSec % 5 === 0) {
+        void selfHealMirrorSync(startedAt);
+      }
     }, 1000);
     return () => {
       if (elapsedTimer) {
@@ -265,6 +281,30 @@
       mirrorStatus = await mirrorSyncStatus();
     } catch {
       mirrorStatus = null;
+    }
+  }
+
+  /**
+   * done/error 이벤트 유실 시 백엔드 실제 상태로 reconcile.
+   * `last_*_sync_at`(epoch 초)이 sync 시작 시각(startedAt, ms→초) 이후면 = 이미 끝났는데
+   * 이벤트만 놓친 것 → markMirrorSyncEnd. 조회 실패(SQLITE_BUSY 등)는 백엔드가 실제로
+   * 바쁠 수 있으니 진행 중으로 간주하고 clear하지 않는다(다음 tick에 재시도).
+   */
+  async function selfHealMirrorSync(startedAt: number) {
+    if (selfHealInFlight) return;
+    selfHealInFlight = true;
+    try {
+      const st = await mirrorSyncStatus();
+      const startedSec = Math.floor(startedAt / 1000);
+      const lastSyncSec = Math.max(st.last_full_sync_at, st.last_incremental_sync_at);
+      if (lastSyncSec >= startedSec || st.last_failure !== null) {
+        mirrorStatus = st;
+        markMirrorSyncEnd();
+      }
+    } catch {
+      // 조회 실패 = 백엔드가 schema build/sync로 바쁠 수 있음 → clear 안 함.
+    } finally {
+      selfHealInFlight = false;
     }
   }
 
