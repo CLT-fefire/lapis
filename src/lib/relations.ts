@@ -163,7 +163,14 @@ export async function buildRelationIndexChunked(
   for (let i = 0; i < infos.length; i++) {
     collectRelationsForInfo(infos[i], resolver, outgoing, incoming);
     if (i > 0 && i % yieldEvery === 0) {
-      await new Promise<void>((r) => setTimeout(r, 0));
+      // requestAnimationFrame 우선 — 청크 사이 paint 보장(스피너 갱신). 없으면 setTimeout.
+      await new Promise<void>((resolve) => {
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => resolve());
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
     }
   }
   return { outgoing, incoming };

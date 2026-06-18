@@ -149,6 +149,8 @@ type WorkerInMsg =
       reset: boolean;
     }
   | { type: "toJSONShard"; id: number; shardId: number }
+  | { type: "updateDoc"; id: number; shardId: number; doc: FullTextDoc }
+  | { type: "removeDoc"; id: number; shardId: number; docId: string }
   | { type: "search"; id: number; query: string; limit: number }
   | { type: "resetAll"; id: number };
 
@@ -277,6 +279,37 @@ export async function workerToJSONShard(shardId: number): Promise<string | null>
   });
   if (!r.jsonBytes) return null;
   return new TextDecoder().decode(new Uint8Array(r.jsonBytes));
+}
+
+/**
+ * 단일 노트 증분 갱신 — 해당 shard에 add/replace. 외부 파일 변경 watcher 경로에서 호출.
+ * vault 전체 재빌드(read_vault_bundle) 없이 바뀐 노트만 풀텍스트에 반영.
+ */
+export async function workerUpdateDoc(
+  shardId: number,
+  doc: FullTextDoc,
+): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({
+    type: "updateDoc",
+    id,
+    shardId,
+    doc,
+  });
+}
+
+/** 단일 노트 증분 삭제 — 해당 shard에서 discard. 없으면 무시. */
+export async function workerRemoveDoc(
+  shardId: number,
+  docId: string,
+): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({
+    type: "removeDoc",
+    id,
+    shardId,
+    docId,
+  });
 }
 
 /** worker 안 모든 shard 인덱스 release. clearIndexes에서 호출. */

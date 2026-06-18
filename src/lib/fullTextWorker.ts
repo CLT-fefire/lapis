@@ -77,6 +77,8 @@ type InMsg =
       reset: boolean;
     }
   | { type: "toJSONShard"; id: number; shardId: number }
+  | { type: "updateDoc"; id: number; shardId: number; doc: FullTextDoc }
+  | { type: "removeDoc"; id: number; shardId: number; docId: string }
   | { type: "search"; id: number; query: string; limit: number }
   | { type: "resetAll"; id: number };
 
@@ -137,6 +139,31 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         const jsonStr = JSON.stringify(idx);
         const bytes = textEncoder.encode(jsonStr);
         post({ type: "json", id: msg.id, jsonBytes: bytes.buffer }, [bytes.buffer]);
+        break;
+      }
+      case "updateDoc": {
+        // 증분 갱신 — 단일 노트 add/replace (vault 전체 재빌드 회피).
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
+          throw new Error(`invalid shardId=${msg.shardId}`);
+        }
+        let index = indexes[msg.shardId];
+        if (!index) {
+          index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
+          indexes[msg.shardId] = index;
+        }
+        if (index.has(msg.doc.id)) index.replace(msg.doc);
+        else index.add(msg.doc);
+        post({ type: "ready", id: msg.id });
+        break;
+      }
+      case "removeDoc": {
+        // 증분 삭제 — discard(lazy). 없으면 무시.
+        if (msg.shardId < 0 || msg.shardId >= MAX_SHARDS) {
+          throw new Error(`invalid shardId=${msg.shardId}`);
+        }
+        const index = indexes[msg.shardId];
+        if (index && index.has(msg.docId)) index.discard(msg.docId);
+        post({ type: "ready", id: msg.id });
         break;
       }
       case "search": {
