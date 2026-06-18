@@ -13,6 +13,7 @@
     reloadNotes,
     treeLoading,
     indexBuilding,
+    indexRefreshing,
     createNewNote,
     selectNote,
   } from "$lib/stores/vault";
@@ -392,8 +393,10 @@ graph LR
     {/if}
   </header>
 
-  {#if $indexBuilding}
-    <div class="progress-strip" title="인덱스 빌드 중 (백링크/태그/검색)">
+  {#if $indexBuilding || $indexRefreshing}
+    <!-- 최초 빌드(blocking)·백그라운드 재빌드/증분 모두 이 얇은 strip으로 표시.
+         dim 오버레이(.index-overlay)는 최초 빌드($indexBuilding)에만 — 아래 참조. -->
+    <div class="progress-strip" title="인덱스 갱신 중 (백링크/태그/검색)">
       <div class="progress-fill"></div>
     </div>
   {/if}
@@ -547,7 +550,9 @@ graph LR
     {/if}
 
     {#if $indexBuilding}
-      <!-- 인덱스 빌드 중 dim overlay — 진행 중임을 명확히 + 트리 클릭 race condition 차단 -->
+      <!-- dim overlay는 **최초** 빌드($indexBuilding)에만 — 쓸 수 있는 인덱스가 아직 없어
+           보여줄 게 없으니 클릭을 막아도 무방. watcher 변경/수동 새로고침 등 재빌드는
+           $indexRefreshing으로 분류돼 오버레이 없이 백그라운드 진행(트리·클릭 그대로). -->
       <div class="index-overlay" role="status" aria-live="polite">
         <div class="index-overlay-card">
           <div class="spinner" aria-hidden="true"></div>

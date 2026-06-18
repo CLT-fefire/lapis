@@ -81,8 +81,17 @@ export const currentNoteContent = writable<string>("");
 export const linkIndex = writable<LinkIndex | null>(null);
 /** 트리 listNotes 진행 중 — 짧음 (~30-100ms) */
 export const treeLoading = writable<boolean>(false);
-/** 인덱스 재빌드 진행 중 — 길음 (~1-3s, 큰 vault) */
+/**
+ * 인덱스 **최초** 빌드 진행 중 — 쓸 수 있는 인덱스가 아직 없는 상태(cold start).
+ * Sidebar의 blocking dim overlay를 띄운다(보여줄 게 없으니 클릭 막아도 무방).
+ */
 export const indexBuilding = writable<boolean>(false);
+/**
+ * 인덱스 **재빌드/증분 갱신** 진행 중 — 이미 쓸 수 있는 (stale) 인덱스가 떠 있는 상태.
+ * watcher 변경/수동 새로고침 등은 여기로 분류 → blocking 오버레이 없이 백그라운드 진행
+ * (상단 얇은 progress strip만). 트리·노트 클릭은 그대로 사용 가능.
+ */
+export const indexRefreshing = writable<boolean>(false);
 
 /**
  * 현재 풀텍스트 인덱스가 빌드된 shard 수 (cache-hit=meta.shard_count / cache-miss=
@@ -112,6 +121,10 @@ export async function openVault(path: string): Promise<void> {
   }
   currentNotePath.set(null);
   currentNoteContent.set("");
+  // 이전 vault의 인덱스는 새 vault엔 무효 → 명시적으로 비워 이 vault의 첫 빌드를
+  // "최초 빌드"(blocking 오버레이)로 취급(stale 검색/백링크 노출 방지). 이후 **같은**
+  // vault 내 변경(watcher/편집/수동 새로고침)은 background 재빌드($indexRefreshing).
+  linkIndex.set(null);
   clearNavHistory();
   clearTabs();
 
@@ -294,6 +307,10 @@ export async function reloadNotes(): Promise<void> {
 async function reloadNotesInner(): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
+  // 쓸 수 있는 인덱스가 이미 떠 있으면 이번은 "재빌드"(watcher fallback / 수동 새로고침) →
+  // blocking 오버레이 대신 백그라운드(progress strip만). 최초 빌드(linkIndex 없음)만 blocking.
+  // 인덱스는 빌드 완료 후 atomic하게 .set 되므로 재빌드 중에도 이전 인덱스로 계속 탐색 가능.
+  const buildState = get(linkIndex) === null ? indexBuilding : indexRefreshing;
   // dev 모드 측정 — 어느 단계가 cold start 비용을 차지하는지 추적. release는 dead code.
   const perf = import.meta.env.DEV;
   const t0 = perf ? performance.now() : 0;
@@ -327,7 +344,7 @@ async function reloadNotesInner(): Promise<void> {
   // 본 chore(2026-05-20): vault fingerprint(stat 누적 hash) + disk 캐시(MiniSearch JSON +
   // link_infos)로 vault 변경이 없으면 9s addAll + 1s IPC body를 모두 회피. cache miss는
   // 첫 사용/노트 편집 후만 발생.
-  indexBuilding.set(true);
+  buildState.set(true);
   try {
     // cold-start cacheLookup — 메타만 받음 (link_infos ~2-3MB). minisearch_json(30MB)은
     // lazy 시점에 별 명령으로. Tauri IPC + frontend JSON.parse 비용 큰 폭 단축.
@@ -413,7 +430,7 @@ async function reloadNotesInner(): Promise<void> {
     clearFacetCounts();
     clearFilters();
   } finally {
-    indexBuilding.set(false);
+    buildState.set(false);
   }
   if (perf) {
     tEnd = performance.now();
@@ -491,6 +508,7 @@ export async function reindexIncremental(
   }
 
   reloadInFlight = true;
+  indexRefreshing.set(true); // 백그라운드 진행 표시(progress strip만) — 오버레이 없음
   try {
     // 트리 갱신 (listNotes — 본문 미읽음, ~수십 ms)
     await refreshTreeOnly();
@@ -556,6 +574,7 @@ export async function reindexIncremental(
     }
   } finally {
     reloadInFlight = false;
+    indexRefreshing.set(false);
   }
   return true;
 }
