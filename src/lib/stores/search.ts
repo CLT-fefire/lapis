@@ -43,6 +43,12 @@ export const pendingFullTextVault = writable<{
 export const fullTextLoading = writable<boolean>(false);
 
 /**
+ * 풀텍스트 풀 빌드(cache-miss `rebuildIndexes`) 진행률 — 인덱싱된 doc 수 / 전체.
+ * MemorySyncModal "인덱스 갱신 중" 단계에서 퍼센트+막대 표시. 빌드 외엔 null.
+ */
+export const buildProgress = writable<{ done: number; total: number } | null>(null);
+
+/**
  * vault 로딩 시 호출 — cache miss 풀 빌드 경로. **sharded(동적)**: vault 크기 기반
  * shard 수 결정 후 분할 + 순차 worker addAll.
  *
@@ -61,6 +67,8 @@ export async function rebuildIndexes(
   indexBuilding.set(true);
   fullTextIndexReady.set(false);
   const shardCount = decideShardCount(contents.length);
+  buildProgress.set({ done: 0, total: contents.length });
+  let done = 0;
   try {
     if (import.meta.env.DEV) {
       console.debug(
@@ -83,8 +91,12 @@ export async function rebuildIndexes(
       const docs = shards[i];
       // 첫 배치는 reset=true(새 인덱스). 빈 shard도 reset 1회로 초기화.
       await workerAddToShard(i, docs.slice(0, POST_BATCH), true);
+      done += Math.min(POST_BATCH, docs.length);
+      buildProgress.set({ done, total: contents.length });
       for (let off = POST_BATCH; off < docs.length; off += POST_BATCH) {
         await workerAddToShard(i, docs.slice(off, off + POST_BATCH), false);
+        done += Math.min(POST_BATCH, docs.length - off);
+        buildProgress.set({ done, total: contents.length });
       }
       if (i === 0) fullTextIndexReady.set(true);
       if (import.meta.env.DEV) {
@@ -99,6 +111,7 @@ export async function rebuildIndexes(
     fullTextIndexReady.set(false);
   } finally {
     indexBuilding.set(false);
+    buildProgress.set(null);
   }
   return shardCount;
 }
@@ -107,6 +120,7 @@ export function clearIndexes(): void {
   quickEntries.set([]);
   fullTextIndexReady.set(false);
   indexBuilding.set(false);
+  buildProgress.set(null);
   // worker의 in-memory 인덱스도 release — 다음 빌드 전까지 메모리 줄임.
   void workerReset().catch((e) => console.warn("worker reset failed", e));
 }
