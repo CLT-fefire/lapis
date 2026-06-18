@@ -10,7 +10,6 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "setup:lindera": "bash scripts/setup-lindera-cache.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

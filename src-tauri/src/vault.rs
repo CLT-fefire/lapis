@@ -18,6 +18,11 @@ pub struct NoteEntry {
 
 const SKIP_DIRS: &[&str] = &["node_modules", "target", ".svelte-kit", "build", "dist", ".git"];
 
+/// `LAPIS_PERF=1`이면 perf 계측 로그를 stderr로 출력.
+fn perf_enabled() -> bool {
+    std::env::var("LAPIS_PERF").ok().as_deref() == Some("1")
+}
+
 #[tauri::command]
 pub fn list_notes(vault_path: String) -> Result<Vec<NoteEntry>, String> {
     let root = PathBuf::from(&vault_path);
@@ -648,7 +653,7 @@ fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
         file_count: files.len(),
     };
 
-    if crate::search::perf_enabled() {
+    if perf_enabled() {
         eprintln!(
             "[lapis-perf] vault-bundle files={} walk={}ms read={}ms",
             stats.file_count, walk_ms, read_ms,
@@ -703,7 +708,7 @@ fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String>
     let fingerprint = format!("{:016x}", hasher.finish());
     let walk_ms = t0.elapsed().as_millis();
 
-    if crate::search::perf_enabled() {
+    if perf_enabled() {
         eprintln!(
             "[lapis-perf] vault-fingerprint files={} elapsed={}ms fp={}",
             entries.len(),

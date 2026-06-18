@@ -4,7 +4,6 @@
   import FilterPanel from "./FilterPanel.svelte";
   import OutlinePanel from "./OutlinePanel.svelte";
   import FavoritesPanel from "./FavoritesPanel.svelte";
-  import { get } from "svelte/store";
   import { outlineHeadings } from "$lib/stores/outline";
   import {
     vaultPath,
@@ -45,18 +44,8 @@
     selectedDocKinds,
     selectedTopics,
   } from "$lib/stores/filters";
-  import { mirrorSyncStatus, type SyncStatus } from "$lib/tauri/mirror";
-  import { openMemorySync } from "$lib/stores/memorySync";
-  import {
-    claudeMemEnabled,
-    openSettings,
-    mirrorSyncing,
-    mirrorSyncStartedAt,
-    markMirrorSyncStart,
-    markMirrorSyncEnd,
-  } from "$lib/stores/settings";
+  import { openSettings } from "$lib/stores/settings";
   import { toggleSidebar } from "$lib/stores/layout";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
@@ -201,140 +190,6 @@
     return n > 99 ? "99+" : String(n);
   }
 
-  // Mirror status indicator (PR2 #11) ────────────────────────────────────────
-  let mirrorStatus: SyncStatus | null = $state(null);
-  /** sync 진행 중 경과(초) — tooltip 표시용. 1초마다 갱신. */
-  let mirrorSyncElapsedSec = $state(0);
-  let elapsedTimer: ReturnType<typeof setInterval> | null = null;
-  /**
-   * done/error 이벤트 유실 self-heal — syncing이 이 시간(초)을 넘게 지속되면 백엔드 실제
-   * 상태로 reconcile. 정상 sync는 보통 수초, 큰 full sync는 더 길 수 있으나 self-heal은
-   * "last_*_sync_at이 startedAt 이후" 또는 last_failure 존재 시에만 clear → 진행 중엔 안전.
-   */
-  const SELF_HEAL_AFTER_SEC = 10;
-  let selfHealInFlight = false;
-
-  // 초기 로드 + 이벤트 listen으로 갱신 (claude-mem 활성 시에만)
-  $effect(() => {
-    if (!$claudeMemEnabled) {
-      mirrorStatus = null;
-      markMirrorSyncEnd();
-      return;
-    }
-    // sync_now가 schema build 중이면 mirror_sync_status도 동시 schema build 시도 →
-    // SQLITE_BUSY. mirror-sync-done 도착하면 어차피 refresh 다시 도니 effect-init은 skip.
-    // ⚠️ get()으로 **비반응** 읽기 — $mirrorSyncing을 구독하면 sync 시작(true)이 이 effect를
-    //    재실행시켜 done/error 리스너를 unlisten→재등록하는 갭에 백엔드 mirror-sync-done이
-    //    유실된다(영구 syncing stuck). 리스너는 $claudeMemEnabled에만 묶여 안정 유지돼야 함.
-    if (!get(mirrorSyncing)) {
-      void refreshMirrorStatus();
-    }
-    let u1: UnlistenFn | null = null;
-    let u2: UnlistenFn | null = null;
-    let u3: UnlistenFn | null = null;
-    void listen("mirror-sync-start", () => markMirrorSyncStart()).then((u) => (u3 = u));
-    void listen("mirror-sync-done", () => {
-      markMirrorSyncEnd();
-      void refreshMirrorStatus();
-    }).then((u) => (u1 = u));
-    void listen("mirror-sync-error", () => {
-      markMirrorSyncEnd();
-      void refreshMirrorStatus();
-    }).then((u) => (u2 = u));
-    return () => {
-      u1?.();
-      u2?.();
-      u3?.();
-    };
-  });
-
-  // 경과 초 카운터 — syncing 동안만 동작. mirrorSyncStartedAt이 null이면 정지.
-  $effect(() => {
-    const startedAt = $mirrorSyncStartedAt;
-    if (startedAt === null) {
-      mirrorSyncElapsedSec = 0;
-      selfHealInFlight = false;
-      if (elapsedTimer) {
-        clearInterval(elapsedTimer);
-        elapsedTimer = null;
-      }
-      return;
-    }
-    mirrorSyncElapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-    elapsedTimer = setInterval(() => {
-      mirrorSyncElapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-      // 이벤트 유실 보정 — 임계 후 5초마다 백엔드 실제 상태로 reconcile 시도.
-      if (mirrorSyncElapsedSec >= SELF_HEAL_AFTER_SEC && mirrorSyncElapsedSec % 5 === 0) {
-        void selfHealMirrorSync(startedAt);
-      }
-    }, 1000);
-    return () => {
-      if (elapsedTimer) {
-        clearInterval(elapsedTimer);
-        elapsedTimer = null;
-      }
-    };
-  });
-
-  async function refreshMirrorStatus() {
-    try {
-      mirrorStatus = await mirrorSyncStatus();
-    } catch {
-      mirrorStatus = null;
-    }
-  }
-
-  /**
-   * done/error 이벤트 유실 시 백엔드 실제 상태로 reconcile.
-   * `last_*_sync_at`(epoch 초)이 sync 시작 시각(startedAt, ms→초) 이후면 = 이미 끝났는데
-   * 이벤트만 놓친 것 → markMirrorSyncEnd. 조회 실패(SQLITE_BUSY 등)는 백엔드가 실제로
-   * 바쁠 수 있으니 진행 중으로 간주하고 clear하지 않는다(다음 tick에 재시도).
-   */
-  async function selfHealMirrorSync(startedAt: number) {
-    if (selfHealInFlight) return;
-    selfHealInFlight = true;
-    try {
-      const st = await mirrorSyncStatus();
-      const startedSec = Math.floor(startedAt / 1000);
-      const lastSyncSec = Math.max(st.last_full_sync_at, st.last_incremental_sync_at);
-      if (lastSyncSec >= startedSec || st.last_failure !== null) {
-        mirrorStatus = st;
-        markMirrorSyncEnd();
-      }
-    } catch {
-      // 조회 실패 = 백엔드가 schema build/sync로 바쁠 수 있음 → clear 안 함.
-    } finally {
-      selfHealInFlight = false;
-    }
-  }
-
-  /** blue: sync 진행 중, green: 정상, yellow: 비어있음, red: 실패. syncing이 다른 상태보다 우선. */
-  function mirrorColor(s: SyncStatus | null, syncing: boolean): "blue" | "green" | "yellow" | "red" {
-    if (syncing) return "blue";
-    if (!s) return "red";
-    if (s.last_failure) return "red";
-    if (s.memory_count === 0) return "yellow";
-    return "green";
-  }
-
-  function mirrorTooltip(s: SyncStatus | null, syncing: boolean, elapsedSec: number): string {
-    if (syncing) {
-      const elapsed = elapsedSec > 0 ? ` · 약 ${elapsedSec}s 경과` : "";
-      return `Mirror: sync 진행 중…${elapsed}`;
-    }
-    if (!s) return "Mirror: 상태 조회 실패 (mirror DB 미초기화)";
-    if (s.last_failure) return `Mirror: 마지막 sync 실패 — ${s.last_failure}`;
-    if (s.memory_count === 0) return "Mirror: 비어있음. Memory: Sync에서 동기화하세요.";
-    return `Mirror: ${s.memory_count.toLocaleString()} memories · 최근 sync ${formatEpoch(s.last_incremental_sync_at)}`;
-  }
-
-  function formatEpoch(epoch: number): string {
-    if (!epoch) return "—";
-    const d = new Date(epoch * 1000);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
   // 빈 vault 첫 진입 가이드용 Welcome 노트 콘텐츠. 사용자가 명시적으로 버튼을 눌렀을 때만 생성.
   const WELCOME_NOTE_CONTENT = `---
 title: Welcome
@@ -414,15 +269,6 @@ graph LR
         <span class="loading-spinner" title="트리 로드 중"></span>
       {/if}
       <div class="actions">
-        {#if $claudeMemEnabled}
-          <button
-            class="mirror-dot mirror-{mirrorColor(mirrorStatus, $mirrorSyncing)}"
-            class:syncing={$mirrorSyncing}
-            title={mirrorTooltip(mirrorStatus, $mirrorSyncing, mirrorSyncElapsedSec)}
-            aria-label="메모리 mirror 상태"
-            onclick={openMemorySync}
-          ></button>
-        {/if}
         <button class="btn btn--icon btn--sm btn--plain" title="새로고침" onclick={reloadNotes}>↻</button>
         <button class="btn btn--icon btn--sm btn--plain" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
         <button class="btn btn--icon btn--sm btn--plain" title="사이드바 접기 (⌘B)" aria-label="사이드바 접기" onclick={toggleSidebar}>◀</button>
@@ -695,43 +541,6 @@ graph LR
     border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
-  }
-
-  /* Mirror status indicator — 점만 노출, 클릭 시 MemorySyncModal 오픈 */
-  .mirror-dot {
-    width: 10px;
-    height: 10px;
-    align-self: center;
-    border-radius: 50%;
-    border: none;
-    padding: 0;
-    margin: 0 var(--sp-2) 0 0;
-    cursor: pointer;
-    box-shadow: 0 0 0 1px var(--surface-sunken);
-  }
-  .mirror-dot:hover {
-    box-shadow: 0 0 0 2px var(--accent);
-  }
-  .mirror-green {
-    background: var(--success);
-  }
-  .mirror-yellow {
-    background: var(--warning);
-  }
-  .mirror-red {
-    background: var(--danger);
-  }
-  .mirror-blue {
-    background: var(--accent);
-  }
-
-  /* sync 진행 중 — 펄스로 활동 중임을 시각화 */
-  .mirror-dot.syncing {
-    animation: mirror-pulse 1.1s ease-in-out infinite;
-  }
-  @keyframes mirror-pulse {
-    0%, 100% { opacity: 0.5; transform: scale(0.85); }
-    50% { opacity: 1; transform: scale(1.15); }
   }
 
   .open-btn {
