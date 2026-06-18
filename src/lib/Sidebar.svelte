@@ -35,7 +35,7 @@
     SECTION_KEYS,
     type SidebarSectionKey,
   } from "$lib/stores/sidebar";
-  import { FileText, ListTree, Hash, SlidersHorizontal, Star } from "@lucide/svelte";
+  import { FileText, ListTree, Hash, SlidersHorizontal, Star, Settings } from "@lucide/svelte";
   import { pinnedNotePaths } from "$lib/stores/pins";
   import {
     docKindCounts,
@@ -561,12 +561,10 @@ graph LR
   </div>
 
   <footer class="sidebar-foot">
-    <button
-      class="btn btn--icon btn--sm btn--plain settings-btn"
-      title="설정"
-      aria-label="설정 열기"
-      onclick={openSettings}
-    >⚙</button>
+    <button class="settings-btn" title="설정" aria-label="설정 열기" onclick={openSettings}>
+      <Settings size={16} strokeWidth={2} aria-hidden="true" />
+      <span>설정</span>
+    </button>
   </footer>
 </aside>
 
@@ -788,28 +786,42 @@ graph LR
   .sidebar-foot {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: var(--sp-2);
-    padding: var(--sp-3) 10px;
+    padding: var(--sp-2) var(--sp-3);
     border-top: 1px solid var(--border-subtle);
     background: var(--surface-raised);
     flex-shrink: 0;
   }
 
+  /* 설정 버튼 — 작은 ⚙ 글리프는 인지가 어려워(사용자 피드백) 아이콘+라벨의 전폭 버튼으로. */
   .settings-btn {
-    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    cursor: pointer;
+    transition: background var(--dur-fast), color var(--dur-fast),
+      border-color var(--dur-fast);
   }
   .settings-btn:hover {
+    background: var(--surface-overlay);
+    border-color: var(--border-default);
     color: var(--accent);
   }
 
-  /* 인덱스 빌드 중 dim overlay — 트리 영역 cover */
+  /* 인덱스 빌드 중 dim overlay — 트리 영역 cover.
+     ⚠️ backdrop-filter(blur) 금지: WKWebView에서 backdrop-filter 레이어가 빌드 중 고정돼
+     자식 스피너 애니메이션이 멈춘다(메인스레드 idle일 때도). dim은 불투명 배경으로 대체. */
   .index-overlay {
     position: absolute;
     inset: 0;
     background: var(--backdrop);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
     display: flex;
     align-items: flex-start;
     justify-content: center;

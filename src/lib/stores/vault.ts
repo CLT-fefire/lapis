@@ -17,12 +17,17 @@ import {
   writeNote,
   backupNotes,
   pruneLinkRewriteBackups,
+  scanLinkSingle,
   type NoteEntry,
 } from "$lib/tauri/notes";
 import {
   buildQuickEntries,
   workerLoadShard,
   workerToJSONShard,
+  workerUpdateDoc,
+  workerRemoveDoc,
+  computeShardId,
+  decideShardCount,
 } from "$lib/searchIndex";
 import {
   fullTextIndexReady,
@@ -36,7 +41,7 @@ import {
   type LinkRewritePreviewItem,
 } from "$lib/linkRewrite";
 import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
-import { buildIndex, resolveTarget, type LinkIndex } from "$lib/linkIndex";
+import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
 import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
@@ -78,6 +83,16 @@ export const linkIndex = writable<LinkIndex | null>(null);
 export const treeLoading = writable<boolean>(false);
 /** 인덱스 재빌드 진행 중 — 길음 (~1-3s, 큰 vault) */
 export const indexBuilding = writable<boolean>(false);
+
+/**
+ * 현재 풀텍스트 인덱스가 빌드된 shard 수 (cache-hit=meta.shard_count / cache-miss=
+ * rebuildIndexes 결정값). 증분 갱신(`reindexIncremental`)이 노트→shard 라우팅에 사용.
+ * 노트 수가 shardCount 임계를 넘으면(`decideShardCount` 변동) 증분 대신 풀 빌드로 fallback.
+ */
+let activeShardCount = 1;
+
+/** 한 burst에서 이 개수를 넘는 변경은 증분 대신 풀 빌드 — 그게 더 단순/안전. */
+const INCREMENTAL_MAX = 200;
 
 export async function pickAndOpenVault(): Promise<void> {
   const selected = await openDialog({
@@ -162,9 +177,19 @@ export async function openVault(path: string): Promise<void> {
   })();
 }
 
-/** 다음 macro task로 양보 — JS event loop가 OS/UI 메시지 처리 시간 확보. */
+/**
+ * 빌드 단계 사이 양보 — `requestAnimationFrame` 우선이라 다음 paint까지 기다림 →
+ * 인덱스 빌드 오버레이 스피너가 단계 사이에 실제로 갱신/회전한다(setTimeout(0)은 메인
+ * 스레드가 바쁘면 paint를 건너뛸 수 있음). rAF 없으면(test 등) setTimeout(0) fallback.
+ */
 function nextTick(): Promise<void> {
-  return new Promise<void>((r) => setTimeout(r, 0));
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 }
 
 /**
@@ -318,7 +343,7 @@ async function reloadNotesInner(): Promise<void> {
       // cache hit. link_infos는 즉시 사용. fullTextIndex는 lazy — pendingFullTextVault에
       // vault path만 박고 idle 시점에 minisearch_json 받아 loadJSON.
       const links = meta.link_infos;
-      linkIndex.set(buildIndex(links));
+      linkIndex.set(await buildIndexChunked(links));
       await nextTick();
       tagIndex.set(buildTagIndex(links));
       await nextTick();
@@ -329,6 +354,7 @@ async function reloadNotesInner(): Promise<void> {
       quickEntries.set(buildQuickEntries(links));
       fullTextIndexReady.set(false);
       // meta.shard_count는 cache miss 시 결정한 동적 값. lazy load가 같은 수로 순차 로드.
+      activeShardCount = meta.shard_count;
       pendingFullTextVault.set({ vault: root, shardCount: meta.shard_count });
       scheduleLazyFullTextLoad();
       appliedFromCache = true;
@@ -355,7 +381,7 @@ async function reloadNotesInner(): Promise<void> {
       const contents = bundle.contents;
       await nextTick();
 
-      linkIndex.set(buildIndex(links));
+      linkIndex.set(await buildIndexChunked(links));
       await nextTick();
 
       tagIndex.set(buildTagIndex(links));
@@ -368,29 +394,15 @@ async function reloadNotesInner(): Promise<void> {
 
       // rebuildIndexes — 동적 shardCount 반환 (vault 크기 기반)
       const shardCount = await rebuildIndexes(links, contents);
+      activeShardCount = shardCount;
 
       // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리.
-      // sharded — meta + N shard 파일 각각 저장. worker.toJSONShard가 worker thread에서
-      // 직렬화 → main thread freeze 0. shardCount는 vault별 동적 값.
       const fpForSave = fp.fingerprint;
       const linksForSave = links;
       setTimeout(() => {
-        void (async () => {
-          try {
-            if (!get(fullTextIndexReady)) return;
-            await writeSearchCacheMeta(root, fpForSave, linksForSave, shardCount);
-            for (let i = 0; i < shardCount; i++) {
-              const json = await workerToJSONShard(i);
-              if (!json) continue;
-              await writeSearchCacheShard(root, i, json);
-            }
-            if (import.meta.env.DEV) {
-              console.debug(`[lapis-perf] search-cache saved fp=${fpForSave} shards=${shardCount}`);
-            }
-          } catch (e) {
-            console.warn("[search-cache] write failed", e);
-          }
-        })();
+        void saveSearchCache(root, linksForSave, shardCount, fpForSave).catch((e) =>
+          console.warn("[search-cache] write failed", e),
+        );
       }, 0);
     }
   } catch (e) {
@@ -413,6 +425,139 @@ async function reloadNotesInner(): Promise<void> {
         `build=${fmt(tCacheCheckEnd, tEnd)}ms total=${fmt(t0, tEnd)}ms`,
     );
   }
+}
+
+/**
+ * 풀텍스트 디스크 캐시 저장 (meta + shard JSON). cache-miss 풀 빌드와 증분 갱신 후
+ * 재저장이 공유. worker.toJSONShard는 worker thread 직렬화 → main freeze 0.
+ */
+async function saveSearchCache(
+  root: string,
+  links: import("$lib/tauri/notes").LinkInfo[],
+  shardCount: number,
+  fingerprint: string,
+): Promise<void> {
+  if (!get(fullTextIndexReady)) return;
+  await writeSearchCacheMeta(root, fingerprint, links, shardCount);
+  for (let i = 0; i < shardCount; i++) {
+    const json = await workerToJSONShard(i);
+    if (!json) continue;
+    await writeSearchCacheShard(root, i, json);
+  }
+  if (import.meta.env.DEV) {
+    console.debug(`[lapis-perf] search-cache saved fp=${fingerprint} shards=${shardCount}`);
+  }
+}
+
+/**
+ * 외부 파일 변경(watcher)을 **in-memory 인덱스에 증분 반영**.
+ *
+ * 기존엔 변경 1건에도 `read_vault_bundle`로 vault 전체(12000+노트 body)를 다시 읽어
+ * 모든 인덱스를 재빌드 → 메인 스레드 수 초 점유(인덱스 빌드 스피너 freeze)였다.
+ * 이제:
+ *  - **풀텍스트**: 바뀐 노트만 worker add/replace/discard (전체 재빌드·재읽기 없음)
+ *  - **파생(resolver/backlinks/relations/tag/facet/quick)**: 현재 `byPath`(메모리)로 재계산
+ *    (IPC 재읽기 없음, buildIndexChunked는 청크 yield)
+ *  - **트리**: listNotes만 (본문 미읽음, 저렴)
+ *  - **디스크 캐시**: 백그라운드 재저장(다음 launch 캐시 HIT 유지)
+ *
+ * 인덱스 미준비 / 대량 burst / shardCount 임계 변동 시 `reloadNotes`(풀 빌드)로 fallback.
+ *
+ * @returns true=처리 완료(또는 fallback 수행), false=다른 reload/reindex 진행 중(caller가 재시도).
+ */
+export async function reindexIncremental(
+  changed: string[],
+  removed: string[],
+): Promise<boolean> {
+  if (reloadInFlight) return false; // 다른 reload/reindex 진행 중 — caller가 변경분 재큐
+  const root = get(vaultPath);
+  if (!root) return true;
+  const idx = get(linkIndex);
+  if (!idx) {
+    await reloadNotes(); // 인덱스 없음 → 풀 빌드
+    return true;
+  }
+
+  // 노트 수 추정 → shardCount 변동(임계 통과) 또는 대량 변경이면 풀 빌드가 더 안전/단순.
+  const addCount = changed.filter((p) => !idx.byPath.has(p)).length;
+  const delCount = removed.filter((p) => idx.byPath.has(p)).length;
+  const newNoteCount = idx.byPath.size + addCount - delCount;
+  if (
+    changed.length + removed.length > INCREMENTAL_MAX ||
+    decideShardCount(newNoteCount) !== activeShardCount
+  ) {
+    await reloadNotes();
+    return true;
+  }
+
+  reloadInFlight = true;
+  try {
+    // 트리 갱신 (listNotes — 본문 미읽음, ~수십 ms)
+    await refreshTreeOnly();
+
+    // 풀텍스트 worker는 캐시 로드가 끝나야 증분 가능(pending이면 먼저 로드). 로드 못 하면
+    // (캐시 없음/진행 중) 풀텍스트 증분은 건너뛰고 파생만 갱신 → 다음 풀 빌드가 정정.
+    await ensureFullTextIndex();
+    const ftReady = get(fullTextIndexReady);
+
+    // byPath 사본에 증분 적용 → 파생 재빌드 입력(원본은 final set 전까지 보존).
+    const infosMap = new Map(idx.byPath);
+    for (const path of removed) {
+      infosMap.delete(path);
+      if (ftReady) {
+        try {
+          await workerRemoveDoc(computeShardId(path, activeShardCount), path);
+        } catch (e) {
+          console.warn("[reindex] removeDoc 실패", path, e);
+        }
+      }
+    }
+    for (const path of changed) {
+      try {
+        const info = await scanLinkSingle(root, path);
+        infosMap.set(info.source_path, info);
+        if (ftReady) {
+          const body = await readNote(path);
+          await workerUpdateDoc(computeShardId(path, activeShardCount), {
+            id: path,
+            name: info.source_name,
+            body,
+          });
+        }
+      } catch (e) {
+        console.warn("[reindex] scan/update 실패", path, e);
+      }
+    }
+
+    // 파생 인덱스 재빌드 — in-memory(IPC 재읽기 없음). buildIndexChunked는 청크 yield.
+    const infos = Array.from(infosMap.values());
+    linkIndex.set(await buildIndexChunked(infos));
+    tagIndex.set(buildTagIndex(infos));
+    const facets = buildFacetCounts(infos);
+    docKindCounts.set(facets.docKindCounts);
+    topicCounts.set(facets.topicCounts);
+    quickEntries.set(buildQuickEntries(infos));
+    clearBacklinkCache();
+
+    // 디스크 캐시 백그라운드 재저장 → 다음 launch 캐시 HIT 유지(변경 fingerprint 반영).
+    if (ftReady) {
+      const infosForSave = infos;
+      const shardForSave = activeShardCount;
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const fp = await vaultFingerprint(root);
+            await saveSearchCache(root, infosForSave, shardForSave, fp.fingerprint);
+          } catch (e) {
+            console.warn("[reindex] 캐시 재저장 실패", e);
+          }
+        })();
+      }, 0);
+    }
+  } finally {
+    reloadInFlight = false;
+  }
+  return true;
 }
 
 // === Phase 4.1 — Vault 조작 high-level 함수 ===

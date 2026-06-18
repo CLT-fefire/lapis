@@ -3,6 +3,7 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { memorySyncOpen, closeMemorySync } from "$lib/stores/memorySync";
   import { vaultPath, reloadNotes } from "$lib/stores/vault";
+  import { buildProgress } from "$lib/stores/search";
   import { loadVaultConfig } from "$lib/vaultConfig";
   import {
     memoryPreviewExport,
@@ -427,6 +428,19 @@
               <div class="secondary">백링크 · 태그 · 풀텍스트 검색 재구성 (사이드바 트리/검색 반영)</div>
             </div>
           </div>
+          {#if $buildProgress && $buildProgress.total > 0}
+            {@const pct = Math.min(100, Math.round(($buildProgress.done / $buildProgress.total) * 100))}
+            <div class="prog-row">
+              <div class="prog-head">
+                <span class="prog-text">
+                  검색 인덱스 {pct}% · {$buildProgress.done.toLocaleString()} / {$buildProgress.total.toLocaleString()}
+                </span>
+              </div>
+              <div class="prog-bar">
+                <div class="prog-fill indexing" style="width: {pct}%"></div>
+              </div>
+            </div>
+          {/if}
         {:else if stage === "done" && report}
           <p>완료.</p>
           <ul class="counts">
@@ -636,6 +650,10 @@
 
   .prog-fill.obs {
     background: linear-gradient(90deg, var(--teal), var(--teal));
+  }
+
+  .prog-fill.indexing {
+    background: var(--accent);
   }
 
   /* indexing stage — 사이드바 dim overlay와 톤 통일 (spinner + 2줄 텍스트) */

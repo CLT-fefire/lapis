@@ -142,13 +142,15 @@ export function decideShardCount(noteCount: number): number {
 type WorkerInMsg =
   | { type: "loadShard"; id: number; shardId: number; jsonBytes: ArrayBuffer }
   | {
-      type: "addAllShard";
+      type: "addToShard";
       id: number;
       shardId: number;
       docs: FullTextDoc[];
-      chunkSize?: number;
+      reset: boolean;
     }
   | { type: "toJSONShard"; id: number; shardId: number }
+  | { type: "updateDoc"; id: number; shardId: number; doc: FullTextDoc }
+  | { type: "removeDoc"; id: number; shardId: number; docId: string }
   | { type: "search"; id: number; query: string; limit: number }
   | { type: "resetAll"; id: number };
 
@@ -211,19 +213,27 @@ export async function workerLoadShard(shardId: number, json: string): Promise<vo
   );
 }
 
-/** 특정 shard에 docs addAll (cache miss). 각 shard는 대략 totalDocs/SHARD_COUNT개. */
-export async function workerAddAllShard(
+/**
+ * 특정 shard에 docs 한 배치를 추가 (cache miss 풀 빌드).
+ *
+ * `reset=true`면 shard 인덱스를 새로 만들고 추가(첫 배치), false면 기존에 append.
+ * **caller(`rebuildIndexes`)가 shard를 작은 배치로 나눠 호출**하는 이유: 한 shard 전체
+ * (수천 doc × body)를 한 번에 postMessage하면 WKWebView가 main thread에서 structured
+ * clone에 수 초를 써 UI(인덱스 빌드 스피너 포함)가 freeze된다. 배치마다 await(worker
+ * 왕복)로 main thread가 양보돼 스피너가 계속 돈다.
+ */
+export async function workerAddToShard(
   shardId: number,
   docs: FullTextDoc[],
-  chunkSize = 200,
+  reset: boolean,
 ): Promise<void> {
   const id = ++nextMsgId;
   await dispatch<{ type: "ready"; id: number }>({
-    type: "addAllShard",
+    type: "addToShard",
     id,
     shardId,
     docs,
-    chunkSize,
+    reset,
   });
 }
 
@@ -269,6 +279,37 @@ export async function workerToJSONShard(shardId: number): Promise<string | null>
   });
   if (!r.jsonBytes) return null;
   return new TextDecoder().decode(new Uint8Array(r.jsonBytes));
+}
+
+/**
+ * 단일 노트 증분 갱신 — 해당 shard에 add/replace. 외부 파일 변경 watcher 경로에서 호출.
+ * vault 전체 재빌드(read_vault_bundle) 없이 바뀐 노트만 풀텍스트에 반영.
+ */
+export async function workerUpdateDoc(
+  shardId: number,
+  doc: FullTextDoc,
+): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({
+    type: "updateDoc",
+    id,
+    shardId,
+    doc,
+  });
+}
+
+/** 단일 노트 증분 삭제 — 해당 shard에서 discard. 없으면 무시. */
+export async function workerRemoveDoc(
+  shardId: number,
+  docId: string,
+): Promise<void> {
+  const id = ++nextMsgId;
+  await dispatch<{ type: "ready"; id: number }>({
+    type: "removeDoc",
+    id,
+    shardId,
+    docId,
+  });
 }
 
 /** worker 안 모든 shard 인덱스 release. clearIndexes에서 호출. */

@@ -426,7 +426,9 @@ fn ensure_in_vault(path: &Path, vault: &Path) -> Result<(), String> {
 
 /// Lapis가 다루는 노트 확장자: `.md` (마크다운 본문) + `.mmd` (단일 mermaid 다이어그램).
 /// `.mmd`는 v0.4.0부터 읽기/저장/삭제/이름변경 가능. 생성(create_note)은 여전히 `.md`만.
-fn is_supported_note_ext(ext: &std::ffi::OsStr) -> bool {
+/// 트리(walk_dir)·fingerprint(walk_md_stats)·bundle(walk_md_files)·watcher(is_relevant_path)가
+/// **모두 이 술어를 공유**해야 화면(트리)과 인덱스(검색/fingerprint)·외부변경 감시가 갈라지지 않는다.
+pub(crate) fn is_supported_note_ext(ext: &std::ffi::OsStr) -> bool {
     let s = ext.to_string_lossy();
     s.eq_ignore_ascii_case("md") || s.eq_ignore_ascii_case("mmd")
 }
