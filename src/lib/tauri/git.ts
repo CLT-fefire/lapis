@@ -38,6 +38,15 @@ export function gitCommitAll(vaultPath: string, message: string): Promise<boolea
   return invoke<boolean>("git_commit_all", { vaultPath, message });
 }
 
+/** 변경된 path만 add 후 커밋(거대 vault에서 전체 스캔 회피). 변경 없으면 false. */
+export function gitCommitPaths(
+  vaultPath: string,
+  paths: string[],
+  message: string,
+): Promise<boolean> {
+  return invoke<boolean>("git_commit_paths", { vaultPath, paths, message });
+}
+
 /** 노트 1건의 commit 이력(최신순). */
 export function gitLog(vaultPath: string, path: string, limit: number): Promise<GitCommit[]> {
   return invoke<GitCommit[]>("git_log", { vaultPath, path, limit });

@@ -37,6 +37,28 @@ fn rel_in_vault(vault: &Path, path: &str) -> Result<String, String> {
     Ok(rel.to_string_lossy().replace('\\', "/"))
 }
 
+/// 변경 노트 절대경로 → vault 기준 상대경로(POSIX). **삭제되어 존재하지 않아도 동작**한다
+/// (auto-commit이 삭제도 스테이징해야 하므로 `rel_in_vault`의 canonicalize는 부적합).
+/// vault 밖이거나 `..`/절대 성분으로 탈출하면 `None`(스킵 — path traversal 차단).
+fn rel_for_add(vault: &Path, path: &str) -> Option<String> {
+    use std::path::Component;
+    let p = PathBuf::from(path);
+    // 존재하면 canonicalize로 symlink 정규화 후 strip(가장 안전). 삭제됐으면 lexical strip.
+    let rel = match p.canonicalize() {
+        Ok(cp) => cp.strip_prefix(vault).map(|r| r.to_path_buf()).ok()?,
+        Err(_) => p.strip_prefix(vault).map(|r| r.to_path_buf()).ok()?,
+    };
+    // 탈출(`..`)·절대 성분 거부 + 빈 경로 거부.
+    if rel.as_os_str().is_empty()
+        || rel
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+    {
+        return None;
+    }
+    Some(rel.to_string_lossy().replace('\\', "/"))
+}
+
 /// git 실행 — 인자 배열(shell 미경유). 성공 시 stdout, 실패 시 stderr(trim).
 fn run_git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")
@@ -102,9 +124,13 @@ fn git_commit_all_inner(vault_path: &str, message: &str) -> Result<bool, String>
     commit_inner(&vault, message)
 }
 
-/// add -A → (스테이징 변경 있으면) commit. 빈 커밋 방지. user 식별자 인라인 지정.
-fn commit_inner(vault: &Path, message: &str) -> Result<bool, String> {
-    run_git(vault, &["add", "-A"])?;
+fn git_commit_paths_inner(vault_path: &str, paths: &[String], message: &str) -> Result<bool, String> {
+    let vault = canon_vault(vault_path)?;
+    commit_paths_inner(&vault, paths, message)
+}
+
+/// 스테이징된 변경이 있으면 commit, 없으면 false(빈 커밋 방지). user 식별자 인라인 지정.
+fn commit_staged(vault: &Path, message: &str) -> Result<bool, String> {
     // diff --cached --quiet: 스테이징 변경 없으면 exit 0(Ok) → 커밋 skip.
     if run_git(vault, &["diff", "--cached", "--quiet"]).is_ok() {
         return Ok(false);
@@ -122,6 +148,26 @@ fn commit_inner(vault: &Path, message: &str) -> Result<bool, String> {
         ],
     )?;
     Ok(true)
+}
+
+/// add -A(전체 스윕) → commit. init·재조정(앱 꺼진 동안 drift) 등 전수 커밋용.
+fn commit_inner(vault: &Path, message: &str) -> Result<bool, String> {
+    run_git(vault, &["add", "-A"])?;
+    commit_staged(vault, message)
+}
+
+/// 변경된 path만 add → commit. 거대 vault에서 `add -A` 전체 워킹트리 스캔을 피한다(duration 최적화).
+/// `git add -- <pathspec>`는 git 2.0+에서 수정·생성·삭제를 모두 스테이징한다.
+/// 변환 가능한 path가 하나도 없으면 no-op(false).
+fn commit_paths_inner(vault: &Path, paths: &[String], message: &str) -> Result<bool, String> {
+    let rels: Vec<String> = paths.iter().filter_map(|p| rel_for_add(vault, p)).collect();
+    if rels.is_empty() {
+        return Ok(false);
+    }
+    let mut args: Vec<&str> = vec!["add", "--"];
+    args.extend(rels.iter().map(String::as_str));
+    run_git(vault, &args)?;
+    commit_staged(vault, message)
 }
 
 fn git_log_inner(vault_path: &str, path: &str, limit: u32) -> Result<Vec<GitCommit>, String> {
@@ -202,6 +248,19 @@ pub async fn git_commit_all(vault_path: String, message: String) -> Result<bool,
     spawn_blocking(move || git_commit_all_inner(&vault_path, &message))
         .await
         .map_err(|e| format!("git_commit_all spawn_blocking join: {e}"))?
+}
+
+/// 변경된 path만 add 후 커밋. 변경 없으면 false. 거대 vault에서 `git_commit_all`의
+/// 전체 워킹트리 스캔을 피하는 빠른 경로(watcher가 모은 변경 경로 전달).
+#[tauri::command]
+pub async fn git_commit_paths(
+    vault_path: String,
+    paths: Vec<String>,
+    message: String,
+) -> Result<bool, String> {
+    spawn_blocking(move || git_commit_paths_inner(&vault_path, &paths, &message))
+        .await
+        .map_err(|e| format!("git_commit_paths spawn_blocking join: {e}"))?
 }
 
 /// 노트 1건의 commit 이력(최신순, `--follow`). limit는 1~500 clamp.
@@ -316,6 +375,83 @@ mod tests {
         fs::create_dir_all(dir.join("_memories")).unwrap();
         fs::write(dir.join("_memories/m.md"), "noise\n").unwrap();
         assert!(!git_has_changes_inner(&s(&dir)).unwrap());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn commit_paths_stages_only_given_paths() {
+        let dir = temp_dir();
+        let a = dir.join("a.md");
+        let b = dir.join("b.md");
+        fs::write(&a, "a1\n").unwrap();
+        fs::write(&b, "b1\n").unwrap();
+        git_init_inner(&s(&dir)).unwrap();
+
+        // 둘 다 수정했지만 a만 커밋 대상으로 전달 → a만 스냅샷, b는 dirty로 남음.
+        fs::write(&a, "a2\n").unwrap();
+        fs::write(&b, "b2\n").unwrap();
+        assert!(git_commit_paths_inner(&s(&dir), &[s(&a)], "edit a").unwrap());
+        assert!(git_has_changes_inner(&s(&dir)).unwrap()); // b가 아직 dirty
+
+        // b도 커밋 → 깨끗.
+        assert!(git_commit_paths_inner(&s(&dir), &[s(&b)], "edit b").unwrap());
+        assert!(!git_has_changes_inner(&s(&dir)).unwrap());
+
+        // a 이력엔 init + "edit a" 2건(있고 "edit b"는 없음 — follow가 b를 안 따라감).
+        let log_a = git_log_inner(&s(&dir), &s(&a), 10).unwrap();
+        assert_eq!(log_a.len(), 2);
+        assert_eq!(log_a[0].subject, "edit a");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn commit_paths_stages_deletion_of_missing_file() {
+        let dir = temp_dir();
+        let note = dir.join("gone.md");
+        fs::write(&note, "x\n").unwrap();
+        git_init_inner(&s(&dir)).unwrap();
+
+        // 파일을 외부에서 삭제 — canonicalize 불가한 경로지만 삭제가 스테이징돼야 함.
+        let removed_path = s(&note);
+        fs::remove_file(&note).unwrap();
+        assert!(git_commit_paths_inner(&s(&dir), &[removed_path], "delete gone").unwrap());
+        assert!(!git_has_changes_inner(&s(&dir)).unwrap()); // 삭제가 커밋됨 → 깨끗
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn commit_paths_empty_or_outside_is_noop() {
+        let dir = temp_dir();
+        fs::write(dir.join("real.md"), "x\n").unwrap();
+        git_init_inner(&s(&dir)).unwrap();
+        fs::write(dir.join("real.md"), "y\n").unwrap();
+
+        // 빈 목록 → no-op(false), 변경은 그대로 남음.
+        assert!(!git_commit_paths_inner(&s(&dir), &[], "noop").unwrap());
+        // vault 밖 경로만 → 변환 0건 → no-op.
+        assert!(!git_commit_paths_inner(&s(&dir), &["/etc/passwd".to_string()], "esc").unwrap());
+        assert!(git_has_changes_inner(&s(&dir)).unwrap()); // 아직 dirty(아무것도 커밋 안 됨)
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn rel_for_add_blocks_traversal_and_outside() {
+        let dir = temp_dir();
+        // vault 안 파일(존재) → 상대경로.
+        let inside = dir.join("sub").join("n.md");
+        fs::create_dir_all(inside.parent().unwrap()).unwrap();
+        fs::write(&inside, "x\n").unwrap();
+        assert_eq!(rel_for_add(&dir, &s(&inside)).as_deref(), Some("sub/n.md"));
+
+        // 탈출 시도(존재 안 함 → lexical) → None.
+        let escape = format!("{}/../../etc/passwd", s(&dir));
+        assert_eq!(rel_for_add(&dir, &escape), None);
+        // vault 자체 → 빈 상대경로 → None.
+        assert_eq!(rel_for_add(&dir, &s(&dir)), None);
 
         fs::remove_dir_all(&dir).ok();
     }
