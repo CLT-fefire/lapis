@@ -36,6 +36,7 @@ pub fn run() {
             git::git_init,
             git::git_has_changes,
             git::git_commit_all,
+            git::git_commit_paths,
             git::git_log,
             git::git_show_diff,
             search_cache::read_search_cache_meta,
