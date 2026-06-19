@@ -28,10 +28,12 @@
  *
  * **제약**: worker는 Tauri invoke 불가. snippet 생성은 main thread에서 `readNote` 사용.
  *
- * **옵션 일관**: `FULLTEXT_OPTIONS`는 `searchIndex.ts`와 동일. 옵션 변경 시 두 곳 + CACHE_VERSION bump.
+ * **토크나이저**: 한글 bigram 하이브리드(`koTokenize.ts`) — index/query 동일 적용. 변경 시
+ * `search_cache.rs`의 CACHE_VERSION bump 필수(인덱스 호환 깨짐).
  */
 
 import MiniSearch, { type Options } from "minisearch";
+import { koBigramTokenize, normalizeTerm } from "./koTokenize";
 
 interface FullTextDoc {
   id: string;
@@ -43,10 +45,18 @@ const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
   fields: ["name", "body"],
   storeFields: ["name"],
   idField: "id",
+  tokenize: koBigramTokenize,
+  processTerm: normalizeTerm,
   searchOptions: {
     boost: { name: 3 },
-    prefix: true,
-    fuzzy: 0.15,
+    // 역직렬화(loadJSON) 후에도 쿼리 토큰화·정규화가 인덱스와 일치하도록 명시.
+    tokenize: koBigramTokenize,
+    processTerm: normalizeTerm,
+    // 한글 bigram(2글자)은 prefix/fuzzy 제외(정확 매칭). 영어 단어(>2)만 prefix,
+    // fuzzy는 4글자+ 에만 — 짧은 term의 radix tree 확장 폭발·오타 노이즈 억제.
+    prefix: (term) => term.length > 2,
+    fuzzy: (term) => (term.length > 3 ? 0.15 : false),
+    maxFuzzy: 3,
   },
 };
 
