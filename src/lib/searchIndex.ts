@@ -100,14 +100,7 @@ export interface FullTextDoc {
   body: string;
 }
 
-export interface FullTextHit {
-  path: string;
-  name: string;
-  score: number;
-  snippet: string;
-}
-
-interface WorkerHit {
+export interface WorkerHit {
   path: string;
   score: number;
   name: string;
@@ -319,45 +312,38 @@ export async function workerReset(): Promise<void> {
 }
 
 /**
- * 풀텍스트 검색 — async, worker proxy.
+ * 풀텍스트 랭킹만 — worker가 path/score/name 반환. **IO·snippet 없음**(저비용).
  *
- * - worker가 path/score/name 반환
- * - main에서 매 hit마다 readNote(path)로 body lazy fetch → snippet 생성
- * - 한 노트 read 실패 시 그 결과만 skip
- *
+ * 스니펫은 `buildContentSnippet`로 **표시 대상 hit에만** 지연 생성한다 — dedupe·결과 컷으로
+ * 탈락하는 hit에 대해 `readNote`(디스크 IO + IPC)를 낭비하지 않기 위함.
  * 호출자(`palette.ts:matchContent`)도 async 체인. 인덱스 인자는 안 받음(worker singleton).
  */
-export async function searchFullText(
+export async function searchFullTextRanked(
   query: string,
   limit = 30,
-): Promise<FullTextHit[]> {
+): Promise<WorkerHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const workerHits = await workerSearch(q, limit);
-  if (workerHits.length === 0) return [];
-  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const RADIUS = 60;
+  return workerSearch(q, limit);
+}
 
-  const hits = await Promise.all(
-    workerHits.map(async (h): Promise<FullTextHit | null> => {
-      let body = "";
-      try {
-        body = await readNote(h.path);
-      } catch (e) {
-        console.warn(`[search] readNote failed for ${h.path}`, e);
-        return null;
-      }
-      const { snippet, matched } = extractSnippetAround(body, tokens, RADIUS);
-      const finalSnippet = matched
-        ? snippet
-        : body.slice(0, RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
-      return {
-        path: h.path,
-        name: h.name,
-        score: h.score,
-        snippet: finalSnippet,
-      };
-    }),
-  );
-  return hits.filter((h): h is FullTextHit => h !== null);
+const SNIPPET_RADIUS = 60;
+
+/**
+ * 단일 노트의 검색 스니펫 생성 — `readNote` 1회 + 매치 주변 추출. 실패 시 빈 문자열.
+ * 최종 표시 결과에만 호출(불필요한 디스크 IO 회피).
+ */
+export async function buildContentSnippet(path: string, query: string): Promise<string> {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let body = "";
+  try {
+    body = await readNote(path);
+  } catch (e) {
+    console.warn(`[search] readNote failed for ${path}`, e);
+    return "";
+  }
+  const { snippet, matched } = extractSnippetAround(body, tokens, SNIPPET_RADIUS);
+  return matched
+    ? snippet
+    : body.slice(0, SNIPPET_RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
 }

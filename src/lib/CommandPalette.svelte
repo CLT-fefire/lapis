@@ -17,6 +17,9 @@
   let query = $state("");
   let activeIndex = $state(0);
 
+  /** 검색 디바운스(ms) — 빠른 타이핑 시 키 입력마다 풀검색(searchQuick 12k + readNote×N) 방지. */
+  const SEARCH_DEBOUNCE_MS = 90;
+
   // 키보드 탐색 중에는 mouseenter를 무시 — 컨테이너가 스크롤되면 마우스 좌표가 그대로여도
   // 새로 화면에 들어온 항목 위에 커서가 위치하게 되어 mouseenter가 발화, activeIndex가
   // 의도와 반대로 바뀌는 hijacking을 막는다. 마우스가 실제로 움직이면 모드 해제.
@@ -63,19 +66,26 @@
     const q = query;
     const hint = $paletteHintMode;
     let cancelled = false;
-    void (async () => {
-      try {
-        const r = await unifiedSearch(q, hint);
-        if (!cancelled) results = r;
-      } catch (e) {
-        if (!cancelled) {
-          console.warn("unifiedSearch failed", e);
-          results = [];
+    // 빈 입력(Recent/Quick Actions)은 즉시, 입력이 있으면 디바운스 — 타이핑 중 매 키마다
+    // 풀검색이 도는 것을 막아 입력 지연을 없앤다. 다음 키 입력이 timer를 clear하므로
+    // 입력이 멈춘 뒤 1회만 실행. cancelled로 stale 결과 덮어쓰기도 차단(이중 안전).
+    const delay = q.trim() === "" ? 0 : SEARCH_DEBOUNCE_MS;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const r = await unifiedSearch(q, hint);
+          if (!cancelled) results = r;
+        } catch (e) {
+          if (!cancelled) {
+            console.warn("unifiedSearch failed", e);
+            results = [];
+          }
         }
-      }
-    })();
+      })();
+    }, delay);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   });
 
