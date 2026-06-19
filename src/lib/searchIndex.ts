@@ -1,6 +1,7 @@
 import type { NoteContent, LinkInfo } from "$lib/tauri/notes";
 import { readNote } from "$lib/tauri/notes";
 import { extractSnippetAround } from "$lib/snippet";
+import { chosungOf, isChosungQuery } from "$lib/hangul";
 import FullTextWorker from "./fullTextWorker?worker";
 
 /* =========================================================
@@ -12,6 +13,7 @@ export interface QuickEntry {
   path: string;
   primaryLabel: string;   // 표시용 (title || name)
   matchKeys: string[];    // 매칭 대상 (name, aliases, title 모두)
+  chosungKeys: string[];  // matchKeys와 1:1 초성 형태 (초성 쿼리 매칭용, 선계산)
   parentPath: string;     // 부모 디렉토리 (UI 보조 표시용)
 }
 
@@ -29,10 +31,12 @@ export function buildQuickEntries(infos: LinkInfo[]): QuickEntry[] {
     for (const a of info.aliases) keys.add(a);
     const segs = info.source_path.split("/").filter(Boolean);
     const parent = segs.slice(-3, -1).join("/"); // 부모 두 단계만
+    const matchKeys = [...keys];
     return {
       path: info.source_path,
       primaryLabel: info.title ?? info.source_name,
-      matchKeys: [...keys],
+      matchKeys,
+      chosungKeys: matchKeys.map(chosungOf), // 초성 쿼리 매칭용 선계산(키 입력마다 재계산 회피)
       parentPath: parent,
     };
   });
@@ -73,14 +77,18 @@ export function searchQuick(query: string, entries: QuickEntry[], limit = 30): Q
       .slice(0, limit)
       .map((entry) => ({ entry, matchedKey: entry.primaryLabel, score: 0 }));
   }
+  // "ㄱㅂㅈ"처럼 자음만이면 초성 검색: 각 키의 초성 형태에 매칭하되, 표시용 matchedKey는
+  // 원본 키(title/name)로 유지. 일반 쿼리는 기존 fuzzy 경로.
+  const chosungMode = isChosungQuery(query);
   const hits: QuickHit[] = [];
   for (const entry of entries) {
+    const keys = chosungMode ? entry.chosungKeys : entry.matchKeys;
     let best: QuickHit | null = null;
-    for (const key of entry.matchKeys) {
-      const score = fuzzyMatch(query, key);
+    for (let i = 0; i < keys.length; i++) {
+      const score = fuzzyMatch(query, keys[i]);
       if (score === null) continue;
       if (!best || score > best.score) {
-        best = { entry, matchedKey: key, score };
+        best = { entry, matchedKey: entry.matchKeys[i], score };
       }
     }
     if (best) hits.push(best);
