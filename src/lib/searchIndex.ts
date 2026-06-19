@@ -12,8 +12,9 @@ import FullTextWorker from "./fullTextWorker?worker";
 export interface QuickEntry {
   path: string;
   primaryLabel: string;   // 표시용 (title || name)
-  matchKeys: string[];    // 매칭 대상 (name, aliases, title 모두)
-  chosungKeys: string[];  // matchKeys와 1:1 초성 형태 (초성 쿼리 매칭용, 선계산)
+  matchKeys: string[];    // 매칭 대상 (name, aliases, title 모두) — 표시·반환용 원본
+  matchKeysLower: string[]; // matchKeys 소문자 선계산 (매 검색마다 toLowerCase 반복 회피)
+  chosungKeys: string[];  // matchKeys와 1:1 초성 형태 (초성 쿼리 매칭용, 선계산; 이미 소문자)
   parentPath: string;     // 부모 디렉토리 (UI 보조 표시용)
 }
 
@@ -36,6 +37,7 @@ export function buildQuickEntries(infos: LinkInfo[]): QuickEntry[] {
       path: info.source_path,
       primaryLabel: info.title ?? info.source_name,
       matchKeys,
+      matchKeysLower: matchKeys.map((k) => k.toLowerCase()), // 검색마다 toLowerCase 반복 회피
       chosungKeys: matchKeys.map(chosungOf), // 초성 쿼리 매칭용 선계산(키 입력마다 재계산 회피)
       parentPath: parent,
     };
@@ -43,12 +45,10 @@ export function buildQuickEntries(infos: LinkInfo[]): QuickEntry[] {
 }
 
 /**
- * 단순 fuzzy: subsequence 매칭 + 시작·연속 가중치.
- * 라이브러리 없이 ~20줄. 1만 노트 미만에서 즉각.
+ * fuzzy 코어 — **q, t 모두 이미 소문자**라고 가정(정규화 캐시 경로용). subsequence 매칭 +
+ * 시작·연속 가중치. 라이브러리 없이 ~20줄.
  */
-export function fuzzyMatch(query: string, target: string): number | null {
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
+export function fuzzyMatchLower(q: string, t: string): number | null {
   if (!q) return 0;
   if (q === t) return 1000;
   if (t.startsWith(q)) return 800 - (t.length - q.length); // 시작 매칭 강한 가산
@@ -71,28 +71,107 @@ export function fuzzyMatch(query: string, target: string): number | null {
   return score - (t.length - q.length); // 짧을수록 우대
 }
 
+/** 편의 래퍼 — q/t를 소문자화 후 매칭. (tag/facet 등 비-Quick 경로용; 동작은 기존과 동일.) */
+export function fuzzyMatch(query: string, target: string): number | null {
+  return fuzzyMatchLower(query.toLowerCase(), target.toLowerCase());
+}
+
+/**
+ * 단일 엔트리 스코어링 — searchQuick / searchQuickIncremental 공유.
+ * `qLower`는 호출부에서 1회 소문자화한 쿼리. chosung 모드면 chosungKeys(이미 소문자),
+ * 아니면 matchKeysLower를 사용. matchedKey는 표시용 원본 matchKeys[i].
+ */
+function scoreEntry(entry: QuickEntry, qLower: string, chosungMode: boolean): QuickHit | null {
+  const keys = chosungMode ? entry.chosungKeys : entry.matchKeysLower;
+  let best: QuickHit | null = null;
+  for (let i = 0; i < keys.length; i++) {
+    const score = fuzzyMatchLower(qLower, keys[i]);
+    if (score === null) continue;
+    if (!best || score > best.score) {
+      best = { entry, matchedKey: entry.matchKeys[i], score };
+    }
+  }
+  return best;
+}
+
+/**
+ * 전체 스캔(순수). 테스트 레퍼런스이자 incremental의 fallback 의미. "ㄱㅂㅈ"처럼 자음만이면
+ * 초성 검색(키의 초성 형태에 매칭), 일반 쿼리는 fuzzy.
+ */
 export function searchQuick(query: string, entries: QuickEntry[], limit = 30): QuickHit[] {
   if (!query.trim()) {
     return entries
       .slice(0, limit)
       .map((entry) => ({ entry, matchedKey: entry.primaryLabel, score: 0 }));
   }
-  // "ㄱㅂㅈ"처럼 자음만이면 초성 검색: 각 키의 초성 형태에 매칭하되, 표시용 matchedKey는
-  // 원본 키(title/name)로 유지. 일반 쿼리는 기존 fuzzy 경로.
   const chosungMode = isChosungQuery(query);
+  const qLower = query.toLowerCase();
   const hits: QuickHit[] = [];
   for (const entry of entries) {
-    const keys = chosungMode ? entry.chosungKeys : entry.matchKeys;
-    let best: QuickHit | null = null;
-    for (let i = 0; i < keys.length; i++) {
-      const score = fuzzyMatch(query, keys[i]);
-      if (score === null) continue;
-      if (!best || score > best.score) {
-        best = { entry, matchedKey: entry.matchKeys[i], score };
-      }
-    }
+    const best = scoreEntry(entry, qLower, chosungMode);
     if (best) hits.push(best);
   }
+  hits.sort((a, b) => b.score - a.score);
+  return hits.slice(0, limit);
+}
+
+// === 점진 필터링 (incremental) ===
+// 새 쿼리가 직전 쿼리를 prefix로 확장하고(같은 모드·같은 entries 참조) 있으면, 직전에 매칭된
+// 후보군만 재스캔한다. subsequence 매칭은 `Q1`이 `Q2`의 prefix일 때 matches(Q2) ⊆ matches(Q1)이
+// 성립하므로(엔트리 단위로도 성립) 결과가 동일하다. 모드 전환·삭제/편집·reindex(entries 교체) 시
+// 전체 스캔으로 fallback. **후보군은 limit로 자르지 않고 전부** 보관해야 정확하다(하위 랭크가
+// 다음 쿼리에서 상위로 올 수 있음).
+
+let lastQuery = "";
+let lastChosungMode: boolean | null = null;
+let lastEntries: QuickEntry[] | null = null;
+let lastCandidates: QuickEntry[] = [];
+
+/** incremental 캐시 리셋(테스트·명시적 무효화용). */
+export function resetQuickSearchCache(): void {
+  lastQuery = "";
+  lastChosungMode = null;
+  lastEntries = null;
+  lastCandidates = [];
+}
+
+/**
+ * searchQuick의 점진 버전 — 매 호출 결과는 동일하나, prefix 확장 입력에서는 직전 후보군만
+ * 스캔해 큰 vault에서 매 검색 전수 순회를 피한다. 호출부(palette `matchFiles`)에서 사용.
+ */
+export function searchQuickIncremental(query: string, entries: QuickEntry[], limit = 30): QuickHit[] {
+  if (!query.trim()) {
+    lastQuery = "";
+    lastChosungMode = null;
+    lastEntries = entries;
+    lastCandidates = [];
+    return entries
+      .slice(0, limit)
+      .map((entry) => ({ entry, matchedKey: entry.primaryLabel, score: 0 }));
+  }
+  const chosungMode = isChosungQuery(query);
+  const qLower = query.toLowerCase();
+  const canIncrement =
+    lastEntries === entries &&
+    lastChosungMode === chosungMode &&
+    lastQuery !== "" &&
+    query.startsWith(lastQuery);
+  const pool = canIncrement ? lastCandidates : entries;
+
+  const candidates: QuickEntry[] = [];
+  const hits: QuickHit[] = [];
+  for (const entry of pool) {
+    const best = scoreEntry(entry, qLower, chosungMode);
+    if (best) {
+      candidates.push(entry); // limit 무관 전체 후보 보관(다음 prefix 확장의 정확성)
+      hits.push(best);
+    }
+  }
+  lastQuery = query;
+  lastChosungMode = chosungMode;
+  lastEntries = entries;
+  lastCandidates = candidates;
+
   hits.sort((a, b) => b.score - a.score);
   return hits.slice(0, limit);
 }
