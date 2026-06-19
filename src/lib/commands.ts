@@ -5,6 +5,7 @@ import {
   currentNotePath,
   pickAndOpenVault,
   reloadNotes,
+  forceReindex,
   deletePath,
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
@@ -58,6 +59,16 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       void reloadNotes();
+    },
+  },
+  {
+    id: "rebuild-index",
+    label: "Rebuild Index (force)",
+    disabled: () => !get(vaultPath),
+    run() {
+      // 캐시 무시·전체 재읽기·워커 초기화 후 재빌드. 외부 대량 변경(frontmatter 정규화 등) 후
+      // "확실히 새로" 또는 fingerprint가 못 잡는 변경 복구용. Reload Vault(캐시 재사용)와 구분.
+      void forceReindex();
     },
   },
   {

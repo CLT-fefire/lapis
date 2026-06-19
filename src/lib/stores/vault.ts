@@ -289,7 +289,23 @@ export async function reloadNotes(): Promise<void> {
   }
 }
 
-async function reloadNotesInner(): Promise<void> {
+/**
+ * **강제 재구축** — fingerprint 디스크 캐시를 무시하고 vault 전체를 다시 읽어 모든 인덱스를
+ * 처음부터 재빌드한다(+ 캐시 덮어쓰기). 풀텍스트 워커도 `clearIndexes()`로 비운 뒤 다시 채워
+ * stale shard 잔존 가능성까지 제거. 외부 대량 변경(예: frontmatter 정규화) 후 "확실히 새로",
+ * 또는 fingerprint가 못 잡는 mtime·size 동일 in-place write 복구용. 커맨드 `rebuild-index`에서 호출.
+ */
+export async function forceReindex(): Promise<void> {
+  if (reloadInFlight) return;
+  reloadInFlight = true;
+  try {
+    await reloadNotesInner(true);
+  } finally {
+    reloadInFlight = false;
+  }
+}
+
+async function reloadNotesInner(force = false): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
   // 쓸 수 있는 인덱스가 이미 떠 있으면 이번은 "재빌드"(watcher fallback / 수동 새로고침) →
@@ -308,6 +324,10 @@ async function reloadNotesInner(): Promise<void> {
 
   // 전체 인덱스 재빌드 시 백링크 snippet 캐시도 stale — 안전하게 전부 비움.
   clearBacklinkCache();
+
+  // 강제 재구축: 풀텍스트 워커를 먼저 비운다(stale shard 잔존 제거). 이후 miss 경로가
+  // 전체 재읽기로 다시 채운다. (워커 메시지는 순서 보장 — resetAll → addToShard 순.)
+  if (force) clearIndexes();
 
   // 1) 트리
   treeLoading.set(true);
@@ -341,7 +361,7 @@ async function reloadNotesInner(): Promise<void> {
     if (perf) tCacheCheckEnd = performance.now();
 
     let appliedFromCache = false;
-    if (meta && meta.fingerprint === fp.fingerprint) {
+    if (!force && meta && meta.fingerprint === fp.fingerprint) {
       // cache hit. link_infos는 즉시 사용. fullTextIndex는 lazy — pendingFullTextVault에
       // vault path만 박고 idle 시점에 minisearch_json 받아 loadJSON.
       const links = meta.link_infos;
