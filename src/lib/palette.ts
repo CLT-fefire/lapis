@@ -2,7 +2,8 @@ import { get } from "svelte/store";
 import {
   fuzzyMatch,
   searchQuick,
-  searchFullText,
+  searchFullTextRanked,
+  buildContentSnippet,
   type QuickEntry,
 } from "$lib/searchIndex";
 import { quickEntries, fullTextIndexReady } from "$lib/stores/search";
@@ -186,12 +187,24 @@ function matchFiles(query: string, entries: QuickEntry[], limit = 20): PaletteRe
 async function matchContent(query: string, limit = 20): Promise<PaletteResult[]> {
   if (!query.trim()) return [];
   if (!get(fullTextIndexReady)) return []; // worker 인덱스가 아직 빌드 중 — CommandPalette UI에 안내
-  // searchFullText는 async — worker.search + main의 readNote × N으로 snippet 합성.
-  const hits = await searchFullText(query, limit);
+  // 랭킹만(저비용). snippet은 표시 대상에만 fillContentSnippets로 지연 생성 — dedupe·컷으로
+  // 탈락하는 hit에 readNote(디스크 IO) 낭비 방지.
+  const hits = await searchFullTextRanked(query, limit);
   return hits.map((h) => ({
-    entry: { kind: "content", path: h.path, name: h.name, snippet: h.snippet },
+    entry: { kind: "content", path: h.path, name: h.name, snippet: "" },
     score: normalizedScore("content", h.score),
   }));
+}
+
+/** content 결과에 스니펫을 채운다(readNote × content 건수). 최종 표시 집합에만 호출. */
+async function fillContentSnippets(results: PaletteResult[], query: string): Promise<void> {
+  await Promise.all(
+    results.map(async (r) => {
+      if (r.entry.kind === "content") {
+        r.entry.snippet = await buildContentSnippet(r.entry.path, query);
+      }
+    }),
+  );
 }
 
 function commandsAsResults(query: string, limit = 20): PaletteResult[] {
@@ -259,7 +272,10 @@ export async function unifiedSearch(
     return query ? matchFiles(query, get(quickEntries)) : recentAsResults();
   }
   if (mode === "fulltext") {
-    return query ? await matchContent(query) : recentAsResults();
+    if (!query) return recentAsResults();
+    const content = await matchContent(query);
+    await fillContentSnippets(content, query); // 전부 표시되므로 모두 생성
+    return content;
   }
 
   // all 모드 — 빈 query면 Recent + Quick Actions
@@ -288,7 +304,10 @@ export async function unifiedSearch(
 
   const merged = [...byPath.values(), ...tags, ...facets, ...cmds];
   merged.sort((a, b) => b.score - a.score);
-  return merged.slice(0, 30);
+  const final = merged.slice(0, 30);
+  // 최종 컷에 든 content에만 스니펫 생성 — dedupe(파일과 같은 path)·30컷으로 탈락한 hit은 IO 안 함.
+  await fillContentSnippets(final, query);
+  return final;
 }
 
 /** 그룹별로 결과 분할 — UI 렌더링용. 빈 그룹은 제외하지 않음(헤더 결정은 UI에서). */
