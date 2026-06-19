@@ -1,7 +1,7 @@
 import { get } from "svelte/store";
 import {
   fuzzyMatch,
-  searchQuick,
+  searchQuickIncremental,
   searchFullTextRanked,
   buildContentSnippet,
   type QuickEntry,
@@ -169,7 +169,7 @@ function matchFacets(query: string, limit = 20): PaletteResult[] {
 }
 
 function matchFiles(query: string, entries: QuickEntry[], limit = 20): PaletteResult[] {
-  const hits = searchQuick(query, entries, limit);
+  const hits = searchQuickIncremental(query, entries, limit);
   return hits.map((h) => ({
     entry: {
       kind: "note",
