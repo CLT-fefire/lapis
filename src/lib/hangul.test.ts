@@ -47,6 +47,7 @@ describe("searchQuick — 초성 모드", () => {
       path: `/v/${label}.md`,
       primaryLabel: label,
       matchKeys,
+      matchKeysLower: matchKeys.map((k) => k.toLowerCase()),
       chosungKeys: matchKeys.map(chosungOf),
       parentPath: "v",
     };
