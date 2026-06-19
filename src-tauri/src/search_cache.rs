@@ -15,6 +15,7 @@
 //! - v3: gzip 압축
 //! - v4: sharded (메타 + N shard 파일 분리)
 //! - v5: LinkInfo에 generic `props`(모든 frontmatter 키) 추가 — Phase A 지식 그래프
+//! - v6: 풀텍스트 토크나이저를 한글 bigram 하이브리드로 변경(koTokenize) — 인덱스 토큰 공간 변경
 
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -29,7 +30,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::vault::LinkInfo;
 
-pub const CACHE_VERSION: u32 = 5;
+pub const CACHE_VERSION: u32 = 6;
 
 /// 메타 파일 schema — `*.meta.json.gz`에 직렬화.
 #[derive(Debug, Serialize, Deserialize, Clone)]
