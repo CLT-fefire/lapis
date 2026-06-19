@@ -75,11 +75,15 @@ async function handleChange(change: VaultChange): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
 
+  // 이번 이벤트로 바뀐 경로 — git 자동커밋에 targeted add로 넘긴다.
+  const touched: string[] = [];
+
   switch (change.kind) {
     case "modified":
     case "created":
       pendingRemoved.delete(change.path);
       pendingChanged.add(change.path);
+      touched.push(change.path);
       // 본문이 바뀌었으니 이 path를 source로 하는 백링크 snippet 캐시는 stale.
       invalidateCacheBySource(change.path);
       // 현재 열린 노트가 영향 받으면 외부변경 충돌/리로드 즉시 처리.
@@ -91,6 +95,7 @@ async function handleChange(change: VaultChange): Promise<void> {
     case "removed":
       pendingChanged.delete(change.path);
       pendingRemoved.add(change.path);
+      touched.push(change.path);
       invalidateCacheBySource(change.path);
       void closeTab(change.path); // 열려 있었다면 탭 제거
       break;
@@ -99,6 +104,7 @@ async function handleChange(change: VaultChange): Promise<void> {
       pendingRemoved.add(change.from);
       pendingRemoved.delete(change.to);
       pendingChanged.add(change.to);
+      touched.push(change.from, change.to);
       invalidateCacheBySource(change.from);
       invalidateCacheBySource(change.to);
       void closeTab(change.from);
@@ -108,7 +114,7 @@ async function handleChange(change: VaultChange): Promise<void> {
   scheduleIncrementalReindex();
 
   // git 버전관리 켜진 vault면 변경 정착 후 자동 커밋 예약(내부에서 repo 여부 확인).
-  scheduleAutoCommit(root);
+  scheduleAutoCommit(root, touched);
 }
 
 /**
