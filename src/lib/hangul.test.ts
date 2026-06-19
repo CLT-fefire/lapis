@@ -87,4 +87,12 @@ describe("searchQuick — 초성 모드", () => {
     expect(hits.map((h) => h.entry.primaryLabel)).toContain("문서");
     expect(hits[0].matchedKey).toBe("회의록"); // 매칭된 원본 키
   });
+
+  it('실제 보고 케이스: "ㄷㅋㅁㄷ" → "다크모드_..." 파일 (앞부분 초성 매칭)', () => {
+    // 파일명이 "다크모드"로 시작 → 초성 ㄷㅋㅁㄷ가 접두 → startsWith 매칭돼야 함.
+    const real = [entry("다크모드_색상이미지_개요_root"), entry("문서목록")];
+    const hits = searchQuick("ㄷㅋㅁㄷ", real);
+    expect(hits.map((h) => h.entry.primaryLabel)).toContain("다크모드_색상이미지_개요_root");
+    expect(hits[0].entry.primaryLabel).toBe("다크모드_색상이미지_개요_root"); // 접두 매칭이 상위
+  });
 });
