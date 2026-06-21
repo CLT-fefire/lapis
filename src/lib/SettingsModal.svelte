@@ -10,7 +10,7 @@
     clampBackupKeep,
   } from "$lib/stores/settings";
   import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
-  import { vaultPath } from "$lib/stores/vault";
+  import { vaultPath, forceReindex } from "$lib/stores/vault";
   import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
   import { get } from "svelte/store";
 
@@ -78,6 +78,17 @@
     if (!vault || $gitBusy) return;
     await startVersioning(vault);
     gitHint = $gitRepo ? "버전관리를 시작했습니다 — 변경 시 자동으로 커밋됩니다." : "시작 실패 — 콘솔 확인";
+  }
+
+  // === 인덱스 강제 재구축 ===
+  // 보통은 자동 반영(watcher 증분 + launch fingerprint)되지만, 외부 대량 변경이 검색에
+  // 안 잡힐 때를 위한 수동 escape hatch. 캐시 무시·워커 초기화 후 전체 재빌드.
+  // 설정을 닫고 트리거 — 진행/완료는 사이드바 blocking 오버레이(+progress)가 표시한다
+  // (재구축 중 풀텍스트가 torn이라 사이드바·팔레트를 막는다). 읽기 패널은 계속 사용 가능.
+  function onRebuildIndex() {
+    if (!get(vaultPath)) return;
+    closeSettings();
+    void forceReindex().catch((e) => console.error("[Settings] rebuild index failed", e));
   }
 </script>
 
@@ -172,6 +183,27 @@
               >
                 {$gitBusy ? "시작 중…" : "버전관리 시작"}
               </button>
+            {/if}
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">인덱스 재구축</span>
+              <span class="label-desc">
+                검색·태그·관계 인덱스를 캐시를 무시하고 처음부터 다시 만듭니다. 외부에서 문서나
+                속성을 대량으로 바꿨는데 검색에 반영이 안 될 때 사용하세요.
+                <strong>보통은 자동 반영</strong>되므로 평소엔 필요 없습니다. 누르면 설정이 닫히고
+                사이드바에 진행 표시가 나타납니다(완료까지 검색은 잠시 막힘, 읽기는 계속 가능).
+              </span>
+            </span>
+          </div>
+          <div class="setting-control">
+            {#if !$vaultPath}
+              <span class="setting-status">vault 없음</span>
+            {:else}
+              <button class="btn btn--sm" onclick={onRebuildIndex}>재구축</button>
             {/if}
           </div>
         </section>
