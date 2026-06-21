@@ -83,24 +83,12 @@
   // === 인덱스 강제 재구축 ===
   // 보통은 자동 반영(watcher 증분 + launch fingerprint)되지만, 외부 대량 변경이 검색에
   // 안 잡힐 때를 위한 수동 escape hatch. 캐시 무시·워커 초기화 후 전체 재빌드.
-  let rebuilding = $state(false);
-  let rebuildHint = $state("");
-  async function onRebuildIndex() {
-    if (rebuilding || !get(vaultPath)) return;
-    rebuilding = true;
-    rebuildHint = "재구축 중…";
-    try {
-      await forceReindex();
-      rebuildHint = "인덱스를 다시 만들었습니다.";
-      setTimeout(() => {
-        if (rebuildHint.startsWith("인덱스를")) rebuildHint = "";
-      }, 2500);
-    } catch (e) {
-      console.error("[Settings] rebuild index failed", e);
-      rebuildHint = "재구축 실패 — 콘솔 확인";
-    } finally {
-      rebuilding = false;
-    }
+  // 설정을 닫고 트리거 — 진행/완료는 사이드바 blocking 오버레이(+progress)가 표시한다
+  // (재구축 중 풀텍스트가 torn이라 사이드바·팔레트를 막는다). 읽기 패널은 계속 사용 가능.
+  function onRebuildIndex() {
+    if (!get(vaultPath)) return;
+    closeSettings();
+    void forceReindex().catch((e) => console.error("[Settings] rebuild index failed", e));
   }
 </script>
 
@@ -206,20 +194,16 @@
               <span class="label-desc">
                 검색·태그·관계 인덱스를 캐시를 무시하고 처음부터 다시 만듭니다. 외부에서 문서나
                 속성을 대량으로 바꿨는데 검색에 반영이 안 될 때 사용하세요.
-                <strong>보통은 자동 반영</strong>되므로 평소엔 필요 없습니다.
+                <strong>보통은 자동 반영</strong>되므로 평소엔 필요 없습니다. 누르면 설정이 닫히고
+                사이드바에 진행 표시가 나타납니다(완료까지 검색은 잠시 막힘, 읽기는 계속 가능).
               </span>
-              {#if rebuildHint}
-                <span class="label-hint">{rebuildHint}</span>
-              {/if}
             </span>
           </div>
           <div class="setting-control">
             {#if !$vaultPath}
               <span class="setting-status">vault 없음</span>
             {:else}
-              <button class="btn btn--sm" disabled={rebuilding} onclick={onRebuildIndex}>
-                {rebuilding ? "재구축 중…" : "재구축"}
-              </button>
+              <button class="btn btn--sm" onclick={onRebuildIndex}>재구축</button>
             {/if}
           </div>
         </section>

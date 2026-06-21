@@ -311,7 +311,10 @@ async function reloadNotesInner(force = false): Promise<void> {
   // 쓸 수 있는 인덱스가 이미 떠 있으면 이번은 "재빌드"(watcher fallback / 수동 새로고침) →
   // blocking 오버레이 대신 백그라운드(progress strip만). 최초 빌드(linkIndex 없음)만 blocking.
   // 인덱스는 빌드 완료 후 atomic하게 .set 되므로 재빌드 중에도 이전 인덱스로 계속 탐색 가능.
-  const buildState = get(linkIndex) === null ? indexBuilding : indexRefreshing;
+  // 최초 빌드(인덱스 없음)와 **명시적 강제 재구축(force)**은 blocking 오버레이(+progress) — force는
+  // 풀텍스트 shard를 in-place로 reset→refill해 검색이 torn이므로 사이드바·팔레트를 막아 혼란 방지.
+  // watcher 증분/일반 새로고침은 non-blocking strip(읽던 인덱스로 계속 탐색).
+  const buildState = force || get(linkIndex) === null ? indexBuilding : indexRefreshing;
   // dev 모드 측정 — 어느 단계가 cold start 비용을 차지하는지 추적. release는 dead code.
   const perf = import.meta.env.DEV;
   const t0 = perf ? performance.now() : 0;
