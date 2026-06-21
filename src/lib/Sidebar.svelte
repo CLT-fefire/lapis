@@ -17,6 +17,7 @@
     createNewNote,
     selectNote,
   } from "$lib/stores/vault";
+  import { buildProgress } from "$lib/stores/search";
   import { groupingField, setGroupingField } from "$lib/stores/lens";
   import { groupingCandidates, groupNotesByField } from "$lib/lens";
   import {
@@ -443,7 +444,13 @@ graph LR
           <div class="spinner" aria-hidden="true"></div>
           <div class="index-overlay-text">
             <div class="primary">인덱스 빌드 중…</div>
-            <div class="secondary">백링크 · 태그 · 풀텍스트 검색 재구성</div>
+            <div class="secondary">
+              {#if $buildProgress && $buildProgress.total > 0}
+                풀텍스트 {$buildProgress.done.toLocaleString()} / {$buildProgress.total.toLocaleString()} 노트
+              {:else}
+                백링크 · 태그 · 풀텍스트 검색 재구성
+              {/if}
+            </div>
           </div>
         </div>
       </div>

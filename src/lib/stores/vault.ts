@@ -289,13 +289,32 @@ export async function reloadNotes(): Promise<void> {
   }
 }
 
-async function reloadNotesInner(): Promise<void> {
+/**
+ * **강제 재구축** — fingerprint 디스크 캐시를 무시하고 vault 전체를 다시 읽어 모든 인덱스를
+ * 처음부터 재빌드한다(+ 캐시 덮어쓰기). 풀텍스트 워커도 `clearIndexes()`로 비운 뒤 다시 채워
+ * stale shard 잔존 가능성까지 제거. 외부 대량 변경(예: frontmatter 정규화) 후 "확실히 새로",
+ * 또는 fingerprint가 못 잡는 mtime·size 동일 in-place write 복구용. 커맨드 `rebuild-index`에서 호출.
+ */
+export async function forceReindex(): Promise<void> {
+  if (reloadInFlight) return;
+  reloadInFlight = true;
+  try {
+    await reloadNotesInner(true);
+  } finally {
+    reloadInFlight = false;
+  }
+}
+
+async function reloadNotesInner(force = false): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
   // 쓸 수 있는 인덱스가 이미 떠 있으면 이번은 "재빌드"(watcher fallback / 수동 새로고침) →
   // blocking 오버레이 대신 백그라운드(progress strip만). 최초 빌드(linkIndex 없음)만 blocking.
   // 인덱스는 빌드 완료 후 atomic하게 .set 되므로 재빌드 중에도 이전 인덱스로 계속 탐색 가능.
-  const buildState = get(linkIndex) === null ? indexBuilding : indexRefreshing;
+  // 최초 빌드(인덱스 없음)와 **명시적 강제 재구축(force)**은 blocking 오버레이(+progress) — force는
+  // 풀텍스트 shard를 in-place로 reset→refill해 검색이 torn이므로 사이드바·팔레트를 막아 혼란 방지.
+  // watcher 증분/일반 새로고침은 non-blocking strip(읽던 인덱스로 계속 탐색).
+  const buildState = force || get(linkIndex) === null ? indexBuilding : indexRefreshing;
   // dev 모드 측정 — 어느 단계가 cold start 비용을 차지하는지 추적. release는 dead code.
   const perf = import.meta.env.DEV;
   const t0 = perf ? performance.now() : 0;
@@ -308,6 +327,10 @@ async function reloadNotesInner(): Promise<void> {
 
   // 전체 인덱스 재빌드 시 백링크 snippet 캐시도 stale — 안전하게 전부 비움.
   clearBacklinkCache();
+
+  // 강제 재구축: 풀텍스트 워커를 먼저 비운다(stale shard 잔존 제거). 이후 miss 경로가
+  // 전체 재읽기로 다시 채운다. (워커 메시지는 순서 보장 — resetAll → addToShard 순.)
+  if (force) clearIndexes();
 
   // 1) 트리
   treeLoading.set(true);
@@ -341,7 +364,7 @@ async function reloadNotesInner(): Promise<void> {
     if (perf) tCacheCheckEnd = performance.now();
 
     let appliedFromCache = false;
-    if (meta && meta.fingerprint === fp.fingerprint) {
+    if (!force && meta && meta.fingerprint === fp.fingerprint) {
       // cache hit. link_infos는 즉시 사용. fullTextIndex는 lazy — pendingFullTextVault에
       // vault path만 박고 idle 시점에 minisearch_json 받아 loadJSON.
       const links = meta.link_infos;
