@@ -10,7 +10,7 @@
     clampBackupKeep,
   } from "$lib/stores/settings";
   import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
-  import { vaultPath } from "$lib/stores/vault";
+  import { vaultPath, forceReindex } from "$lib/stores/vault";
   import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
   import { get } from "svelte/store";
 
@@ -78,6 +78,29 @@
     if (!vault || $gitBusy) return;
     await startVersioning(vault);
     gitHint = $gitRepo ? "버전관리를 시작했습니다 — 변경 시 자동으로 커밋됩니다." : "시작 실패 — 콘솔 확인";
+  }
+
+  // === 인덱스 강제 재구축 ===
+  // 보통은 자동 반영(watcher 증분 + launch fingerprint)되지만, 외부 대량 변경이 검색에
+  // 안 잡힐 때를 위한 수동 escape hatch. 캐시 무시·워커 초기화 후 전체 재빌드.
+  let rebuilding = $state(false);
+  let rebuildHint = $state("");
+  async function onRebuildIndex() {
+    if (rebuilding || !get(vaultPath)) return;
+    rebuilding = true;
+    rebuildHint = "재구축 중…";
+    try {
+      await forceReindex();
+      rebuildHint = "인덱스를 다시 만들었습니다.";
+      setTimeout(() => {
+        if (rebuildHint.startsWith("인덱스를")) rebuildHint = "";
+      }, 2500);
+    } catch (e) {
+      console.error("[Settings] rebuild index failed", e);
+      rebuildHint = "재구축 실패 — 콘솔 확인";
+    } finally {
+      rebuilding = false;
+    }
   }
 </script>
 
@@ -171,6 +194,31 @@
                 onclick={onStartVersioning}
               >
                 {$gitBusy ? "시작 중…" : "버전관리 시작"}
+              </button>
+            {/if}
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">인덱스 재구축</span>
+              <span class="label-desc">
+                검색·태그·관계 인덱스를 캐시를 무시하고 처음부터 다시 만듭니다. 외부에서 문서나
+                속성을 대량으로 바꿨는데 검색에 반영이 안 될 때 사용하세요.
+                <strong>보통은 자동 반영</strong>되므로 평소엔 필요 없습니다.
+              </span>
+              {#if rebuildHint}
+                <span class="label-hint">{rebuildHint}</span>
+              {/if}
+            </span>
+          </div>
+          <div class="setting-control">
+            {#if !$vaultPath}
+              <span class="setting-status">vault 없음</span>
+            {:else}
+              <button class="btn btn--sm" disabled={rebuilding} onclick={onRebuildIndex}>
+                {rebuilding ? "재구축 중…" : "재구축"}
               </button>
             {/if}
           </div>
