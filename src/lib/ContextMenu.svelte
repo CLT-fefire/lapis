@@ -7,8 +7,11 @@
   } from "$lib/stores/tree-ui";
   import { deletePath, createNewFolder } from "$lib/stores/vault";
   import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
+  import { revealInFinder } from "$lib/tauri/reveal";
 
-  async function onAction(action: "new-note" | "new-folder" | "rename" | "delete" | "copy-path" | "pin") {
+  async function onAction(
+    action: "new-note" | "new-folder" | "rename" | "delete" | "copy-path" | "reveal" | "pin",
+  ) {
     const target = $contextTarget;
     if (!target) return;
     closeContextMenu();
@@ -36,6 +39,9 @@
         break;
       case "copy-path":
         await copyToClipboard(entry.path);
+        break;
+      case "reveal":
+        await revealInFinder(entry.path);
         break;
       case "pin":
         togglePin(entry.path);
@@ -101,6 +107,7 @@
       </li>
     {/if}
     <li><button onclick={() => onAction("copy-path")}>📋 Copy Path</button></li>
+    <li><button onclick={() => onAction("reveal")}>📂 Finder에서 보기</button></li>
   </ul>
 {/if}
 
