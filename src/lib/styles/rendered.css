@@ -1,0 +1,266 @@
+/* =============================================================================
+ * 렌더된 마크다운 본문(`.rendered`) 스타일 — 단일 진실 위치.
+ *
+ * 두 곳이 이 파일 하나를 쓴다:
+ *   1. 앱 프리뷰   — `+page.svelte`가 `import` (Vite가 전역 스타일시트로 주입)
+ *   2. HTML 내보내기 — `previewExport.ts`가 `?raw`로 읽어 결과 문서에 인라인
+ *
+ * ⚠️ 그래서 이 파일은 **`.rendered` 서브트리에만** 영향을 줘야 한다. 앱 셸(툴바·
+ *    사이드바·모달)에 걸리는 규칙을 여기 넣으면 내보낸 HTML에도 딸려 나간다.
+ *
+ * ⚠️ 색·간격은 반드시 `var(--토큰)`으로 쓴다. 내보내기가 `var(--...)` 이름을
+ *    긁어 `getComputedStyle`로 실제 값을 해석하므로, 리터럴을 박으면 테마가
+ *    반영되지 않는다.
+ *
+ * (2026-08-03 `+page.svelte`의 Svelte-scoped 블록 + `app.css`의 hljs 블록에서 이전.
+ *  scoped 상태로는 컴파일 시 `.rendered.svelte-xxxx` 가 붙어 내보내기에서 재사용
+ *  불가능했다.)
+ * ========================================================================== */
+
+.rendered {
+  line-height: 1.65;
+  /* 프리뷰 글꼴 크기(줌) — ReadingControls가 --reading-font-size로 주입. 헤딩은 em이라 비례. */
+  font-size: var(--reading-font-size, 15px);
+}
+
+.rendered h1 {
+  font-size: 1.8em;
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--sp-3);
+  margin-top: 0;
+}
+
+.rendered h2 {
+  font-size: 1.35em;
+  margin-top: 1.6em;
+  color: var(--text-primary);
+}
+
+.rendered h3 {
+  font-size: 1.1em;
+  color: var(--text-secondary);
+}
+
+.rendered a {
+  color: var(--accent);
+}
+
+.rendered code {
+  background: var(--surface-sunken);
+  padding: 1px var(--sp-3);
+  border-radius: var(--r-sm);
+  font-size: 0.9em;
+  color: var(--violet);
+}
+
+.rendered pre {
+  background: var(--surface-sunken);
+  padding: var(--sp-5);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+}
+
+.rendered pre code {
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0;
+}
+
+/* Mermaid 다이어그램 호스트 (Phase 4.4.a) */
+.rendered .mermaid-host {
+  margin: 1em 0;
+  text-align: center;
+  position: relative; /* PNG 내보내기 버튼 absolute 기준 */
+}
+
+/* PNG 내보내기 hover 버튼 — 앱 전용 UI. 내보낸 HTML에선 요소 자체가 제거된다. */
+.rendered .mermaid-export-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  color: var(--text-primary);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-base) ease;
+  z-index: 2;
+}
+
+.rendered .mermaid-host:hover .mermaid-export-btn {
+  opacity: 1;
+}
+
+.rendered .mermaid-export-btn:hover {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+}
+
+.rendered .mermaid-host[data-rendered="pending"] {
+  min-height: 80px;
+  background: var(--surface-sunken);
+  border-radius: var(--r-sm);
+}
+
+.rendered .mermaid-host svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.rendered .mermaid-error {
+  background: var(--danger-bg-subtle);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  padding: var(--sp-5);
+  border-radius: var(--r-sm);
+  white-space: pre-wrap;
+  text-align: left;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.rendered blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 1em 0;
+  padding: 0 14px;
+  color: var(--text-secondary);
+}
+
+.rendered table {
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.rendered th,
+.rendered td {
+  border: 1px solid var(--border-default);
+  padding: var(--sp-3) var(--sp-5);
+}
+
+.rendered th {
+  background: var(--surface-overlay);
+}
+
+.rendered ul,
+.rendered ol {
+  padding-left: 1.5em;
+}
+
+.rendered li {
+  margin: 0.2em 0;
+}
+
+/* Wikilink 스타일 (span 기반 — 안전한 navigation) */
+.rendered .wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent-border);
+  cursor: pointer;
+  padding: 0 1px;
+  border-radius: var(--r-sm);
+  transition: background var(--dur-fast);
+}
+
+.rendered .wikilink:hover {
+  background: var(--accent-bg-subtle);
+}
+
+.rendered .wikilink:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.rendered .wikilink.unresolved {
+  color: var(--danger);
+  border-bottom-color: var(--danger-border);
+  border-bottom-style: dotted;
+}
+
+.rendered .wikilink.unresolved:hover {
+  background: var(--danger-bg-subtle);
+}
+
+/* =============================================================================
+ * 코드 구문 하이라이팅 (highlight.js)
+ * hljs 토큰 클래스를 에디터용 --cm-* 토큰에 매핑 → (1) 에디터와 색 일치
+ * (2) 라이트/다크 자동 적응(토큰이 테마별 정의됨). 별도 hljs 테마 CSS는 쓰지 않음.
+ * 코드블록 배경/패딩은 위 `pre` 규칙이 담당(여기선 색만).
+ *
+ * `.rendered` 하위로 한정한다 — 이 파일은 내보낸 HTML에도 그대로 들어가므로
+ * 전역 `.hljs` 로 두면 범위가 불필요하게 넓어진다. (2026-08-03 app.css에서 이전)
+ * ========================================================================== */
+.rendered .hljs {
+  background: transparent;
+  color: var(--text-primary);
+}
+.rendered .hljs-comment,
+.rendered .hljs-quote {
+  color: var(--cm-comment);
+  font-style: italic;
+}
+.rendered .hljs-keyword,
+.rendered .hljs-selector-tag,
+.rendered .hljs-literal,
+.rendered .hljs-doctag,
+.rendered .hljs-keyword .hljs-meta {
+  color: var(--cm-keyword);
+}
+.rendered .hljs-string,
+.rendered .hljs-meta .hljs-string,
+.rendered .hljs-regexp,
+.rendered .hljs-template-tag {
+  color: var(--cm-string);
+}
+.rendered .hljs-number,
+.rendered .hljs-symbol,
+.rendered .hljs-bullet,
+.rendered .hljs-link {
+  color: var(--cm-number);
+}
+.rendered .hljs-title,
+.rendered .hljs-title.function_,
+.rendered .hljs-section,
+.rendered .hljs-name {
+  color: var(--cm-link);
+}
+.rendered .hljs-type,
+.rendered .hljs-built_in,
+.rendered .hljs-title.class_,
+.rendered .hljs-class .hljs-title,
+.rendered .hljs-tag {
+  color: var(--cm-heading);
+}
+.rendered .hljs-attr,
+.rendered .hljs-attribute,
+.rendered .hljs-property,
+.rendered .hljs-variable.constant_,
+.rendered .hljs-params {
+  color: var(--cm-list);
+}
+.rendered .hljs-meta,
+.rendered .hljs-comment.hljs-meta {
+  color: var(--cm-meta);
+}
+.rendered .hljs-variable,
+.rendered .hljs-template-variable,
+.rendered .hljs-selector-attr,
+.rendered .hljs-selector-pseudo {
+  color: var(--text-primary);
+}
+.rendered .hljs-deletion {
+  color: var(--danger);
+}
+.rendered .hljs-addition {
+  color: var(--success);
+}
+.rendered .hljs-emphasis {
+  font-style: italic;
+}
+.rendered .hljs-strong {
+  font-weight: 600;
+}
