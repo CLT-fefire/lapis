@@ -62,7 +62,8 @@ const md = new MarkdownIt({
   breaks: false,
   typographer: true,
   // 코드 펜스 하이라이트. info-string 언어가 등록돼 있으면 hljs로 토큰화한 HTML 반환.
-  // 토큰 색은 app.css의 .hljs-* → --cm-* 토큰 매핑이 담당(에디터와 일치 + 라이트/다크 자동).
+  // 토큰 색은 lib/styles/rendered.css의 .rendered .hljs-* → --cm-* 매핑이 담당
+  // (에디터와 일치 + 라이트/다크 자동). 이 HTML은 `.rendered` 안에서만 렌더된다.
   highlight(str, lang): string {
     const language = lang ? lang.trim().toLowerCase() : "";
     if (language && hljs.getLanguage(language)) {
