@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  // 렌더된 본문 스타일 — HTML 내보내기와 공유하는 단일 진실 위치. 전역으로 주입된다.
+  import "$lib/styles/rendered.css";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
   import Editor from "$lib/Editor.svelte";
@@ -18,6 +20,7 @@
   import TabBar from "$lib/TabBar.svelte";
   import GraphModal from "$lib/GraphModal.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
+  import PaneMenu, { type PaneMenuItem } from "$lib/PaneMenu.svelte";
   import { readingFontSize } from "$lib/stores/reading";
   import { restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
@@ -671,6 +674,49 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     }
   }
 
+  /**
+   * 페인 툴바 `⋯` 메뉴 항목.
+   *
+   * 복사류는 `keepOpen: true` — 결과가 레이블 자체("✓ 복사됨")로 표시되므로
+   * 메뉴를 닫으면 피드백이 보이지 않는다. 바깥에 남긴 것은 빈도가 높은 `Aa`(글꼴)와
+   * 구조적인 접기 버튼뿐이다.
+   */
+  const editorMenuItems: PaneMenuItem[] = $derived([
+    {
+      id: "copy-path",
+      label: pathCopied ? "✓ 복사됨" : "🔗 경로 복사",
+      title: "현재 노트의 절대 경로 복사 (⌘⇧C)",
+      disabled: !$currentNotePath,
+      keepOpen: true,
+      onSelect: copyCurrentPath,
+    },
+    {
+      id: "copy-markdown",
+      label: editorCopied ? "✓ 복사됨" : "📋 마크다운 복사",
+      title: "마크다운 원본 전체 복사",
+      keepOpen: true,
+      onSelect: copyEditor,
+    },
+  ]);
+
+  const previewMenuItems: PaneMenuItem[] = $derived([
+    {
+      id: "copy-path",
+      label: pathCopied ? "✓ 복사됨" : "🔗 경로 복사",
+      title: "현재 노트의 절대 경로 복사 (⌘⇧C)",
+      disabled: !$currentNotePath,
+      keepOpen: true,
+      onSelect: copyCurrentPath,
+    },
+    {
+      id: "copy-rich",
+      label: previewCopied ? "✓ 복사됨" : "📋 리치 텍스트 복사",
+      title: "리치 텍스트로 복사 (Confluence·메일 등 서식 유지)",
+      keepOpen: true,
+      onSelect: copyPreview,
+    },
+  ]);
+
   // Editor↔Preview 비율 기반 스크롤 동기화 — 마우스 hover로 source 결정 (무한 루프 방지)
   $effect(() => {
     // collapse 상태에 의존성 등록 → 펼침/접힘 시 자동 재셋업
@@ -1082,23 +1128,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <div class="pane-title">
           <span>Editor</span>
           <div class="pane-actions">
-            <button
-              class="copy-btn path"
-              class:done={pathCopied}
-              title="현재 노트의 절대 경로 복사 (⌘⇧C)"
-              onclick={copyCurrentPath}
-              disabled={!$currentNotePath}
-            >
-              {pathCopied ? "✓ 복사됨" : "🔗 경로 복사"}
-            </button>
-            <button
-              class="copy-btn"
-              class:done={editorCopied}
-              title="마크다운 원본 전체 복사"
-              onclick={copyEditor}
-            >
-              {editorCopied ? "✓ 복사됨" : "📋 마크다운 복사"}
-            </button>
+            <PaneMenu label="Editor 추가 작업" items={editorMenuItems} />
             {#if !$previewCollapsed}
               <button
                 class="btn btn--icon btn--sm"
@@ -1146,23 +1176,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
           <span>Preview</span>
           <div class="pane-actions">
             <ReadingControls />
-            <button
-              class="copy-btn path"
-              class:done={pathCopied}
-              title="현재 노트의 절대 경로 복사 (⌘⇧C)"
-              onclick={copyCurrentPath}
-              disabled={!$currentNotePath}
-            >
-              {pathCopied ? "✓ 복사됨" : "🔗 경로 복사"}
-            </button>
-            <button
-              class="copy-btn"
-              class:done={previewCopied}
-              title="리치 텍스트로 복사 (Confluence·메일 등 서식 유지)"
-              onclick={copyPreview}
-            >
-              {previewCopied ? "✓ 복사됨" : "📋 리치 텍스트 복사"}
-            </button>
+            <PaneMenu label="Preview 추가 작업" items={previewMenuItems} />
             {#if !$editorCollapsed}
               <button
                 class="btn btn--icon btn--sm"
@@ -1498,54 +1512,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     min-height: 30px;
   }
 
-  .copy-btn {
-    padding: 3px 10px;
-    font-size: var(--fs-xs);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    color: var(--text-secondary);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-family: inherit;
-    text-transform: none;
-    letter-spacing: normal;
-    transition: background var(--dur-base), border-color var(--dur-base),
-      color var(--dur-base);
-  }
-
-  .copy-btn:hover {
-    background: var(--surface-sunken);
-    border-color: var(--accent);
-    color: var(--text-primary);
-  }
-
-  .copy-btn.done {
-    background: var(--success-bg-subtle);
-    border-color: var(--success);
-    color: var(--success);
-  }
-
-  /* 경로 복사 버튼 — 마크다운/리치 복사와 시각 구분 위해 약간 톤 다름 */
-  .copy-btn.path {
-    color: var(--accent);
-  }
-
-  .copy-btn.path:hover:not(:disabled) {
-    border-color: var(--accent);
-    color: var(--accent-hover);
-  }
-
-  .copy-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .copy-btn:disabled:hover {
-    background: var(--surface-overlay);
-    border-color: var(--border-strong);
-    color: var(--text-secondary);
-  }
-
   .pane-actions {
     display: flex;
     align-items: center;
@@ -1609,173 +1575,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   /* Properties 패널 CSS는 src/lib/Properties.svelte로 이전 (Phase 4.3.a) */
 
-  .rendered {
-    line-height: 1.65;
-    /* 프리뷰 글꼴 크기(줌) — ReadingControls가 --reading-font-size로 주입. 헤딩은 em이라 비례. */
-    font-size: var(--reading-font-size, 15px);
-  }
-
-  .rendered :global(h1) {
-    font-size: 1.8em;
-    border-bottom: 1px solid var(--border-default);
-    padding-bottom: var(--sp-3);
-    margin-top: 0;
-  }
-
-  .rendered :global(h2) {
-    font-size: 1.35em;
-    margin-top: 1.6em;
-    color: var(--text-primary);
-  }
-
-  .rendered :global(h3) {
-    font-size: 1.1em;
-    color: var(--text-secondary);
-  }
-
-  .rendered :global(a) {
-    color: var(--accent);
-  }
-
-  .rendered :global(code) {
-    background: var(--surface-sunken);
-    padding: 1px var(--sp-3);
-    border-radius: var(--r-sm);
-    font-size: 0.9em;
-    color: var(--violet);
-  }
-
-  .rendered :global(pre) {
-    background: var(--surface-sunken);
-    padding: var(--sp-5);
-    border-radius: var(--r-md);
-    overflow-x: auto;
-    border: 1px solid var(--border-subtle);
-  }
-
-  .rendered :global(pre code) {
-    background: transparent;
-    color: var(--text-primary);
-    padding: 0;
-  }
-
-  /* Mermaid 다이어그램 호스트 (Phase 4.4.a) */
-  .rendered :global(.mermaid-host) {
-    margin: 1em 0;
-    text-align: center;
-    position: relative; /* PNG 내보내기 버튼 absolute 기준 */
-  }
-
-  /* PNG 내보내기 hover 버튼 */
-  .rendered :global(.mermaid-export-btn) {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    padding: var(--sp-2) var(--sp-4);
-    font-size: var(--fs-sm);
-    line-height: 1;
-    color: var(--text-primary);
-    background: var(--surface-overlay);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity var(--dur-base) ease;
-    z-index: 2;
-  }
-
-  .rendered :global(.mermaid-host:hover .mermaid-export-btn) {
-    opacity: 1;
-  }
-
-  .rendered :global(.mermaid-export-btn:hover) {
-    background: var(--surface-sunken);
-    border-color: var(--border-strong);
-  }
-
-  .rendered :global(.mermaid-host[data-rendered="pending"]) {
-    min-height: 80px;
-    background: var(--surface-sunken);
-    border-radius: var(--r-sm);
-  }
-
-  .rendered :global(.mermaid-host svg) {
-    max-width: 100%;
-    height: auto;
-  }
-
-  .rendered :global(.mermaid-error) {
-    background: var(--danger-bg-subtle);
-    border: 1px solid var(--danger-border);
-    color: var(--danger);
-    padding: var(--sp-5);
-    border-radius: var(--r-sm);
-    white-space: pre-wrap;
-    text-align: left;
-    font-size: var(--fs-sm);
-    line-height: 1.5;
-  }
-
-  .rendered :global(blockquote) {
-    border-left: 3px solid var(--accent);
-    margin: 1em 0;
-    padding: 0 14px;
-    color: var(--text-secondary);
-  }
-
-  .rendered :global(table) {
-    border-collapse: collapse;
-    margin: 1em 0;
-  }
-
-  .rendered :global(th),
-  .rendered :global(td) {
-    border: 1px solid var(--border-default);
-    padding: var(--sp-3) var(--sp-5);
-  }
-
-  .rendered :global(th) {
-    background: var(--surface-overlay);
-  }
-
-  .rendered :global(ul),
-  .rendered :global(ol) {
-    padding-left: 1.5em;
-  }
-
-  .rendered :global(li) {
-    margin: 0.2em 0;
-  }
-
-  /* Wikilink 스타일 (span 기반 — 안전한 navigation) */
-  .rendered :global(.wikilink) {
-    color: var(--accent);
-    text-decoration: none;
-    border-bottom: 1px dashed var(--accent-border);
-    cursor: pointer;
-    padding: 0 1px;
-    border-radius: var(--r-sm);
-    transition: background var(--dur-fast);
-  }
-
-  .rendered :global(.wikilink:hover) {
-    background: var(--accent-bg-subtle);
-  }
-
-  .rendered :global(.wikilink:focus-visible) {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
-
-  .rendered :global(.wikilink.unresolved) {
-    color: var(--danger);
-    border-bottom-color: var(--danger-border);
-    border-bottom-style: dotted;
-  }
-
-  .rendered :global(.wikilink.unresolved:hover) {
-    background: var(--danger-bg-subtle);
-  }
+  /* 렌더된 마크다운 본문(.rendered) CSS는 src/lib/styles/rendered.css로 이전 (2026-08-03).
+     HTML 내보내기가 같은 파일을 ?raw로 읽어 인라인하므로 여기에 되돌리지 말 것 —
+     Svelte scoped가 되면 .rendered.svelte-xxxx 가 붙어 내보내기에서 재사용 불가. */
 
   /* 이웃(관계+백링크) 패널 CSS는 src/lib/Neighborhood.svelte로 이전 (Phase A-2) */
 </style>
