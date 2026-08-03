@@ -21,6 +21,7 @@
   import GraphModal from "$lib/GraphModal.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
   import PaneMenu, { type PaneMenuItem } from "$lib/PaneMenu.svelte";
+  import { revealInFinder } from "$lib/tauri/reveal";
   import { readingFontSize } from "$lib/stores/reading";
   import { restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
@@ -681,6 +682,18 @@ GitHub: <https://github.com/CLT-fefire/lapis>
    * 메뉴를 닫으면 피드백이 보이지 않는다. 바깥에 남긴 것은 빈도가 높은 `Aa`(글꼴)와
    * 구조적인 접기 버튼뿐이다.
    */
+  /** Editor·Preview 양쪽 `⋯`에 같은 모양으로 들어가는 항목. 현재 노트를 Finder에서 연다. */
+  function revealMenuItem(): PaneMenuItem {
+    const path = $currentNotePath;
+    return {
+      id: "reveal",
+      label: "📂 Finder에서 보기",
+      title: "현재 노트를 Finder에서 선택된 상태로 열기",
+      disabled: !path,
+      onSelect: () => revealInFinder(path ?? ""),
+    };
+  }
+
   const editorMenuItems: PaneMenuItem[] = $derived([
     {
       id: "copy-path",
@@ -697,6 +710,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       keepOpen: true,
       onSelect: copyEditor,
     },
+    revealMenuItem(),
   ]);
 
   const previewMenuItems: PaneMenuItem[] = $derived([
@@ -715,6 +729,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       keepOpen: true,
       onSelect: copyPreview,
     },
+    revealMenuItem(),
   ]);
 
   // Editor↔Preview 비율 기반 스크롤 동기화 — 마우스 hover로 source 결정 (무한 루프 방지)
