@@ -22,6 +22,7 @@
   import ReadingControls from "$lib/ReadingControls.svelte";
   import PaneMenu, { type PaneMenuItem } from "$lib/PaneMenu.svelte";
   import { revealInFinder } from "$lib/tauri/reveal";
+  import { exportPreviewToHtml } from "$lib/previewExport";
   import { readingFontSize } from "$lib/stores/reading";
   import { restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
@@ -682,6 +683,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
    * 메뉴를 닫으면 피드백이 보이지 않는다. 바깥에 남긴 것은 빈도가 높은 `Aa`(글꼴)와
    * 구조적인 접기 버튼뿐이다.
    */
+  /** 프리뷰 본문 엘리먼트 — HTML 내보내기가 이 라이브 DOM을 clone한다(Mermaid SVG 포함). */
+  let renderedArticleEl: HTMLElement | undefined = $state();
+
   /** Editor·Preview 양쪽 `⋯`에 같은 모양으로 들어가는 항목. 현재 노트를 Finder에서 연다. */
   function revealMenuItem(): PaneMenuItem {
     const path = $currentNotePath;
@@ -728,6 +732,13 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       title: "리치 텍스트로 복사 (Confluence·메일 등 서식 유지)",
       keepOpen: true,
       onSelect: copyPreview,
+    },
+    {
+      id: "export-html",
+      label: "💾 HTML로 저장…",
+      title: "프리뷰 내용을 자립형 HTML 파일로 저장 (CSS·이미지 포함)",
+      disabled: !$currentNotePath,
+      onSelect: () => exportPreviewToHtml(renderedArticleEl, $currentNotePath),
     },
     revealMenuItem(),
   ]);
@@ -1216,7 +1227,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick} onscroll={handlePreviewScroll}>
         <Properties data={effectiveProperties} isAuto={propertiesAuto} rawNote={raw} />
-        <article class="rendered" style="--reading-font-size: {$readingFontSize}px">
+        <article
+          class="rendered"
+          bind:this={renderedArticleEl}
+          style="--reading-font-size: {$readingFontSize}px"
+        >
           {@html parsed.html}
         </article>
 

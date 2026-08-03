@@ -54,6 +54,9 @@ export function rewriteImageSources(
     }
     const absolute = joinNotePath(notePath, src);
     img.src = convertFileSrc(absolute);
+    // 원본 절대 경로 박제 — src가 asset:// URL로 덮여 쓰이면 어느 파일인지 알 수 없다.
+    // HTML 내보내기가 이미지 인라인에 실패했을 때 이 값으로 로그를 남긴다.
+    img.dataset.absPath = absolute;
     img.loading = "lazy";
     img.dataset.srcRewritten = "1";
   }
