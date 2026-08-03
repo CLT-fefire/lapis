@@ -11,6 +11,7 @@
   import { isDirty } from "$lib/stores/editor";
   import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
   import { noteStem } from "$lib/notePath";
+  import { revealInFinder } from "$lib/tauri/reveal";
 
   let barEl: HTMLDivElement | undefined = $state();
 
@@ -188,6 +189,15 @@
         onclick={() => { const p = menu.path; closeCtxMenu(); void closeTabsToRight(p); }}
       >오른쪽 탭 닫기</button>
     </li>
+    <li class="sep"></li>
+    <li>
+      <!-- path를 먼저 캡처 — closeCtxMenu()가 ctxMenu=null로 만들면 {@const menu}가
+           재평가돼 menu.path가 undefined가 된다 (#90 회귀 이력). -->
+      <button
+        role="menuitem"
+        onclick={() => { const p = menu.path; closeCtxMenu(); void revealInFinder(p); }}
+      >📂 Finder에서 보기</button>
+    </li>
   </ul>
 {/if}
 
@@ -314,6 +324,13 @@
 
   .tab-ctx-menu li {
     margin: 0;
+  }
+
+  /* 탭 닫기 그룹과 Finder 액션 구분 */
+  .tab-ctx-menu li.sep {
+    height: 1px;
+    background: var(--border-default);
+    margin: var(--sp-2) 0;
   }
 
   .tab-ctx-menu button {
