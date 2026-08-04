@@ -469,8 +469,8 @@ graph LR
   .sidebar {
     display: flex;
     flex-direction: column;
-    background: var(--surface-base);
-    border-right: 1px solid var(--border-default);
+    /* 3계층 중 중간 — 레일(어두움)과 본문(밝음) 사이. 보더 없이 명암차로 분리. */
+    background: var(--surface-panel);
     height: 100%;
     overflow: hidden;
     /* 폭 제어는 +page.svelte의 .workspace grid가 담당 (드래그 가능). */
@@ -482,7 +482,7 @@ graph LR
     align-items: center;
     gap: var(--sp-4);
     padding: var(--sp-5);
-    border-bottom: 1px solid var(--border-default);
+    /* 사이드바 본체(--surface-panel)보다 밝아 보더 없이 헤더가 도드라진다. */
     background: var(--surface-raised);
     min-height: calc(var(--control-h-lg) + var(--sp-5));
   }
@@ -562,61 +562,8 @@ graph LR
     background: var(--surface-sunken);
   }
 
-  /* 탭 */
-  .tabs {
-    display: flex;
-    background: var(--surface-raised);
-    border-bottom: 1px solid var(--border-default);
-  }
-
-  .tab {
-    flex: 1;
-    min-width: 0;
-    padding: var(--sp-4) var(--sp-3);
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-    font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    font-family: inherit;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-2);
-    transition: color var(--dur-fast), border-color var(--dur-fast);
-    overflow: hidden;
-  }
-
-  .tab:hover {
-    color: var(--text-secondary);
-  }
-
-  .tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-  }
-
-  .badge {
-    background: var(--accent-bg-subtle);
-    color: var(--accent-hover);
-    font-size: var(--fs-xs);
-    padding: var(--sp-1) var(--sp-3);
-    border-radius: var(--r-lg);
-    text-transform: none;
-    letter-spacing: normal;
-    font-weight: 500;
-    flex-shrink: 0;
-    line-height: 1.3;
-  }
-
-  .badge.active {
-    background: var(--accent);
-    color: var(--accent-fg);
-    font-weight: 600;
-  }
+  /* 구 가로 탭 CSS(.tabs/.tab/.badge)는 #96 세로 아코디언 개편 때 마크업이 사라졌는데
+     스타일만 남아 svelte-check 경고 6건을 내고 있었다 — 2026-08-05 제거. */
 
   .sidebar-body {
     flex: 1;
@@ -783,8 +730,7 @@ graph LR
   .lens-label {
     color: var(--text-muted);
     font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.01em;
     flex-shrink: 0;
   }
 

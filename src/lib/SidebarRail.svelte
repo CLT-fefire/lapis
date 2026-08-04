@@ -61,8 +61,8 @@
     gap: var(--sp-2);
     height: 100%;
     padding: var(--sp-3) 0;
-    background: var(--surface-raised);
-    border-right: 1px solid var(--border-default);
+    /* 3계층 중 가장 어두운 면 — 보더 없이 명암차만으로 사이드바와 분리된다. */
+    background: var(--surface-rail);
     overflow: hidden;
   }
 

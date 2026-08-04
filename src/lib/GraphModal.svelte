@@ -1071,8 +1071,7 @@
     padding: var(--sp-2) var(--sp-3) 0;
     font-size: var(--fs-xs);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
     color: var(--text-secondary);
   }
   .diag-hint {

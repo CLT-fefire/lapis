@@ -70,8 +70,7 @@
 
   .published h3 {
     font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.01em;
     color: var(--text-muted);
     margin: 0 0 10px 0;
     font-weight: 600;

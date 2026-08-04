@@ -1283,8 +1283,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     gap: var(--sp-5);
     padding: var(--sp-5) var(--sp-6);
-    border-bottom: 1px solid var(--border-default);
-    background: var(--surface-raised);
+    /* 크롬 계층 — 아래 본문(--surface-content)보다 어두워 보더 없이 분리된다. */
+    background: var(--surface-panel);
     font-size: var(--fs-base);
   }
 
@@ -1522,7 +1522,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid var(--border-default);
+    /* 3계층 중 가장 밝은 면 — 시선이 여기로 모인다. */
+    background: var(--surface-content);
+    /* Editor↔Preview는 **같은 계층**의 분할이라 명암차로 나눌 수 없다.
+       영역 간 분리(레일↔사이드바↔본문)만 보더를 걷어내고, 여기는 subtle로 남긴다. */
+    border-right: 1px solid var(--border-subtle);
   }
 
   .pane:last-child {
@@ -1536,11 +1540,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     gap: var(--sp-4);
     padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-5);
     font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    /* uppercase + letter-spacing은 2016년대 대시보드 관용구 — 굵기로 위계를 준다. */
+    font-weight: 600;
     color: var(--text-muted);
-    background: var(--surface-overlay);
-    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-panel);
     min-height: var(--control-h-lg);
   }
 
@@ -1550,14 +1553,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     gap: var(--sp-3);
   }
 
-  /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침 */
+  /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침.
+     스트립은 크롬 계층(--surface-panel)이라 본문과 명암차로 분리된다. */
   .pane.collapsed {
-    border-right: 1px solid var(--border-default);
-  }
-
-  .pane.collapsed:last-child {
     border-right: none;
-    border-left: 1px solid var(--border-default);
   }
 
   .collapsed-strip {
@@ -1569,7 +1568,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     justify-content: flex-start;
     gap: var(--sp-5);
     padding: var(--sp-5) 0;
-    background: var(--surface-overlay);
+    background: var(--surface-panel);
     border: none;
     color: var(--text-muted);
     cursor: pointer;
@@ -1591,8 +1590,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     writing-mode: vertical-rl;
     transform: rotate(180deg);
     font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     user-select: none;
   }
 
