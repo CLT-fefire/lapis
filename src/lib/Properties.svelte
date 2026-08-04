@@ -472,8 +472,7 @@
     color: var(--text-muted);
     font-weight: 400;
     font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.01em;
   }
 
   .properties table {

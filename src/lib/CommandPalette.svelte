@@ -502,8 +502,7 @@
     background: var(--surface-overlay);
     padding: var(--sp-4) 18px var(--sp-2);
     font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.01em;
     color: var(--accent);
     font-weight: 600;
     z-index: 1;

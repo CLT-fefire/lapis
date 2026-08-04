@@ -135,8 +135,7 @@
     cursor: pointer;
     font-family: inherit;
     font-size: var(--fs-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
     color: var(--text-muted);
     transition: color var(--dur-fast);
   }

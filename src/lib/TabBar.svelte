@@ -207,8 +207,8 @@
     align-items: stretch;
     gap: var(--sp-1);
     padding: var(--sp-1) var(--sp-2) 0;
-    background: var(--surface-base);
-    border-bottom: 1px solid var(--border-default);
+    /* 크롬 계층 — 활성 탭만 본문 계층(--surface-content)으로 올라와 아래와 이어진다. */
+    background: var(--surface-panel);
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
@@ -220,10 +220,9 @@
     gap: var(--sp-1);
     max-width: 200px;
     padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
-    background: var(--surface-raised);
-    border: 1px solid var(--border-default);
-    border-bottom: none;
-    border-radius: var(--r-sm) var(--r-sm) 0 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--r-md) var(--r-md) 0 0;
     color: var(--text-secondary);
     font-size: var(--fs-sm);
     cursor: pointer;
@@ -232,14 +231,14 @@
   }
 
   .tab:hover {
-    background: var(--surface-overlay);
+    background: var(--surface-raised);
     color: var(--text-primary);
   }
 
   .tab.active {
-    background: var(--surface-base);
+    background: var(--surface-content);
     color: var(--text-primary);
-    border-color: var(--border-strong);
+    font-weight: 600;
   }
 
   /* 드래그 중인 탭은 흐리게, 드롭 대상은 좌측 보더로 삽입 위치 표시 */
