@@ -101,8 +101,7 @@
     border-bottom: 1px solid var(--border-default);
     font-weight: 600;
     font-size: var(--fs-base);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.01em;
     color: var(--accent);
   }
 

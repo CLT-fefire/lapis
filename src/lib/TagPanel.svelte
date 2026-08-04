@@ -338,8 +338,7 @@
   .flat-header {
     padding: var(--sp-2) 14px;
     font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.01em;
     color: var(--text-muted);
   }
 

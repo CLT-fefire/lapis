@@ -185,8 +185,7 @@
     align-items: center;
     justify-content: space-between;
     font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.01em;
     color: var(--text-muted);
     padding: 0 var(--sp-1) var(--sp-2) var(--sp-1);
   }
