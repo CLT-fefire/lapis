@@ -481,10 +481,10 @@ graph LR
     display: flex;
     align-items: center;
     gap: var(--sp-4);
-    padding: 10px var(--sp-5);
+    padding: var(--sp-5);
     border-bottom: 1px solid var(--border-default);
     background: var(--surface-raised);
-    min-height: 42px;
+    min-height: calc(var(--control-h-lg) + var(--sp-5));
   }
 
   .vault-name {
@@ -552,7 +552,7 @@ graph LR
 
   .open-btn {
     width: 100%;
-    padding: var(--sp-3) 10px;
+    padding: var(--sp-3) var(--sp-5);
     font-size: var(--fs-base);
     background: var(--surface-overlay);
   }
@@ -602,8 +602,8 @@ graph LR
   .badge {
     background: var(--accent-bg-subtle);
     color: var(--accent-hover);
-    font-size: 10px;
-    padding: 1px 5px;
+    font-size: var(--fs-xs);
+    padding: var(--sp-1) var(--sp-3);
     border-radius: var(--r-lg);
     text-transform: none;
     letter-spacing: normal;
@@ -685,7 +685,7 @@ graph LR
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 40px;
+    padding-top: var(--sp-10);
     z-index: 30;
     /* 트리 클릭 차단 (overlay가 포인터 받음) */
   }
@@ -697,9 +697,9 @@ graph LR
     background: var(--surface-overlay);
     border: 1px solid var(--border-default);
     border-radius: var(--r-lg);
-    padding: 14px 18px;
+    padding: var(--sp-5) var(--sp-6);
     box-shadow: var(--shadow-md);
-    max-width: calc(100% - 32px);
+    max-width: calc(100% - var(--sp-6) * 2);
   }
 
   .spinner {
@@ -740,7 +740,7 @@ graph LR
     color: var(--text-muted);
     font-size: var(--fs-sm);
     text-align: center;
-    padding: 30px var(--sp-6);
+    padding: var(--sp-10) var(--sp-6);
     line-height: 1.6;
   }
 
@@ -750,14 +750,14 @@ graph LR
 
   .empty .empty-hint {
     color: var(--text-muted);
-    font-size: 11.5px;
+    font-size: var(--fs-xs);
     line-height: 1.55;
-    margin: -4px 0 14px 0;
+    margin: calc(var(--sp-2) * -1) 0 var(--sp-5) 0;
   }
 
   /* .welcome-btn은 app.css .btn 프리미티브(.btn--primary) 사용 + 레이아웃만 로컬 */
   .welcome-btn {
-    margin-bottom: 10px;
+    margin-bottom: var(--sp-5);
   }
 
   .link-btn {
@@ -775,7 +775,7 @@ graph LR
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-    padding: var(--sp-3) 10px var(--sp-2) 10px;
+    padding: var(--sp-3) var(--sp-5) var(--sp-2) var(--sp-5);
     border-bottom: 1px solid var(--border-subtle);
     background: var(--surface-raised);
   }
@@ -811,7 +811,7 @@ graph LR
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-    padding: var(--sp-3) 10px var(--sp-2) 10px;
+    padding: var(--sp-3) var(--sp-5) var(--sp-2) var(--sp-5);
     border-bottom: 1px solid var(--border-subtle);
     background: var(--surface-raised);
   }
