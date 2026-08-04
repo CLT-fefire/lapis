@@ -129,7 +129,7 @@
     align-items: center;
     gap: var(--sp-2);
     width: 100%;
-    padding: var(--sp-3) 10px;
+    padding: var(--sp-3) var(--sp-5);
     background: var(--surface-raised);
     border: none;
     cursor: pointer;
@@ -173,8 +173,8 @@
   .badge {
     background: var(--accent-bg-subtle);
     color: var(--accent-hover);
-    font-size: 10px;
-    padding: 1px 5px;
+    font-size: var(--fs-xs);
+    padding: var(--sp-1) var(--sp-3);
     border-radius: var(--r-lg);
     text-transform: none;
     letter-spacing: normal;

@@ -16,6 +16,15 @@
           document.documentElement.dataset.theme = "system";
         }
       })();
+      // 레이아웃 점프 방지 — first-paint 전에 밀도 속성 적용 (density.ts와 키 동기화)
+      (function () {
+        try {
+          var d = localStorage.getItem("lapis.density");
+          document.documentElement.dataset.density = d === "compact" ? "compact" : "default";
+        } catch (e) {
+          document.documentElement.dataset.density = "default";
+        }
+      })();
     </script>
     %sveltekit.head%
   </head>

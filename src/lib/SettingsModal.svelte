@@ -10,6 +10,7 @@
     clampBackupKeep,
   } from "$lib/stores/settings";
   import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
+  import { density, setDensity, type Density } from "$lib/stores/density";
   import { vaultPath, forceReindex } from "$lib/stores/vault";
   import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
   import { get } from "svelte/store";
@@ -18,6 +19,11 @@
     { value: "system", label: "시스템" },
     { value: "light", label: "라이트" },
     { value: "dark", label: "다크" },
+  ];
+
+  const DENSITY_OPTIONS: { value: Density; label: string }[] = [
+    { value: "default", label: "기본" },
+    { value: "compact", label: "촘촘하게" },
   ];
 
   // 백업 max_keep — 입력 중에는 local state, blur/Enter 시 적용
@@ -119,6 +125,33 @@
                   class:active={$themeMode === opt.value}
                   aria-pressed={$themeMode === opt.value}
                   onclick={() => setTheme(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">밀도</span>
+              <span class="label-desc">
+                사이드바·목록·버튼의 여백을 조절합니다. "촘촘하게"는 한 화면에 더 많은 항목을
+                보여줍니다(글자 크기는 그대로).
+              </span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label="밀도 선택">
+              {#each DENSITY_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$density === opt.value}
+                  aria-pressed={$density === opt.value}
+                  onclick={() => setDensity(opt.value)}
                 >
                   {opt.label}
                 </button>

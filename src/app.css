@@ -31,6 +31,14 @@
   --surface-overlay: var(--n-150);
   --surface-sunken: var(--n-200);
 
+  /* 시맨틱 — Surface 3계층 (셸 영역 분리용; 바깥으로 갈수록 어둡게)
+   * 1px 보더 대신 "명암차"로 영역을 나누기 위한 축. 레일 < 패널 < 본문 순으로 밝아진다.
+   * ⚠️ 계층 간 차이가 인지 가능해야 하므로 램프 스텝을 그대로 쓰지 않고 rail만 별도 값.
+   * 적용은 PR-2(하드보더 제거)에서 — 여기선 정의만 한다. */
+  --surface-rail: #090b0f;
+  --surface-panel: var(--n-50);
+  --surface-content: var(--n-100);
+
   /* 시맨틱 — Border */
   --border-subtle: var(--n-200);
   --border-default: var(--n-300);
@@ -109,17 +117,21 @@
   --sp-8: 24px;
   --sp-10: 32px;
 
-  /* --- Radius --- */
+  /* --- Radius (2026-08-05 상향: md 6→8, lg 10→12 — 컨테이너 기본을 md로 승격) --- */
   --r-xs: 3px;
   --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 10px;
+  --r-md: 8px;
+  --r-lg: 12px;
   --r-full: 9999px;
 
   /* --- Control 높이 (인터랙티브 컨트롤 표준 3단) --- */
   --control-h-sm: 24px;
   --control-h-md: 28px;
   --control-h-lg: 32px;
+
+  /* --- 리스트 행 높이 (파일트리·태그·검색 결과 등)
+   * 밀도 스위치의 주 대상. 각 컴포넌트가 padding으로 암묵 결정하던 것을 단일 소스화. */
+  --row-h: 28px;
 
   /* --- 사이드바 아이콘 레일 폭(접힘 모드) --- */
   --rail-w: 52px;
@@ -168,12 +180,42 @@
   color-scheme: dark;
 }
 
+/* =============================================================================
+ * 밀도 (2단: default / compact)
+ *
+ * ⚠️ 밀도는 **이 블록 하나**로만 제어한다. 컴포넌트에 px 리터럴을 남기면 밀도가
+ * 반쪽만 먹어 "조밀하면서 동시에 헐렁한" 상태가 된다(Discord 2025 개편의 실패 지점).
+ * 새 CSS를 쓸 때 여백·컨트롤 높이는 반드시 --sp-* / --control-h-* / --row-h 를 쓸 것.
+ *
+ * 폰트 크기(--fs-*)는 두 밀도에서 **동일**하다. 가독성은 밀도의 대상이 아니다.
+ * --sp-1(2px) / --sp-2(4px)는 이미 최소라 유지한다.
+ * ========================================================================== */
+:root[data-density="compact"] {
+  --sp-3: 4px;
+  --sp-4: 6px;
+  --sp-5: 8px;
+  --sp-6: 12px;
+  --sp-8: 16px;
+  --sp-10: 24px;
+
+  --control-h-sm: 20px;
+  --control-h-md: 24px;
+  --control-h-lg: 28px;
+
+  --row-h: 24px;
+}
+
 /* --- 라이트 오버라이드 (명시 선택) ---------------------------------------- */
 :root[data-theme="light"] {
   --surface-base: #f4f6f9;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
   --surface-sunken: #eef1f5;
+
+  /* 3계층 — 라이트는 명암차가 좁아 눈에 덜 띄므로 다크보다 간격을 **크게** 잡는다. */
+  --surface-rail: #e8ecf2;
+  --surface-panel: #f2f5f9;
+  --surface-content: #ffffff;
 
   --border-subtle: #e7eaf0;
   --border-default: #d7dce4;
@@ -235,6 +277,12 @@
     --surface-raised: #ffffff;
     --surface-overlay: #ffffff;
     --surface-sunken: #eef1f5;
+
+    /* 3계층 — 위 [data-theme="light"] 블록과 **항상 함께** 수정할 것.
+       값이 중복 정의돼 있어 한쪽만 고치면 시스템 모드에서만 깨진다. */
+    --surface-rail: #e8ecf2;
+    --surface-panel: #f2f5f9;
+    --surface-content: #ffffff;
 
     --border-subtle: #e7eaf0;
     --border-default: #d7dce4;

@@ -81,6 +81,7 @@
     restorePaneState,
   } from "$lib/stores/layout";
   import { onSystemThemeChange, restoreTheme, themeMode } from "$lib/stores/theme";
+  import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
   import { groupRelations, type RelationGroup } from "$lib/relations";
@@ -979,6 +980,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   onMount(() => {
     restoreTheme();
+    restoreDensity();
     void restoreSettings();
     restorePaneState();
     restoreLastVault();
@@ -1280,7 +1282,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     align-items: center;
     gap: var(--sp-5);
-    padding: 10px var(--sp-6);
+    padding: var(--sp-5) var(--sp-6);
     border-bottom: 1px solid var(--border-default);
     background: var(--surface-raised);
     font-size: var(--fs-base);
@@ -1325,7 +1327,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .save-badge {
     font-size: var(--fs-xs);
-    padding: var(--sp-1) 7px;
+    padding: var(--sp-1) var(--sp-3);
     border-radius: var(--r-lg);
     font-weight: 500;
     flex-shrink: 0;
@@ -1362,7 +1364,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .conflict-modal {
-    width: min(520px, 92vw);
+    width: min(var(--modal-w-lg), 92vw);
     background: var(--surface-raised);
     border: 1px solid var(--danger-border);
     border-radius: var(--r-lg);
@@ -1374,8 +1376,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .conflict-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 14px 18px;
+    gap: var(--sp-5);
+    padding: var(--sp-5) var(--sp-6);
     background: var(--danger-bg-subtle);
     border-bottom: 1px solid var(--danger-border);
     font-weight: 600;
@@ -1383,12 +1385,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .conflict-icon {
-    font-size: 18px;
+    font-size: var(--fs-lg);
     color: var(--danger);
   }
 
   .conflict-body {
-    padding: var(--sp-6) 18px;
+    padding: var(--sp-6);
     line-height: 1.6;
     font-size: var(--fs-md);
     color: var(--text-secondary);
@@ -1396,7 +1398,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   .conflict-body .path {
     margin: var(--sp-4) 0;
-    padding: var(--sp-3) 10px;
+    padding: var(--sp-3) var(--sp-5);
     background: var(--surface-overlay);
     border-radius: var(--r-sm);
     font-family: var(--font-mono);
@@ -1413,7 +1415,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .conflict-foot {
     display: flex;
     gap: var(--sp-4);
-    padding: var(--sp-5) 14px;
+    padding: var(--sp-5);
     background: var(--surface-raised);
     border-top: 1px solid var(--danger-border);
   }
@@ -1424,7 +1426,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     flex-direction: column;
     align-items: center;
     gap: var(--sp-2);
-    padding: 10px var(--sp-5);
+    padding: var(--sp-5);
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     color: var(--text-secondary);
@@ -1457,7 +1459,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .conflict-foot .btn .hint {
-    font-size: 10px;
+    font-size: var(--fs-xs);
     font-weight: 400;
     color: var(--text-muted);
   }
@@ -1532,14 +1534,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-4);
-    padding: var(--sp-2) var(--sp-4) var(--sp-2) 14px;
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-5);
     font-size: var(--fs-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
     background: var(--surface-overlay);
     border-bottom: 1px solid var(--border-default);
-    min-height: 30px;
+    min-height: var(--control-h-lg);
   }
 
   .pane-actions {
@@ -1566,7 +1568,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     align-items: center;
     justify-content: flex-start;
     gap: var(--sp-5);
-    padding: 14px 0;
+    padding: var(--sp-5) 0;
     background: var(--surface-overlay);
     border: none;
     color: var(--text-muted);
@@ -1600,7 +1602,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   }
 
   .preview-pane .pane-body {
-    padding: 20px 28px;
+    padding: var(--sp-8) var(--sp-10);
   }
 
   /* Properties 패널 CSS는 src/lib/Properties.svelte로 이전 (Phase 4.3.a) */
