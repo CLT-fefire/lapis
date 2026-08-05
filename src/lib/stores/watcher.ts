@@ -2,6 +2,7 @@ import { writable, get } from "svelte/store";
 import { watchVault, unwatchVault, onVaultChange, type VaultChange } from "$lib/tauri/watcher";
 import { readNote } from "$lib/tauri/notes";
 import { invalidateCacheBySource } from "$lib/backlinks";
+import { markChangedFromWatcher } from "./unread";
 import { scheduleAutoCommit } from "./git";
 import {
   vaultPath,
@@ -90,6 +91,11 @@ async function handleChange(change: VaultChange): Promise<void> {
       if (get(currentNotePath) === change.path) {
         const mtime = "mtime_ms" in change ? change.mtime_ms : Date.now();
         await reconcileCurrentNote(change.path, mtime);
+      } else {
+        // 지금 보고 있지 않은 노트만 "안 본 사이 바뀜"으로 표시한다 — 읽는 중에
+        // 볼드가 되면 혼란스럽고, 열린 노트는 위 reconcile이 따로 처리한다.
+        const mtime = "mtime_ms" in change ? change.mtime_ms : Date.now();
+        markChangedFromWatcher(change.path, mtime);
       }
       break;
     case "removed":

@@ -140,6 +140,17 @@ export function vaultFingerprint(vaultPath: string): Promise<VaultFingerprintRes
   return invoke<VaultFingerprintResult>("vault_fingerprint", { vaultPath });
 }
 
+/**
+ * 주어진 경로들의 mtime(ms)만 stat. 전체 vault를 걷지 않는다.
+ * 삭제됐거나 vault 밖인 경로는 **결과에서 조용히 빠진다**(에러 아님).
+ */
+export function notesMtimes(
+  vaultPath: string,
+  paths: string[],
+): Promise<[string, number][]> {
+  return invoke<[string, number][]>("notes_mtimes", { vaultPath, paths });
+}
+
 /** cold-start cacheLookup — 가벼운 메타만 (minisearch_json 제외). v4부터 shard_count 포함. */
 export interface SearchCacheMeta {
   version: number;
