@@ -31,8 +31,10 @@
   .outline {
     display: flex;
     flex-direction: column;
-    /* FileTree와 같은 어휘 — 항목을 좌우에서 띄워 "칩"으로 보이게 한다. */
+    /* FileTree와 같은 어휘 — 항목을 좌우에서 띄워 "칩"으로 보이게 한다.
+       하단 여유는 목차가 길어 스크롤될 때 마지막 항목이 경계에 붙지 않게 한다. */
     padding: var(--sp-2);
+    padding-bottom: var(--sp-5);
     overflow-y: auto;
   }
 
@@ -46,9 +48,17 @@
     color: var(--text-secondary);
     font-family: inherit;
     font-size: var(--fs-sm);
+    /* ⚠️ **하단 잘림의 실제 원인은 flex-shrink였다**(2026-08-05).
+       .outline이 flex column이라 항목이 기본값 flex-shrink:1로 압축된다 — 목차가 길수록
+       심해져 clientHeight가 line-height보다 작아지고, overflow:hidden이 그 초과분을
+       잘라낸다(실측: line-height 18px인데 clientHeight 16px). 스크롤은 압축이 끝난
+       뒤에야 생기므로 overflow-y:auto만으로는 막지 못한다.
+       line-height 명시는 글리프(한글 받침·디센더) 여유를 위해 함께 둔다. */
+    flex-shrink: 0;
+    line-height: 1.5;
     padding-top: var(--sp-2);
     padding-bottom: var(--sp-2);
-    padding-right: 10px;
+    padding-right: var(--sp-5);
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;

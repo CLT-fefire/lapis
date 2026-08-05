@@ -39,8 +39,10 @@
     children,
   }: Props = $props();
 
+  // 12000+ 노트 vault에서는 태그·필터 카운트가 세 자리를 훌쩍 넘는다. 99+로 접으면
+  // "많다"는 것 말고는 아무 정보가 없어 상한을 9999+로 올렸다(2026-08-05).
   function compactCount(n: number): string {
-    return n > 99 ? "99+" : String(n);
+    return n > 9999 ? "9999+" : String(n);
   }
 
   // === 리사이즈 핸들 드래그 ===
@@ -198,6 +200,8 @@
     font-weight: 500;
     flex-shrink: 0;
     line-height: 1.3;
+    /* 카운트가 자주 바뀌는 자리라 숫자 폭을 고정 — 배지가 들썩이지 않는다. */
+    font-variant-numeric: tabular-nums;
   }
 
   .body {

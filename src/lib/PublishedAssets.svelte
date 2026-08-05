@@ -117,6 +117,8 @@
     font-size: var(--fs-xs);
     color: var(--text-secondary);
     max-width: 140px;
+    /* overflow:hidden + line-height 미지정은 한글 받침을 자른다(OutlinePanel과 같은 건). */
+    line-height: 1.5;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
