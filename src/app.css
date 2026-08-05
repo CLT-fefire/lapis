@@ -364,6 +364,31 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* --- 스크롤바 (Discord식: 얇고 둥근 thumb, track은 투명) -------------------
+ * 기본 macOS 오버레이 스크롤바는 크롬 위에서 존재감이 없어 패널 경계가 흐릿해진다.
+ * WebKit 전용 의사요소라 Tauri(WKWebView)에서 그대로 먹는다. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-disabled);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* --- 접근성: 가시적 focus 링 ---------------------------------------------- */
 :focus-visible {
   outline: 2px solid var(--focus-ring);
