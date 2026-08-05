@@ -8,7 +8,13 @@ import {
   deletePath,
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
-import { toggleEditor, togglePreview, toggleSidebar } from "$lib/stores/layout";
+import {
+  toggleEditor,
+  togglePreview,
+  toggleSidebar,
+  toggleContext,
+  resetLayout,
+} from "$lib/stores/layout";
 import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
 
 export interface Command {
@@ -80,6 +86,21 @@ export const BUILTIN_COMMANDS: Command[] = [
     label: "Toggle Preview Pane",
     run() {
       togglePreview();
+    },
+  },
+  {
+    id: "toggle-context-panel",
+    label: "Toggle Context Panel",
+    shortcut: "⌘⌥B",
+    run() {
+      toggleContext();
+    },
+  },
+  {
+    id: "reset-layout",
+    label: "Reset Layout",
+    run() {
+      resetLayout();
     },
   },
   {

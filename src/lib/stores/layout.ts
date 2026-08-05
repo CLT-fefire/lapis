@@ -92,6 +92,21 @@ export function resetContextWidth(): void {
   setContextWidth(DEFAULT_CONTEXT_WIDTH);
 }
 
+/**
+ * 모든 페인 상태·폭을 기본값으로 되돌린다(⌘K → "레이아웃 초기화").
+ * 신규 설치 기본값과 동일한 상태 — 기존 사용자가 원할 때 스스로 맞출 수 있는 경로다.
+ */
+export function resetLayout(): void {
+  editorCollapsed.set(true);
+  previewCollapsed.set(false);
+  contextCollapsed.set(false);
+  sidebarCollapsed.set(false);
+  persistPane();
+  persistSidebarCollapsed();
+  setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+  setContextWidth(DEFAULT_CONTEXT_WIDTH);
+}
+
 function persistPane(): void {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(
@@ -138,6 +153,12 @@ export function restorePaneState(): void {
       console.warn("restorePaneState (pane) failed", e);
       localStorage.removeItem(PANE_KEY);
     }
+  } else {
+    // 저장된 상태가 없다 = **신규 설치**. Lapis는 읽기·탐색이 주 용도라 Editor는
+    // 접은 채 시작해 Preview에 공간을 준다. 기존 사용자의 저장값은 위 분기가
+    // 그대로 존중하므로 이 기본값이 남의 레이아웃을 덮어쓰지 않는다.
+    // (원할 때 새 기본값으로 맞추려면 ⌘K → "레이아웃 초기화".)
+    editorCollapsed.set(true);
   }
 
   const widthRaw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
