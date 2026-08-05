@@ -39,6 +39,11 @@
   --surface-panel: var(--n-50);
   --surface-content: var(--n-100);
 
+  /* 툴팁 — Discord는 **라이트 테마에서도 어두운** 말풍선을 쓴다(macOS 네이티브 툴팁과
+     반대). 테마별 오버라이드에서도 어둡게 유지할 것. */
+  --tooltip-bg: #111318;
+  --tooltip-fg: #e6e9ef;
+
   /* 시맨틱 — Border */
   --border-subtle: var(--n-200);
   --border-default: var(--n-300);
