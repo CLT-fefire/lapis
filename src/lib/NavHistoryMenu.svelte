@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { scale } from "svelte/transition";
+  import { menuPop } from "$lib/motion";
   import { navView } from "$lib/stores/navHistory";
   import { goToHistory } from "$lib/stores/vault";
   import { noteDisplayName } from "$lib/notePath";
@@ -42,7 +44,7 @@
 <svelte:window onmousedown={onWindowMouseDown} onkeydown={onWindowKey} />
 
 {#if open}
-  <ul class="nav-history-menu" role="menu">
+  <ul class="nav-history-menu" role="menu" transition:scale={menuPop()}>
     {#each items as item (item.index)}
       <li>
         <button
@@ -62,6 +64,8 @@
 <style>
   .nav-history-menu {
     position: absolute;
+    /* 방문 기록 버튼(좌상단) 아래에서 자라난다. */
+    transform-origin: top left;
     top: calc(100% + var(--sp-2));
     left: 0;
     list-style: none;

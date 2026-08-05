@@ -5,6 +5,8 @@
 
 <script lang="ts">
   import { onMount, onDestroy, tick, type Snippet } from "svelte";
+  import { fade, scale } from "svelte/transition";
+  import { backdropFade, cardPop } from "$lib/motion";
 
   interface Props {
     /** ESC / backdrop 클릭 시 호출. */
@@ -100,8 +102,13 @@
   tabindex="-1"
   onclick={onBackdropClick}
   onkeydown={onKeydown}
+  transition:fade={backdropFade()}
 >
-  {@render children()}
+  <!-- 카드는 consumer의 snippet이라 여기서 직접 transition을 걸 수 없다. 래퍼를 하나 두고
+       backdrop의 가로 정렬을 이 래퍼가 이어받는다(세로 정렬은 backdrop이 유지). -->
+  <div class="ms-card-wrap" transition:scale={cardPop()}>
+    {@render children()}
+  </div>
 </div>
 
 <style>
@@ -115,6 +122,15 @@
     overflow: auto;
     outline: none;
   }
+  /* 카드 래퍼 — 폭 100%를 차지하고 가로 중앙 정렬만 담당한다. 세로 정렬은 backdrop의
+     align-items가 이 래퍼에 걸리므로, 래퍼 높이는 카드 높이를 따라가고 카드가
+     세로로 늘어나지 않는다(stretch 회귀 방지). */
+  .ms-card-wrap {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
   .ms-align-center {
     align-items: center;
   }
