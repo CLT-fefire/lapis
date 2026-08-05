@@ -135,7 +135,12 @@
     cursor: pointer;
     font-family: inherit;
     font-size: var(--fs-xs);
-    letter-spacing: 0.01em;
+    /* Discord 채널 카테고리의 어휘 — 작게·굵게·대문자. PR-2에서 "2016년대 관용구"로
+       걷어냈다가 되돌린 것: Discord는 실제로 카테고리에 uppercase를 쓴다.
+       (한글 레이블에는 uppercase가 적용되지 않아 무해하다.) */
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-weight: 700;
     color: var(--text-muted);
     transition: color var(--dur-fast);
   }
