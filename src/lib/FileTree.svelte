@@ -361,6 +361,11 @@
     position: relative;
     height: 28px; /* ROW_HEIGHT와 일치 */
     overflow: hidden;
+    /* Discord 채널 아이템처럼 행을 좌우에서 띄운다 — 행이 패널 폭을 꽉 채우지 않고
+       "칩"으로 보이게 하는 게 시각 인상의 핵심. 세로는 건드리지 않아 가상 스크롤의
+       ROW_HEIGHT 계산에 영향이 없다. 8px(Discord)이 아니라 4px인 건 12000노트 트리의
+       깊은 들여쓰기에서 이름이 잘리지 않게 하려는 절충. */
+    padding: 0 var(--sp-2);
   }
 
   .row-wrap.drop-target {
@@ -378,6 +383,7 @@
     padding-right: var(--sp-4);
     background: transparent;
     border: none;
+    border-radius: var(--r-sm);
     text-align: left;
     cursor: pointer;
     font-family: inherit;
@@ -404,11 +410,12 @@
     background: var(--surface-overlay);
   }
 
+  /* Discord 채널 아이템은 선택을 **배경**으로만 표시한다(좌측 바는 서버 레일의 어휘).
+     행에 radius가 생기면 inset 3px 바가 모서리에서 잘려 어색하기도 하다. */
   .row.note.active {
     background: var(--accent-bg-subtle);
     color: var(--text-primary);
     font-weight: 600;
-    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .row.note.active:hover {
@@ -416,14 +423,10 @@
   }
 
   /* 필터 ↑↓ 키보드로 활성화된 row — 현재 열린 노트(.active)와 시각 구분(노란 톤) */
-  .row.note.keyboard-active {
-    background: var(--warning-bg-subtle);
-    box-shadow: inset 3px 0 0 var(--warning);
-  }
-
+  .row.note.keyboard-active,
   .row.note.active.keyboard-active {
     background: var(--warning-bg-subtle);
-    box-shadow: inset 3px 0 0 var(--warning);
+    color: var(--text-primary);
   }
 
   .caret {

@@ -31,7 +31,8 @@
   .outline {
     display: flex;
     flex-direction: column;
-    padding: var(--sp-2) 0;
+    /* FileTree와 같은 어휘 — 항목을 좌우에서 띄워 "칩"으로 보이게 한다. */
+    padding: var(--sp-2);
     overflow-y: auto;
   }
 
@@ -41,7 +42,7 @@
     text-align: left;
     background: transparent;
     border: none;
-    border-left: 2px solid transparent;
+    border-radius: var(--r-sm);
     color: var(--text-secondary);
     font-family: inherit;
     font-size: var(--fs-sm);
@@ -60,9 +61,9 @@
     background: var(--surface-sunken);
   }
 
+  /* 선택은 배경으로만 — 좌측 바는 레일의 어휘라 리스트에서는 쓰지 않는다. */
   .outline-item.active {
     color: var(--accent);
-    border-left-color: var(--accent);
     background: var(--accent-bg-subtle);
   }
 

@@ -93,6 +93,7 @@
     overflow: hidden;
   }
 
+  /* Discord 서버 아이콘의 어휘: 평소 **원형**, hover·active에서 squircle로 모프한다. */
   .rail-btn {
     position: relative;
     display: flex;
@@ -103,10 +104,16 @@
     border: none;
     background: transparent;
     color: var(--text-muted);
-    border-radius: var(--r-md);
+    border-radius: var(--r-full);
     cursor: pointer;
     flex-shrink: 0;
-    transition: color var(--dur-fast), background var(--dur-fast);
+    transition: color var(--dur-fast), background var(--dur-fast),
+      border-radius var(--dur-base) var(--ease-out);
+  }
+
+  .rail-btn:hover,
+  .rail-btn.active {
+    border-radius: var(--r-lg);
   }
 
   .rail-btn:hover {
@@ -114,23 +121,33 @@
     color: var(--text-secondary);
   }
 
-  /* 활성 섹션 — 배경을 사이드바 계층까지 올려 "이 아이콘이 옆 패널과 이어져 있다"를
-     보이게 하고, 좌측 accent 바로 선택을 표시한다(FileTree의 pill과 같은 어휘). */
   .rail-btn.active {
-    background: var(--surface-panel);
-    color: var(--text-primary);
+    background: var(--accent-bg-subtle);
+    color: var(--accent);
+  }
+
+  /* 선택 인디케이터 — Discord처럼 버튼 안이 아니라 **레일 가장자리**에 붙는 pill.
+     높이로 상태를 말한다: 평소 0 → hover 20px → active 24px.
+     left 계산식은 버튼(40px)이 레일(--rail-w) 중앙에 있다는 전제에서 x=0으로 보낸다. */
+  .rail-btn::before {
+    content: "";
+    position: absolute;
+    left: calc((40px - var(--rail-w, 52px)) / 2);
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 0;
+    background: var(--text-primary);
+    border-radius: 0 var(--r-full) var(--r-full) 0;
+    transition: height var(--dur-base) var(--ease-out);
+  }
+
+  .rail-btn:hover::before {
+    height: 20px;
   }
 
   .rail-btn.active::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 60%;
-    background: var(--accent);
-    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    height: 24px;
   }
 
   .rail-btn:focus-visible {
