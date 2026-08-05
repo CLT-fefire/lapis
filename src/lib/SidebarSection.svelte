@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { ChevronDown, ChevronRight, type LucideIcon } from "@lucide/svelte";
+  import { ChevronRight, type LucideIcon } from "@lucide/svelte";
+  import { fly } from "svelte/transition";
+  import { sectionReveal } from "$lib/motion";
 
   /**
    * 사이드바 세로 아코디언 섹션 1개 (옵션 B). 헤더(chevron + lucide 아이콘 + 레이블 + badge)
@@ -74,8 +76,10 @@
   style={open && height != null ? `flex: 0 0 ${height}px` : ""}
 >
   <button class="section-header" aria-expanded={open} onclick={onToggle}>
+    <!-- 아이콘을 교체하면(ChevronDown ↔ ChevronRight) 회전을 애니메이션할 수 없다.
+         하나로 고정하고 CSS로 90° 돌린다 — Discord 카테고리와 같은 방식. -->
     <span class="chevron" aria-hidden="true">
-      {#if open}<ChevronDown size={13} />{:else}<ChevronRight size={13} />{/if}
+      <ChevronRight size={13} />
     </span>
     <span class="icon" aria-hidden="true"><Icon size={15} /></span>
     <span class="label">{label}</span>
@@ -84,7 +88,7 @@
     {/if}
   </button>
   {#if open}
-    <div class="body">
+    <div class="body" transition:fly={sectionReveal()}>
       {@render children()}
     </div>
     {#if resizable}
@@ -159,6 +163,15 @@
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+  }
+
+  /* 펼침 = chevron 90° 회전. 높이 변화는 flex가 즉시 처리하므로, 이 회전과
+     콘텐츠 fly가 "펼쳐진다"는 인상을 만든다. */
+  .chevron {
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  .section.open .chevron {
+    transform: rotate(90deg);
   }
 
   .chevron {
