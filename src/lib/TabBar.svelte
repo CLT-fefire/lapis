@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { slide } from "svelte/transition";
+  import { tabChip } from "$lib/motion";
   import { openTabs } from "$lib/stores/tabs";
   import {
     currentNotePath,
@@ -125,6 +127,7 @@
         class:drag-over-before={dragOverIndex === i && dragIndex !== null && dragIndex > i}
         class:drag-over-after={dragOverIndex === i && dragIndex !== null && dragIndex < i}
         class:dragging={dragIndex === i}
+        transition:slide={tabChip()}
         role="tab"
         tabindex="0"
         aria-selected={path === $currentNotePath}

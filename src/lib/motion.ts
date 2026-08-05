@@ -45,3 +45,25 @@ export function cardPop() {
 export function menuPop() {
   return { duration: dur(MOTION_FAST), start: 0.95, easing: cubicOut, opacity: 0 };
 }
+
+/**
+ * 아코디언 섹션 콘텐츠 — 위에서 살짝 내려오며 나타난다(fly).
+ *
+ * ⚠️ **slide를 쓸 수 없다.** SidebarSection의 `.body`는 `flex: 1`이라 height가 flex로
+ * 결정되고, slide가 인라인으로 거는 height는 무시된다. 높이 변화 자체는 즉시 일어나고
+ * 여기서는 **내용의 등장**만 다룬다 — chevron 회전(CSS)과 합쳐져 "펼쳐진다"로 읽힌다.
+ */
+export function sectionReveal() {
+  return { duration: dur(MOTION_BASE), y: -6, easing: cubicOut };
+}
+
+/**
+ * 탭 칩 추가/제거 — 가로로 늘어나며 등장.
+ *
+ * 탭 전환(다른 노트 열기)에는 **모션을 두지 않는다**. 하루에 수백 번 반복하는 조작이라
+ * 매 전환이 곧 대기 시간이 되고, 읽기 시작이 그만큼 늦어진다. 여기는 "칩이 생기고
+ * 사라지는" 구조 변화만 다룬다.
+ */
+export function tabChip() {
+  return { duration: dur(MOTION_FAST), axis: "x" as const, easing: cubicOut };
+}
