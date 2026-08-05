@@ -35,7 +35,11 @@
     SECTION_KEYS,
     type SidebarSectionKey,
   } from "$lib/stores/sidebar";
-  import { FileText, Hash, SlidersHorizontal, Star, Settings } from "@lucide/svelte";
+  import { FileText, Hash, SlidersHorizontal, Star, Settings, ChevronDown } from "@lucide/svelte";
+  import PaneMenu, { type PaneMenuItem } from "./PaneMenu.svelte";
+  import { revealInFinder } from "$lib/tauri/reveal";
+  import { forceReindex } from "$lib/stores/vault";
+  import { watcherStatus } from "$lib/stores/watcher";
   import { pinnedNotePaths } from "$lib/stores/pins";
   import {
     docKindCounts,
@@ -49,6 +53,41 @@
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
   }
+
+  // === vault 메뉴 (Discord 서버 헤더 드롭다운) ===
+  // 헤더에 상시 노출하던 ↻ 📁 를 여기로 접고, 설정에만 있던 인덱스 재구축도 합류시킨다.
+  const vaultMenuItems: PaneMenuItem[] = [
+    { id: "reload", label: "↻ 새로고침", onSelect: () => void reloadNotes() },
+    {
+      id: "reveal",
+      label: "📂 Finder에서 보기",
+      onSelect: () => {
+        if ($vaultPath) void revealInFinder($vaultPath);
+      },
+    },
+    { id: "open-other", label: "📁 다른 vault 열기…", onSelect: () => void pickAndOpenVault() },
+    {
+      id: "reindex",
+      label: "🔄 인덱스 재구축",
+      title: "검색·태그·관계 인덱스를 캐시 무시하고 다시 만듭니다",
+      onSelect: () => void forceReindex(),
+    },
+    { id: "settings", label: "⚙ 설정", onSelect: openSettings },
+  ];
+
+  // === 하단 상태 (Discord 유저 패널 자리) ===
+  // watcher 점(topbar) · 트리 로딩 스피너(헤더) · 인덱스 진행(별도 strip)으로 **세 곳에
+  // 흩어져 있던** 신호를 한 줄로 모은다. 우선순위: 작업 중 > 감시 상태.
+  const vaultStatus = $derived.by(() => {
+    if ($indexBuilding) return { tone: "busy", text: "인덱스 만드는 중…" };
+    if ($indexRefreshing) return { tone: "busy", text: "인덱스 갱신 중…" };
+    if ($treeLoading) return { tone: "busy", text: "트리 읽는 중…" };
+    if ($watcherStatus === "watching") return { tone: "ok", text: "변경 감시 중" };
+    if ($watcherStatus === "error") return { tone: "error", text: "감시 오류" };
+    return { tone: "idle", text: "대기" };
+  });
+
+  const noteCount = $derived($linkIndex ? $linkIndex.byPath.size : 0);
 
   // === 펼친 섹션 리사이즈 ===
   // 펼친 섹션을 위→아래 순서로 모은다. 마지막 펼친 섹션은 잔여 공간을 흡수(height=null·핸들 없음),
@@ -263,15 +302,19 @@ graph LR
 <aside class="sidebar">
   <header class="sidebar-header">
     {#if $vaultPath}
-      <div class="vault-name" title={$vaultPath}>{vaultDisplayName($vaultPath)}</div>
-      {#if $treeLoading}
-        <span class="loading-spinner" title="트리 로드 중"></span>
-      {/if}
-      <div class="actions">
-        <button class="btn btn--icon btn--sm btn--plain" title="새로고침" onclick={reloadNotes}>↻</button>
-        <button class="btn btn--icon btn--sm btn--plain" title="다른 vault 열기" onclick={pickAndOpenVault}>📁</button>
-        <button class="btn btn--icon btn--sm btn--plain" title="사이드바 접기 (⌘B)" aria-label="사이드바 접기" onclick={toggleSidebar}>◀</button>
-      </div>
+      <!-- Discord 서버 헤더 — 이름 전체가 트리거이고 액션은 메뉴 안으로 접는다.
+           접기(◀)는 레일에 상시 있으므로 여기서 제거(중복). -->
+      <PaneMenu
+        items={vaultMenuItems}
+        label="Vault 메뉴"
+        triggerClass="vault-trigger"
+        align="left"
+      >
+        {#snippet trigger()}
+          <span class="vault-name" title={$vaultPath}>{vaultDisplayName($vaultPath)}</span>
+          <ChevronDown size={14} strokeWidth={2.5} aria-hidden="true" />
+        {/snippet}
+      </PaneMenu>
     {:else}
       <button class="open-btn" onclick={pickAndOpenVault}>Vault 열기…</button>
     {/if}
@@ -442,10 +485,24 @@ graph LR
   </div>
 
   <footer class="sidebar-foot">
-    <button class="settings-btn" title="설정" aria-label="설정 열기" onclick={openSettings}>
-      <Settings size={16} strokeWidth={2} aria-hidden="true" />
-      <span>설정</span>
-    </button>
+    <!-- Discord 유저 패널 자리 — 상태 전용.
+         설정 버튼은 두지 않는다: 여기에 라벨 없는 작은 ⚙를 놓으면 "작은 글리프는 인지가
+         어렵다"는 과거 피드백을 되돌리게 된다. 진입 경로는 레일 ⚙(툴팁 있음) ·
+         vault 메뉴 "⚙ 설정" · ⌘K 로 이미 셋이다. -->
+    {#if $vaultPath}
+      <div class="vault-status" title={$vaultPath}>
+        <span
+          class="status-dot"
+          class:ok={vaultStatus.tone === "ok"}
+          class:busy={vaultStatus.tone === "busy"}
+          class:error={vaultStatus.tone === "error"}
+        ></span>
+        <span class="status-text">{vaultStatus.text}</span>
+        {#if noteCount > 0}
+          <span class="status-count">{noteCount.toLocaleString()}</span>
+        {/if}
+      </div>
+    {/if}
   </footer>
 </aside>
 
@@ -481,16 +538,8 @@ graph LR
     color: var(--accent);
   }
 
-  /* 트리 로딩 — 짧음 (~30-100ms). 작은 pulse dot. */
-  .loading-spinner {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: pulse-dot 0.9s ease-in-out infinite;
-    flex-shrink: 0;
-    margin-right: var(--sp-2);
-  }
+  /* 트리 로딩 표시는 하단 상태 줄(.status-dot.busy)로 통합 — 2026-08-05 PR-10.
+     pulse-dot keyframes는 아래 index-overlay에서 계속 쓴다. */
 
   @keyframes pulse-dot {
     0%, 100% { opacity: 0.3; transform: scale(0.8); }
@@ -519,10 +568,6 @@ graph LR
     100% { transform: translateX(380%); }
   }
 
-  .actions {
-    display: flex;
-    gap: var(--sp-2);
-  }
 
   .open-btn,
   .link-btn {
@@ -583,27 +628,69 @@ graph LR
     flex-shrink: 0;
   }
 
-  /* 설정 버튼 — 작은 ⚙ 글리프는 인지가 어려워(사용자 피드백) 아이콘+라벨의 전폭 버튼으로. */
-  .settings-btn {
+  /* vault 상태 한 줄 — 점(상태) + 텍스트 + 노트 수. */
+  .vault-status {
     display: flex;
     align-items: center;
-    gap: var(--sp-2);
+    gap: var(--sp-3);
     width: 100%;
+    min-width: 0;
     padding: var(--sp-2) var(--sp-3);
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--r-sm);
-    color: var(--text-secondary);
-    font-family: inherit;
-    font-size: var(--fs-sm);
-    cursor: pointer;
-    transition: background var(--dur-fast), color var(--dur-fast),
-      border-color var(--dur-fast);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
   }
-  .settings-btn:hover {
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--r-full);
+    background: var(--text-disabled);
+    flex-shrink: 0;
+    transition: background var(--dur-slow), box-shadow var(--dur-slow);
+  }
+  .status-dot.ok {
+    background: var(--success);
+    box-shadow: 0 0 0 3px var(--success-bg-subtle);
+  }
+  .status-dot.busy {
+    background: var(--warning);
+    box-shadow: 0 0 0 3px var(--warning-bg-subtle);
+  }
+  .status-dot.error {
+    background: var(--danger);
+    box-shadow: 0 0 0 3px var(--danger-bg-subtle);
+  }
+
+  .status-text {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .status-count {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-disabled);
+    flex-shrink: 0;
+  }
+
+  /* vault 헤더 트리거 — 이름 전체가 버튼(Discord 서버 헤더). */
+  :global(.vault-trigger) {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: var(--sp-3);
+    background: transparent;
+    border: none;
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background var(--dur-fast);
+  }
+  :global(.vault-trigger:hover) {
     background: var(--surface-overlay);
-    border-color: var(--border-default);
-    color: var(--accent);
   }
 
   /* 인덱스 빌드 중 dim overlay — 트리 영역 cover.

@@ -27,6 +27,7 @@
    * 팝오버 닫기(외부 mousedown + ESC)는 ReadingControls와 같은 패턴 — 우클릭의 mouseup이
    * click으로 인식되는 WKWebView 이슈를 피하려 좌클릭(button 0)만 트리거로 본다.
    */
+  import type { Snippet } from "svelte";
   import { scale } from "svelte/transition";
   import { menuPop } from "$lib/motion";
 
@@ -34,9 +35,21 @@
     items: PaneMenuItem[];
     /** 스크린리더용 — "Editor 추가 작업" 등. */
     label: string;
+    /** 트리거 버튼 내용. 미지정이면 `⋯` (페인 툴바 기본형). */
+    trigger?: Snippet;
+    /** 트리거 버튼 클래스. 넓은 헤더형 트리거를 쓸 때 교체. */
+    triggerClass?: string;
+    /** 팝오버 가로 정렬 — 트리거가 좌측에 있으면 "left". */
+    align?: "left" | "right";
   }
 
-  let { items, label }: Props = $props();
+  let {
+    items,
+    label,
+    trigger,
+    triggerClass = "btn btn--icon btn--sm",
+    align = "right",
+  }: Props = $props();
 
   let open = $state(false);
   /**
@@ -71,17 +84,25 @@
 
 <div class="pane-menu" bind:this={rootEl}>
   <button
-    class="btn btn--icon btn--sm"
+    class={triggerClass}
     class:active={open}
     title={label}
     aria-label={label}
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={() => (open = !open)}
-  >⋯</button>
+  >
+    {#if trigger}{@render trigger()}{:else}⋯{/if}
+  </button>
 
   {#if open}
-    <ul class="pane-menu-popover" role="menu" aria-label={label} transition:scale={menuPop()}>
+    <ul
+      class="pane-menu-popover"
+      class:align-left={align === "left"}
+      role="menu"
+      aria-label={label}
+      transition:scale={menuPop()}
+    >
       {#each items as item (item.id)}
         <li role="none">
           <button
@@ -108,6 +129,13 @@
     right: 0;
     /* ⋯ 버튼(우상단)에서 자라나 보이도록 pop의 원점을 맞춘다. */
     transform-origin: top right;
+  }
+
+  /* 트리거가 좌측에 있는 경우(vault 헤더 등) — 좌상단에서 자라난다. */
+  .pane-menu-popover.align-left {
+    right: auto;
+    left: 0;
+    transform-origin: top left;
     list-style: none;
     margin: 0;
     padding: var(--sp-2) 0;
