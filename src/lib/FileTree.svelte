@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { changedNotes } from "$lib/stores/unread";
   import type { NoteEntry } from "$lib/tauri/notes";
   import {
     selectNote,
@@ -326,6 +327,7 @@
           class="row note"
           class:active={$currentNotePath === entry.path}
           class:keyboard-active={activePath === entry.path}
+          class:changed={$changedNotes.has(entry.path)}
           style="padding-left: {indentPx}px"
           data-leaf-path={entry.path}
           onclick={() => selectNote(entry.path)}
@@ -408,6 +410,26 @@
 
   .row.dir:hover {
     background: var(--surface-overlay);
+  }
+
+  /* "안 본 사이 바뀜" — Discord unread의 어휘: 볼드 + 좌측 흰 바.
+     여기서는 좌측 바를 쓴다. 선택(.active)은 배경으로 표시하므로 둘이 겹쳐도
+     서로 다른 채널로 읽힌다(배경=지금 보는 것 / 바=아직 안 본 변경). */
+  .row.note.changed {
+    color: var(--text-primary);
+    font-weight: 700;
+  }
+
+  .row.note.changed::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    background: var(--text-primary);
+    border-radius: 0 var(--r-full) var(--r-full) 0;
   }
 
   /* Discord 채널 아이템은 선택을 **배경**으로만 표시한다(좌측 바는 서버 레일의 어휘).

@@ -667,6 +667,50 @@ fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
     })
 }
 
+// ─── notes_mtimes ("안 본 사이 바뀐 노트"용) ─────────────────────────────────
+
+/// 주어진 노트들의 mtime(ms)만 stat해서 돌려준다. **읽지 않는다**.
+///
+/// vault 전체를 걷지 않는 것이 요점 — 프론트가 "열람 이력이 있는 경로"만 보내므로
+/// 12000노트 vault에서도 실제 stat 대상은 보통 수백 건이다(전수 walk는
+/// vault_fingerprint가 이미 하고 있고, 여기선 그 비용을 다시 치를 이유가 없다).
+///
+/// 없어졌거나 vault 밖인 경로는 **에러 대신 결과에서 제외**한다. 열람 이력은 파일이
+/// 지워져도 남아 있을 수 있어, 하나 없다고 전체 조회를 실패시키면 쓸모가 없다.
+#[tauri::command]
+pub async fn notes_mtimes(
+    vault_path: String,
+    paths: Vec<String>,
+) -> Result<Vec<(String, u64)>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let vault = canonicalize_vault(&vault_path)?;
+        let mut out: Vec<(String, u64)> = Vec::with_capacity(paths.len());
+        for p in paths {
+            let Ok(canon) = PathBuf::from(&p).canonicalize() else {
+                continue; // 삭제됨
+            };
+            if ensure_in_vault(&canon, &vault).is_err() {
+                continue; // vault 밖 — 조용히 제외
+            }
+            let Ok(meta) = fs::metadata(&canon) else {
+                continue;
+            };
+            let mtime_ms = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            // 키는 **프론트가 보낸 원본 경로** — 프론트의 열람 이력 키와 맞춰야 한다
+            // (canonicalize가 심링크를 풀어 다른 문자열이 될 수 있다).
+            out.push((p, mtime_ms));
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("notes_mtimes join: {e}"))?
+}
+
 // ─── vault_fingerprint (검색 캐시용) ─────────────────────────────────────────
 
 /// vault 모든 .md의 (rel_path, mtime_ms, size)를 정렬해 누적 hash. read 없음, stat만.

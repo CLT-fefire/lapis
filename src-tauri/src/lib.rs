@@ -24,6 +24,7 @@ pub fn run() {
             vault::scan_link_single,
             vault::read_vault_bundle,
             vault::vault_fingerprint,
+            vault::notes_mtimes,
             vault::create_note,
             vault::create_folder,
             vault::delete_note,
