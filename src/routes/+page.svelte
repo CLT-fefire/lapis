@@ -12,9 +12,6 @@
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
-  import Neighborhood from "$lib/Neighborhood.svelte";
-  import Properties from "$lib/Properties.svelte";
-  import PublishedAssets from "$lib/PublishedAssets.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
@@ -79,7 +76,13 @@
     togglePreview,
     toggleSidebar,
     restorePaneState,
+    contextCollapsed,
+    contextWidth,
+    setContextWidth,
+    resetContextWidth,
+    toggleContext,
   } from "$lib/stores/layout";
+  import ContextPanel from "$lib/ContextPanel.svelte";
   import { onSystemThemeChange, restoreTheme, themeMode } from "$lib/stores/theme";
   import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
@@ -823,6 +826,28 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     window.addEventListener("mouseup", onUp);
   }
 
+  // 컨텍스트 패널 폭 리사이저 — 패널이 **우측**이라 드래그 방향이 사이드바와 반대다
+  // (오른쪽으로 끌면 폭이 줄어든다). 더블클릭은 기본값(300) 복원.
+  function startContextResize(e: MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = get(contextWidth);
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      setContextWidth(startW - (ev.clientX - startX));
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   async function confirmAndDeleteCurrent(path: string) {
     const name = path.split("/").pop() ?? path;
     if (!confirm(`노트 "${name}"을(를) 휴지통으로 이동할까요?`)) return;
@@ -920,7 +945,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       if (!$currentNotePath) return;
       e.preventDefault();
       void copyCurrentPath();
-    } else if (key === "b" && !e.shiftKey) {
+    } else if (e.altKey && (e.code === "KeyB" || key === "b" || e.key === "∫")) {
+      // Cmd+Opt+B — 우측 컨텍스트 패널 접기/펼치기.
+      // ⚠️ macOS에서 Option은 문자를 바꾼다(⌥B → "∫") — e.key만 보면 놓친다.
+      // 반대로 일부 환경(자동화·리모트 입력)은 e.code를 비워 보낸다. 어느 한쪽에
+      // 의존하지 않도록 code·key를 **모두** 허용한다. ⌘B 분기보다 먼저 와야 한다.
+      e.preventDefault();
+      toggleContext();
+    } else if (key === "b" && !e.shiftKey && !e.altKey) {
       // Cmd+B — 사이드바 접기/펼치기 (VS Code 표준)
       e.preventDefault();
       toggleSidebar();
@@ -971,12 +1003,16 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // 레일은 **상시** 표시(폭 고정) — 접기의 최소 상태가 곧 레일이다. 사이드바 접힘은
   // 이제 "레일로 교체"가 아니라 "폭 0"이라, 화면에 보이는 결과는 종전과 같으면서
   // 레일이 늘 같은 자리에 머문다.
+  // rail / sidebar / rz / editor / preview / rz2 / context — 7열.
+  // 컨텍스트 패널은 Editor/Preview 가드와 무관하게 독립 접힘(36px 스트립 ↔ --context-w).
   const gridCols = $derived(
     `var(--rail-w, 52px) ` +
       `${$sidebarCollapsed ? "0px" : "var(--sidebar-w, 260px)"} ` +
       `${$sidebarCollapsed ? "0px" : "4px"} ` +
       `${$editorCollapsed ? "36px" : "1fr"} ` +
-      `${$previewCollapsed ? "36px" : "1fr"}`,
+      `${$previewCollapsed ? "36px" : "1fr"} ` +
+      `${$contextCollapsed ? "0px" : "4px"} ` +
+      `${$contextCollapsed ? "36px" : "var(--context-w, 300px)"}`,
   );
 
   // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
@@ -1120,7 +1156,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
   <div
     class="workspace"
-    style="--sidebar-w: {$sidebarWidth}px; grid-template-columns: {gridCols};"
+    style="--sidebar-w: {$sidebarWidth}px; --context-w: {$contextWidth}px; grid-template-columns: {gridCols};"
   >
     <SidebarRail />
     {#if $sidebarCollapsed}
@@ -1236,7 +1272,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick} onscroll={handlePreviewScroll}>
-        <Properties data={effectiveProperties} isAuto={propertiesAuto} rawNote={raw} />
+        <!-- 속성·관계·발행자산은 2026-08-05(PR-4)에 우측 컨텍스트 패널로 이전.
+             Preview는 이제 **본문만** 담는다. -->
         <article
           class="rendered"
           bind:this={renderedArticleEl}
@@ -1244,17 +1281,60 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         >
           {@html parsed.html}
         </article>
-
-        {#if $currentNotePath}
-          <Neighborhood
-            targetNote={currentNoteInfo}
-            outgoing={currentOutgoing}
-            incoming={currentIncoming}
-            backlinks={currentBacklinks}
-          />
-          <PublishedAssets notePath={$currentNotePath} />
-        {/if}
       </div>
+      {/if}
+    </section>
+
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="sidebar-resizer"
+      class:rz-hidden={$contextCollapsed}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="컨텍스트 패널 폭 조절 (더블클릭으로 기본값 복원)"
+      title="드래그로 폭 조절 · 더블클릭으로 복원"
+      onmousedown={startContextResize}
+      ondblclick={resetContextWidth}
+    ></div>
+
+    <section class="pane context-pane" class:collapsed={$contextCollapsed}>
+      {#if $contextCollapsed}
+        <button
+          class="collapsed-strip"
+          title="컨텍스트 패널 펼치기 (⌘⌥B)"
+          aria-label="컨텍스트 패널 펼치기"
+          onclick={toggleContext}
+        >
+          <span class="strip-icon">◀</span>
+          <span class="strip-label">Context</span>
+        </button>
+      {:else}
+        <div class="pane-title">
+          <span>Context</span>
+          <div class="pane-actions">
+            <button
+              class="btn btn--icon btn--sm btn--plain"
+              title="컨텍스트 패널 접기 (⌘⌥B)"
+              aria-label="컨텍스트 패널 접기"
+              onclick={toggleContext}
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+        <ContextPanel
+          properties={{ data: effectiveProperties, isAuto: propertiesAuto, rawNote: raw }}
+          neighborhood={$currentNotePath
+            ? {
+                targetNote: currentNoteInfo,
+                outgoing: currentOutgoing,
+                incoming: currentIncoming,
+                backlinks: currentBacklinks,
+              }
+            : null}
+          notePath={$currentNotePath}
+        />
       {/if}
     </section>
   </div>
@@ -1527,6 +1607,12 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   /* 사이드바 접힘 시 grid 컬럼 자리만 지키는 빈 슬롯(폭 0). */
   .sidebar-slot-empty {
     overflow: hidden;
+  }
+
+  /* 우측 컨텍스트 패널 — 사이드바와 같은 크롬 계층이라 본문을 사이에 두고 좌우 대칭. */
+  .context-pane {
+    background: var(--surface-panel);
+    border-right: none;
   }
 
   .pane {

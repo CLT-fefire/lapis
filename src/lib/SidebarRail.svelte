@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     FileText,
-    ListTree,
     Hash,
     SlidersHorizontal,
     Star,
@@ -32,7 +31,6 @@
    */
   const items: { key: SidebarSectionKey; icon: LucideIcon; label: string }[] = [
     { key: "files", icon: FileText, label: "Files" },
-    { key: "outline", icon: ListTree, label: "Outline" },
     { key: "tags", icon: Hash, label: "Tags" },
     { key: "filters", icon: SlidersHorizontal, label: "Filters" },
     { key: "favorites", icon: Star, label: "Favorites" },
