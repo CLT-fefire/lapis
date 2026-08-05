@@ -964,11 +964,16 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     }
   }
 
-  // Workspace 4-column grid를 collapse 상태 조합으로 동적 산출.
-  // sidebar / resizer / editor / preview 순. 클래스별 하드코딩 대신 derived로
+  // Workspace 5-column grid를 collapse 상태 조합으로 동적 산출.
+  // rail / sidebar / resizer / editor / preview 순. 클래스별 하드코딩 대신 derived로
   // 조합 폭발(사이드바×에디터×프리뷰)을 피한다.
+  //
+  // 레일은 **상시** 표시(폭 고정) — 접기의 최소 상태가 곧 레일이다. 사이드바 접힘은
+  // 이제 "레일로 교체"가 아니라 "폭 0"이라, 화면에 보이는 결과는 종전과 같으면서
+  // 레일이 늘 같은 자리에 머문다.
   const gridCols = $derived(
-    `${$sidebarCollapsed ? "var(--rail-w, 52px)" : "var(--sidebar-w, 260px)"} ` +
+    `var(--rail-w, 52px) ` +
+      `${$sidebarCollapsed ? "0px" : "var(--sidebar-w, 260px)"} ` +
       `${$sidebarCollapsed ? "0px" : "4px"} ` +
       `${$editorCollapsed ? "36px" : "1fr"} ` +
       `${$previewCollapsed ? "36px" : "1fr"}`,
@@ -1117,8 +1122,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     class="workspace"
     style="--sidebar-w: {$sidebarWidth}px; grid-template-columns: {gridCols};"
   >
+    <SidebarRail />
     {#if $sidebarCollapsed}
-      <SidebarRail />
+      <!-- 폭 0 컬럼 자리지킴 — grid 컬럼 순서를 유지하면서 Sidebar는 언마운트해
+           12000노트 트리의 렌더 비용을 접힘 상태에서 물지 않는다. -->
+      <div class="sidebar-slot-empty" aria-hidden="true"></div>
     {:else}
       <Sidebar />
     {/if}
@@ -1516,7 +1524,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     pointer-events: none;
   }
 
-  /* 접힌 사이드바는 SidebarRail(아이콘 레일) 컴포넌트가 담당 — 구 strip 제거됨. */
+  /* 사이드바 접힘 시 grid 컬럼 자리만 지키는 빈 슬롯(폭 0). */
+  .sidebar-slot-empty {
+    overflow: hidden;
+  }
 
   .pane {
     display: flex;
