@@ -20,7 +20,7 @@
   import PaneMenu, { type PaneMenuItem } from "$lib/PaneMenu.svelte";
   import { revealInFinder } from "$lib/tauri/reveal";
   import { exportPreviewToHtml } from "$lib/previewExport";
-  import { readingFontSize } from "$lib/stores/reading";
+  import { readingFontSize, readingMeasureLimited } from "$lib/stores/reading";
   import { restoreSettings } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
   import { parseNote } from "$lib/markdown";
@@ -1269,7 +1269,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <article
           class="rendered"
           bind:this={renderedArticleEl}
-          style="--reading-font-size: {$readingFontSize}px"
+          style="--reading-font-size: {$readingFontSize}px;{$readingMeasureLimited
+            ? ''
+            : ' --reading-measure: none;'}"
         >
           {@html parsed.html}
         </article>

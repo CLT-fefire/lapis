@@ -159,6 +159,14 @@
   --fs-xl: 20px;
   --fs-2xl: 22px;
 
+  /* --- 읽기(프리뷰 본문) ---
+   * 본문 폭 상한. **em이라 글꼴 크기를 키워도 "한 줄 글자 수"가 그대로 유지**된다
+   * (px로 잡으면 글꼴을 키울수록 줄당 글자 수가 줄어 의미가 반대로 간다).
+   * 38em ≈ 한글 38자 / 영문 약 76자 — 한글 권장(35~45자)과 영문 권장(45~75자)이
+   * 겹치는 지점. 문서가 한글 위주라 한글 쪽 상한에 맞췄다.
+   * 끄기는 이 값을 바꾸는 게 아니라 article에 `--reading-measure: none` 인라인 주입. */
+  --reading-measure: 38em;
+
   /* --- Font family --- */
   --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
     "Apple SD Gothic Neo", sans-serif;

@@ -18,9 +18,30 @@
  * ========================================================================== */
 
 .rendered {
-  line-height: 1.65;
+  /* 한글 장문 기준 행간. 1.6대는 라틴 기준값이라 한글에서는 줄이 붙어 보인다. */
+  line-height: 1.75;
   /* 프리뷰 글꼴 크기(줌) — ReadingControls가 --reading-font-size로 주입. 헤딩은 em이라 비례. */
-  font-size: var(--reading-font-size, 15px);
+  font-size: var(--reading-font-size, 16px);
+  /* 본문 폭(measure) 제한. 값은 app.css의 --reading-measure 하나가 갖고, 설정에서 끄면
+     앱이 article에 인라인으로 `none`을 주입한다. 내보낸 HTML도 같은 값을 물려받는다
+     (토큰이 article의 computed style에서 수집되므로 — previewExport.ts 참고). */
+  max-width: var(--reading-measure, none);
+  margin-inline: auto;
+}
+
+/* 문단 — 브라우저 기본 margin(1em)은 행간(1.75em)보다 **좁아** 문단이 덩어리로 안 잡힌다. */
+.rendered p {
+  margin: 0 0 1.15em;
+}
+
+/* 리스트·인용 안에서는 문단 간격을 줄인다(loose list가 과하게 벌어지는 것 방지). */
+.rendered li > p {
+  margin-bottom: 0.4em;
+}
+
+.rendered li > p:last-child,
+.rendered blockquote > p:last-child {
+  margin-bottom: 0;
 }
 
 .rendered h1 {
@@ -36,9 +57,30 @@
   color: var(--text-primary);
 }
 
+/* ⚠️ 헤딩은 본문보다 흐려지면 안 된다 — h3는 --text-secondary였고(다크 6.8:1 vs 본문 14.3:1)
+   h4~h6는 규칙이 없어 브라우저 기본(h5 0.83em / h6 0.67em)으로 **본문보다 작아졌다**.
+   위계는 크기·굵기·위 여백으로만 표현하고 색은 전부 --text-primary로 고정한다. */
 .rendered h3 {
-  font-size: 1.1em;
-  color: var(--text-secondary);
+  font-size: 1.15em;
+  margin-top: 1.5em;
+  color: var(--text-primary);
+}
+
+.rendered h4,
+.rendered h5,
+.rendered h6 {
+  margin-top: 1.4em;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.rendered h4 {
+  font-size: 1.05em;
+}
+
+.rendered h5,
+.rendered h6 {
+  font-size: 1em;
 }
 
 .rendered a {
@@ -131,9 +173,23 @@
   color: var(--text-secondary);
 }
 
+/* 표·이미지는 measure를 넘길 수 있다 — 이 가드가 없으면 폭 제한이 켜진 순간 넓은 표가
+   본문 밖으로 삐져나가 페인 전체가 가로로 밀린다.
+   표는 GitHub markdown-body와 같은 방식: **먼저 본문 폭에 맞춰 줄어들고**(셀 줄바꿈),
+   긴 경로처럼 더 줄일 수 없는 내용이면 그때 표 자체에 가로 스크롤이 생긴다. 페인 전체가
+   밀리는 일은 어느 쪽이든 없다. */
 .rendered table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 1em 0;
+}
+
+.rendered img {
+  max-width: 100%;
+  height: auto;
 }
 
 .rendered th,
