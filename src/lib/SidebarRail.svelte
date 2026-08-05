@@ -52,12 +52,15 @@
 <nav class="rail" aria-label="사이드바 레일">
   <button
     class="rail-btn"
-    title={$sidebarCollapsed ? "사이드바 펼치기 (⌘B)" : "사이드바 접기 (⌘B)"}
     aria-label={$sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
     aria-expanded={!$sidebarCollapsed}
     onclick={toggleSidebar}
   >
     <ToggleIcon size={18} />
+    <span class="rail-tip" aria-hidden="true">
+      {$sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
+      <kbd>⌘B</kbd>
+    </span>
   </button>
   <div class="rail-sep" aria-hidden="true"></div>
   {#each items as it (it.key)}
@@ -66,17 +69,18 @@
     <button
       class="rail-btn"
       class:active={isOpen}
-      title={it.label}
       aria-label={it.label}
       aria-pressed={isOpen}
       onclick={() => activate(it.key)}
     >
       <Icon size={18} />
+      <span class="rail-tip" aria-hidden="true">{it.label}</span>
     </button>
   {/each}
   <div class="rail-spacer"></div>
-  <button class="rail-btn" title="설정" aria-label="설정 열기" onclick={openSettings}>
+  <button class="rail-btn" aria-label="설정 열기" onclick={openSettings}>
     <Settings size={18} />
+    <span class="rail-tip" aria-hidden="true">설정</span>
   </button>
 </nav>
 
@@ -90,7 +94,9 @@
     padding: var(--sp-3) 0;
     /* 3계층 중 가장 어두운 면 — 보더 없이 명암차만으로 사이드바와 분리된다. */
     background: var(--surface-rail);
-    overflow: hidden;
+    /* 툴팁이 레일 밖(오른쪽)으로 나가야 하므로 clip하지 않는다.
+       아이콘이 7개뿐이라 세로 넘침 걱정이 없어 visible로 둘 수 있다. */
+    overflow: visible;
   }
 
   /* Discord 서버 아이콘의 어휘: 평소 **원형**, hover·active에서 squircle로 모프한다. */
@@ -153,6 +159,56 @@
   .rail-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+
+  /* Discord식 툴팁 — 아이콘 오른쪽에서 살짝 밀려 나오는 어두운 말풍선.
+     CSS transition이라 app.css의 prefers-reduced-motion 전역 규칙이 그대로 적용된다
+     (Svelte transition과 달리 motion.ts를 거칠 필요가 없다). */
+  .rail-tip {
+    position: absolute;
+    left: calc(100% + var(--sp-4));
+    top: 50%;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-5);
+    background: var(--tooltip-bg);
+    color: var(--tooltip-fg);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-50%) translateX(-4px);
+    transition: opacity var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+    z-index: var(--z-context-menu);
+  }
+
+  /* 말풍선 꼬리 */
+  .rail-tip::before {
+    content: "";
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: var(--tooltip-bg);
+  }
+
+  .rail-btn:hover .rail-tip,
+  .rail-btn:focus-visible .rail-tip {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+
+  .rail-tip kbd {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    opacity: 0.65;
   }
 
   .rail-sep {
