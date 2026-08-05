@@ -1370,7 +1370,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     align-items: center;
     gap: var(--sp-5);
-    padding: var(--sp-5) var(--sp-6);
+    /* 세로 여백을 --sp-3으로 줄여 크롬을 얇게 — 컨트롤 높이가 실질 높이를 정한다
+       (default 24+12=36px, compact 20+8=28px). */
+    padding: var(--sp-3) var(--sp-6);
     /* 크롬 계층 — 아래 본문(--surface-content)보다 어두워 보더 없이 분리된다. */
     background: var(--surface-panel);
     font-size: var(--fs-base);
