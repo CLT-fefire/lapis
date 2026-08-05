@@ -13,11 +13,11 @@ describe("defaultSidebarNav", () => {
   it("files만 펼침", () => {
     const s = defaultSidebarNav();
     expect(s.sectionOpen.files).toBe(true);
-    expect(s.sectionOpen.outline).toBe(false);
+    expect(s.sectionOpen.tags).toBe(false);
     expect(s.sectionOpen.favorites).toBe(false);
   });
-  it("SECTION_KEYS 5개", () => {
-    expect(SECTION_KEYS).toEqual(["files", "outline", "tags", "filters", "favorites"]);
+  it("SECTION_KEYS 4개", () => {
+    expect(SECTION_KEYS).toEqual(["files", "tags", "filters", "favorites"]);
   });
 });
 
@@ -31,10 +31,10 @@ describe("toggleSectionState", () => {
   });
   it("여러 섹션 동시 펼침 가능 (독립)", () => {
     let s = defaultSidebarNav(); // files true
-    s = toggleSectionState(s, "outline");
+    s = toggleSectionState(s, "filters");
     s = toggleSectionState(s, "tags");
     expect(s.sectionOpen.files).toBe(true);
-    expect(s.sectionOpen.outline).toBe(true);
+    expect(s.sectionOpen.filters).toBe(true);
     expect(s.sectionOpen.tags).toBe(true);
   });
 });
@@ -56,7 +56,6 @@ describe("sectionHeights", () => {
     const s = defaultSidebarNav();
     expect(s.sectionHeights).toEqual({
       files: null,
-      outline: null,
       tags: null,
       filters: null,
       favorites: null,
@@ -66,7 +65,7 @@ describe("sectionHeights", () => {
   it("setSectionHeightState — px 설정 + 반올림 + 다른 섹션 유지", () => {
     const s = setSectionHeightState(defaultSidebarNav(), "files", 240.6);
     expect(s.sectionHeights.files).toBe(241);
-    expect(s.sectionHeights.outline).toBeNull(); // 다른 섹션 유지
+    expect(s.sectionHeights.tags).toBeNull(); // 다른 섹션 유지
   });
 
   it("setSectionHeightState — [MIN, MAX] 클램프", () => {
@@ -93,7 +92,7 @@ describe("sectionHeights", () => {
 
   it("ensureSectionOpenState도 sectionHeights 보존", () => {
     let s = setSectionHeightState(defaultSidebarNav(), "files", 250);
-    s = ensureSectionOpenState(s, "outline");
+    s = ensureSectionOpenState(s, "favorites");
     expect(s.sectionHeights.files).toBe(250);
   });
 });

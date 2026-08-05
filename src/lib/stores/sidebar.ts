@@ -9,11 +9,12 @@ import { writable } from "svelte/store";
  * "접힘=아이콘 레일"은 별도 레벨로 `layout.sidebarCollapsed`(⌘B·SidebarRail)가 담당 —
  * 여기는 펼침 상태에서의 섹션 아코디언만.
  */
-export type SidebarSectionKey = "files" | "outline" | "tags" | "filters" | "favorites";
+// "outline"은 2026-08-05(PR-4)에 우측 컨텍스트 패널로 이전 — context.ts 소관.
+// 사이드바는 "vault 탐색", 컨텍스트 패널은 "현재 문서에 딸린 것"으로 역할이 갈린다.
+export type SidebarSectionKey = "files" | "tags" | "filters" | "favorites";
 
 export const SECTION_KEYS: readonly SidebarSectionKey[] = [
   "files",
-  "outline",
   "tags",
   "filters",
   "favorites",
@@ -38,9 +39,9 @@ export const MAX_SECTION_HEIGHT = 900;
 export function defaultSidebarNav(): SidebarNavState {
   return {
     // 첫 진입은 파일 트리만 펼침(주 콘텐츠).
-    sectionOpen: { files: true, outline: false, tags: false, filters: false, favorites: false },
+    sectionOpen: { files: true, tags: false, filters: false, favorites: false },
     // 전부 미설정 — 첫 펼침은 균등 분배(기존 동작).
-    sectionHeights: { files: null, outline: null, tags: null, filters: null, favorites: null },
+    sectionHeights: { files: null, tags: null, filters: null, favorites: null },
   };
 }
 

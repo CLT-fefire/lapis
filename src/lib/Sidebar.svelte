@@ -2,9 +2,7 @@
   import FileTree from "./FileTree.svelte";
   import TagPanel from "./TagPanel.svelte";
   import FilterPanel from "./FilterPanel.svelte";
-  import OutlinePanel from "./OutlinePanel.svelte";
   import FavoritesPanel from "./FavoritesPanel.svelte";
-  import { outlineHeadings } from "$lib/stores/outline";
   import {
     vaultPath,
     notes,
@@ -37,7 +35,7 @@
     SECTION_KEYS,
     type SidebarSectionKey,
   } from "$lib/stores/sidebar";
-  import { FileText, ListTree, Hash, SlidersHorizontal, Star, Settings } from "@lucide/svelte";
+  import { FileText, Hash, SlidersHorizontal, Star, Settings } from "@lucide/svelte";
   import { pinnedNotePaths } from "$lib/stores/pins";
   import {
     docKindCounts,
@@ -376,20 +374,6 @@ graph LR
             </div>
           {/if}
         {/snippet}
-      </SidebarSection>
-
-      <SidebarSection
-        icon={ListTree}
-        label="Outline"
-        open={$sidebarNav.sectionOpen.outline}
-        count={$outlineHeadings.length}
-        onToggle={() => toggleSection("outline")}
-        height={sectionHeight("outline")}
-        resizable={sectionResizable("outline")}
-        onResize={(h) => setSectionHeight("outline", h)}
-        onResizeReset={() => setSectionHeight("outline", null)}
-      >
-        {#snippet children()}<OutlinePanel />{/snippet}
       </SidebarSection>
 
       <SidebarSection
