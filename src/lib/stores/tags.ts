@@ -1,7 +1,8 @@
 import { writable } from "svelte/store";
 import type { LinkInfo } from "$lib/tauri/notes";
 import { ensureSectionOpen } from "./sidebar";
-import { expandSidebar } from "./layout";
+import { expandSidebar, expandContext } from "./layout";
+import { ensureContextSectionOpen } from "./context";
 
 /**
  * 태그 인덱스 — leaf(정확) 매칭과 prefix(계층) 매칭을 모두 지원.
@@ -181,9 +182,10 @@ export function showFilesTab(): void {
   ensureSectionOpen("files");
 }
 
+/** 목차는 2026-08-05(PR-4)부터 우측 컨텍스트 패널 소속 — ⌘⇧O도 그쪽을 연다. */
 export function showOutlineTab(): void {
-  expandSidebar();
-  ensureSectionOpen("outline");
+  expandContext();
+  ensureContextSectionOpen("outline");
 }
 
 export function showFavoritesTab(): void {

@@ -259,10 +259,10 @@
 {/if}
 
 {#if Object.keys(data).length > 0}
-  <details class="properties" open>
-    <summary>
-      Properties ({Object.keys(data).length}){#if isAuto}<span class="auto-tag">· auto</span>{/if}
-    </summary>
+  <!-- 접기는 감싸는 쪽(ContextPanel의 SidebarSection)이 담당한다 — 자체 <details>를
+       두면 헤더가 이중으로 겹친다(2026-08-05 PR-4). auto 표시만 배지로 남긴다. -->
+  <div class="properties">
+    {#if isAuto}<span class="auto-tag">auto</span>{/if}
     <table>
       <tbody>
         {#each Object.entries(data) as [key, value]}
@@ -366,7 +366,7 @@
       <!-- 합성(auto) properties 표시 중 — 실제 frontmatter가 없으므로 추가 진입점 노출 -->
       <div class="properties-add-footer">{@render addEntry()}</div>
     {/if}
-  </details>
+  </div>
 {/if}
 
 {#if showNotice}
@@ -459,16 +459,9 @@
     color: var(--text-secondary);
   }
 
-  .properties summary {
-    cursor: pointer;
-    color: var(--accent);
-    font-weight: 600;
-    font-size: var(--fs-base);
-    user-select: none;
-  }
-
   .auto-tag {
-    margin-left: var(--sp-3);
+    display: inline-block;
+    margin-bottom: var(--sp-3);
     color: var(--text-muted);
     font-weight: 400;
     font-size: var(--fs-xs);
