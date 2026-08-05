@@ -1,5 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { fade, scale } from "svelte/transition";
+  import { backdropFade, cardPop } from "$lib/motion";
   import { paletteOpen, paletteHintMode, closePalette } from "$lib/stores/palette";
   import {
     fullTextIndexReady,
@@ -264,8 +266,14 @@
 {#if $paletteOpen}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" onclick={onBackdrop}>
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="backdrop" onclick={onBackdrop} transition:fade={backdropFade()}>
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+      transition:scale={cardPop()}
+    >
       <input
         bind:this={inputEl}
         type="text"

@@ -27,6 +27,9 @@
    * 팝오버 닫기(외부 mousedown + ESC)는 ReadingControls와 같은 패턴 — 우클릭의 mouseup이
    * click으로 인식되는 WKWebView 이슈를 피하려 좌클릭(button 0)만 트리거로 본다.
    */
+  import { scale } from "svelte/transition";
+  import { menuPop } from "$lib/motion";
+
   interface Props {
     items: PaneMenuItem[];
     /** 스크린리더용 — "Editor 추가 작업" 등. */
@@ -78,7 +81,7 @@
   >⋯</button>
 
   {#if open}
-    <ul class="pane-menu-popover" role="menu" aria-label={label}>
+    <ul class="pane-menu-popover" role="menu" aria-label={label} transition:scale={menuPop()}>
       {#each items as item (item.id)}
         <li role="none">
           <button
@@ -103,6 +106,8 @@
     position: absolute;
     top: calc(100% + var(--sp-2));
     right: 0;
+    /* ⋯ 버튼(우상단)에서 자라나 보이도록 pop의 원점을 맞춘다. */
+    transform-origin: top right;
     list-style: none;
     margin: 0;
     padding: var(--sp-2) 0;

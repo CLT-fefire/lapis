@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { scale } from "svelte/transition";
+  import { menuPop } from "$lib/motion";
   import {
     contextTarget,
     closeContextMenu,
@@ -88,6 +90,7 @@
   <ul
     class="context-menu"
     role="menu"
+    transition:scale={menuPop()}
     style:left="{target.x}px"
     style:top="{target.y}px"
   >
@@ -114,6 +117,8 @@
 <style>
   .context-menu {
     position: fixed;
+    /* 우클릭 지점(좌상단)에서 자라난다. */
+    transform-origin: top left;
     list-style: none;
     margin: 0;
     padding: var(--sp-2) 0;
