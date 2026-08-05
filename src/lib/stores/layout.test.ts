@@ -87,6 +87,50 @@ describe("restorePaneState — pane 스키마 마이그레이션", () => {
   });
 });
 
+describe("신규 설치 기본 레이아웃 (PR-5)", () => {
+  it("저장된 pane 상태가 없으면 Editor는 접힌 채 시작", async () => {
+    installLocalStorage(); // pane-state 없음 = 신규 설치
+    const m = await loadLayout();
+    m.restorePaneState();
+
+    expect(get(m.editorCollapsed)).toBe(true); // 읽기·탐색이 주 용도
+    expect(get(m.previewCollapsed)).toBe(false);
+    expect(get(m.contextCollapsed)).toBe(false);
+  });
+
+  it("기존 사용자의 저장값은 신규 기본값에 덮이지 않는다", async () => {
+    installLocalStorage({
+      [PANE_KEY]: JSON.stringify({ editor: false, preview: false, context: false }),
+    });
+    const m = await loadLayout();
+    m.restorePaneState();
+
+    expect(get(m.editorCollapsed)).toBe(false); // 저장값 그대로
+  });
+
+  it("resetLayout — 신규 설치와 같은 상태로 되돌리고 영속화", async () => {
+    const store = installLocalStorage();
+    const m = await loadLayout();
+    m.toggleSidebar();
+    m.toggleContext();
+    m.setSidebarWidth(500);
+
+    m.resetLayout();
+
+    expect(get(m.editorCollapsed)).toBe(true);
+    expect(get(m.previewCollapsed)).toBe(false);
+    expect(get(m.contextCollapsed)).toBe(false);
+    expect(get(m.sidebarCollapsed)).toBe(false);
+    expect(get(m.sidebarWidth)).toBe(m.DEFAULT_SIDEBAR_WIDTH);
+    expect(get(m.contextWidth)).toBe(m.DEFAULT_CONTEXT_WIDTH);
+    expect(JSON.parse(store.get(PANE_KEY)!)).toEqual({
+      editor: true,
+      preview: false,
+      context: false,
+    });
+  });
+});
+
 describe("컨텍스트 패널 폭", () => {
   it("저장값을 [MIN, MAX]로 클램프해 복원", async () => {
     installLocalStorage({ [CONTEXT_WIDTH_KEY]: "9999" });
