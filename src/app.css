@@ -50,12 +50,15 @@
   --text-muted: var(--n-600);
   --text-disabled: var(--n-500);
 
-  /* 시맨틱 — Accent (정제 시안) */
-  --accent: #5cc8ff;
-  --accent-hover: #7ad4ff;
-  --accent-fg: #0b0d11;
-  --accent-bg-subtle: rgba(92, 200, 255, 0.12);
-  --accent-border: rgba(92, 200, 255, 0.32);
+  /* 시맨틱 — Accent (Discord Blurple, 2026-08-05 전환)
+   * 컴포넌트 151곳이 이 5개 토큰만 참조하므로 여기만 바꾸면 전부 따라온다.
+   * 다크에서 hover는 **밝아진다** — Discord의 어두워지는 hover는 채워진 버튼 배경 기준이고,
+   * Lapis의 --accent-hover는 텍스트·아이콘 색으로 더 많이 쓰인다. */
+  --accent: #5865f2;
+  --accent-hover: #7983f5;
+  --accent-fg: #ffffff;
+  --accent-bg-subtle: rgba(88, 101, 242, 0.16);
+  --accent-border: rgba(88, 101, 242, 0.42);
 
   /* 시맨틱 — 상태색 */
   --danger: #f47174;
@@ -89,12 +92,13 @@
   --cm-bg: var(--surface-base);
   --cm-fg: var(--text-primary);
   --cm-caret: var(--accent);
-  --cm-selection: rgba(92, 200, 255, 0.2);
+  --cm-selection: rgba(88, 101, 242, 0.3);
   --cm-active-line: rgba(255, 255, 255, 0.045);
   --cm-gutter-fg: var(--text-disabled);
   --cm-gutter-active-fg: var(--text-secondary);
-  /* CM 마크다운 syntax 색 (고정 hue — 라이트 블록에서 오버라이드) */
-  --cm-heading: #7ad4ff;
+  /* CM 마크다운 syntax 색 (고정 hue — 라이트 블록에서 오버라이드).
+     heading은 accent 계열의 밝은 라벤더 — 순 Blurple은 코드 배경에서 너무 어둡다. */
+  --cm-heading: #a5b4fc;
   --cm-strong: var(--text-primary);
   --cm-emphasis: var(--text-secondary);
   --cm-link: var(--accent);
@@ -226,11 +230,13 @@
   --text-muted: #6b7585;
   --text-disabled: #9aa3b2;
 
-  --accent: #0a78c2;
-  --accent-hover: #0a6aad;
+  /* 라이트는 순 Blurple(#5865f2)이 흰 배경에서 대비 4.6:1로 아슬해 한 단계 어둡게 —
+     #4752c4는 약 6.5:1로 본문 링크에도 안전하다. */
+  --accent: #4752c4;
+  --accent-hover: #3c45a5;
   --accent-fg: #ffffff;
-  --accent-bg-subtle: rgba(10, 120, 194, 0.1);
-  --accent-border: rgba(10, 120, 194, 0.3);
+  --accent-bg-subtle: rgba(71, 82, 196, 0.12);
+  --accent-border: rgba(71, 82, 196, 0.34);
 
   --danger: #d83a3d;
   --danger-bg-subtle: rgba(216, 58, 61, 0.1);
@@ -258,9 +264,9 @@
   --shadow-overlay: 0 20px 50px rgba(16, 24, 40, 0.18);
 
   /* CodeMirror — 라이트 syntax 오버라이드 (chrome 토큰은 적응형이라 불필요) */
-  --cm-selection: rgba(10, 120, 194, 0.18);
+  --cm-selection: rgba(71, 82, 196, 0.2);
   --cm-active-line: rgba(10, 30, 60, 0.05);
-  --cm-heading: #0a6aad;
+  --cm-heading: #3c45a5;
   --cm-list: #b7791f;
   --cm-code: #1f9d57;
   --cm-keyword: #8a3fc0;
@@ -293,11 +299,12 @@
     --text-muted: #6b7585;
     --text-disabled: #9aa3b2;
 
-    --accent: #0a78c2;
-    --accent-hover: #0a6aad;
+    /* 위 [data-theme="light"] 블록과 항상 함께 수정할 것(값 중복). */
+    --accent: #4752c4;
+    --accent-hover: #3c45a5;
     --accent-fg: #ffffff;
-    --accent-bg-subtle: rgba(10, 120, 194, 0.1);
-    --accent-border: rgba(10, 120, 194, 0.3);
+    --accent-bg-subtle: rgba(71, 82, 196, 0.12);
+    --accent-border: rgba(71, 82, 196, 0.34);
 
     --danger: #d83a3d;
     --danger-bg-subtle: rgba(216, 58, 61, 0.1);
@@ -325,9 +332,9 @@
     --shadow-overlay: 0 20px 50px rgba(16, 24, 40, 0.18);
 
     /* CodeMirror — 라이트 syntax 오버라이드 */
-    --cm-selection: rgba(10, 120, 194, 0.18);
+    --cm-selection: rgba(71, 82, 196, 0.2);
     --cm-active-line: rgba(10, 30, 60, 0.05);
-    --cm-heading: #0a6aad;
+    --cm-heading: #3c45a5;
     --cm-list: #b7791f;
     --cm-code: #1f9d57;
     --cm-keyword: #8a3fc0;
