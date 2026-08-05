@@ -1,5 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
+  import { scale } from "svelte/transition";
+  import { menuPop } from "$lib/motion";
 
   export interface ValidationResult {
     ok: boolean;
@@ -155,7 +157,7 @@
     <div class="hint invalid">{validation.reason}</div>
   {/if}
   {#if dropdownVisible && suggestions.length > 0}
-    <ul class="dropdown" role="listbox">
+    <ul class="dropdown" role="listbox" transition:scale={menuPop()}>
       {#each suggestions as s, i}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <li
@@ -209,6 +211,8 @@
 
   .dropdown {
     position: absolute;
+    /* 입력 필드 바로 아래에서 펼쳐진다. */
+    transform-origin: top center;
     top: 100%;
     left: 0;
     right: 0;
