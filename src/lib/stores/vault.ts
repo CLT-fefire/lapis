@@ -41,6 +41,7 @@ import {
   type LinkRewritePreviewItem,
 } from "$lib/linkRewrite";
 import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
+import { markOpened, syncFromDisk } from "./unread";
 import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
@@ -141,6 +142,11 @@ export async function openVault(path: string): Promise<void> {
   }
 
   await reloadNotes();
+
+  // 앱이 꺼져 있던 동안의 외부 변경을 "안 본 사이 바뀜"으로 복원.
+  // 열람 이력이 있는 경로만 stat하므로 12000노트여도 대상은 보통 수백 건이고,
+  // 실패해도 표시만 빠질 뿐이라 await로 막지 않는다.
+  void syncFromDisk(path);
 
   // 인덱스 준비 후 실제 존재하지 않는 탭 정리 (외부에서 삭제·이동된 노트).
   const idx = get(linkIndex);
@@ -918,6 +924,8 @@ export async function selectNote(
     pushRecent(path);
     registerTab(path);
     persistTabs();
+    // "안 본 사이 바뀜" 기준점 갱신 + 표시 해제. 읽은 직후이므로 지금이 기준이다.
+    markOpened(path, Date.now());
     // 뒤로/앞으로 이동(fromHistory)이 아닌 일반 열기만 히스토리에 기록.
     if (!opts.fromHistory) recordNavigation(path);
   } catch (e) {
