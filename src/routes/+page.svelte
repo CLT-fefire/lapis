@@ -1126,16 +1126,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       </span>
     {/if}
     <div class="topbar-actions">
-      <span
-        class="watcher-dot"
-        class:watching={$watcherStatus === "watching"}
-        class:error={$watcherStatus === "error"}
-        title={$watcherStatus === "watching"
-          ? "외부 변경 감시 중"
-          : $watcherStatus === "error"
-            ? "Watcher 오류 — 외부 변경 자동 감지 불가"
-            : "Watcher 대기"}
-      ></span>
+      <!-- watcher 상태 점은 사이드바 하단 상태 줄로 통합(2026-08-05 PR-10) —
+           흩어진 상태 신호를 한 곳에서 읽게 하려는 것. -->
       {#if GRAPH_FEATURE_ENABLED}
         <button
           class="btn btn--icon btn--sm"
@@ -1559,25 +1551,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     gap: var(--sp-2);
     margin-left: var(--sp-4);
     align-items: center;
-  }
-
-  .watcher-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--r-full);
-    background: var(--text-disabled);
-    margin-right: var(--sp-2);
-    transition: background var(--dur-slow), box-shadow var(--dur-slow);
-  }
-
-  .watcher-dot.watching {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success-border);
-  }
-
-  .watcher-dot.error {
-    background: var(--danger);
-    box-shadow: 0 0 6px var(--danger-border);
   }
 
   .workspace {
