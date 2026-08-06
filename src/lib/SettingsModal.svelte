@@ -11,6 +11,10 @@
   } from "$lib/stores/settings";
   import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
   import { density, setDensity, type Density } from "$lib/stores/density";
+  import {
+    readingMeasureLimited,
+    setReadingMeasureLimited,
+  } from "$lib/stores/reading";
   import { vaultPath, forceReindex } from "$lib/stores/vault";
   import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
   import { get } from "svelte/store";
@@ -24,6 +28,11 @@
   const DENSITY_OPTIONS: { value: Density; label: string }[] = [
     { value: "default", label: "기본" },
     { value: "compact", label: "촘촘하게" },
+  ];
+
+  const MEASURE_OPTIONS: { value: boolean; label: string }[] = [
+    { value: true, label: "제한" },
+    { value: false, label: "전체 폭" },
   ];
 
   // 백업 max_keep — 입력 중에는 local state, blur/Enter 시 적용
@@ -152,6 +161,36 @@
                   class:active={$density === opt.value}
                   aria-pressed={$density === opt.value}
                   onclick={() => setDensity(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">본문 폭</span>
+              <span class="label-desc">
+                프리뷰 본문 폭을 제한하고 가운데 정렬합니다. 창이 넓을수록 한 줄이 길어져
+                줄을 놓치기 쉬워집니다. <strong>폭 값은 Preview 툴바의 Aa</strong>에서
+                글자 크기와 함께 조절합니다(여기서는 켜고 끄기만). 표는 이 폭에 맞춰
+                줄어들고, 코드 블록처럼 더 줄일 수 없는 내용은 자체 가로 스크롤이 생깁니다.
+                내보낸 HTML도 이 설정을 따릅니다.
+              </span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label="본문 폭 선택">
+              {#each MEASURE_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$readingMeasureLimited === opt.value}
+                  aria-pressed={$readingMeasureLimited === opt.value}
+                  onclick={() => setReadingMeasureLimited(opt.value)}
                 >
                   {opt.label}
                 </button>
