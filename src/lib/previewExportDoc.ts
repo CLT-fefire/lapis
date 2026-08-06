@@ -59,6 +59,14 @@ export function buildRootTokenBlock(
 /**
  * 내보낸 문서의 기본 레이아웃. 앱 셸이 없으므로 body 배경·글꼴·여백을 여기서 세운다.
  * 여기 쓰인 토큰도 `buildRootTokenBlock`의 수집 대상에 포함시켜야 한다.
+ *
+ * 본문 폭 제한·이미지 축소는 여기가 아니라 `rendered.css`의 `.rendered`가 갖는다
+ * (2026-08-06 이전). 여기 있던 `max-width: 900px`는 "앱에서는 페인이 폭을 잡아준다"는
+ * 가정이었는데, v1.6.0에서 Editor 접힘이 기본이 되며 그 가정이 깨졌다 — **앱보다 내보낸
+ * 문서가 더 읽기 좋은** 상태였다. 이제 양쪽 다 `--reading-measure`를 따르고, 설정에서
+ * 폭 제한을 끄면 내보낸 문서도 함께 풀린다(글꼴 크기가 이미 그렇게 동작한다).
+ *
+ * ⚠️ 이 문자열 안에 백틱을 쓰지 말 것 — 템플릿 리터럴이 거기서 끊긴다.
  */
 export const EXPORT_BASE_CSS = `*,
 *::before,
@@ -73,17 +81,6 @@ body {
   color: var(--text-primary, #1a1a1a);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   -webkit-font-smoothing: antialiased;
-}
-
-/* 본문 폭 제한 — 앱에서는 페인이 폭을 잡아주지만 브라우저 전체 폭에선 너무 길어진다. */
-.rendered {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.rendered img {
-  max-width: 100%;
-  height: auto;
 }`;
 
 export function escapeHtml(s: string): string {

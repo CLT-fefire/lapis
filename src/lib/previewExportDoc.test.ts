@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EXPORT_BASE_CSS,
   buildHtmlDocument,
   buildRootTokenBlock,
   collectCssVarNames,
@@ -7,6 +8,15 @@ import {
   escapeHtml,
   suggestHtmlFileName,
 } from "./previewExportDoc";
+import { readFileSync } from "node:fs";
+
+// ⚠️ `import css from "...css?raw"` 는 **vitest에서 빈 문자열**이 된다(CSS 임포트를 stub).
+//    앱 번들(previewExport.ts)에서는 정상이므로 앱 버그가 아니라 테스트 환경 제약 —
+//    여기서는 실제 배포되는 파일을 파일시스템에서 그대로 읽어 검증한다.
+const renderedCss = readFileSync(
+  new URL("./styles/rendered.css", import.meta.url),
+  "utf-8",
+);
 
 describe("collectCssVarNames", () => {
   it("var() 참조에서 토큰 이름을 뽑는다", () => {
@@ -148,5 +158,33 @@ describe("buildHtmlDocument", () => {
     expect(html.indexOf("--accent: #5cc8ff")).toBeLessThan(
       html.indexOf(".rendered h1"),
     );
+  });
+});
+
+/* 본문 폭(measure)이 내보낸 문서까지 따라가는 경로를 못박는다. 2026-08-06 이전에는
+   EXPORT_BASE_CSS가 `max-width: 900px`를 따로 갖고 있어 앱과 내보내기가 서로 다른 폭을
+   썼다(앱은 무제한 = 더 나쁨). 폭 규칙의 단일 진실은 rendered.css다. */
+describe("본문 폭(--reading-measure) 내보내기 경로", () => {
+  it("rendered.css가 --reading-measure를 참조한다", () => {
+    expect(collectCssVarNames(renderedCss)).toContain("--reading-measure");
+  });
+
+  it("EXPORT_BASE_CSS는 폭 규칙을 갖지 않는다 (rendered.css와 이중화 금지)", () => {
+    expect(EXPORT_BASE_CSS).not.toContain("max-width");
+  });
+
+  it("article에서 읽은 폭 값이 토큰 블록에 실린다", () => {
+    // previewExport.ts는 :root가 아니라 **article**의 computed style로 해석한다 —
+    // 사용자가 설정에서 폭 제한을 끄면 그 인라인 값(none)이 그대로 내보내기에 반영된다.
+    const css = `${EXPORT_BASE_CSS}\n${renderedCss}`;
+    const on = buildRootTokenBlock(css, (n) =>
+      n === "--reading-measure" ? "38em" : "",
+    );
+    expect(on).toContain("--reading-measure: 38em;");
+
+    const off = buildRootTokenBlock(css, (n) =>
+      n === "--reading-measure" ? "none" : "",
+    );
+    expect(off).toContain("--reading-measure: none;");
   });
 });

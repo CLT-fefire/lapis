@@ -159,6 +159,13 @@
   --fs-xl: 20px;
   --fs-2xl: 22px;
 
+  /* --- 읽기(프리뷰 본문) ---
+   * 본문 폭 상한의 **fallback**. 실제 값은 Aa 팝오버가 정하고 `+page.svelte`가 article에
+   * 인라인으로 주입한다(무제한이면 `none`) — 여기 값은 주입이 없는 경우의 안전망이다.
+   * **em이라 글꼴을 키워도 "한 줄 글자 수"가 유지**된다(px면 반대로 간다). 한글은 전각이라
+   * `Nem ≈ 한 줄 N자`. 범위·기본값은 stores/reading.ts가 갖는다(READING_MEASURE_*). */
+  --reading-measure: 64em;
+
   /* --- Font family --- */
   --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
     "Apple SD Gothic Neo", sans-serif;
