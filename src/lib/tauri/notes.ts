@@ -8,6 +8,17 @@ export interface NoteEntry {
   children: NoteEntry[] | null;
 }
 
+/**
+ * 디버그 빌드 여부. 릴리즈 앱과 디버그 앱을 동시에 띄울 때 구분 표식을 켜는 데 쓴다.
+ *
+ * ⚠️ `import.meta.env.DEV`로 대신하지 말 것 — 그건 **프론트 번들** 모드라
+ * `tauri build --debug`처럼 Rust만 디버그인 조합에서 창 제목(Rust가 붙인다)과
+ * UI 배지가 어긋난다. 판정의 단일 진실은 Rust의 `cfg!(debug_assertions)`다.
+ */
+export function isDebugBuild(): Promise<boolean> {
+  return invoke<boolean>("is_debug_build");
+}
+
 export function listNotes(vaultPath: string): Promise<NoteEntry[]> {
   return invoke<NoteEntry[]>("list_notes", { vaultPath });
 }

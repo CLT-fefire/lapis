@@ -91,7 +91,7 @@
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
   import { exportMermaidHostToPng } from "$lib/mermaidExport";
   import { rewriteImageSources } from "$lib/assetPath";
-  import type { LinkInfo } from "$lib/tauri/notes";
+  import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
   import {
     inDocSearch,
@@ -1019,6 +1019,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // package.json/tauri.conf.json와 동기되지 않은 stale 값을 표시할 위험을 원천 차단.
   let appVersion = $state<string>("");
 
+  // 디버그 빌드 표식 — 릴리즈 앱과 나란히 띄울 때 어느 창인지 구분한다.
+  // 창 제목은 Rust setup()이 붙이고, 여기선 같은 판정값으로 topbar 배지를 켠다.
+  let isDebug = $state(false);
+
   onMount(() => {
     restoreTheme();
     restoreDensity();
@@ -1030,6 +1034,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         appVersion = await getVersion();
       } catch (e) {
         console.warn("[app] getVersion failed", e);
+      }
+    })();
+    void (async () => {
+      try {
+        isDebug = await isDebugBuild();
+      } catch (e) {
+        // 표식은 편의 기능 — 실패해도 앱은 그대로 쓴다(릴리즈처럼 보일 뿐).
+        console.warn("[app] isDebugBuild failed", e);
       }
     })();
   });
@@ -1074,7 +1086,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 
 <div class="app">
   <header class="topbar">
-    <span class="brand">Lapis</span>
+    <span class="brand" class:debug={isDebug}>Lapis</span>
+    {#if isDebug}
+      <span class="debug-badge" title="디버그 빌드 — 릴리즈 앱이 아닙니다">DEBUG</span>
+    {/if}
     {#if appVersion}
       <span class="phase">v{appVersion}</span>
     {/if}
@@ -1374,6 +1389,24 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     font-weight: 700;
     letter-spacing: 0.04em;
     color: var(--accent);
+  }
+
+  /* 디버그 빌드 — 앱 이름 자체를 액센트(Blurple)에서 warning으로 바꿔 **색만 보고도**
+     릴리즈 창과 구분되게 한다. 배지를 못 보고 지나쳐도 이름 색이 먼저 눈에 띈다. */
+  .brand.debug {
+    color: var(--warning);
+  }
+
+  .debug-badge {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 1px var(--sp-3);
+    border-radius: var(--r-sm);
+    background: var(--warning-bg-subtle);
+    border: 1px solid var(--warning-border);
+    color: var(--warning);
+    user-select: none;
   }
 
   .phase {
