@@ -123,19 +123,17 @@
     display: inline-flex;
   }
 
+  /* ⚠️ 박스 스타일(배경·테두리·min-width·nowrap 등)은 **반드시 이 기본 규칙**에 둔다.
+     정렬 변형(.align-left)에 넣으면 기본형(우측 정렬 = 페인 툴바 `⋯`)이 그 선언을 통째로
+     못 받아, 절대배치 ul이 트리거 버튼 폭(≈24px)으로 shrink-to-fit 되면서 글자가
+     한 자씩 줄바꿈된다. 실제로 그렇게 깨진 적이 있다(#139에서 새 선택자를 원래 규칙
+     중간에 열어 공용 선언이 변형 쪽으로 딸려 들어갔다). */
   .pane-menu-popover {
     position: absolute;
     top: calc(100% + var(--sp-2));
     right: 0;
     /* ⋯ 버튼(우상단)에서 자라나 보이도록 pop의 원점을 맞춘다. */
     transform-origin: top right;
-  }
-
-  /* 트리거가 좌측에 있는 경우(vault 헤더 등) — 좌상단에서 자라난다. */
-  .pane-menu-popover.align-left {
-    right: auto;
-    left: 0;
-    transform-origin: top left;
     list-style: none;
     margin: 0;
     padding: var(--sp-2) 0;
@@ -146,6 +144,13 @@
     z-index: var(--z-context-menu);
     min-width: 190px;
     white-space: nowrap;
+  }
+
+  /* 트리거가 좌측에 있는 경우(vault 헤더 등) — 좌상단에서 자라난다. 정렬만 뒤집는다. */
+  .pane-menu-popover.align-left {
+    right: auto;
+    left: 0;
+    transform-origin: top left;
   }
 
   .pane-menu-popover li {
