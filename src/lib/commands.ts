@@ -14,7 +14,6 @@ import {
   toggleContext,
   resetLayout,
 } from "$lib/stores/layout";
-import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
 import { openPalette } from "$lib/stores/palette";
 import { newWindow } from "$lib/tauri/window";
 
@@ -155,21 +154,6 @@ export const BUILTIN_COMMANDS: Command[] = [
       }
     },
   },
-  // 그래프 기능 비활성 시 팔레트에서도 제외 (GRAPH_FEATURE_ENABLED 참조)
-  ...(GRAPH_FEATURE_ENABLED
-    ? [
-        {
-          id: "open-local-graph",
-          label: "Local Graph: 현재 노트 이웃",
-          shortcut: "⌘G",
-          disabled: () => !get(currentNotePath),
-          run() {
-            const cur = get(currentNotePath);
-            if (cur) openGraph(cur);
-          },
-        } satisfies Command,
-      ]
-    : []),
 ];
 
 /**
