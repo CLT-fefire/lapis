@@ -112,54 +112,14 @@
   // 타입만 가져온다 — `import type`은 런타임 번들에 아무것도 싣지 않으므로
   // 아래 동적 import의 코드 분할을 깨지 않는다.
   import type { EditorApi } from "$lib/Editor.svelte";
+  import { WELCOME_DOC } from "$lib/welcomeDoc";
 
-  const SAMPLE = `---
-title: Lapis 시작하기
-status: welcome
-tags: [welcome, getting-started]
----
 
-# Lapis에 오신 것을 환영합니다
-
-**Lapis**는 로컬 마크다운 파일을 백링크 · 태그 · 그래프로 항해하는 개인용 워크벤치입니다.
-모든 노트는 로컬 파일시스템에만 저장되며, 외부 동기화는 일절 일어나지 않습니다.
-
-## 시작하기
-
-좌측 사이드바 상단의 **Vault 열기…** 버튼으로 마크다운이 들어 있는 폴더를 선택하세요.
-선택 후 트리에서 노트를 클릭하면 이 영역에 본문이, 우측에 렌더링이 표시됩니다.
-
-### 추천 vault 경로
-
-- 개인 노트: \`~/Documents/Notes\`
-- 프로젝트 문서: \`/Users/Shared/Source/<프로젝트>/docs\`
-- 빈 폴더를 새로 만들어도 됩니다 — 첫 노트는 사이드바의 "Welcome 샘플 만들기" 버튼으로 만들 수 있어요.
-
-## 핵심 단축키
-
-| 단축키 | 동작 |
-|---|---|
-| \`⌘K\` | Command Palette — 모든 명령 검색 |
-| \`⌘P\` | Quick File Open — 파일명 fuzzy 검색 |
-| \`⌘⇧F\` | Full-text 검색 (tantivy + 한국어 형태소) |
-| \`⌘F\` | 현재 노트 내 검색 |
-| \`⌘N\` | 새 노트 만들기 |
-| \`⌘S\` | 즉시 저장 (편집 시 2초마다 자동 저장됨) |
-| \`F2\` | 현재 노트 이름 변경 *(Mac 매직 키보드 기본은 F2가 밝기 — \`Fn+F2\` 또는 키보드 설정에서 "F1, F2를 표준 기능 키로" 켜기. 안 되면 \`⌘K\` → "Rename")* |
-| \`⌘⌫\` | 현재 노트 휴지통으로 |
-
-## 자세한 가이드
-
-설치 · 사용 · FAQ는 [팀 Confluence 페이지](https://everysing.atlassian.net/wiki/spaces/IMA/pages/4435017752/Lapis)에 정리되어 있습니다.
-
-GitHub: <https://github.com/CLT-fefire/lapis>
-`;
-
-  // vault 미선택 상태에서만 SAMPLE 사용. 노트 선택 후엔 editor store가 진실의 원천.
+  // vault 미선택 상태에서만 WELCOME_DOC 사용. 노트 선택 후엔 editor store가 진실의 원천.
   // vault 있고 노트 미선택 (예: 삭제 후 / 초기 상태) → 빈 placeholder
   const EMPTY_NOTE_PLACEHOLDER = `# 노트를 선택하세요\n\n좌측 사이드바에서 노트를 클릭하거나, **Cmd+N**으로 새 노트를 만드세요.`;
 
-  let raw = $state(SAMPLE);
+  let raw = $state(WELCOME_DOC);
 
   $effect(() => {
     if ($currentNotePath) {
@@ -174,9 +134,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       }
     } else {
       // vault 미선택 → welcome
-      if (raw !== SAMPLE) {
-        raw = SAMPLE;
-        markSaved(SAMPLE);
+      if (raw !== WELCOME_DOC) {
+        raw = WELCOME_DOC;
+        markSaved(WELCOME_DOC);
       }
     }
   });
@@ -184,7 +144,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // Editor onChange로 들어오는 사용자 입력 → store에 위임 (dirty + autosave)
   function handleEditorChange(next: string) {
     if (!$currentNotePath) {
-      // SAMPLE 편집은 무시 (저장 대상 없음)
+      // WELCOME_DOC 편집은 무시 (저장 대상 없음)
       return;
     }
     noteContentChanged(next);
