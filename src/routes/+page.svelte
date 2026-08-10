@@ -70,14 +70,13 @@
     resolveConflictKeepLocal,
   } from "$lib/stores/watcher";
   import {
-    editorCollapsed,
-    previewCollapsed,
+    mainPane,
+    setMainPane,
+    toggleMainPane,
     sidebarCollapsed,
     sidebarWidth,
     setSidebarWidth,
     resetSidebarWidth,
-    toggleEditor,
-    togglePreview,
     toggleSidebar,
     restorePaneState,
     contextCollapsed,
@@ -99,7 +98,6 @@
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
   import {
     inDocSearch,
-    lastFocused,
     openSearch,
     closeSearch,
     setMatchInfo,
@@ -463,10 +461,11 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     if (!req || req.nonce === lastJumpNonce) return;
     lastJumpNonce = req.nonce;
     const heading = req.heading;
-    if (editorApi && !get(editorCollapsed)) {
+    // 비활성 페인은 언마운트돼 참조가 비어 있다 — null 체크가 곧 모드 체크다.
+    if (editorApi) {
       editorApi.jumpToLine(heading.line + 1);
     }
-    if (previewBodyEl && !get(previewCollapsed)) {
+    if (previewBodyEl) {
       const el = previewBodyEl.querySelector<HTMLElement>(
         `.rendered [id="${cssEscapeAttr(heading.slug)}"]`,
       );
@@ -585,11 +584,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       if (previewBodyEl) clearHighlights(previewBodyEl);
 
       // 다른 문서로 바꿨으니 이전 문서의 스크롤 위치를 버리고 맨 위에서 시작.
-      // 새 본문이 DOM에 반영된 뒤(tick) 프리뷰·에디터 스크롤러를 모두 0으로.
+      // ⚠️ 페인 교대용으로 들고 있던 위치도 함께 버려야 한다 — 안 그러면 노트를 바꾼 뒤
+      //    ⌘E 한 번에 **이전 문서의** 오프셋으로 튄다.
+      keptPreviewScrollTop = 0;
+      keptEditorScrollTop = 0;
+      // 새 본문이 DOM에 반영된 뒤(tick) 지금 떠 있는 스크롤러를 0으로.
       void tick().then(() => {
         if (previewBodyEl) previewBodyEl.scrollTop = 0;
-        const cm = document.querySelector<HTMLElement>(".editor-pane .cm-scroller");
-        if (cm) cm.scrollTop = 0;
+        editorApi?.setScrollTop(0);
       });
     }
   });
@@ -751,62 +753,53 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     revealMenuItem(),
   ]);
 
-  // Editor↔Preview 비율 기반 스크롤 동기화 — 마우스 hover로 source 결정 (무한 루프 방지)
-  $effect(() => {
-    // collapse 상태에 의존성 등록 → 펼침/접힘 시 자동 재셋업
-    const _e = $editorCollapsed;
-    const _p = $previewCollapsed;
+  // --- 읽기 ↔ 편집 교대 (2026-08-10, split 제거) ---
+  //
+  // 비활성 페인은 **언마운트**된다 — 그냥 두면 돌아왔을 때 문서 맨 위로 튄다.
+  // 나가는 쪽 위치를 여기 담아뒀다가 들어올 때 되돌린다. 노트를 바꾸면 무의미해지므로
+  // selectNote 쪽에서 초기화하지 않고, "같은 노트를 보는 동안"만 유효한 값으로 둔다.
+  //
+  // ⚠️ 스크롤 동기화(Editor↔Preview 비율 맞춤)는 이 커밋에서 삭제했다. 두 페인이
+  //    동시에 뜨지 않으니 동기화할 대상이 없다.
+  let keptPreviewScrollTop = 0;
+  let keptEditorScrollTop = 0;
 
-    let editorScroller: HTMLElement | null = null;
-    let previewBody: HTMLElement | null = null;
-    let activeSource: "editor" | "preview" | null = null;
-    let cleaned = false;
+  /**
+   * 페인 교대. 단축키(⌘E)·세그먼트 버튼·⌘K 팔레트가 모두 이 경로를 쓴다.
+   *
+   * 편집에서 나갈 때 **저장을 플러시**한다 — autosave 디바운스가 끝나기 전에
+   * Editor가 언마운트되면 마지막 타이핑이 유실될 수 있다.
+   */
+  async function switchMainPane(to?: "preview" | "editor") {
+    const next = to ?? (get(mainPane) === "preview" ? "editor" : "preview");
+    if (next === get(mainPane)) return;
 
-    const onEditorEnter = () => (activeSource = "editor");
-    const onPreviewEnter = () => (activeSource = "preview");
+    if (next === "preview") {
+      keptEditorScrollTop = editorApi?.getScrollTop() ?? 0;
+      if (get(isDirty)) await saveCurrentNote();
+    } else {
+      keptPreviewScrollTop = previewBodyEl?.scrollTop ?? 0;
+    }
 
-    const onEditorScroll = () => {
-      if (activeSource !== "editor" || !editorScroller || !previewBody) return;
-      const eMax = editorScroller.scrollHeight - editorScroller.clientHeight;
-      if (eMax <= 0) return;
-      const ratio = editorScroller.scrollTop / eMax;
-      const pMax = previewBody.scrollHeight - previewBody.clientHeight;
-      if (pMax > 0) previewBody.scrollTop = ratio * pMax;
-    };
+    // 검색 바는 페인에 매여 있다 — 대상이 사라지면 함께 닫는다.
+    // ⚠️ closeSearch()만 부르면 스토어 **밖**의 상태(하이라이트·매치 카운터)가 남는다.
+    //    떠나는 페인의 정리 루틴을 먼저 태운다 — mainPane은 아직 옛 값이다.
+    if (get(inDocSearch).open) {
+      if (get(mainPane) === "preview") previewOnClosed();
+      else editorOnClosed();
+      closeSearch();
+    }
 
-    const onPreviewScroll = () => {
-      if (activeSource !== "preview" || !editorScroller || !previewBody) return;
-      const pMax = previewBody.scrollHeight - previewBody.clientHeight;
-      if (pMax <= 0) return;
-      const ratio = previewBody.scrollTop / pMax;
-      const eMax = editorScroller.scrollHeight - editorScroller.clientHeight;
-      if (eMax > 0) editorScroller.scrollTop = ratio * eMax;
-    };
+    setMainPane(next);
+    await tick();
 
-    (async () => {
-      await tick();
-      if (cleaned) return;
-      editorScroller = document.querySelector(".editor-pane .cm-scroller");
-      previewBody = document.querySelector(".preview-pane .pane-body");
-      if (!editorScroller || !previewBody) return;
-      editorScroller.addEventListener("pointerenter", onEditorEnter);
-      previewBody.addEventListener("pointerenter", onPreviewEnter);
-      editorScroller.addEventListener("scroll", onEditorScroll, { passive: true });
-      previewBody.addEventListener("scroll", onPreviewScroll, { passive: true });
-    })();
-
-    return () => {
-      cleaned = true;
-      if (editorScroller) {
-        editorScroller.removeEventListener("pointerenter", onEditorEnter);
-        editorScroller.removeEventListener("scroll", onEditorScroll);
-      }
-      if (previewBody) {
-        previewBody.removeEventListener("pointerenter", onPreviewEnter);
-        previewBody.removeEventListener("scroll", onPreviewScroll);
-      }
-    };
-  });
+    if (next === "preview") {
+      if (previewBodyEl) previewBodyEl.scrollTop = keptPreviewScrollTop;
+    } else {
+      editorApi?.setScrollTop(keptEditorScrollTop);
+      editorApi?.focus();
+    }
+  }
 
   // 사이드바 폭 리사이저 — mousedown → 전역 mousemove/mouseup으로 드래그.
   // 더블클릭은 기본값(260) 복원.
@@ -921,16 +914,13 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       void saveCurrentNote();
     } else if (key === "f" && !e.shiftKey) {
-      // Cmd+F — 현재 문서 내 검색. 마지막 포커스 영역에서 열기.
+      // Cmd+F — 현재 문서 내 검색. 떠 있는 페인이 곧 대상이다(교대라 후보가 하나뿐).
       e.preventDefault();
-      const target = get(lastFocused);
-      // collapsed 상태면 펼친 쪽으로 fallback
-      const safeTarget =
-        (target === "editor" && get(editorCollapsed)) ||
-        (target === "preview" && get(previewCollapsed))
-          ? target === "editor" ? "preview" : "editor"
-          : target;
-      openSearch(safeTarget);
+      openSearch(get(mainPane));
+    } else if (key === "e" && !e.shiftKey && !e.altKey) {
+      // Cmd+E — 읽기 ↔ 편집 교대.
+      e.preventDefault();
+      void switchMainPane();
     } else if (key === "n" && !e.shiftKey) {
       // Cmd+N — 새 노트. 현재 노트의 부모 폴더 또는 vault root에 생성.
       e.preventDefault();
@@ -1000,21 +990,20 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     }
   }
 
-  // Workspace 5-column grid를 collapse 상태 조합으로 동적 산출.
-  // rail / sidebar / resizer / editor / preview 순. 클래스별 하드코딩 대신 derived로
-  // 조합 폭발(사이드바×에디터×프리뷰)을 피한다.
+  // Workspace grid를 collapse 상태 조합으로 동적 산출. 클래스별 하드코딩 대신 derived로
+  // 조합 폭발(사이드바×컨텍스트)을 피한다.
   //
   // 레일은 **상시** 표시(폭 고정) — 접기의 최소 상태가 곧 레일이다. 사이드바 접힘은
   // 이제 "레일로 교체"가 아니라 "폭 0"이라, 화면에 보이는 결과는 종전과 같으면서
   // 레일이 늘 같은 자리에 머문다.
-  // rail / sidebar / rz / editor / preview / rz2 / context — 7열.
-  // 컨텍스트 패널은 Editor/Preview 가드와 무관하게 독립 접힘(36px 스트립 ↔ --context-w).
+  //
+  // rail / sidebar / rz / main / rz2 / context — **6열**. Editor·Preview가 교대하면서
+  // 두 열이 하나로 합쳐졌다(2026-08-10). 컨텍스트만 독립 접힘(36px 스트립 ↔ --context-w).
   const gridCols = $derived(
     `var(--rail-w, 52px) ` +
       `${$sidebarCollapsed ? "0px" : "var(--sidebar-w, 260px)"} ` +
       `${$sidebarCollapsed ? "0px" : "4px"} ` +
-      `${$editorCollapsed ? "36px" : "1fr"} ` +
-      `${$previewCollapsed ? "36px" : "1fr"} ` +
+      `1fr ` +
       `${$contextCollapsed ? "0px" : "4px"} ` +
       `${$contextCollapsed ? "36px" : "var(--context-w, 300px)"}`,
   );
@@ -1190,40 +1179,43 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       ondblclick={resetSidebarWidth}
     ></div>
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <section
-      class="pane editor-pane"
-      class:collapsed={$editorCollapsed}
-      onmousedown={() => lastFocused.set("editor")}
-    >
-      {#if $editorCollapsed}
-        <button
-          class="collapsed-strip"
-          onclick={toggleEditor}
-          title="에디터 펼치기"
-          aria-label="에디터 펼치기"
-        >
-          <span class="strip-icon">▶</span>
-          <span class="strip-label">Editor</span>
-        </button>
-      {:else}
-        <TabBar />
-        <div class="pane-title">
-          <span>Editor</span>
-          <div class="pane-actions">
-            <PaneMenu label="Editor 추가 작업" items={editorMenuItems} />
-            {#if !$previewCollapsed}
-              <button
-                class="btn btn--icon btn--sm"
-                title="에디터 접기"
-                aria-label="에디터 접기"
-                onclick={toggleEditor}
-              >
-                ◀
-              </button>
-            {/if}
-          </div>
+    <!-- 본문 페인 — Editor와 Preview가 **교대**한다(2026-08-10, split 제거).
+         TabBar와 pane-title은 모드 밖에 있다. 예전엔 TabBar가 Editor 펼침 분기 안에
+         있어서 Editor를 접으면 탭이 통째로 사라졌다 — 그 결함도 여기서 같이 사라진다. -->
+    <section class="pane main-pane">
+      <TabBar />
+      <div class="pane-title">
+        <div class="pane-switch" role="group" aria-label="본문 표시 모드">
+          <button
+            class="switch-opt"
+            class:active={$mainPane === "preview"}
+            aria-pressed={$mainPane === "preview"}
+            title="읽기 모드 (⌘E로 교대)"
+            onclick={() => void switchMainPane("preview")}
+          >
+            읽기
+          </button>
+          <button
+            class="switch-opt"
+            class:active={$mainPane === "editor"}
+            aria-pressed={$mainPane === "editor"}
+            title="편집 모드 (⌘E로 교대)"
+            onclick={() => void switchMainPane("editor")}
+          >
+            편집
+          </button>
         </div>
+        <div class="pane-actions">
+          {#if $mainPane === "preview"}
+            <ReadingControls />
+            <PaneMenu label="Preview 추가 작업" items={previewMenuItems} />
+          {:else}
+            <PaneMenu label="Editor 추가 작업" items={editorMenuItems} />
+          {/if}
+        </div>
+      </div>
+
+      {#if $mainPane === "editor"}
         <InDocSearchBar
           target="editor"
           onQuery={editorOnQuery}
@@ -1235,43 +1227,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         <div class="pane-body">
           <Editor bind:value={raw} bind:api={editorApi} onChange={handleEditorChange} />
         </div>
-      {/if}
-    </section>
-
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <section
-      class="pane preview-pane"
-      class:collapsed={$previewCollapsed}
-      onmousedown={() => lastFocused.set("preview")}
-    >
-      {#if $previewCollapsed}
-        <button
-          class="collapsed-strip"
-          onclick={togglePreview}
-          title="프리뷰 펼치기"
-          aria-label="프리뷰 펼치기"
-        >
-          <span class="strip-icon">◀</span>
-          <span class="strip-label">Preview</span>
-        </button>
       {:else}
-        <div class="pane-title">
-          <span>Preview</span>
-          <div class="pane-actions">
-            <ReadingControls />
-            <PaneMenu label="Preview 추가 작업" items={previewMenuItems} />
-            {#if !$editorCollapsed}
-              <button
-                class="btn btn--icon btn--sm"
-                title="프리뷰 접기"
-                aria-label="프리뷰 접기"
-                onclick={togglePreview}
-              >
-                ▶
-              </button>
-            {/if}
-          </div>
-        </div>
         <InDocSearchBar
           target="preview"
           onQuery={previewRecompute}
@@ -1282,19 +1238,24 @@ GitHub: <https://github.com/CLT-fefire/lapis>
         />
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="pane-body" bind:this={previewBodyEl} onclick={handlePreviewClick} onscroll={handlePreviewScroll}>
-        <!-- 속성·관계·발행자산은 2026-08-05(PR-4)에 우측 컨텍스트 패널로 이전.
-             Preview는 이제 **본문만** 담는다. -->
-        <article
-          class="rendered"
-          bind:this={renderedArticleEl}
-          style="--reading-font-size: {$readingFontSize}px; --reading-measure: {$readingMeasureLimited
-            ? `${$readingMeasureEm}em`
-            : 'none'};"
+        <div
+          class="pane-body preview-body"
+          bind:this={previewBodyEl}
+          onclick={handlePreviewClick}
+          onscroll={handlePreviewScroll}
         >
-          {@html parsed.html}
-        </article>
-      </div>
+          <!-- 속성·관계·발행자산은 2026-08-05(PR-4)에 우측 컨텍스트 패널로 이전.
+               Preview는 이제 **본문만** 담는다. -->
+          <article
+            class="rendered"
+            bind:this={renderedArticleEl}
+            style="--reading-font-size: {$readingFontSize}px; --reading-measure: {$readingMeasureLimited
+              ? `${$readingMeasureEm}em`
+              : 'none'};"
+          >
+            {@html parsed.html}
+          </article>
+        </div>
       {/if}
     </section>
 
@@ -1357,14 +1318,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   /* 베이스 리셋(html/body, box-sizing)·focus·reduced-motion은 src/app.css가 소유 */
 
   /* in-document search Preview 하이라이트 (Phase 5.0) — <mark> 삽입 방식 */
-  :global(.preview-pane mark.lapis-search-match) {
+  :global(.preview-body mark.lapis-search-match) {
     background-color: rgba(255, 200, 0, 0.35);
     color: inherit;
     padding: 0;
     border-radius: var(--r-xs);
   }
 
-  :global(.preview-pane mark.lapis-search-current) {
+  :global(.preview-body mark.lapis-search-current) {
     background-color: rgba(255, 140, 0, 0.75);
     color: inherit;
     padding: 0;
@@ -1635,8 +1596,8 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     overflow: hidden;
     /* 3계층 중 가장 밝은 면 — 시선이 여기로 모인다. */
     background: var(--surface-content);
-    /* Editor↔Preview는 **같은 계층**의 분할이라 명암차로 나눌 수 없다.
-       영역 간 분리(레일↔사이드바↔본문)만 보더를 걷어내고, 여기는 subtle로 남긴다. */
+    /* 본문↔컨텍스트는 리사이저를 사이에 둔 인접면이라 subtle 보더로 경계를 남긴다.
+       (Editor↔Preview 분할선은 2026-08-10 교대 전환으로 사라졌다.) */
     border-right: 1px solid var(--border-subtle);
   }
 
@@ -1662,6 +1623,42 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: flex;
     align-items: center;
     gap: var(--sp-3);
+  }
+
+  /* 읽기 ↔ 편집 세그먼트 — pane-title의 라벨 자리를 대신한다.
+     리스트 아이템 칩화와 같은 어휘(sunken 트랙 + content 칩)를 쓴다. */
+  .pane-switch {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface-sunken);
+    border-radius: var(--r-md);
+  }
+
+  .switch-opt {
+    padding: 0 var(--sp-4);
+    height: var(--control-h-sm);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background var(--dur-base),
+      color var(--dur-base);
+  }
+
+  .switch-opt:hover:not(.active) {
+    color: var(--text-secondary);
+  }
+
+  .switch-opt.active {
+    background: var(--surface-content);
+    color: var(--text-primary);
   }
 
   /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침.
@@ -1711,7 +1708,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     overflow: auto;
   }
 
-  .preview-pane .pane-body {
+  .pane-body.preview-body {
     padding: var(--sp-8) var(--sp-10);
   }
 
