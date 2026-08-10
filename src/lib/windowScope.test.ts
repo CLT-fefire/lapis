@@ -60,6 +60,29 @@ describe("scopedKey", () => {
   });
 });
 
+describe("라벨을 캐시하지 않는다 (2026-08-10 회귀)", () => {
+  /**
+   * 실제로 터진 버그: `vault.ts`가 모듈 로드 시점에 `const STORAGE_KEY = scopedKey(...)`로
+   * 키를 굳혔더니, **보조 창이 main의 키를 읽어 이전 vault를 그대로 열었다.**
+   * 호출 시점에 계산하도록 바꿔 고쳤다 — 여기서 "나중에 값이 바뀌면 따라온다"를 못 박는다.
+   *
+   * (모듈 로드 시점에 라벨이 왜 어긋났는지 기전은 미확인. 그래서 더더욱 캐시하면 안 된다.)
+   */
+  it("첫 호출 이후 라벨이 바뀌면 scopedKey도 따라 바뀐다", async () => {
+    let label = "main";
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/window", () => ({
+      getCurrentWindow: () => ({ label }),
+    }));
+    const m = await import("./windowScope");
+
+    expect(m.scopedKey("k")).toBe("k"); // main — 접미사 없음
+    label = "w2";
+    expect(m.scopedKey("k")).toBe("k.w2"); // 캐시했다면 여기서 "k"가 나온다
+    expect(m.windowLabel()).toBe("w2");
+  });
+});
+
 describe("pruneOrphanScopedKeys", () => {
   it("main 창이 지난 실행에서 남은 보조 창 키를 걷어낸다", async () => {
     const store = installLocalStorage({

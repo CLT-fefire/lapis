@@ -15,20 +15,28 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 /** `main` 창의 라벨. 이 창만 **접미사 없는** 기존 키를 그대로 쓴다. */
 const MAIN_LABEL = "main";
 
-let cachedLabel: string | null = null;
-
 /**
- * 현재 창 라벨. Tauri 밖(vitest·SSR)에서는 `main`으로 떨어진다 —
- * 그래야 테스트가 기존 키를 그대로 보고, 브라우저 미리보기에서도 동작한다.
+ * 현재 창 라벨. Tauri 밖(vitest·브라우저 미리보기)에서는 `main`으로 떨어진다 —
+ * 그래야 테스트가 기존 키를 그대로 보고, 미리보기에서도 동작한다.
+ *
+ * ⚠️ **캐시하지 않는다.** 예전엔 첫 호출 결과를 모듈 변수에 담았는데, `vault.ts`가
+ * 모듈 로드 시점에 `scopedKey()`를 부르기 때문에 그 순간 Tauri 내부 객체가 아직
+ * 없으면 `main`이 **영구히** 박혀버린다 — 보조 창이 main의 키를 읽어 남의 vault를
+ * 그대로 여는 증상이 된다. 라벨 조회는 프로퍼티 읽기 한 번이라 캐시할 가치가 없다.
  */
 export function windowLabel(): string {
-  if (cachedLabel !== null) return cachedLabel;
   try {
-    cachedLabel = getCurrentWindow().label;
-  } catch {
-    cachedLabel = MAIN_LABEL;
+    return getCurrentWindow().label;
+  } catch (e) {
+    // Tauri 밖(vitest·브라우저 미리보기)이면 내부 객체 자체가 없다 — 정상 fallback.
+    // 반대로 Tauri **안**인데 못 읽었다면 예상 밖이다. 조용히 main으로 떨어지면
+    // 보조 창이 main의 키를 읽어 남의 vault를 열게 되므로 흔적을 남긴다.
+    const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (inTauri) {
+      console.warn("windowLabel: Tauri 내부에서 라벨 조회 실패 — main으로 대체", e);
+    }
+    return MAIN_LABEL;
   }
-  return cachedLabel;
 }
 
 /**

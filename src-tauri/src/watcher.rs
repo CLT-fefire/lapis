@@ -80,6 +80,11 @@ pub fn watch_vault(
     vault_path: String,
 ) -> Result<(), String> {
     let label = window.label().to_string();
+    // 창별 vault가 실제로 갈라지는지 눈으로 확인하는 통로. 창 라벨은 프론트의
+    // localStorage 키 스코프와 같은 값이라, 여기 찍히는 라벨이 곧 그 창이 읽는 키다.
+    if cfg!(debug_assertions) {
+        eprintln!("[lapis] watch_vault: window={label} vault={vault_path}");
+    }
 
     let root = PathBuf::from(&vault_path);
     if !root.is_dir() {
