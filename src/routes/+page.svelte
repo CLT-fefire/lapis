@@ -4,7 +4,6 @@
   import "$lib/styles/rendered.css";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
-  import Editor from "$lib/Editor.svelte";
   import Sidebar from "$lib/Sidebar.svelte";
   import SidebarRail from "$lib/SidebarRail.svelte";
   import GitBanner from "$lib/GitBanner.svelte";
@@ -109,6 +108,8 @@
     clearHighlights,
     scrollCurrentMarkIntoView,
   } from "$lib/previewHighlight";
+  // 타입만 가져온다 — `import type`은 런타임 번들에 아무것도 싣지 않으므로
+  // 아래 동적 import의 코드 분할을 깨지 않는다.
   import type { EditorApi } from "$lib/Editor.svelte";
 
   const SAMPLE = `---
@@ -1230,7 +1231,23 @@ GitHub: <https://github.com/CLT-fefire/lapis>
           onOptionsChanged={editorOnOptionsChanged}
         />
         <div class="pane-body">
-          <Editor bind:value={raw} bind:api={editorApi} onChange={handleEditorChange} />
+          <!-- CodeMirror(~550KB)는 **편집 모드에 들어갈 때** 로드한다. 정적 import면
+               읽기만 하는 세션에서도 시작할 때마다 파싱되는데, Lapis의 주 용도가
+               읽기·탐색이라 그게 시작 payload의 절반이었다(1089 → 543KB).
+               ⚠️ 실패를 삼키지 말 것 — 조용히 빈 화면이 되면 원인을 못 찾는다. -->
+          {#await import("$lib/Editor.svelte")}
+            <div class="editor-loading">에디터 불러오는 중…</div>
+          {:then EditorModule}
+            <EditorModule.default
+              bind:value={raw}
+              bind:api={editorApi}
+              onChange={handleEditorChange}
+            />
+          {:catch err}
+            <div class="editor-loading editor-error">
+              에디터를 불러오지 못했습니다 — {err instanceof Error ? err.message : String(err)}
+            </div>
+          {/await}
         </div>
       {:else}
         <InDocSearchBar
@@ -1739,6 +1756,18 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   .pane-body {
     flex: 1;
     overflow: auto;
+  }
+
+  /* 에디터 청크를 받는 동안의 자리 표시. 보통 한 프레임이라 거의 안 보이지만,
+     비워두면 로드가 늦을 때 "아무 일도 안 일어난 것"처럼 보인다. */
+  .editor-loading {
+    padding: var(--sp-8) var(--sp-10);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+  }
+
+  .editor-error {
+    color: var(--danger, var(--text-primary));
   }
 
   .pane-body.preview-body {
