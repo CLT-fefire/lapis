@@ -13,11 +13,19 @@ export const DEFAULT_CONTEXT_WIDTH = 300;
 export const MIN_CONTEXT_WIDTH = 220;
 export const MAX_CONTEXT_WIDTH = 520;
 
-export const editorCollapsed = writable<boolean>(false);
-export const previewCollapsed = writable<boolean>(false);
+/**
+ * 본문 영역에 무엇을 띄울지 — Editor와 Preview는 **교대**한다(split 없음, 2026-08-10).
+ *
+ * 이전 모델은 `editorCollapsed`/`previewCollapsed` 2비트였는데, "둘 다 접힘"이
+ * 불법이라 토글·헤더 버튼·복원 세 곳에 가드가 붙어 있었다 — 즉 실제 상태는
+ * 처음부터 enum 하나였다. split을 걷어내면서 그 가드가 통째로 사라진다.
+ */
+export type MainPane = "preview" | "editor";
+
+export const mainPane = writable<MainPane>("preview");
 export const sidebarCollapsed = writable<boolean>(false);
 export const sidebarWidth = writable<number>(DEFAULT_SIDEBAR_WIDTH);
-/** 우측 컨텍스트 패널(관계·백링크·목차·속성). Editor/Preview와 달리 **독립** 접힘 — 가드 없음. */
+/** 우측 컨텍스트 패널(관계·백링크·목차·속성). 본문 페인과 **독립**으로 접힌다. */
 export const contextCollapsed = writable<boolean>(false);
 export const contextWidth = writable<number>(DEFAULT_CONTEXT_WIDTH);
 
@@ -34,20 +42,19 @@ export function expandSidebar(): void {
   }
 }
 
-// 둘 다 접히는 상태는 의미 없으므로 가드. 다른 쪽이 이미 접혀 있으면 토글 거부.
-export function toggleEditor(): void {
-  if (get(previewCollapsed)) return;
-  editorCollapsed.update((v) => !v);
+/** 읽기 ↔ 편집 교대. 가드가 필요 없다 — 어느 쪽이든 항상 하나는 떠 있다. */
+export function toggleMainPane(): void {
+  mainPane.update((v) => (v === "preview" ? "editor" : "preview"));
   persistPane();
 }
 
-export function togglePreview(): void {
-  if (get(editorCollapsed)) return;
-  previewCollapsed.update((v) => !v);
+export function setMainPane(pane: MainPane): void {
+  if (get(mainPane) === pane) return;
+  mainPane.set(pane);
   persistPane();
 }
 
-/** 컨텍스트 패널은 Editor/Preview 가드와 무관하게 언제든 접고 펼 수 있다. */
+/** 컨텍스트 패널은 본문 페인 모드와 무관하게 언제든 접고 펼 수 있다. */
 export function toggleContext(): void {
   contextCollapsed.update((v) => !v);
   persistPane();
@@ -97,8 +104,7 @@ export function resetContextWidth(): void {
  * 신규 설치 기본값과 동일한 상태 — 기존 사용자가 원할 때 스스로 맞출 수 있는 경로다.
  */
 export function resetLayout(): void {
-  editorCollapsed.set(true);
-  previewCollapsed.set(false);
+  mainPane.set("preview");
   contextCollapsed.set(false);
   sidebarCollapsed.set(false);
   persistPane();
@@ -112,8 +118,7 @@ function persistPane(): void {
   localStorage.setItem(
     PANE_KEY,
     JSON.stringify({
-      editor: get(editorCollapsed),
-      preview: get(previewCollapsed),
+      pane: get(mainPane),
       context: get(contextCollapsed),
     }),
   );
@@ -129,36 +134,43 @@ function persistSidebarCollapsed(): void {
   localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(get(sidebarCollapsed)));
 }
 
+/**
+ * 저장값 → mainPane. 구 스키마(`{editor, preview}` boolean 2개)를 함께 받는다.
+ *
+ * 접기 2비트에는 `split`(둘 다 펼침)이 있었지만 새 모델엔 없다 — split이던 사용자는
+ * **읽기**로 보낸다. 신규 설치·레이아웃 초기화와 같은 쪽이라 결과가 한 곳으로 수렴하고,
+ * Lapis의 주 용도(읽기·탐색)와도 맞는다. 편집을 쓰던 사용자만 `editor`로 남는다.
+ */
+function readMainPane(parsed: Record<string, unknown>): MainPane {
+  if (parsed.pane === "editor" || parsed.pane === "preview") return parsed.pane;
+  // 구 스키마: 프리뷰만 접혀 있었다 = 편집을 보고 있었다.
+  // (둘 다 접힘은 옛 가드가 막던 손상 상태 — 여기선 조용히 읽기로 떨군다.)
+  if (parsed.preview === true && parsed.editor !== true) return "editor";
+  return "preview";
+}
+
 export function restorePaneState(): void {
   if (typeof localStorage === "undefined") return;
 
+  // 저장된 상태가 없으면 = **신규 설치**. store 초기값 "preview"가 그대로 남는다
+  // — Lapis는 읽기·탐색이 주 용도다.
   const paneRaw = localStorage.getItem(PANE_KEY);
   if (paneRaw) {
     try {
       const parsed = JSON.parse(paneRaw);
       if (parsed && typeof parsed === "object") {
-        // context는 Editor/Preview 가드와 **독립**이라 먼저 복원한다.
+        // context는 본문 페인과 **독립**이라 따로 복원한다.
         // 구 스키마(2026-08-05 이전 = context 필드 없음)면 undefined → false(펼침)로
         // 떨어져 신규 패널이 처음에 열린 채 보인다 — 의도된 기본값.
         contextCollapsed.set(!!parsed.context);
-        if (parsed.editor && parsed.preview) {
-          // 손상된 상태(둘 다 접힘) 복원 거부 — 가드 일관성
-          localStorage.removeItem(PANE_KEY);
-        } else {
-          editorCollapsed.set(!!parsed.editor);
-          previewCollapsed.set(!!parsed.preview);
-        }
+        mainPane.set(readMainPane(parsed));
+        // 구 스키마를 읽었으면 새 스키마로 즉시 덮어써 마이그레이션을 1회로 끝낸다.
+        if (typeof parsed.pane !== "string") persistPane();
       }
     } catch (e) {
       console.warn("restorePaneState (pane) failed", e);
       localStorage.removeItem(PANE_KEY);
     }
-  } else {
-    // 저장된 상태가 없다 = **신규 설치**. Lapis는 읽기·탐색이 주 용도라 Editor는
-    // 접은 채 시작해 Preview에 공간을 준다. 기존 사용자의 저장값은 위 분기가
-    // 그대로 존중하므로 이 기본값이 남의 레이아웃을 덮어쓰지 않는다.
-    // (원할 때 새 기본값으로 맞추려면 ⌘K → "레이아웃 초기화".)
-    editorCollapsed.set(true);
   }
 
   const widthRaw = localStorage.getItem(SIDEBAR_WIDTH_KEY);

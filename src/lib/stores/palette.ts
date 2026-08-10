@@ -8,8 +8,21 @@ export const paletteOpen = writable<boolean>(false);
  */
 export const paletteHintMode = writable<PaletteMode>("all");
 
-export function openPalette(mode: PaletteMode = "all"): void {
+/**
+ * 팔레트에서 고른 노트를 **어느 탭에** 열지.
+ * - `new-tab` (기본): 탭을 추가한다. ⌘K·⌘T 등 기존 경로 전부.
+ * - `replace`: 활성 탭을 갈아끼운다. ⌘P(Quick File Open) 전용 — "잠깐 보기".
+ */
+export type PaletteOpenIntent = "new-tab" | "replace";
+
+export const paletteIntent = writable<PaletteOpenIntent>("new-tab");
+
+export function openPalette(
+  mode: PaletteMode = "all",
+  intent: PaletteOpenIntent = "new-tab",
+): void {
   paletteHintMode.set(mode);
+  paletteIntent.set(intent);
   paletteOpen.set(true);
 }
 

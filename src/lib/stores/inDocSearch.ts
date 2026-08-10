@@ -64,11 +64,8 @@ const initial: InDocSearchState = {
 
 export const inDocSearch = writable<InDocSearchState>(initial);
 
-/**
- * 마지막으로 포커스된 영역. Cmd+F가 어디로 갈지 결정한다.
- * Editor 포커스 시 'editor', Preview 영역 mousedown/focusin 시 'preview'.
- */
-export const lastFocused = writable<SearchTarget>("editor");
+// `lastFocused`는 2026-08-10 split 제거와 함께 삭제됐다. Editor/Preview가 교대하므로
+// "마지막으로 포커스된 영역" = 지금 떠 있는 영역 — ⌘F는 layout의 `mainPane`을 그대로 쓴다.
 
 export function openSearch(target: SearchTarget): void {
   inDocSearch.update((s) => ({ ...s, open: true, target }));

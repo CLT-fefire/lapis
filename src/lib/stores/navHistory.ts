@@ -2,7 +2,7 @@ import { writable, derived } from "svelte/store";
 
 /**
  * 노트 방문 순서 스택 + 현재 위치 커서. 브라우저/Xcode식 뒤로·앞으로 가기.
- * recent(MRU 빈도)·lastClosed(직전 1개)와는 별개 — 방문 순서를 보존한다.
+ * recent(MRU 빈도)와는 별개 — 방문 순서를 보존한다.
  */
 export interface NavState {
   /** 방문 순서 path 스택(과거→미래). */
