@@ -16,6 +16,7 @@ import {
 } from "$lib/stores/layout";
 import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
 import { openPalette } from "$lib/stores/palette";
+import { newWindow } from "$lib/tauri/window";
 
 export interface Command {
   id: string;
@@ -82,6 +83,15 @@ export const BUILTIN_COMMANDS: Command[] = [
     run() {
       // ⌘P("잠깐 보기", 활성 탭 교체)와 짝. 여기서 고른 노트는 새 탭으로 열린다.
       openPalette("files", "new-tab");
+    },
+  },
+  {
+    id: "new-window",
+    label: "New Window",
+    shortcut: "⌘⇧T",
+    run() {
+      // 새 창은 vault 없이 뜬다 — 거기서 다른 vault를 고르면 그 창만 바뀐다.
+      void newWindow().catch((e) => console.error("new window failed", e));
     },
   },
   {
