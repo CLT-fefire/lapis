@@ -35,9 +35,37 @@ export function removeTabEntry(
   return { tabs: next, nextActive };
 }
 
+/**
+ * 활성 탭 자리를 새 경로로 **교체**(⌘P "잠깐 보기"). 탭이 무한히 쌓이지 않게 한다.
+ *
+ * - 새 경로가 이미 열려 있으면 목록을 건드리지 않는다 — 활성만 옮겨간다.
+ *   (브라우저·VS Code와 같다. 여기서 옛 탭을 닫으면 "탭을 옮겨 다녔더니 하나씩
+ *   사라진다"가 된다.)
+ * - 교체할 자리가 없으면(활성 노트 없음 · 목록 밖) 그냥 추가.
+ * - 있으면 **그 자리에서** 갈아끼워 탭 순서가 튀지 않게 한다.
+ */
+export function replaceTabEntry(
+  tabs: string[],
+  fromPath: string | null,
+  toPath: string,
+): string[] {
+  if (!toPath || tabs.includes(toPath)) return tabs;
+  if (!fromPath) return addTabEntry(tabs, toPath);
+  const idx = tabs.indexOf(fromPath);
+  if (idx === -1) return addTabEntry(tabs, toPath);
+  const next = [...tabs];
+  next[idx] = toPath;
+  return next;
+}
+
 /** 노트 열기 시 호출 — 탭 등록. */
 export function registerTab(path: string): void {
   openTabs.update((tabs) => addTabEntry(tabs, path));
+}
+
+/** 활성 탭을 새 경로로 교체 — `replaceTabEntry`의 store 래퍼. */
+export function replaceTab(fromPath: string | null, toPath: string): void {
+  openTabs.update((tabs) => replaceTabEntry(tabs, fromPath, toPath));
 }
 
 /** 탭 제거 후 다음 활성 path 반환(없으면 null). activePath는 호출자가 전달. */

@@ -15,6 +15,7 @@ import {
   resetLayout,
 } from "$lib/stores/layout";
 import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
+import { openPalette } from "$lib/stores/palette";
 
 export interface Command {
   id: string;
@@ -71,6 +72,16 @@ export const BUILTIN_COMMANDS: Command[] = [
     shortcut: "⌘B",
     run() {
       toggleSidebar();
+    },
+  },
+  {
+    id: "new-tab",
+    label: "New Tab",
+    shortcut: "⌘T",
+    disabled: () => !get(vaultPath),
+    run() {
+      // ⌘P("잠깐 보기", 활성 탭 교체)와 짝. 여기서 고른 노트는 새 탭으로 열린다.
+      openPalette("files", "new-tab");
     },
   },
   {
