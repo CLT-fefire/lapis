@@ -1114,7 +1114,17 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     </div>
     <span class="meta">
       {#if $currentNotePath}
-        {noteDisplayName($currentNotePath)}
+        <!-- 표시는 마지막 2 segment지만 복사되는 건 **절대 경로**다.
+             ⋯ 메뉴의 "경로 복사"와 같은 경로(copyCurrentPath)를 탄다 — 매번 메뉴를
+             열지 않아도 되게 하려는 것. -->
+        <button
+          class="meta-path"
+          class:copied={pathCopied}
+          title={pathCopied ? "복사됨" : `클릭하면 절대 경로 복사 (⌘⇧C)\n${$currentNotePath}`}
+          onclick={() => void copyCurrentPath()}
+        >
+          {pathCopied ? "✓ " : ""}{noteDisplayName($currentNotePath)}
+        </button>
         {#if $isSaving}
           <span class="save-badge saving">saving…</span>
         {:else if $lastSaveError}
@@ -1398,6 +1408,34 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     display: inline-flex;
     align-items: center;
     gap: var(--sp-4);
+  }
+
+  /* 경로 라벨은 클릭 가능한 복사 버튼 — 생김새는 종전 텍스트 그대로 두고
+     hover에서만 눌리는 것임을 드러낸다. */
+  .meta-path {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 2px var(--sp-3);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    transition:
+      background var(--dur-base),
+      color var(--dur-base);
+  }
+
+  .meta-path:hover {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
+
+  .meta-path.copied {
+    color: var(--accent);
   }
 
   .doc-stats {
