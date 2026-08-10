@@ -92,6 +92,7 @@
   import { rewriteImageSources } from "$lib/assetPath";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
   import { newWindow } from "$lib/tauri/window";
+  import { resolveShortcut } from "$lib/keymap";
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
   import {
     inDocSearch,
@@ -111,54 +112,14 @@
   // 타입만 가져온다 — `import type`은 런타임 번들에 아무것도 싣지 않으므로
   // 아래 동적 import의 코드 분할을 깨지 않는다.
   import type { EditorApi } from "$lib/Editor.svelte";
+  import { WELCOME_DOC } from "$lib/welcomeDoc";
 
-  const SAMPLE = `---
-title: Lapis 시작하기
-status: welcome
-tags: [welcome, getting-started]
----
 
-# Lapis에 오신 것을 환영합니다
-
-**Lapis**는 로컬 마크다운 파일을 백링크 · 태그 · 그래프로 항해하는 개인용 워크벤치입니다.
-모든 노트는 로컬 파일시스템에만 저장되며, 외부 동기화는 일절 일어나지 않습니다.
-
-## 시작하기
-
-좌측 사이드바 상단의 **Vault 열기…** 버튼으로 마크다운이 들어 있는 폴더를 선택하세요.
-선택 후 트리에서 노트를 클릭하면 이 영역에 본문이, 우측에 렌더링이 표시됩니다.
-
-### 추천 vault 경로
-
-- 개인 노트: \`~/Documents/Notes\`
-- 프로젝트 문서: \`/Users/Shared/Source/<프로젝트>/docs\`
-- 빈 폴더를 새로 만들어도 됩니다 — 첫 노트는 사이드바의 "Welcome 샘플 만들기" 버튼으로 만들 수 있어요.
-
-## 핵심 단축키
-
-| 단축키 | 동작 |
-|---|---|
-| \`⌘K\` | Command Palette — 모든 명령 검색 |
-| \`⌘P\` | Quick File Open — 파일명 fuzzy 검색 |
-| \`⌘⇧F\` | Full-text 검색 (tantivy + 한국어 형태소) |
-| \`⌘F\` | 현재 노트 내 검색 |
-| \`⌘N\` | 새 노트 만들기 |
-| \`⌘S\` | 즉시 저장 (편집 시 2초마다 자동 저장됨) |
-| \`F2\` | 현재 노트 이름 변경 *(Mac 매직 키보드 기본은 F2가 밝기 — \`Fn+F2\` 또는 키보드 설정에서 "F1, F2를 표준 기능 키로" 켜기. 안 되면 \`⌘K\` → "Rename")* |
-| \`⌘⌫\` | 현재 노트 휴지통으로 |
-
-## 자세한 가이드
-
-설치 · 사용 · FAQ는 [팀 Confluence 페이지](https://github.com/eren0315/lapis)에 정리되어 있습니다.
-
-GitHub: <https://github.com/CLT-fefire/lapis>
-`;
-
-  // vault 미선택 상태에서만 SAMPLE 사용. 노트 선택 후엔 editor store가 진실의 원천.
+  // vault 미선택 상태에서만 WELCOME_DOC 사용. 노트 선택 후엔 editor store가 진실의 원천.
   // vault 있고 노트 미선택 (예: 삭제 후 / 초기 상태) → 빈 placeholder
   const EMPTY_NOTE_PLACEHOLDER = `# 노트를 선택하세요\n\n좌측 사이드바에서 노트를 클릭하거나, **Cmd+N**으로 새 노트를 만드세요.`;
 
-  let raw = $state(SAMPLE);
+  let raw = $state(WELCOME_DOC);
 
   $effect(() => {
     if ($currentNotePath) {
@@ -173,9 +134,9 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       }
     } else {
       // vault 미선택 → welcome
-      if (raw !== SAMPLE) {
-        raw = SAMPLE;
-        markSaved(SAMPLE);
+      if (raw !== WELCOME_DOC) {
+        raw = WELCOME_DOC;
+        markSaved(WELCOME_DOC);
       }
     }
   });
@@ -183,7 +144,7 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // Editor onChange로 들어오는 사용자 입력 → store에 위임 (dirty + autosave)
   function handleEditorChange(next: string) {
     if (!$currentNotePath) {
-      // SAMPLE 편집은 무시 (저장 대상 없음)
+      // WELCOME_DOC 편집은 무시 (저장 대상 없음)
       return;
     }
     noteContentChanged(next);
@@ -852,145 +813,135 @@ GitHub: <https://github.com/CLT-fefire/lapis>
   // 전역 키보드 단축키
   // - F2                     : 현재 노트 이름 변경
   // - Cmd/Ctrl + Backspace/Delete : 현재 노트를 휴지통으로
-  // - Cmd/Ctrl+K            : 통합 명령 팔레트 (toggle) — Phase 4.5
-  // - Cmd/Ctrl+P            : Quick Switcher (파일 그룹만 — 호환)
-  // - Cmd/Ctrl+Shift+F (또는 P): 풀텍스트 (Content 그룹만 — 호환)
-  // - Cmd/Ctrl+Shift+T      : 직전 노트 다시 열기 (Phase 4.5.b)
-  // 모달이 이미 열려 있을 때는 CommandPalette 내부 핸들러가 ESC/화살표 등 처리
+  // 단축키 **목록**은 `keymap.ts`가 단일 진실이다(여기 중복 기재하지 말 것 — 어긋난다).
+  // 모달이 이미 열려 있을 때는 CommandPalette 내부 핸들러가 ESC/화살표 등 처리.
   function handleGlobalKey(e: KeyboardEvent) {
-    // 입력/편집 영역 안에서는 단축키를 가로채지 않음
+    // 입력/편집 영역 안에서는 (일부) 단축키를 가로채지 않음
     // (CodeMirror는 contenteditable, FileTree 인라인 rename은 INPUT)
     const target = e.target as HTMLElement | null;
-    const inEditing = !!target && (
-      target.tagName === "INPUT" ||
-      target.tagName === "TEXTAREA" ||
-      target.isContentEditable
-    );
+    const inEditing =
+      !!target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable);
 
-    // F2 — 현재 노트 이름 변경 (modifier 없음). 입력 중이면 패스.
-    if (e.key === "F2" && !e.metaKey && !e.ctrlKey && !inEditing) {
-      const cur = $currentNotePath;
-      if (cur) {
+    // 어느 단축키인지 고르는 일은 keymap.ts(순수·테스트됨)가 한다. 여기는 효과만.
+    const hit = resolveShortcut(e, { inEditing });
+    if (!hit) return;
+
+    // ⚠️ preventDefault는 분기마다 위치가 다르다. "대상이 없으면 브라우저 기본 동작을
+    //    남겨둔다"는 기존 의미를 그대로 지킨다 — 일괄로 앞당기지 말 것.
+    switch (hit.id) {
+      case "rename-note": {
+        const cur = $currentNotePath;
+        if (!cur) return;
         e.preventDefault();
         requestRename(cur);
+        return;
       }
-      return;
-    }
-
-    // Cmd/Ctrl + Backspace/Delete — 현재 노트를 휴지통으로. 입력 중이면 패스.
-    if (
-      (e.key === "Backspace" || e.key === "Delete") &&
-      (e.metaKey || e.ctrlKey) &&
-      !inEditing
-    ) {
-      const cur = $currentNotePath;
-      if (cur) {
+      case "delete-note": {
+        const cur = $currentNotePath;
+        if (!cur) return;
         e.preventDefault();
         void confirmAndDeleteCurrent(cur);
+        return;
       }
-      return;
-    }
-
-    const isMod = e.metaKey || e.ctrlKey;
-    if (!isMod) return;
-    const key = e.key.toLowerCase();
-    if (key === "k" && !e.shiftKey) {
-      e.preventDefault();
-      if ($paletteOpen) closePalette();
-      else openPalette("all");
-    } else if (key === "p" && !e.shiftKey) {
-      // Cmd+P — 잠깐 보기. 활성 탭을 갈아끼워 탭이 무한히 쌓이지 않게 한다.
-      e.preventDefault();
-      openPalette("files", "replace");
-    } else if (key === "t" && !e.shiftKey) {
-      // Cmd+T — 새 탭. 같은 파일 팔레트지만 고른 노트를 **새 탭**으로 연다.
-      // ⌘P와 짝을 이룬다(잠깐 보기 ↔ 붙잡기) — 브라우저·VS Code와 같은 구도.
-      e.preventDefault();
-      openPalette("files", "new-tab");
-    } else if (key === "t" && e.shiftKey) {
-      // Cmd+Shift+T — 새 창. vault가 비어 있는 채로 떠서 "Vault 열기…" 화면이 나온다.
-      e.preventDefault();
-      void newWindow().catch((err) => console.error("new window failed", err));
-    } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
-      e.preventDefault();
-      openPalette("fulltext");
-    } else if (key === "s" && !e.shiftKey) {
-      e.preventDefault();
-      void saveCurrentNote();
-    } else if (key === "f" && !e.shiftKey) {
-      // Cmd+F — 현재 문서 내 검색. 떠 있는 페인이 곧 대상이다(교대라 후보가 하나뿐).
-      e.preventDefault();
-      openSearch(get(mainPane));
-    } else if (key === "e" && !e.shiftKey && !e.altKey) {
-      // Cmd+E — 읽기 ↔ 편집 교대.
-      e.preventDefault();
-      void switchMainPane();
-    } else if (key === "n" && !e.shiftKey) {
-      // Cmd+N — 새 노트. 현재 노트의 부모 폴더 또는 vault root에 생성.
-      e.preventDefault();
-      if (!$vaultPath) return;
-      const cur = $currentNotePath;
-      const parentDir = cur
-        ? cur.split("/").slice(0, -1).join("/")
-        : $vaultPath;
-      const parentLabel = cur
-        ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
-        : "(vault root)";
-      openNewNote(parentDir, parentLabel);
-    } else if (key === "c" && e.shiftKey) {
-      // Cmd+Shift+C — 현재 노트 절대 경로 복사.
-      // copyCurrentPath()를 그대로 호출 → Editor/Preview pane-title 버튼과 동일한 ✓ 플래시.
-      if (!$currentNotePath) return;
-      e.preventDefault();
-      void copyCurrentPath();
-    } else if (e.altKey && (e.code === "KeyB" || key === "b" || e.key === "∫")) {
-      // Cmd+Opt+B — 우측 컨텍스트 패널 접기/펼치기.
-      // ⚠️ macOS에서 Option은 문자를 바꾼다(⌥B → "∫") — e.key만 보면 놓친다.
-      // 반대로 일부 환경(자동화·리모트 입력)은 e.code를 비워 보낸다. 어느 한쪽에
-      // 의존하지 않도록 code·key를 **모두** 허용한다. ⌘B 분기보다 먼저 와야 한다.
-      e.preventDefault();
-      toggleContext();
-    } else if (key === "b" && !e.shiftKey && !e.altKey) {
-      // Cmd+B — 사이드바 접기/펼치기 (VS Code 표준)
-      e.preventDefault();
-      toggleSidebar();
-    } else if (key === "e" && e.shiftKey) {
-      // Cmd+Shift+E — 사이드바 파일 트리 필터 input에 포커스 (Explorer)
-      e.preventDefault();
-      const input = document.querySelector<HTMLInputElement>(".tree-filter-input");
-      if (input) {
-        input.focus();
-        input.select();
+      case "palette":
+        e.preventDefault();
+        if ($paletteOpen) closePalette();
+        else openPalette("all");
+        return;
+      case "quick-open":
+        // 잠깐 보기 — 활성 탭을 갈아끼워 탭이 무한히 쌓이지 않게 한다.
+        e.preventDefault();
+        openPalette("files", "replace");
+        return;
+      case "new-tab":
+        // ⌘P와 짝(잠깐 보기 ↔ 붙잡기) — 고른 노트를 새 탭으로.
+        e.preventDefault();
+        openPalette("files", "new-tab");
+        return;
+      case "new-window":
+        // 새 창은 vault 없이 떠서 "Vault 열기…" 화면이 나온다.
+        e.preventDefault();
+        void newWindow().catch((err) => console.error("new window failed", err));
+        return;
+      case "fulltext-search":
+        e.preventDefault();
+        openPalette("fulltext");
+        return;
+      case "save":
+        e.preventDefault();
+        void saveCurrentNote();
+        return;
+      case "find-in-doc":
+        // 떠 있는 페인이 곧 대상이다(교대라 후보가 하나뿐).
+        e.preventDefault();
+        openSearch(get(mainPane));
+        return;
+      case "toggle-main-pane":
+        e.preventDefault();
+        void switchMainPane();
+        return;
+      case "new-note": {
+        e.preventDefault();
+        if (!$vaultPath) return;
+        const cur = $currentNotePath;
+        const parentDir = cur ? cur.split("/").slice(0, -1).join("/") : $vaultPath;
+        const parentLabel = cur
+          ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
+          : "(vault root)";
+        openNewNote(parentDir, parentLabel);
+        return;
       }
-    } else if (key === "o" && e.shiftKey) {
-      // Cmd+Shift+O — 아웃라인(TOC) 패널 표시 (사이드바 접혀 있으면 펼침)
-      e.preventDefault();
-      if (get(sidebarCollapsed)) toggleSidebar();
-      showOutlineTab();
-    } else if ((key === "arrowleft" || key === "arrowright") && e.metaKey && e.ctrlKey) {
-      // Cmd+Ctrl+← / → — 노트 뒤로/앞으로 가기 (Xcode 동일)
-      e.preventDefault();
-      if (key === "arrowleft") void goBackNote();
-      else void goForwardNote();
-    } else if ((key === "," || key === ".") && !e.shiftKey && !e.altKey) {
-      // Cmd+, / Cmd+. — 방문 기록에서 이전/다음 노트. ⌘⌃←/→와 같은 동작의 한 손 별칭.
-      // ⚠️ 둘 다 macOS 관용(⌘,=환경설정 · ⌘.=취소)과 겹치는 자리다. Lapis는 네이티브
-      //    메뉴에 Settings 항목이 없어 webview까지 도달하지만, 메뉴를 추가하게 되면
-      //    ⌘,는 그쪽이 먼저 먹는다 — 그때 이 바인딩을 재검토할 것.
-      e.preventDefault();
-      if (key === ",") void goBackNote();
-      else void goForwardNote();
-    } else if (key === "w" && !e.shiftKey) {
-      // Cmd+W — 활성 탭 닫기
-      e.preventDefault();
-      const cur = $currentNotePath;
-      if (cur) void closeTab(cur);
-    } else if (/^[1-9]$/.test(key) && !e.shiftKey) {
-      // Cmd+1~9 — N번째 탭
-      const path = tabPathForShortcut(get(openTabs), Number(key));
-      if (path) {
+      case "copy-path":
+        // pane-title 버튼·topbar 라벨과 동일한 ✓ 플래시를 타도록 같은 함수를 쓴다.
+        if (!$currentNotePath) return;
+        e.preventDefault();
+        void copyCurrentPath();
+        return;
+      case "toggle-context":
+        e.preventDefault();
+        toggleContext();
+        return;
+      case "toggle-sidebar":
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      case "focus-tree-filter": {
+        e.preventDefault();
+        const input = document.querySelector<HTMLInputElement>(".tree-filter-input");
+        if (input) {
+          input.focus();
+          input.select();
+        }
+        return;
+      }
+      case "show-outline":
+        e.preventDefault();
+        if (get(sidebarCollapsed)) toggleSidebar();
+        showOutlineTab();
+        return;
+      case "nav-back":
+        e.preventDefault();
+        void goBackNote();
+        return;
+      case "nav-forward":
+        e.preventDefault();
+        void goForwardNote();
+        return;
+      case "close-tab": {
+        e.preventDefault();
+        const cur = $currentNotePath;
+        if (cur) void closeTab(cur);
+        return;
+      }
+      case "select-tab": {
+        const path = tabPathForShortcut(get(openTabs), hit.index ?? 0);
+        if (!path) return; // 그 자리에 탭이 없으면 기본 동작을 남긴다
         e.preventDefault();
         if (path !== $currentNotePath) void selectNote(path);
+        return;
       }
     }
   }
