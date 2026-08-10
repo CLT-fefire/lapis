@@ -54,6 +54,7 @@ import {
   clearFilters,
 } from "$lib/stores/filters";
 import { pushRecent } from "$lib/stores/recent";
+import { scopedKey, pruneOrphanScopedKeys } from "$lib/windowScope";
 import {
   recordNavigation,
   navBack,
@@ -74,7 +75,12 @@ import {
   keepUpTo,
 } from "$lib/stores/tabs";
 
-const STORAGE_KEY = "lapis.last-vault-path";
+/**
+ * "이 창이 마지막으로 본 vault" — **창별**이다(2026-08-10 멀티 윈도우).
+ * `main` 창은 접미사 없는 원래 키를 그대로 써서 기존 저장값을 잇는다. → `windowScope.ts`
+ */
+const VAULT_KEY_BASE = "lapis.last-vault-path";
+const STORAGE_KEY = scopedKey(VAULT_KEY_BASE);
 
 export const vaultPath = writable<string | null>(null);
 export const notes = writable<NoteEntry[]>([]);
@@ -1010,6 +1016,9 @@ export async function closeTabsToRight(path: string): Promise<void> {
 
 export async function restoreLastVault(): Promise<void> {
   if (typeof localStorage === "undefined") return;
+  // 지난 실행에서 열려 있던 보조 창(w2, w3…)의 키는 아무도 회수하지 않는다 —
+  // Tauri가 재시작 때 만드는 창은 `main` 하나뿐이라 여기서 걷어낸다.
+  pruneOrphanScopedKeys(VAULT_KEY_BASE);
   const last = localStorage.getItem(STORAGE_KEY);
   if (!last) return;
   try {
