@@ -59,6 +59,9 @@ fn new_window(app: tauri::AppHandle) -> Result<String, String> {
     .map_err(|e| format!("창 생성 실패: {e}"))?;
 
     apply_debug_title(&window);
+    if cfg!(debug_assertions) {
+        eprintln!("[lapis] new_window: label={label}");
+    }
     Ok(label)
 }
 
