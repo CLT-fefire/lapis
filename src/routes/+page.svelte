@@ -37,7 +37,6 @@
   } from "$lib/stores/outline";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
-  import { peekLastClosed } from "$lib/stores/recent";
   import { openNewNote } from "$lib/stores/tree-ui";
   import {
     vaultPath,
@@ -901,15 +900,17 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       if ($paletteOpen) closePalette();
       else openPalette("all");
     } else if (key === "p" && !e.shiftKey) {
+      // Cmd+P — 잠깐 보기. 활성 탭을 갈아끼워 탭이 무한히 쌓이지 않게 한다.
       e.preventDefault();
-      openPalette("files");
+      openPalette("files", "replace");
+    } else if (key === "t" && !e.shiftKey) {
+      // Cmd+T — 새 탭. 같은 파일 팔레트지만 고른 노트를 **새 탭**으로 연다.
+      // ⌘P와 짝을 이룬다(잠깐 보기 ↔ 붙잡기) — 브라우저·VS Code와 같은 구도.
+      e.preventDefault();
+      openPalette("files", "new-tab");
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
       openPalette("fulltext");
-    } else if (key === "t" && e.shiftKey) {
-      e.preventDefault();
-      const path = peekLastClosed();
-      if (path && path !== $currentNotePath) void selectNote(path);
     } else if (key === "s" && !e.shiftKey) {
       e.preventDefault();
       void saveCurrentNote();
@@ -974,6 +975,14 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       // Cmd+Ctrl+← / → — 노트 뒤로/앞으로 가기 (Xcode 동일)
       e.preventDefault();
       if (key === "arrowleft") void goBackNote();
+      else void goForwardNote();
+    } else if ((key === "," || key === ".") && !e.shiftKey && !e.altKey) {
+      // Cmd+, / Cmd+. — 방문 기록에서 이전/다음 노트. ⌘⌃←/→와 같은 동작의 한 손 별칭.
+      // ⚠️ 둘 다 macOS 관용(⌘,=환경설정 · ⌘.=취소)과 겹치는 자리다. Lapis는 네이티브
+      //    메뉴에 Settings 항목이 없어 webview까지 도달하지만, 메뉴를 추가하게 되면
+      //    ⌘,는 그쪽이 먼저 먹는다 — 그때 이 바인딩을 재검토할 것.
+      e.preventDefault();
+      if (key === ",") void goBackNote();
       else void goForwardNote();
     } else if (key === "w" && !e.shiftKey) {
       // Cmd+W — 활성 탭 닫기

@@ -53,7 +53,7 @@ import {
   clearFacetCounts,
   clearFilters,
 } from "$lib/stores/filters";
-import { pushRecent, rememberLastClosed } from "$lib/stores/recent";
+import { pushRecent } from "$lib/stores/recent";
 import {
   recordNavigation,
   navBack,
@@ -63,6 +63,7 @@ import {
 } from "$lib/stores/navHistory";
 import {
   registerTab,
+  replaceTab,
   unregisterTab,
   clearTabs,
   openTabs,
@@ -888,7 +889,7 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
 
 export async function selectNote(
   path: string,
-  opts: { fromHistory?: boolean } = {},
+  opts: { fromHistory?: boolean; replaceCurrentTab?: boolean } = {},
 ): Promise<void> {
   // editor 모듈을 lazy import — circular import 회피
   // (editor가 vault store를 import하므로 직접 top-level import 시 초기화 순서 위험)
@@ -908,12 +909,8 @@ export async function selectNote(
     }
   }
 
-  // 새 노트 열기 직전, 직전 노트 path를 lastClosed로 기록 (Cmd+Shift+T 대상).
-  // 같은 노트 재선택은 의미 없으므로 다를 때만.
+  // 탭 교체(⌘P)는 **덮어쓸 자리**를 알아야 하므로 currentNotePath가 바뀌기 전에 잡는다.
   const prevPath = get(currentNotePath);
-  if (prevPath && prevPath !== path) {
-    rememberLastClosed(prevPath);
-  }
 
   try {
     const content = await readNote(path);
@@ -922,7 +919,9 @@ export async function selectNote(
     // editor 상태 동기화 — 새 노트 기준으로 dirty 해제
     if (editor) editor.markSaved(content);
     pushRecent(path);
-    registerTab(path);
+    // ⌘P는 활성 탭을 갈아끼우고(잠깐 보기), 그 밖의 모든 경로는 탭을 추가한다(붙잡기).
+    if (opts.replaceCurrentTab) replaceTab(prevPath, path);
+    else registerTab(path);
     persistTabs();
     // "안 본 사이 바뀜" 기준점 갱신 + 표시 해제. 읽은 직후이므로 지금이 기준이다.
     markOpened(path, Date.now());
