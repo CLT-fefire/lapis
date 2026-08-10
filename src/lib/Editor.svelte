@@ -20,6 +20,12 @@
     focus: () => void;
     /** 1-based 라인으로 커서 이동 + 스크롤 (아웃라인 TOC 점프용). */
     jumpToLine: (line: number) => void;
+    /**
+     * 스크롤 위치(px) 읽기/쓰기. 읽기↔편집 교대(2026-08-10)로 이 컴포넌트가
+     * 언마운트되므로, 호출자가 위치를 들고 있다가 되돌아올 때 복원한다.
+     */
+    getScrollTop: () => number;
+    setScrollTop: (px: number) => void;
   }
 </script>
 
@@ -261,6 +267,12 @@
           effects: EditorView.scrollIntoView(info.from, { y: "start" }),
         });
         view.focus();
+      },
+      getScrollTop() {
+        return view.scrollDOM.scrollTop;
+      },
+      setScrollTop(px: number) {
+        view.scrollDOM.scrollTop = px;
       },
     };
   }

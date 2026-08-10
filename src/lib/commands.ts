@@ -9,8 +9,7 @@ import {
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
 import {
-  toggleEditor,
-  togglePreview,
+  toggleMainPane,
   toggleSidebar,
   toggleContext,
   resetLayout,
@@ -75,17 +74,11 @@ export const BUILTIN_COMMANDS: Command[] = [
     },
   },
   {
-    id: "toggle-editor-pane",
-    label: "Toggle Editor Pane",
+    id: "toggle-main-pane",
+    label: "Toggle Editor / Preview",
+    shortcut: "⌘E",
     run() {
-      toggleEditor();
-    },
-  },
-  {
-    id: "toggle-preview-pane",
-    label: "Toggle Preview Pane",
-    run() {
-      togglePreview();
+      toggleMainPane();
     },
   },
   {
