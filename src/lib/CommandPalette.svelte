@@ -2,7 +2,7 @@
   import { tick } from "svelte";
   import { fade, scale } from "svelte/transition";
   import { backdropFade, cardPop } from "$lib/motion";
-  import { paletteOpen, paletteHintMode, closePalette } from "$lib/stores/palette";
+  import { paletteOpen, paletteHintMode, paletteIntent, closePalette } from "$lib/stores/palette";
   import {
     fullTextIndexReady,
     indexBuilding,
@@ -169,7 +169,10 @@
       case "note":
       case "content":
       case "recent":
-        await selectNote(entry.path);
+        // ⌘P로 연 팔레트만 활성 탭을 갈아끼운다. ⌘K·⌘T는 탭을 추가.
+        await selectNote(entry.path, {
+          replaceCurrentTab: $paletteIntent === "replace",
+        });
         closePalette();
         break;
       case "tag":

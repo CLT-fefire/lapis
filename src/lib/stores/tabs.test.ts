@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   addTabEntry,
+  replaceTabEntry,
   removeTabEntry,
   tabPathForShortcut,
   readVaultTabs,
@@ -10,6 +11,32 @@ import {
   keepUpTo,
   type TabsMap,
 } from "./tabs";
+
+describe("replaceTabEntry — ⌘P 잠깐 보기", () => {
+  it("활성 탭 자리에서 갈아끼운다 (순서 보존)", () => {
+    expect(replaceTabEntry(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
+  });
+
+  it("이미 열린 탭이면 목록을 건드리지 않는다 — 활성만 옮겨간다", () => {
+    const tabs = ["a", "b", "c"];
+    // 여기서 "a"를 닫아버리면 탭을 옮겨 다닐 때마다 하나씩 사라진다.
+    expect(replaceTabEntry(tabs, "a", "c")).toBe(tabs);
+  });
+
+  it("활성 노트가 없으면(첫 열기) 그냥 추가", () => {
+    expect(replaceTabEntry([], null, "a")).toEqual(["a"]);
+    expect(replaceTabEntry(["a"], null, "b")).toEqual(["a", "b"]);
+  });
+
+  it("활성 path가 목록 밖이면 추가로 떨어진다", () => {
+    expect(replaceTabEntry(["a"], "ghost", "b")).toEqual(["a", "b"]);
+  });
+
+  it("빈 path는 무시", () => {
+    const tabs = ["a"];
+    expect(replaceTabEntry(tabs, "a", "")).toBe(tabs);
+  });
+});
 
 describe("addTabEntry", () => {
   it("새 path를 끝에 추가", () => {
