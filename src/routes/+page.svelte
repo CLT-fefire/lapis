@@ -94,6 +94,7 @@
   import { exportMermaidHostToPng } from "$lib/mermaidExport";
   import { rewriteImageSources } from "$lib/assetPath";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
+  import { newWindow } from "$lib/tauri/window";
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
   import {
     inDocSearch,
@@ -908,6 +909,10 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       // ⌘P와 짝을 이룬다(잠깐 보기 ↔ 붙잡기) — 브라우저·VS Code와 같은 구도.
       e.preventDefault();
       openPalette("files", "new-tab");
+    } else if (key === "t" && e.shiftKey) {
+      // Cmd+Shift+T — 새 창. vault가 비어 있는 채로 떠서 "Vault 열기…" 화면이 나온다.
+      e.preventDefault();
+      void newWindow().catch((err) => console.error("new window failed", err));
     } else if ((key === "f" && e.shiftKey) || (key === "p" && e.shiftKey)) {
       e.preventDefault();
       openPalette("fulltext");

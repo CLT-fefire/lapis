@@ -54,6 +54,7 @@ import {
   clearFilters,
 } from "$lib/stores/filters";
 import { pushRecent } from "$lib/stores/recent";
+import { scopedKey, pruneOrphanScopedKeys } from "$lib/windowScope";
 import {
   recordNavigation,
   navBack,
@@ -74,7 +75,16 @@ import {
   keepUpTo,
 } from "$lib/stores/tabs";
 
-const STORAGE_KEY = "lapis.last-vault-path";
+/**
+ * "이 창이 마지막으로 본 vault" — **창별**이다(2026-08-10 멀티 윈도우).
+ * `main` 창은 접미사 없는 원래 키를 그대로 써서 기존 저장값을 잇는다. → `windowScope.ts`
+ *
+ * ⚠️ **모듈 상수로 굳히지 말 것.** 모듈 로드 시점엔 Tauri 내부 객체가 아직 없을 수 있어
+ * 라벨이 `main`으로 잡히고, 그러면 보조 창이 main의 키를 읽어 **남의 vault를 그대로
+ * 연다**(2026-08-10 실제 발생). 호출 시점에 계산한다.
+ */
+const VAULT_KEY_BASE = "lapis.last-vault-path";
+const vaultStorageKey = () => scopedKey(VAULT_KEY_BASE);
 
 export const vaultPath = writable<string | null>(null);
 export const notes = writable<NoteEntry[]>([]);
@@ -119,7 +129,7 @@ export async function pickAndOpenVault(): Promise<void> {
 export async function openVault(path: string): Promise<void> {
   vaultPath.set(path);
   if (typeof localStorage !== "undefined") {
-    localStorage.setItem(STORAGE_KEY, path);
+    localStorage.setItem(vaultStorageKey(), path);
   }
   currentNotePath.set(null);
   currentNoteContent.set("");
@@ -1010,12 +1020,15 @@ export async function closeTabsToRight(path: string): Promise<void> {
 
 export async function restoreLastVault(): Promise<void> {
   if (typeof localStorage === "undefined") return;
-  const last = localStorage.getItem(STORAGE_KEY);
+  // 지난 실행에서 열려 있던 보조 창(w2, w3…)의 키는 아무도 회수하지 않는다 —
+  // Tauri가 재시작 때 만드는 창은 `main` 하나뿐이라 여기서 걷어낸다.
+  pruneOrphanScopedKeys(VAULT_KEY_BASE);
+  const last = localStorage.getItem(vaultStorageKey());
   if (!last) return;
   try {
     await openVault(last);
   } catch (e) {
     console.warn("restoreLastVault failed", e);
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(vaultStorageKey());
   }
 }
