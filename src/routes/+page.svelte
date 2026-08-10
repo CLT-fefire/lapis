@@ -15,7 +15,6 @@
   import SettingsModal from "$lib/SettingsModal.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
-  import GraphModal from "$lib/GraphModal.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
   import PaneMenu, { type PaneMenuItem } from "$lib/PaneMenu.svelte";
   import { revealInFinder } from "$lib/tauri/reveal";
@@ -36,7 +35,6 @@
     headingJumpRequest,
   } from "$lib/stores/outline";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
-  import { openGraph, GRAPH_FEATURE_ENABLED } from "$lib/stores/graph";
   import { openNewNote } from "$lib/stores/tree-ui";
   import {
     vaultPath,
@@ -144,7 +142,6 @@ tags: [welcome, getting-started]
 | \`⌘⇧F\` | Full-text 검색 (tantivy + 한국어 형태소) |
 | \`⌘F\` | 현재 노트 내 검색 |
 | \`⌘N\` | 새 노트 만들기 |
-| \`⌘G\` | Graph View |
 | \`⌘S\` | 즉시 저장 (편집 시 2초마다 자동 저장됨) |
 | \`F2\` | 현재 노트 이름 변경 *(Mac 매직 키보드 기본은 F2가 밝기 — \`Fn+F2\` 또는 키보드 설정에서 "F1, F2를 표준 기능 키로" 켜기. 안 되면 \`⌘K\` → "Rename")* |
 | \`⌘⌫\` | 현재 노트 휴지통으로 |
@@ -969,13 +966,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
       e.preventDefault();
       if (get(sidebarCollapsed)) toggleSidebar();
       showOutlineTab();
-    } else if (key === "g" && !e.shiftKey && GRAPH_FEATURE_ENABLED) {
-      // Cmd+G — 현재 노트 중심 Local 그래프 (ADR-003 PR-G2′).
-      // ⌘⇧G는 macOS Finder "폴더로 이동" 시스템 단축과 겹쳐 webview에 도달 못함.
-      // 그래프 기능 비활성(GRAPH_FEATURE_ENABLED=false) 시 이 분기를 타지 않음.
-      e.preventDefault();
-      const cur = $currentNotePath;
-      if (cur) openGraph(cur);
     } else if ((key === "arrowleft" || key === "arrowright") && e.metaKey && e.ctrlKey) {
       // Cmd+Ctrl+← / → — 노트 뒤로/앞으로 가기 (Xcode 동일)
       e.preventDefault();
@@ -1060,7 +1050,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
 <ContextMenu />
 <NewNoteModal />
 <SettingsModal />
-{#if GRAPH_FEATURE_ENABLED}<GraphModal />{/if}
 <LinkRewritePreviewModal />
 
 {#if $externalConflict}
@@ -1160,14 +1149,6 @@ GitHub: <https://github.com/CLT-fefire/lapis>
     <div class="topbar-actions">
       <!-- watcher 상태 점은 사이드바 하단 상태 줄로 통합(2026-08-05 PR-10) —
            흩어진 상태 신호를 한 곳에서 읽게 하려는 것. -->
-      {#if GRAPH_FEATURE_ENABLED}
-        <button
-          class="btn btn--icon btn--sm"
-          title="Local 그래프 — 현재 노트 이웃 (⌘G)"
-          disabled={!$currentNotePath}
-          onclick={() => $currentNotePath && openGraph($currentNotePath)}
-        >◉</button>
-      {/if}
       <button
         class="btn btn--icon btn--sm"
         title="Command palette (Cmd+K)"
