@@ -230,6 +230,32 @@
     });
   }
 
+  /**
+   * ⚠️ **갓 mount된 view에 스크롤을 한 번만 지정하면 엉뚱한 데 선다.** CodeMirror는
+   * 아직 렌더하지 않은 줄을 **추정 높이**로 둔 height map으로 스크롤 위치를 계산한다.
+   * 그래서 dispatch 직후의 `scrollHeight`가 실측과 다르고, 그 차이만큼 빗나간다.
+   * 실측 사례(welcome 41행): dispatch 때 1149px → 측정 후 1380px, 착지가 38px 초과.
+   * **긴 문서에서 오차가 커진다** — 474행 한글 문서(줄바꿈 다발)에서 90행쯤 밀렸다.
+   *
+   * 읽기↔편집 교대(⌘E)는 **매번 Editor를 새로 mount**하므로 이 경로를 항상 지난다.
+   * 커서만 옮겨지고 화면은 안 따라가는 형태라 타입체크·테스트엔 안 잡힌다.
+   *
+   * 대책: 측정이 진행되는 다음 프레임마다 **같은 위치로 다시 적용**하고, 위치가 더
+   * 움직이지 않으면(=측정 수렴) 멈춘다. 매 패스마다 height map이 실측으로 대체되며
+   * 정확해진다. `tries`는 폭주 방지용 상한.
+   */
+  function scrollPosToTop(view: EditorView, pos: number, tries = 4): void {
+    const before = view.scrollDOM.scrollTop;
+    view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "start" }) });
+    if (tries <= 0) return;
+    requestAnimationFrame(() => {
+      // ⌘E 연타로 그 사이 view가 destroy될 수 있다.
+      if (!view.dom.isConnected) return;
+      if (Math.abs(view.scrollDOM.scrollTop - before) < 1) return; // 수렴
+      scrollPosToTop(view, pos, tries - 1);
+    });
+  }
+
   function buildApi(view: EditorView): EditorApi {
     return {
       setQuery(q: string, opts: EditorSearchOptions = {}) {
@@ -268,10 +294,8 @@
         const total = view.state.doc.lines;
         const n = Math.min(Math.max(1, Math.floor(line)), total);
         const info = view.state.doc.line(n);
-        view.dispatch({
-          selection: { anchor: info.from },
-          effects: EditorView.scrollIntoView(info.from, { y: "start" }),
-        });
+        view.dispatch({ selection: { anchor: info.from } });
+        scrollPosToTop(view, info.from);
         view.focus();
       },
       getFocusLine() {
@@ -291,6 +315,12 @@
       },
       setScrollTop(px: number) {
         view.scrollDOM.scrollTop = px;
+        // 같은 이유(위 scrollPosToTop) — 측정 전 scrollHeight가 작으면 값이 잘려 들어간다.
+        requestAnimationFrame(() => {
+          if (view.dom.isConnected && Math.abs(view.scrollDOM.scrollTop - px) >= 1) {
+            view.scrollDOM.scrollTop = px;
+          }
+        });
       },
     };
   }
