@@ -555,7 +555,7 @@
       // 다른 문서로 바꿨으니 이전 문서의 스크롤 위치를 버리고 맨 위에서 시작.
       // ⚠️ 페인 교대용으로 들고 있던 위치도 함께 버려야 한다 — 안 그러면 노트를 바꾼 뒤
       //    ⌘E 한 번에 **이전 문서의** 오프셋으로 튄다.
-      keptPreviewScrollTop = 0;
+      keptPreviewOffset = 0;
       // 앵커도 함께 버린다 — 이전 문서의 slug를 들고 있으면 다음 교대에서
       // sameAnchor 판정이 엉뚱하게 맞아떨어질 수 있다.
       keptPreviewAnchor = null;
@@ -734,14 +734,21 @@
   // 픽셀만으로는 부족하다 — 두 페인의 px는 **서로 환산이 안 된다**(코드펜스·표·mermaid는
   // 소스 한 줄이 렌더 수백 px). 그래서 공통 기준인 **섹션 앵커**로 옮긴다(`paneAnchor.ts`).
   //
-  // 프리뷰로 들어갈 때만 px를 함께 쓴다: 상대 페인이 같은 섹션에 머물렀다면(`sameAnchor`)
-  // 떠날 때의 px를 그대로 되돌려 ⌘E 왕복으로 읽던 줄을 잃지 않게 한다.
+  // 프리뷰로 들어갈 때는 섹션 머리에서 얼마나 더 내려가 있었는지(**상대 offset**)까지
+  // 되살린다 — 같은 섹션에 머물렀다면(`sameAnchor`) ⌘E 왕복으로 읽던 줄을 잃지 않는다.
   //
-  // ⚠️ **에디터 쪽은 px를 쓰지 않는다 — 쓸 수 없다.** CodeMirror의 `scrollTop`은 height
+  // ⚠️ **절대 scrollTop을 저장하면 안 된다.** mermaid는 IntersectionObserver 지연 렌더라
+  // 프리뷰가 remount되면 `.mermaid-host`가 **0px인 새 요소**로 돌아온다. 위쪽에 다이어그램이
+  // 있으면 문서 전체가 수천 px 짧아져 절대 px가 **max로 잘리고**, 그 자리는 화면 밖으로
+  // 사라진 채 문서 끝이 뜬다(실측: 호스트 2800px → 0px, 목표가 −1453px로 밀려나고 문서
+  // 끝 섹션이 상단에 옴). 게다가 그 위치에선 다이어그램이 화면 밖이라 관찰자가 영원히
+  // 안 터져 **스스로 복구되지도 않는다**. 앵커 기준 상대값은 위쪽 변화에 면역이다.
+  //
+  // ⚠️ **에디터 쪽은 px를 아예 쓰지 않는다 — 쓸 수 없다.** CodeMirror의 `scrollTop`은 height
   // map이 얼마나 실측됐는지에 따라 의미가 달라진다(같은 문서·같은 창에서 scrollHeight가
   // 10902 ↔ 21385로 관측됨). 갓 mount된 view에 px를 되돌리면 100행쯤 엉뚱한 데 선다.
   // 항상 앵커 라인으로 점프한다 — 왕복 시 섹션 머리로 밀리는 건 감수한다.
-  let keptPreviewScrollTop = 0;
+  let keptPreviewOffset = 0;
   let keptPreviewAnchor: PaneAnchor | null = null;
 
   /**
@@ -782,21 +789,22 @@
     return anchorForSlug(parsed.headings, slug);
   }
 
-  /** 앵커를 프리뷰 스크롤에 적용. 대상 헤딩을 못 찾으면 false (호출자가 폴백). */
-  function applyPreviewAnchor(anchor: PaneAnchor): boolean {
-    if (!previewBodyEl) return false;
-    if (!anchor.slug) {
-      previewBodyEl.scrollTop = 0;
-      return true;
-    }
+  /**
+   * 앵커 헤딩이 스크롤 컨텐츠 안에서 몇 px 지점에 있는지. 헤딩이 없으면(문서 맨 위) 0.
+   * ⚠️ `scrollIntoView` 대신 직접 계산한다 — 상대 offset과 합성해야 하고, 방금 나타난
+   * 페인을 흐르게 하지 않아야 한다(TOC 클릭은 사용자가 대상을 보고 있으니 smooth가 맞다).
+   */
+  function previewAnchorBase(anchor: PaneAnchor): number {
+    if (!previewBodyEl || !anchor.slug) return 0;
     const el = previewBodyEl.querySelector<HTMLElement>(
       `.rendered [id="${cssEscapeAttr(anchor.slug)}"]`,
     );
-    if (!el) return false;
-    // ⚠️ 교대에는 smooth를 쓰지 않는다 — 방금 나타난 페인이 또 흐르면 위치를 놓친다.
-    //    (TOC 클릭은 사용자가 대상을 보고 있으니 smooth가 맞다.)
-    el.scrollIntoView({ block: "start" });
-    return true;
+    if (!el) return 0;
+    return (
+      el.getBoundingClientRect().top -
+      previewBodyEl.getBoundingClientRect().top +
+      previewBodyEl.scrollTop
+    );
   }
 
   /**
@@ -817,9 +825,12 @@
         : TOP_ANCHOR;
       if (get(isDirty)) await saveCurrentNote();
     } else {
-      keptPreviewScrollTop = previewBodyEl?.scrollTop ?? 0;
       incoming = currentPreviewAnchor();
       keptPreviewAnchor = incoming;
+      // 섹션 머리에서 얼마나 더 내려와 있었나 — 절대 px가 아니라 이 상대값을 들고 간다.
+      keptPreviewOffset = previewBodyEl
+        ? previewBodyEl.scrollTop - previewAnchorBase(incoming)
+        : 0;
     }
 
     // 검색 바는 페인에 매여 있다 — 대상이 사라지면 함께 닫는다.
@@ -835,10 +846,11 @@
     await tick();
 
     if (next === "preview") {
-      // 프리뷰를 떠날 때와 같은 섹션이면 px를 그대로 되돌린다(왕복으로 읽던 줄을 잃지 않게).
-      const exact = sameAnchor(keptPreviewAnchor, incoming);
-      if (exact || !applyPreviewAnchor(incoming)) {
-        if (previewBodyEl) previewBodyEl.scrollTop = keptPreviewScrollTop;
+      if (previewBodyEl) {
+        // 같은 섹션에 머물렀다면 섹션 머리로부터의 거리까지 되살린다(왕복으로 읽던 줄을
+        // 잃지 않게). 섹션이 옮겨졌으면 새 섹션 머리에 세운다.
+        const offset = sameAnchor(keptPreviewAnchor, incoming) ? keptPreviewOffset : 0;
+        previewBodyEl.scrollTop = previewAnchorBase(incoming) + offset;
       }
     } else {
       pendingEditorLine = incoming.line;

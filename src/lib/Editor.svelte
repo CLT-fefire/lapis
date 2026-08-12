@@ -233,6 +233,13 @@
   }
 
   /**
+   * 사용자가 이 view에서 **직접** 스크롤했는지. 앵커 점프 같은 프로그램 스크롤과
+   * 구분해야 한다 — `getFocusLine()`이 "커서를 쓸까, 보고 있는 쪽을 쓸까"를 이걸로 가른다.
+   * 컴포넌트가 교대마다 새로 mount되므로 매번 false에서 시작한다.
+   */
+  let userScrolled = false;
+
+  /**
    * ⚠️ **갓 mount된 view에 스크롤을 한 번만 지정하면 엉뚱한 데 선다.** CodeMirror는
    * 아직 렌더하지 않은 줄을 **추정 높이**로 둔 height map으로 스크롤 위치를 계산한다.
    * 그래서 dispatch 직후의 `scrollHeight`가 실측과 다르고, 그 차이만큼 빗나간다.
@@ -326,13 +333,25 @@
       getFocusLine() {
         const doc = view.state.doc;
         const cursorLine = doc.lineAt(view.state.selection.main.head).number;
-        const rect = view.scrollDOM.getBoundingClientRect();
-        // 뷰포트 상·하단의 문서 위치. content 밖을 찍으면 null → 커서로 폴백.
-        const topPos = view.posAtCoords({ x: rect.left + 8, y: rect.top + 8 });
-        if (topPos == null) return cursorLine;
-        const topLine = doc.lineAt(topPos).number;
-        const bottomPos = view.posAtCoords({ x: rect.left + 8, y: rect.bottom - 8 });
-        const bottomLine = bottomPos == null ? doc.lines : doc.lineAt(bottomPos).number;
+        // 사용자가 이 view에서 직접 스크롤한 적이 없으면 **커서가 진실**이다 — 커서는
+        // 우리가 앵커 점프로 거기 두었고, 그 뒤로 아무도 옮기지 않았다.
+        //
+        // ⚠️ 기하만 보고 판정하면 안 된다. 앵커 점프의 스크롤은 measure 사이클(rAF)에서
+        //    적용되므로, 그 전에 ⌘E를 다시 누르면 뷰포트가 **아직 맨 위**다 → "커서가
+        //    화면 밖"으로 오판해 1행을 돌려주고 프리뷰가 문서 맨 위로 튄다.
+        if (!userScrolled) return cursorLine;
+
+        // 사용자가 스크롤했다면 지금 보고 있는 쪽이 진실이다. 뷰포트 상·하단에 걸린 줄을
+        // **문서 상대 높이**로 조회한다.
+        //
+        // ⚠️ 좌표 기반 `posAtCoords`를 쓰면 안 된다 — x가 라인번호 거터에 걸리고
+        //    문서 끝 근처에서는 **보이지 않는 줄**을 돌려준다. 실측: 442행이 상단에
+        //    보이는데(스크롤 max) 상·하단 모두 475(문서 끝)로 답했다.
+        const top = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
+        const topLine = doc.lineAt(view.lineBlockAtHeight(top).from).number;
+        const bottomLine = doc.lineAt(
+          view.lineBlockAtHeight(top + view.scrollDOM.clientHeight).from,
+        ).number;
         return cursorLine >= topLine && cursorLine <= bottomLine ? cursorLine : topLine;
       },
       setScrollTop(px: number) {
@@ -385,8 +404,15 @@
     });
 
     view = new EditorView({ state, parent: host });
+    // 휠·트랙패드로 훑은 것만 "사용자 스크롤"로 본다. 클릭·키보드 이동은 커서를 함께
+    // 옮기므로 커서가 곧 사용자 위치다 — 따로 표시할 필요가 없다.
+    view.scrollDOM.addEventListener("wheel", markUserScrolled, { passive: true });
     api = buildApi(view);
   });
+
+  function markUserScrolled() {
+    userScrolled = true;
+  }
 
   // 외부에서 value가 바뀌면 에디터 doc도 동기화 (예: 사이드바에서 다른 노트 선택)
   // current !== value 가드로 사용자 타이핑 시 무한 루프 방지
@@ -401,6 +427,7 @@
   });
 
   onDestroy(() => {
+    view?.scrollDOM.removeEventListener("wheel", markUserScrolled);
     view?.destroy();
     api = undefined;
   });
