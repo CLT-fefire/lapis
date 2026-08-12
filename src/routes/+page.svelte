@@ -112,6 +112,13 @@
   // 타입만 가져온다 — `import type`은 런타임 번들에 아무것도 싣지 않으므로
   // 아래 동적 import의 코드 분할을 깨지 않는다.
   import type { EditorApi } from "$lib/Editor.svelte";
+  import {
+    anchorForLine,
+    anchorForSlug,
+    sameAnchor,
+    TOP_ANCHOR,
+    type PaneAnchor,
+  } from "$lib/paneAnchor";
   import { WELCOME_DOC } from "$lib/welcomeDoc";
 
 
@@ -433,6 +440,11 @@
     activeHeadingSlug.set(heading.slug);
   });
 
+  // 프리뷰의 헤딩 앵커 = scroll-spy와 페인 교대(⌘E)가 함께 쓰는 셀렉터. 한쪽만 고치면
+  // 두 기능이 서로 다른 헤딩을 "현재 위치"로 보게 된다.
+  const PREVIEW_HEADING_SELECTOR =
+    ".rendered h1[id], .rendered h2[id], .rendered h3[id], .rendered h4[id], .rendered h5[id], .rendered h6[id]";
+
   // 프리뷰 스크롤 → 활성 헤딩 하이라이트 (scroll-spy). rAF 스로틀.
   let scrollSpyScheduled = false;
   function handlePreviewScroll() {
@@ -446,9 +458,7 @@
   function updateActiveHeading() {
     const container = previewBodyEl;
     if (!container) return;
-    const hs = container.querySelectorAll<HTMLElement>(
-      ".rendered h1[id], .rendered h2[id], .rendered h3[id], .rendered h4[id], .rendered h5[id], .rendered h6[id]",
-    );
+    const hs = container.querySelectorAll<HTMLElement>(PREVIEW_HEADING_SELECTOR);
     if (hs.length === 0) {
       activeHeadingSlug.set(null);
       return;
@@ -547,6 +557,11 @@
       //    ⌘E 한 번에 **이전 문서의** 오프셋으로 튄다.
       keptPreviewScrollTop = 0;
       keptEditorScrollTop = 0;
+      // 앵커도 함께 버린다 — 이전 문서의 slug를 들고 있으면 다음 교대에서
+      // sameAnchor 판정이 엉뚱하게 맞아떨어질 수 있다.
+      keptPreviewAnchor = null;
+      keptEditorAnchor = null;
+      pendingEditorRestore = null;
       // 새 본문이 DOM에 반영된 뒤(tick) 지금 떠 있는 스크롤러를 0으로.
       void tick().then(() => {
         if (previewBodyEl) previewBodyEl.scrollTop = 0;
@@ -712,16 +727,78 @@
     revealMenuItem(),
   ]);
 
-  // --- 읽기 ↔ 편집 교대 (2026-08-10, split 제거) ---
+  // --- 읽기 ↔ 편집 교대 (2026-08-10 split 제거 / 2026-08-12 위치 이월) ---
   //
   // 비활성 페인은 **언마운트**된다 — 그냥 두면 돌아왔을 때 문서 맨 위로 튄다.
   // 나가는 쪽 위치를 여기 담아뒀다가 들어올 때 되돌린다. 노트를 바꾸면 무의미해지므로
-  // selectNote 쪽에서 초기화하지 않고, "같은 노트를 보는 동안"만 유효한 값으로 둔다.
+  // selectNote 쪽에서 초기화한다.
   //
-  // ⚠️ 스크롤 동기화(Editor↔Preview 비율 맞춤)는 이 커밋에서 삭제했다. 두 페인이
-  //    동시에 뜨지 않으니 동기화할 대상이 없다.
+  // 픽셀만으로는 부족하다 — 두 페인의 px는 **서로 환산이 안 된다**(코드펜스·표·mermaid는
+  // 소스 한 줄이 렌더 수백 px). 그래서 위치를 두 겹으로 들고 있는다:
+  //   ① px — 같은 페인으로 되돌아올 때 **정확히** 그 자리
+  //   ② 앵커(섹션) — 상대 페인에서 위치가 옮겨졌을 때 그쪽을 따라간다 (`paneAnchor.ts`)
+  // 판정은 `sameAnchor`: 상대 페인이 같은 섹션에 머물렀다면 ①, 옮겨졌다면 ②.
+  // ①이 없으면 ⌘E 왕복 한 번에 읽던 줄이 섹션 머리로 밀린다.
   let keptPreviewScrollTop = 0;
   let keptEditorScrollTop = 0;
+  let keptPreviewAnchor: PaneAnchor | null = null;
+  let keptEditorAnchor: PaneAnchor | null = null;
+
+  /**
+   * 들어가는 Editor에 적용할 복원 — `line`은 앵커 점프(0-based), `px`는 정확 복원.
+   *
+   * ⚠️ 큐가 필요한 이유: Editor는 지연 로드(#150)라 `setMainPane` 직후 `await tick()`
+   * 한 번으로는 `editorApi`가 아직 없을 수 있다(청크 첫 로드). 그때 그냥 `?.`로 흘리면
+   * 첫 ⌘E에서만 위치 이월이 **조용히** 누락된다.
+   */
+  let pendingEditorRestore: { line: number } | { px: number } | null = null;
+
+  function applyPendingEditorRestore() {
+    const r = pendingEditorRestore;
+    if (!r || !editorApi) return;
+    pendingEditorRestore = null;
+    if ("line" in r) editorApi.jumpToLine(r.line + 1);
+    else editorApi.setScrollTop(r.px);
+    editorApi.focus();
+  }
+
+  // api가 붙는 순간을 잡아 큐를 비운다 (위 ⚠️).
+  $effect(() => {
+    if (editorApi) applyPendingEditorRestore();
+  });
+
+  /** 프리뷰에서 지금 화면 상단에 걸린 섹션. 첫 헤딩보다 위면 문서 맨 위. */
+  function currentPreviewAnchor(): PaneAnchor {
+    const container = previewBodyEl;
+    if (!container) return TOP_ANCHOR;
+    const hs = container.querySelectorAll<HTMLElement>(PREVIEW_HEADING_SELECTOR);
+    const cTop = container.getBoundingClientRect().top;
+    // scroll-spy(updateActiveHeading)와 달리 첫 헤딩 위쪽을 hs[0]으로 끌어올리지 않는다 —
+    // 인트로 문단을 읽다가 ⌘E를 누르면 h1으로 건너뛰어 버리기 때문.
+    let slug: string | null = null;
+    for (const h of hs) {
+      if (h.getBoundingClientRect().top - cTop <= 8) slug = h.id;
+      else break;
+    }
+    return anchorForSlug(parsed.headings, slug);
+  }
+
+  /** 앵커를 프리뷰 스크롤에 적용. 대상 헤딩을 못 찾으면 false (호출자가 폴백). */
+  function applyPreviewAnchor(anchor: PaneAnchor): boolean {
+    if (!previewBodyEl) return false;
+    if (!anchor.slug) {
+      previewBodyEl.scrollTop = 0;
+      return true;
+    }
+    const el = previewBodyEl.querySelector<HTMLElement>(
+      `.rendered [id="${cssEscapeAttr(anchor.slug)}"]`,
+    );
+    if (!el) return false;
+    // ⚠️ 교대에는 smooth를 쓰지 않는다 — 방금 나타난 페인이 또 흐르면 위치를 놓친다.
+    //    (TOC 클릭은 사용자가 대상을 보고 있으니 smooth가 맞다.)
+    el.scrollIntoView({ block: "start" });
+    return true;
+  }
 
   /**
    * 페인 교대. 단축키(⌘E)·세그먼트 버튼·⌘K 팔레트가 모두 이 경로를 쓴다.
@@ -733,11 +810,19 @@
     const next = to ?? (get(mainPane) === "preview" ? "editor" : "preview");
     if (next === get(mainPane)) return;
 
+    // 떠나는 페인이 가리키던 섹션 = 들어가는 페인이 맞춰야 할 위치.
+    let incoming: PaneAnchor;
     if (next === "preview") {
       keptEditorScrollTop = editorApi?.getScrollTop() ?? 0;
+      incoming = editorApi
+        ? anchorForLine(parsed.headings, editorApi.getFocusLine() - 1)
+        : TOP_ANCHOR;
+      keptEditorAnchor = incoming;
       if (get(isDirty)) await saveCurrentNote();
     } else {
       keptPreviewScrollTop = previewBodyEl?.scrollTop ?? 0;
+      incoming = currentPreviewAnchor();
+      keptPreviewAnchor = incoming;
     }
 
     // 검색 바는 페인에 매여 있다 — 대상이 사라지면 함께 닫는다.
@@ -753,10 +838,16 @@
     await tick();
 
     if (next === "preview") {
-      if (previewBodyEl) previewBodyEl.scrollTop = keptPreviewScrollTop;
+      // 프리뷰를 떠날 때와 같은 섹션이면 px를 그대로 되돌린다(왕복으로 읽던 줄을 잃지 않게).
+      const exact = sameAnchor(keptPreviewAnchor, incoming);
+      if (exact || !applyPreviewAnchor(incoming)) {
+        if (previewBodyEl) previewBodyEl.scrollTop = keptPreviewScrollTop;
+      }
     } else {
-      editorApi?.setScrollTop(keptEditorScrollTop);
-      editorApi?.focus();
+      pendingEditorRestore = sameAnchor(keptEditorAnchor, incoming)
+        ? { px: keptEditorScrollTop }
+        : { line: incoming.line };
+      applyPendingEditorRestore();
     }
   }
 

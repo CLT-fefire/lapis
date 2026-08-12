@@ -21,6 +21,12 @@
     /** 1-based 라인으로 커서 이동 + 스크롤 (아웃라인 TOC 점프용). */
     jumpToLine: (line: number) => void;
     /**
+     * 지금 보고 있는 1-based 라인 — 편집 → 읽기 교대 때 섹션 앵커를 뽑는 기준
+     * (`paneAnchor.ts`). 커서가 화면 안이면 **커서**(방금 고친 자리), 스크롤만 해서
+     * 커서가 화면 밖이면 **뷰포트 상단**을 돌려준다.
+     */
+    getFocusLine: () => number;
+    /**
      * 스크롤 위치(px) 읽기/쓰기. 읽기↔편집 교대(2026-08-10)로 이 컴포넌트가
      * 언마운트되므로, 호출자가 위치를 들고 있다가 되돌아올 때 복원한다.
      */
@@ -267,6 +273,18 @@
           effects: EditorView.scrollIntoView(info.from, { y: "start" }),
         });
         view.focus();
+      },
+      getFocusLine() {
+        const doc = view.state.doc;
+        const cursorLine = doc.lineAt(view.state.selection.main.head).number;
+        const rect = view.scrollDOM.getBoundingClientRect();
+        // 뷰포트 상·하단의 문서 위치. content 밖을 찍으면 null → 커서로 폴백.
+        const topPos = view.posAtCoords({ x: rect.left + 8, y: rect.top + 8 });
+        if (topPos == null) return cursorLine;
+        const topLine = doc.lineAt(topPos).number;
+        const bottomPos = view.posAtCoords({ x: rect.left + 8, y: rect.bottom - 8 });
+        const bottomLine = bottomPos == null ? doc.lines : doc.lineAt(bottomPos).number;
+        return cursorLine >= topLine && cursorLine <= bottomLine ? cursorLine : topLine;
       },
       getScrollTop() {
         return view.scrollDOM.scrollTop;
