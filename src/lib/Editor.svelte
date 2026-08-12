@@ -27,10 +27,12 @@
      */
     getFocusLine: () => number;
     /**
-     * 스크롤 위치(px) 읽기/쓰기. 읽기↔편집 교대(2026-08-10)로 이 컴포넌트가
-     * 언마운트되므로, 호출자가 위치를 들고 있다가 되돌아올 때 복원한다.
+     * 스크롤 위치를 px로 지정. **노트를 바꿀 때 맨 위(0)로 보내는 용도만** 쓴다.
+     *
+     * ⚠️ 임의 px 복원용으로 쓰지 말 것 — CodeMirror의 `scrollTop`은 height map이
+     * 얼마나 실측됐는지에 따라 같은 값이 다른 위치를 가리킨다(같은 문서에서
+     * scrollHeight 10902 ↔ 21385 관측). 위치를 되살릴 땐 `jumpToLine`을 쓴다.
      */
-    getScrollTop: () => number;
     setScrollTop: (px: number) => void;
   }
 </script>
@@ -240,20 +242,43 @@
    * 읽기↔편집 교대(⌘E)는 **매번 Editor를 새로 mount**하므로 이 경로를 항상 지난다.
    * 커서만 옮겨지고 화면은 안 따라가는 형태라 타입체크·테스트엔 안 잡힌다.
    *
-   * 대책: 측정이 진행되는 다음 프레임마다 **같은 위치로 다시 적용**하고, 위치가 더
-   * 움직이지 않으면(=측정 수렴) 멈춘다. 매 패스마다 height map이 실측으로 대체되며
-   * 정확해진다. `tries`는 폭주 방지용 상한.
+   * 대책: 측정이 진행되는 다음 프레임마다 **같은 위치로 다시 적용**한다. 매 패스마다
+   * 그 주변이 실제로 렌더·측정돼 height map이 실측으로 대체되며 정확해진다.
+   *
+   * ⚠️ 종료 조건은 **대상 줄이 실제로 상단에 왔는지**(`coordsAtPos`)로 판정한다.
+   * "스크롤이 더 안 움직인다"를 수렴으로 쓰면 안 된다 — 추정 height map이 "이미
+   * 도착했다"고 계산하면 **움직이지 않고도 빗나간 채 종료**한다(실측 2530px = 120행).
    */
-  function scrollPosToTop(view: EditorView, pos: number, tries = 4): void {
-    const before = view.scrollDOM.scrollTop;
-    view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "start" }) });
-    if (tries <= 0) return;
-    requestAnimationFrame(() => {
-      // ⌘E 연타로 그 사이 view가 destroy될 수 있다.
-      if (!view.dom.isConnected) return;
-      if (Math.abs(view.scrollDOM.scrollTop - before) < 1) return; // 수렴
-      scrollPosToTop(view, pos, tries - 1);
-    });
+  function scrollPosToTop(view: EditorView, pos: number): void {
+    let aborted = false;
+    const abort = () => {
+      aborted = true;
+    };
+    // 사용자가 휠·타이핑을 시작하면 즉시 손을 뗀다 — 안 그러면 몇 프레임 동안 다툰다.
+    view.scrollDOM.addEventListener("wheel", abort, { passive: true });
+    view.dom.addEventListener("keydown", abort);
+    const cleanup = () => {
+      view.scrollDOM.removeEventListener("wheel", abort);
+      view.dom.removeEventListener("keydown", abort);
+    };
+
+    const pass = (tries: number) => {
+      view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "start" }) });
+      if (tries <= 0) return cleanup();
+      requestAnimationFrame(() => {
+        // ⌘E 연타로 그 사이 view가 destroy될 수 있다.
+        if (aborted || !view.dom.isConnected) return cleanup();
+        const coords = view.coordsAtPos(pos);
+        const paneTop = view.scrollDOM.getBoundingClientRect().top;
+        // 렌더돼 있고 상단에 붙었으면 진짜 도착. 아직 렌더 안 됐으면(null) 계속 간다.
+        if (coords && Math.abs(coords.top - paneTop) <= 8) return cleanup();
+        // 문서 끝이라 더 올릴 수 없는 위치면 여기가 최선이다.
+        const max = view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight;
+        if (view.scrollDOM.scrollTop >= max - 1) return cleanup();
+        pass(tries - 1);
+      });
+    };
+    pass(10);
   }
 
   function buildApi(view: EditorView): EditorApi {
@@ -309,9 +334,6 @@
         const bottomPos = view.posAtCoords({ x: rect.left + 8, y: rect.bottom - 8 });
         const bottomLine = bottomPos == null ? doc.lines : doc.lineAt(bottomPos).number;
         return cursorLine >= topLine && cursorLine <= bottomLine ? cursorLine : topLine;
-      },
-      getScrollTop() {
-        return view.scrollDOM.scrollTop;
       },
       setScrollTop(px: number) {
         view.scrollDOM.scrollTop = px;

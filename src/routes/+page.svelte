@@ -556,12 +556,10 @@
       // ⚠️ 페인 교대용으로 들고 있던 위치도 함께 버려야 한다 — 안 그러면 노트를 바꾼 뒤
       //    ⌘E 한 번에 **이전 문서의** 오프셋으로 튄다.
       keptPreviewScrollTop = 0;
-      keptEditorScrollTop = 0;
       // 앵커도 함께 버린다 — 이전 문서의 slug를 들고 있으면 다음 교대에서
       // sameAnchor 판정이 엉뚱하게 맞아떨어질 수 있다.
       keptPreviewAnchor = null;
-      keptEditorAnchor = null;
-      pendingEditorRestore = null;
+      pendingEditorLine = null;
       // 새 본문이 DOM에 반영된 뒤(tick) 지금 떠 있는 스크롤러를 0으로.
       void tick().then(() => {
         if (previewBodyEl) previewBodyEl.scrollTop = 0;
@@ -734,37 +732,38 @@
   // selectNote 쪽에서 초기화한다.
   //
   // 픽셀만으로는 부족하다 — 두 페인의 px는 **서로 환산이 안 된다**(코드펜스·표·mermaid는
-  // 소스 한 줄이 렌더 수백 px). 그래서 위치를 두 겹으로 들고 있는다:
-  //   ① px — 같은 페인으로 되돌아올 때 **정확히** 그 자리
-  //   ② 앵커(섹션) — 상대 페인에서 위치가 옮겨졌을 때 그쪽을 따라간다 (`paneAnchor.ts`)
-  // 판정은 `sameAnchor`: 상대 페인이 같은 섹션에 머물렀다면 ①, 옮겨졌다면 ②.
-  // ①이 없으면 ⌘E 왕복 한 번에 읽던 줄이 섹션 머리로 밀린다.
+  // 소스 한 줄이 렌더 수백 px). 그래서 공통 기준인 **섹션 앵커**로 옮긴다(`paneAnchor.ts`).
+  //
+  // 프리뷰로 들어갈 때만 px를 함께 쓴다: 상대 페인이 같은 섹션에 머물렀다면(`sameAnchor`)
+  // 떠날 때의 px를 그대로 되돌려 ⌘E 왕복으로 읽던 줄을 잃지 않게 한다.
+  //
+  // ⚠️ **에디터 쪽은 px를 쓰지 않는다 — 쓸 수 없다.** CodeMirror의 `scrollTop`은 height
+  // map이 얼마나 실측됐는지에 따라 의미가 달라진다(같은 문서·같은 창에서 scrollHeight가
+  // 10902 ↔ 21385로 관측됨). 갓 mount된 view에 px를 되돌리면 100행쯤 엉뚱한 데 선다.
+  // 항상 앵커 라인으로 점프한다 — 왕복 시 섹션 머리로 밀리는 건 감수한다.
   let keptPreviewScrollTop = 0;
-  let keptEditorScrollTop = 0;
   let keptPreviewAnchor: PaneAnchor | null = null;
-  let keptEditorAnchor: PaneAnchor | null = null;
 
   /**
-   * 들어가는 Editor에 적용할 복원 — `line`은 앵커 점프(0-based), `px`는 정확 복원.
+   * 들어가는 Editor가 점프할 0-based 소스 라인.
    *
    * ⚠️ 큐가 필요한 이유: Editor는 지연 로드(#150)라 `setMainPane` 직후 `await tick()`
    * 한 번으로는 `editorApi`가 아직 없을 수 있다(청크 첫 로드). 그때 그냥 `?.`로 흘리면
    * 첫 ⌘E에서만 위치 이월이 **조용히** 누락된다.
    */
-  let pendingEditorRestore: { line: number } | { px: number } | null = null;
+  let pendingEditorLine: number | null = null;
 
-  function applyPendingEditorRestore() {
-    const r = pendingEditorRestore;
-    if (!r || !editorApi) return;
-    pendingEditorRestore = null;
-    if ("line" in r) editorApi.jumpToLine(r.line + 1);
-    else editorApi.setScrollTop(r.px);
+  function applyPendingEditorLine() {
+    if (pendingEditorLine === null || !editorApi) return;
+    const line = pendingEditorLine;
+    pendingEditorLine = null;
+    editorApi.jumpToLine(line + 1);
     editorApi.focus();
   }
 
   // api가 붙는 순간을 잡아 큐를 비운다 (위 ⚠️).
   $effect(() => {
-    if (editorApi) applyPendingEditorRestore();
+    if (editorApi) applyPendingEditorLine();
   });
 
   /** 프리뷰에서 지금 화면 상단에 걸린 섹션. 첫 헤딩보다 위면 문서 맨 위. */
@@ -813,11 +812,9 @@
     // 떠나는 페인이 가리키던 섹션 = 들어가는 페인이 맞춰야 할 위치.
     let incoming: PaneAnchor;
     if (next === "preview") {
-      keptEditorScrollTop = editorApi?.getScrollTop() ?? 0;
       incoming = editorApi
         ? anchorForLine(parsed.headings, editorApi.getFocusLine() - 1)
         : TOP_ANCHOR;
-      keptEditorAnchor = incoming;
       if (get(isDirty)) await saveCurrentNote();
     } else {
       keptPreviewScrollTop = previewBodyEl?.scrollTop ?? 0;
@@ -844,10 +841,8 @@
         if (previewBodyEl) previewBodyEl.scrollTop = keptPreviewScrollTop;
       }
     } else {
-      pendingEditorRestore = sameAnchor(keptEditorAnchor, incoming)
-        ? { px: keptEditorScrollTop }
-        : { line: incoming.line };
-      applyPendingEditorRestore();
+      pendingEditorLine = incoming.line;
+      applyPendingEditorLine();
     }
   }
 
