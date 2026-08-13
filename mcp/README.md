@@ -29,12 +29,25 @@ MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같�
 
 Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인코드 제외) ·
 `extract_md_links` · `collect_all_props`가 전부 Rust 전용이다. 재구현하면 스캐너가 두 벌이
-되고 drift가 생긴다. → **MCP는 캐시를 읽기만 하고, stale이면 실패한다.**
+되고 drift가 생긴다. → **MCP는 캐시를 읽기만 한다.**
 
-앱이 떠 있으면 watcher가 알아서 갱신한다. ⚠️ 다만 **커밋까지 10~20초**다 — shard 8개를 쓴
-뒤 meta를 **마지막에** 커밋하기 때문(그 순서가 meta↔shard skew를 막는다, `search_cache.rs` v7).
-그 동안 `stale`이 계속 나는 건 정상이다. 실측으로 앱 기동 직후 질의가 `stale`을 받았고
-재빌드가 끝나자 통과했다.
+앱이 떠 있으면 watcher가 갱신한다. ⚠️ **커밋까지 10~20초**다 — shard 8개를 쓴 뒤 meta를
+**마지막에** 커밋하기 때문(그 순서가 meta↔shard skew를 막는다, `search_cache.rs` v7).
+
+### staleness는 막지 않고 **보고**한다
+
+초기 설계는 fail-closed였는데 **실측이 전제를 뒤집었다.** 살아 있는 vault는 커밋 사이에도
+계속 쓰인다 — 2026-08-13 실측에서 **19,202개 중 3개(0.016%)** 가 캐시보다 새로웠고, 그
+상태로 모든 질의가 실패했다. 0.016%로 도구를 세우는 건 비례하지 않고, 무엇보다 **하드
+실패 자체가 판단**이다(이 서버의 원칙은 "판단하지 않는다").
+
+```json
+"stale": { "newer_count": 5, "total": 19203, "behind_s": 293,
+           "sample": ["lysn-epic/memories/MEMORY.md", "…"] }
+```
+
+**필드가 없으면 최신**이라는 뜻이다. 있으면 몇 개가 얼마나 앞서는지 보고 판단하라 —
+보통 몇 건이면 결과에 영향이 없고, 수백 건이면 앱이 꺼져 있었다는 신호다.
 
 ## 인자
 
@@ -69,8 +82,10 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 
 `{ error: { kind, message, remedy } }`.
 
-`cache_absent` · `version_skew` · `corrupt` · `stale` · `vault_ambiguous` ·
+`cache_absent` · `version_skew` · `corrupt` · `vault_ambiguous` ·
 `vault_not_found` · `path_not_indexed` · `shard_incomplete` · `no_criteria`
+
+(`stale`은 오류가 아니라 응답 필드다 — 위 참조.)
 
 **부분 인덱스로 검색하지 않는다.** shard가 하나라도 결손·skew면 실패한다 — "검색했는데
 안 나온다"는 소비자에게 "없다"로 읽히고, 그건 없는 것보다 나쁘다.
@@ -106,8 +121,7 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
   토크나이저 문제라 MCP에서 못 고친다 — 앱을 바꾸면 `CACHE_VERSION` bump다.
 - **stale 판정이 mtime 프록시다.** meta의 `fingerprint`가 Rust `DefaultHasher`(std가 값
   안정성을 부정)라 JS로 재현할 수 없다. **삭제만 있고 수정이 없는 변경을 놓친다.**
-- **캐시 디렉터리가 dev·릴리즈 공통**(`com.lapis.dev`). 두 빌드의 `CACHE_VERSION`이 다르면
-  서로의 캐시를 덮어쓴다. MCP 결함은 아니지만 개발 중엔 겪는다.
+- **매 질의마다 vault를 walk 한다**(19,000 파일, 실측 53~66 ms). staleness 보고 비용이다.
 
 ## 개발
 

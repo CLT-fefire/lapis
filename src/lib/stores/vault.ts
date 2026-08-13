@@ -666,20 +666,32 @@ export async function reindexIncremental(
     clearBacklinkCache();
 
     // 디스크 캐시 백그라운드 재저장 → 다음 launch 캐시 HIT 유지(변경 fingerprint 반영).
-    if (ftReady) {
-      const infosForSave = infos;
-      const shardForSave = activeShardCount;
-      setTimeout(() => {
-        void (async () => {
-          try {
-            const fp = await vaultFingerprint(root);
-            await saveSearchCache(root, infosForSave, shardForSave, fp.fingerprint);
-          } catch (e) {
-            console.warn("[reindex] 캐시 재저장 실패", e);
-          }
-        })();
-      }, 0);
-    }
+    //
+    // ⚠️ **`ftReady`로 감싸지 않는다.** 예전엔 `if (ftReady)`가 이 블록 전체를 막았다.
+    // 그런데 `saveSearchCache`는 이미 내부에서 구조(meta)와 풀텍스트(shard)의 게이트를
+    // 나눠 놓았다 — meta는 항상 쓰고, shard는 준비됐을 때만 쓴다. 바깥에서 다시 막으면
+    // 그 분리가 **무의미해지고 구조 데이터가 풀텍스트 상태에 다시 종속된다.**
+    //
+    // 실제 증상: cache **HIT**로 뜬 세션에서는 풀텍스트가 idle 지연 로드라 이 시점에
+    // `ftReady`가 아직 false다 → 편집해도 디스크 캐시가 **영영 갱신되지 않는다**.
+    // 실측(2026-08-13)으로 MISS 기동은 저장하고 HIT 기동은 안 하는 게 재현됐다:
+    // 두 경우 모두 `scan_link_single`까지 왔는데 `vault_fingerprint` 호출이 HIT에서만
+    // 늘지 않았다(저장 경로가 그걸 부른다).
+    //
+    // 이게 지식 질의 MCP의 전제를 깼다 — "앱을 켜두면 인덱스가 최신"이 거짓이었고,
+    // 편집 직후부터 앱을 재시작할 때까지 계속 `stale`이었다.
+    const infosForSave = infos;
+    const shardForSave = activeShardCount;
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const fp = await vaultFingerprint(root);
+          await saveSearchCache(root, infosForSave, shardForSave, fp.fingerprint);
+        } catch (e) {
+          console.warn("[reindex] 캐시 재저장 실패", e);
+        }
+      })();
+    }, 0);
   } finally {
     reloadInFlight = false;
     indexRefreshing.set(false);
