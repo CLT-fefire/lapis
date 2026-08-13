@@ -1,4 +1,5 @@
 mod git;
+mod paths;
 mod search_cache;
 mod settings;
 mod vault;
