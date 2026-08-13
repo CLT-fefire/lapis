@@ -31,7 +31,10 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 `extract_md_links` · `collect_all_props`가 전부 Rust 전용이다. 재구현하면 스캐너가 두 벌이
 되고 drift가 생긴다. → **MCP는 캐시를 읽기만 하고, stale이면 실패한다.**
 
-앱이 떠 있으면 watcher가 2초 안에 갱신하므로 실사용에서 문제가 되지 않는다.
+앱이 떠 있으면 watcher가 알아서 갱신한다. ⚠️ 다만 **커밋까지 10~20초**다 — shard 8개를 쓴
+뒤 meta를 **마지막에** 커밋하기 때문(그 순서가 meta↔shard skew를 막는다, `search_cache.rs` v7).
+그 동안 `stale`이 계속 나는 건 정상이다. 실측으로 앱 기동 직후 질의가 `stale`을 받았고
+재빌드가 끝나자 통과했다.
 
 ## 인자
 
