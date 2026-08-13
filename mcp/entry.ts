@@ -14,6 +14,11 @@ export { buildIndex } from "$lib/linkIndex";
 export { buildTagIndex } from "$lib/stores/tags";
 export { applyFilters } from "$lib/stores/filters";
 export { koBigramTokenize, normalizeTerm } from "$lib/koTokenize";
-export { FULLTEXT_OPTIONS, unionRank, type FullTextDoc } from "$lib/fullTextOptions";
+export {
+  FULLTEXT_OPTIONS,
+  unionRank,
+  unionRankDetailed,
+  type FullTextDoc,
+} from "$lib/fullTextOptions";
 export type { LinkInfo } from "$lib/tauri/notes";
 export type { LinkIndex } from "$lib/linkIndex";
