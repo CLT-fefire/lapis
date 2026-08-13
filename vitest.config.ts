@@ -16,6 +16,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // `mcp/`는 앱이 만든 캐시를 읽는 지식 질의 MCP 서버 — `$lib`을 import하므로 같은
+    // alias가 필요하고, 순수 Node라 같은 환경에서 돈다.
+    include: ["src/**/*.test.ts", "mcp/**/*.test.ts"],
   },
 });

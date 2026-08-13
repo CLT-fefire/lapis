@@ -1,0 +1,22 @@
+{
+  // 루트 tsconfig는 SvelteKit이 생성한 include를 상속해서 `src/`·`test/`만 본다
+  // (`.svelte-kit/tsconfig.json`). 그래서 `mcp/`는 `npm run check`에 **안 잡혔다.**
+  // 여기서 별도로 잡고, `npm run check:mcp`가 이 설정으로 검사한다.
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2023",
+    "module": "esnext",
+    // ⚠️ **`bundler`여야 한다.** 실제 실행 경로가 esbuild 번들이고, 앱 코드는 확장자 없는
+    // bundler 스타일 import를 쓴다(`$lib/linkIndex`). `nodenext`로 두면 그 import들이
+    // 해소되지 않아 타입이 조용히 `any`/`unknown`으로 떨어진다 — 오류가 아니라 **무음
+    // 타입 소실**이라 더 나쁘다.
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "paths": { "$lib/*": ["../src/lib/*"] }
+  },
+  "include": ["**/*.ts"]
+}
