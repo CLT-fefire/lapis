@@ -5,7 +5,7 @@
  * fingerprint가 바뀌고 ⓑ 19,000노트라 느리고 ⓒ 개인 문서 내용이 단정문에 박힌다.
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,6 +24,23 @@ export interface FixtureNote {
   targets?: string[];
   /** frontmatter cross-ref — `{ 필드: [노트 stem] }`. */
   related?: Record<string, string[]>;
+}
+
+/**
+ * 만든 임시 디렉터리 목록. ⚠️ 이게 없으면 테스트가 돌 때마다 `$TMPDIR`에 디렉터리가
+ * 쌓인다 — 실제로 470여 개가 남아 있었다. 테스트 훅에서 `cleanupFixtures()`를 부른다.
+ */
+const created: string[] = [];
+
+/** 이 실행에서 만든 픽스처 디렉터리를 전부 지운다. 실패는 무시(임시 파일일 뿐이다). */
+export function cleanupFixtures(): void {
+  for (const dir of created.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* 무시 */
+    }
+  }
 }
 
 export interface Fixture {
@@ -51,12 +68,10 @@ export function makeFixture(
   } = {},
 ): Fixture {
   const cacheDir = mkdtempSync(path.join(tmpdir(), "lapis-mcp-fixture-"));
+  created.push(cacheDir);
   const vaultRoot = opts.vaultRoot ?? path.join(cacheDir, "vault");
   const key = "fixturekey000001";
   const fingerprint = opts.fingerprint ?? "f1f1f1f1f1f1f1f1";
-
-  const stemToAbs = new Map<string, string>();
-  for (const n of notes) stemToAbs.set(basename(n.rel), `${vaultRoot}/${n.rel}`);
 
   const infos: LinkInfo[] = notes.map((n) => ({
     source_path: `${vaultRoot}/${n.rel}`,

@@ -46,13 +46,16 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 | `sources` | — | 팔 한정 |
 | `exclude` | — | vault 상대 **문자열 prefix** 배열 |
 | `include_archive` | — | `_memories` 기본 제외 해제 |
-| `limit` | — | 기본 10, 상한 50 |
+| `limit` | — | 기본 10, 상한 50. `0`은 1로 클램프(기본값으로 튀지 않는다) |
 | `vault` | — | vault 루트 절대 경로 |
 
 ### 알아야 하는 동작 4가지
 
-1. **구조 + `text`를 같이 주면 구조가 필터, BM25가 순위.** 구조만 주면 그 집합 전건(랭킹 없음).
-   구조 집합은 상한을 넘어도 자르지 않고 `truncated: true`로 알린다.
+1. **구조 + `text`를 같이 주면 구조가 필터, BM25가 순위.** 구조만 주면 그 집합을 먼저 싣는다.
+   **`limit`은 항상 지킨다**(상한 50). 집합이 더 크면 `structural_total`로 전체 크기를,
+   버린 게 있으면 `truncated: true`를 낸다. ⚠️ 초기엔 "구조는 안 자른다"를 전건 적재로
+   구현했다가 `{doc_kind:"solution", limit:10}`이 **130행 38 KB**를 냈다 — 바이트를 줄이려고
+   만든 도구가 그 반대를 했다. 지금은 같은 질의가 **3.0 KB**다.
 2. **`backlinks_of`는 본문 링크 ∪ frontmatter `related`/`amends`/`superseded_by`.**
    `via`가 근거를 구분해 낸다. 본문만 보면 실측 8건 중 3건을 놓친다.
 3. **`_memories`는 기본 제외.** vault의 94%(18,039/19,222)라서 BM25 상위를 익사시킨다.
@@ -106,7 +109,7 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 ## 개발
 
 ```bash
-npm run test -- mcp/     # 픽스처 기반 28건 (라이브 캐시에 의존하지 않는다)
+npm run test -- mcp/     # 픽스처 기반 53건 (라이브 캐시에 의존하지 않는다)
 npm run check:mcp        # tsc — ⚠️ 루트 `npm run check`는 `src/`만 본다
 ```
 

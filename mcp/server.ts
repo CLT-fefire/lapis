@@ -56,6 +56,14 @@ const TOOL = {
   },
 } as const;
 
+/**
+ * 지원하는 프로토콜 버전. 클라이언트가 요청한 게 이 안에 있으면 그걸 되울리고,
+ * 없으면 우리 최신을 돌려줘 클라이언트가 호환을 판단하게 한다(MCP 규약).
+ * ⚠️ 예전엔 요청을 보지 않고 상수를 돌려줘서, 나중에 프로토콜이 바뀌면 원인이 서버
+ * 하드코딩이라는 걸 알아채기 어려웠다.
+ */
+const SUPPORTED_PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
+
 function send(msg: unknown): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
@@ -73,12 +81,18 @@ function handle(line: string): void {
   };
 
   switch (method) {
-    case "initialize":
+    case "initialize": {
+      const asked = params?.protocolVersion;
+      const agreed =
+        typeof asked === "string" && SUPPORTED_PROTOCOLS.includes(asked as never)
+          ? asked
+          : SUPPORTED_PROTOCOLS[0];
       return reply({
-        protocolVersion: "2024-11-05",
+        protocolVersion: agreed,
         capabilities: { tools: {} },
         serverInfo: { name: "lapis-mcp", version: "1.0.0" },
       });
+    }
     case "notifications/initialized":
     case "notifications/cancelled":
       return;

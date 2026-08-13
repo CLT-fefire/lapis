@@ -12,14 +12,8 @@
 
 export { buildIndex } from "$lib/linkIndex";
 export { buildTagIndex } from "$lib/stores/tags";
-export { applyFilters, buildFacetCounts } from "$lib/stores/filters";
+export { applyFilters } from "$lib/stores/filters";
 export { koBigramTokenize, normalizeTerm } from "$lib/koTokenize";
-export {
-  FULLTEXT_OPTIONS,
-  MAX_SHARDS,
-  unionRank,
-  type FullTextDoc,
-  type FullTextHit,
-} from "$lib/fullTextOptions";
+export { FULLTEXT_OPTIONS, unionRank, type FullTextDoc } from "$lib/fullTextOptions";
 export type { LinkInfo } from "$lib/tauri/notes";
 export type { LinkIndex } from "$lib/linkIndex";

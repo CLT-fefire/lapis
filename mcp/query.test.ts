@@ -6,7 +6,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { addSiblingMeta, makeFixture, SAMPLE_NOTES, type Fixture } from "./fixture.ts";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
+import {
+  addSiblingMeta,
+  cleanupFixtures,
+  makeFixture,
+  SAMPLE_NOTES,
+  type Fixture,
+} from "./fixture.ts";
 import {
   lapisQuery,
   resetState,
@@ -17,6 +26,8 @@ import {
 import { LapisError } from "./cache.ts";
 
 let fx: Fixture;
+/** 테스트가 makeFixture를 안 거치고 직접 만든 임시 디렉터리. */
+const scratch: string[] = [];
 
 function setup(opts: Parameters<typeof makeFixture>[1] = {}, notes = SAMPLE_NOTES) {
   fx = makeFixture(notes, opts);
@@ -29,6 +40,9 @@ beforeEach(() => setup());
 afterEach(() => {
   delete process.env.LAPIS_CACHE_DIR;
   resetState();
+  // 안 하면 매 실행마다 $TMPDIR에 픽스처 디렉터리가 쌓인다(실측 470여 개 누적).
+  cleanupFixtures();
+  for (const d of scratch.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
 /** 검색 응답으로 좁힌다 — `list` 응답이 오면 테스트가 그 자리에서 실패해야 한다. */
@@ -63,7 +77,16 @@ describe("인자 검증", () => {
 
   it("limit은 1~50으로 클램프된다", () => {
     expect(search({ doc_kind: "solution", limit: 999 }).returned).toBeLessThanOrEqual(50);
-    expect(search({ doc_kind: "adr", limit: 0 }).returned).toBeGreaterThan(0);
+  });
+
+  // ⚠️ `Math.trunc(limit) || DEFAULT_LIMIT`가 falsy-zero에 걸려 0을 **10으로** 바꿨다.
+  // 명시적으로 준 값이 조용히 다른 값이 되면 응답 크기를 통제하려는 호출자가 원인을 못 찾는다.
+  it("limit:0은 기본값 10이 아니라 하한 1로 간다", () => {
+    expect(search({ doc_kind: "adr", limit: 0 }).returned).toBe(1);
+  });
+
+  it("limit이 NaN이면 기본값으로 떨어진다", () => {
+    expect(search({ doc_kind: "adr", limit: Number.NaN }).returned).toBe(2);
   });
 });
 
@@ -124,11 +147,52 @@ describe("병합 규칙 — 구조는 집합이거나 필터", () => {
     expect(r.results.every((x) => x.score === null)).toBe(true);
   });
 
-  // 구조 집합이 상한을 넘어도 자르지 않는다 — 잘림을 모르면 "인덱스에 없다"와 혼동한다.
-  it("구조 집합은 상한을 넘어도 자르지 않고 truncated로 알린다", () => {
+  // ⚠️ 예전엔 "구조는 안 자른다"를 pool 전건 적재로 구현해 `limit`이 무의미했다.
+  // 실측으로 `{doc_kind:"solution", limit:10}`이 130행 38 KB를 냈다 — grep 베이스라인
+  // 4문항 전체가 45 KB였으니 단일 질의가 그보다 컸다.
+  it("구조 집합도 limit을 지키고, 남은 건 structural_total로 알린다", () => {
     const r = search({ doc_kind: "adr", limit: 1 });
-    expect(r.returned).toBe(2);
+    expect(r.returned).toBe(1); // ← 상한 준수
+    expect(r.structural_total).toBe(2); // ← 집합 크기는 따로 통보
     expect(r.truncated).toBe(true);
+  });
+
+  it("상한 안에 다 들어가면 truncated는 false다", () => {
+    const r = search({ doc_kind: "adr", limit: 10 });
+    expect(r.returned).toBe(2);
+    expect(r.structural_total).toBe(2);
+    expect(r.truncated).toBe(false);
+  });
+
+  // 예전엔 BM25 전용 질의가 수백 건 중 10건만 주면서도 truncated=false였다.
+  it("BM25 전용 질의도 버린 게 있으면 truncated다", () => {
+    const r = search({ text: "태그", limit: 1, include_archive: true });
+    expect(r.returned).toBe(1);
+    expect(r.truncated).toBe(true);
+  });
+
+  it("구조+text 교집합도 limit을 지킨다", () => {
+    const r = search({ text: "태그", doc_kind: "solution", limit: 1, include_archive: true });
+    expect(r.returned).toBe(1);
+    expect(r.structural_total).toBe(2);
+    expect(r.truncated).toBe(true);
+  });
+});
+
+describe("지연 로드 보고", () => {
+  // ⚠️ `loadBm25` **뒤에** `BM !== null`을 읽어서 항상 true였다. 실측으로 이미 로드된
+  // 2·3회차도 true였고, 그 값으로 "지연 로드를 확인했다"고 착각하게 만들었다.
+  it("lazy_loaded_now는 처음 로드한 호출에서만 true", () => {
+    const first = search({ text: "태그", include_archive: true });
+    const second = search({ text: "vitest", include_archive: true });
+    const bm = (r: SearchResponse) => r.used.find((u) => u.name === "bm25")!;
+    expect(bm(first).lazy_loaded_now).toBe(true);
+    expect(bm(second).lazy_loaded_now).toBe(false);
+  });
+
+  it("구조 전용 질의는 BM25를 아예 로드하지 않는다", () => {
+    const r = search({ doc_kind: "adr" });
+    expect(r.used.some((u) => u.name === "bm25")).toBe(false);
   });
 });
 
@@ -302,5 +366,118 @@ describe("오류 직렬화", () => {
       expect(j.error.kind).toBe("no_criteria");
       expect(j.error.remedy).toBeTruthy();
     }
+  });
+});
+
+// ── 리뷰가 지목한 미검증 오류 kind 4종 + 격리 동작 ─────────────────────
+// `stale`은 모든 질의를 막는 fail-closed 게이트인데 테스트가 0건이었다. 픽스처가 vault
+// 파일을 meta보다 **먼저** 쓰기 때문에 이 경로가 한 번도 실행되지 않았다 — 방향이
+// 뒤집히는 회귀가 들어와도 전부 통과했을 것이다.
+describe("staleness — fail-closed", () => {
+  it("vault의 노트가 캐시보다 새로우면 stale", () => {
+    const fixture = setup();
+    // 노트 하나를 meta보다 1시간 뒤로 밀어 앱이 아직 재색인하지 않은 상태를 만든다.
+    const future = new Date(Date.now() + 3_600_000);
+    utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "stale" }),
+    );
+  });
+
+  it("캐시가 노트보다 새로우면 통과", () => {
+    expect(search({ doc_kind: "adr" }).returned).toBe(2);
+  });
+});
+
+describe("캐시 부재·손상", () => {
+  it("캐시 디렉터리가 없으면 cache_absent", () => {
+    process.env.LAPIS_CACHE_DIR = nodePath.join(tmpdir(), "lapis-mcp-없는디렉터리-12345");
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "cache_absent" }),
+    );
+  });
+
+  it("meta가 하나도 없으면 cache_absent", () => {
+    const dir = mkdtempSync(nodePath.join(tmpdir(), "lapis-mcp-empty-"));
+    scratch.push(dir);
+    process.env.LAPIS_CACHE_DIR = dir;
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "cache_absent" }),
+    );
+  });
+
+  // ⚠️ 손상 파일 하나가 **정상 vault 질의를 전부 막았다.** 손상을 version_skew와 같은
+  // 통에 넣고 `size: -1`로 표시했더니 크기 비교가 그걸 "더 클 수도 있음"으로 읽었다.
+  // 메시지도 "구버전 캐시가 … v-1 -1건"으로 나가 원인을 못 짚었다.
+  it("손상된 남의 캐시 1개는 정상 vault를 막지 않는다", () => {
+    const fixture = setup();
+    writeFileSync(nodePath.join(fixture.cacheDir, "junkkey000000001.meta.json.gz"), "gzip 아님");
+    resetState();
+    expect(search({ doc_kind: "adr" }).returned).toBe(2);
+  });
+
+  it("쓸 수 있는 캐시가 없고 손상만 있으면 corrupt", () => {
+    const dir = mkdtempSync(nodePath.join(tmpdir(), "lapis-mcp-corrupt-"));
+    scratch.push(dir);
+    writeFileSync(nodePath.join(dir, "junkkey000000001.meta.json.gz"), "gzip 아님");
+    process.env.LAPIS_CACHE_DIR = dir;
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "corrupt" }),
+    );
+  });
+
+  // ⚠️ `statSync`에 try/catch가 없어 생 ENOENT가 `kind:"internal"`로 나갔다.
+  it("질의 사이에 meta가 지워지면 internal이 아니라 cache_absent", () => {
+    const fixture = setup();
+    expect(search({ doc_kind: "adr" }).returned).toBe(2);
+    rmSync(nodePath.join(fixture.cacheDir, `${fixture.key}.meta.json.gz`));
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "cache_absent" }),
+    );
+  });
+});
+
+describe("vault 동률", () => {
+  it("같은 크기 캐시가 둘이면 vault_ambiguous", () => {
+    const fixture = setup();
+    addSiblingMeta(fixture, {
+      key: "twinkey000000001",
+      version: 7,
+      noteCount: SAMPLE_NOTES.length,
+      vaultRoot: "/other/twin",
+    });
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "vault_ambiguous" }),
+    );
+  });
+
+  it("동률이어도 vault를 명시하면 해소된다", () => {
+    const fixture = setup();
+    addSiblingMeta(fixture, {
+      key: "twinkey000000001",
+      version: 7,
+      noteCount: SAMPLE_NOTES.length,
+      vaultRoot: "/other/twin",
+    });
+    resetState();
+    expect(search({ doc_kind: "adr", vault: fixture.vaultRoot }).vault).toBe(fixture.vaultRoot);
+  });
+});
+
+describe("vault 인자 정규화", () => {
+  // ⚠️ 캐시 재사용 판정만 `norm()`을 쓰고 `resolveVault`는 `path.resolve` + 후행 슬래시
+  // 제거까지 했다. 그래서 슬래시 하나 차이로 매 호출 전체 재로드 + BM25 8 shard
+  // 재로드(실측 1.4초)가 일어났다.
+  it("후행 슬래시가 있어도 인덱스를 다시 로드하지 않는다", () => {
+    const fixture = setup();
+    search({ text: "태그", vault: fixture.vaultRoot, include_archive: true });
+    const again = search({ text: "vitest", vault: fixture.vaultRoot + "/", include_archive: true });
+    const bm = again.used.find((u) => u.name === "bm25")!;
+    expect(bm.lazy_loaded_now).toBe(false); // 재로드했다면 true가 된다
   });
 });

@@ -33,7 +33,15 @@ import {
   type LinkIndex,
   type LinkInfo,
 } from "./entry.ts";
-import { LapisError, checkStale, loadShards, norm, resolveVault, type VaultCache } from "./cache.ts";
+import {
+  LapisError,
+  checkStale,
+  loadShards,
+  norm,
+  normalizeVaultArg,
+  resolveVault,
+  type VaultCache,
+} from "./cache.ts";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
@@ -81,8 +89,13 @@ export interface SearchResponse extends ResponseBase {
   list?: undefined;
   used: Record<string, unknown>[];
   resolved_target?: string;
+  /** 실제로 실린 행 수. 항상 `limit` 이하. */
   returned: number;
+  /** 실린 행 중 구조 팔에서 온 수. */
   structural_count: number;
+  /** 구조 팔 집합의 **전체** 크기(상한 적용 전). 구조 인자가 없으면 0. */
+  structural_total: number;
+  /** 상한 때문에 **실제로 버린 행이 있는가**. 구조·BM25 어느 쪽이든 포함. */
   truncated: boolean;
   results: ResultRow[];
 }
@@ -118,8 +131,21 @@ let BM: MiniSearch<FullTextDoc>[] | null = null;
 function loadStructural(vaultArg?: string): Loaded {
   // 앱이 재빌드하면 우리 메모리는 낡는다 — meta mtime 1회 stat으로 감지해 다시 읽는다.
   if (ST) {
-    const fresh = statSync(ST.vc.metaFile).mtimeMs;
-    if (fresh === ST.metaMs && (!vaultArg || ST.vc.root === norm(vaultArg))) return ST;
+    // ⚠️ `resolveVault`와 **같은 정규형**으로 비교해야 한다. 예전엔 여기서 `norm()`만
+    // 했는데 `resolveVault`는 `path.resolve()` + 후행 슬래시 제거까지 한다. 그래서
+    // `vault: ".../knowledge/"` 처럼 슬래시 하나만 달라도 매 호출 전체 재로드 +
+    // `BM = null`로 풀텍스트 8 shard 재로드(실측 1.4초)가 일어났다.
+    const wantRoot = vaultArg ? normalizeVaultArg(vaultArg) : null;
+    let fresh: number | null = null;
+    try {
+      fresh = statSync(ST.vc.metaFile).mtimeMs;
+    } catch {
+      // 질의 사이에 캐시가 지워졌다(v7 GC·수동 정리). 생 ENOENT를 던지면 소비자에게
+      // `kind:"internal"`로 나가 복구 방법을 알려주지 못한다 → 아래에서 재해소한다.
+      ST = null;
+      BM = null;
+    }
+    if (ST && fresh === ST.metaMs && (!wantRoot || ST.vc.root === wantRoot)) return ST;
     BM = null; // 인덱스가 바뀌었으면 풀텍스트도 무효다
   }
   const vc = resolveVault(vaultArg);
@@ -220,6 +246,11 @@ function snippet(abs: string, text?: string): string | null {
  * "전부 찾아라"의 완결성은 결국 `topic` 정확일치가 냈는데, 판정 세션은 `tag-system` ·
  * `multi-window` 같은 **값을 BM25 결과 메타에 우연히 노출돼서** 알았다. `topic`을 쓸지
  * `tag`를 쓸지 판단할 근거도 응답 안에 없었다. 값을 찍어 맞히게 하지 않는다.
+ *
+ * 앱의 `buildFacetCounts`를 쓰지 않는다 — 그쪽은 doc_kind·topic **둘만** 세고 `tags`도
+ * `exclude`도 모른다. 세 종류를 한 순회로 처리하는 편이 doc_kind/topic만 위임하고 tags를
+ * 따로 도는 것보다 단순하다. ⚠️ 대신 **카운트 규칙이 갈릴 수 있다** — 앱 facet 패널과
+ * 숫자가 어긋나면 여기부터 본다.
  */
 function listFacet(
   st: Loaded,
@@ -270,7 +301,10 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     );
   }
 
-  const cap = Math.min(Math.max(1, Math.trunc(limit) || DEFAULT_LIMIT), MAX_LIMIT);
+  // ⚠️ `Math.trunc(limit) || DEFAULT_LIMIT`로 쓰면 `limit: 0`이 10으로 조용히 바뀐다
+  // (falsy-zero). 아래 `Math.max(1, …)`가 이미 하한을 보장하므로 폴백은 NaN만 잡는다.
+  const wanted = Math.trunc(limit);
+  const cap = Math.min(Math.max(1, Number.isFinite(wanted) ? wanted : DEFAULT_LIMIT), MAX_LIMIT);
   const ex = [...exclude.map(norm), ...(include_archive ? [] : ARCHIVE_PREFIXES)];
   const allow = new Set<string>(sources ?? ["bm25", "structural"]);
 
@@ -370,6 +404,9 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
 
   let ranked: { path: string; score: number }[] = [];
   if (text && allow.has("bm25")) {
+    // ⚠️ `loadBm25` **전에** 잡아야 한다. 뒤에서 `BM !== null`을 읽으면 항상 true다
+    // (실측: 이미 로드된 2·3회차도 true였다 — 지연 로드를 확인했다고 착각하게 만든다).
+    const wasLoaded = BM !== null;
     const idxs = loadBm25(st);
     ranked = unionRank(idxs, text, 0)
       .map((h) => ({ path: norm(h.path), score: h.score }))
@@ -378,7 +415,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
       name: "bm25",
       corpus_size: idxs.reduce((n, i) => n + i.documentCount, 0),
       matched: ranked.length,
-      lazy_loaded_now: BM !== null,
+      lazy_loaded_now: !wasLoaded,
     });
   }
 
@@ -397,51 +434,63 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   };
 
   // ── 병합 — 인자 조합에 따라 구조 팔의 성격이 다르다 ──────────────────
-  //  · 구조만        → **집합**이다. 전건 싣고 자르지 않는다.
+  //  · 구조만        → **집합**이다. 상한 안에서 구조를 먼저 싣는다.
   //  · 구조 + text   → **필터**다. 교집합을 BM25 점수로 정렬한다.
+  //
   // ⚠️ "구조는 언제나 안 자른다"로 두면 넓은 facet이 랭킹 없이 앞을 다 채운다.
   //    실측: `{text:"태그 체계", doc_kind:"solution"}`이 solution 130건을 무순위로 쏟아
-  //    정답이 **#128**. 이 규칙으로 고친 뒤 **#2**.
+  //    정답이 **#128**. 구조를 먼저 채우는 규칙으로 고친 뒤 **#2**.
+  //
+  // ⚠️ 그런데 그걸 "pool 전건을 싣는다"로 구현하면 **`limit`이 무의미해지고 응답이
+  //    무제한이 된다.** 실측 `{doc_kind:"solution", limit:10}`이 **130행 38 KB**,
+  //    `{tag:"tech", limit:10}`이 **284행 72 KB**였다(행마다 `snippet` 파일 읽기까지).
+  //    grep 베이스라인이 4문항 45 KB였으니 단일 질의가 그보다 컸다 — 이 도구의 존재
+  //    이유를 스스로 무너뜨린다. 원래 의도는 "BM25 노이즈가 구조 결과를 밀어내지 않게"
+  //    였으므로 **구조 우선 + 상한 준수 + `structural_total`로 집합 크기 통보**로 만족시킨다.
   const results: ResultRow[] = [];
   const seen = new Set<string>();
+
+  // 상한과 무관한 구조 집합의 전체 크기. 잘림 판정과 통보에 쓴다.
+  const poolLive = pool === null ? [] : [...pool].filter((abs) => !excluded(st.rel(abs), ex));
+  const structuralTotal = poolLive.length;
   let structuralCount = 0;
-  let truncated = false;
 
   if (pool !== null && text && allow.has("bm25")) {
+    // 구조 ∩ BM25를 점수순으로 먼저.
     for (const r of ranked) {
       if (results.length >= cap) break;
       if (!pool.has(r.path) || seen.has(r.path)) continue;
       seen.add(r.path);
       results.push(row(r.path, Number(r.score.toFixed(4)), ["structural", "bm25"]));
     }
-    structuralCount = results.length;
-    // 구조엔 있는데 BM25가 못 본 건은 점수 없이 뒤에 붙인다(집합 정보 보존).
-    for (const abs of pool) {
-      if (seen.has(abs) || excluded(st.rel(abs), ex)) continue;
-      if (results.length >= cap) {
-        truncated = true;
-        break;
-      }
+    // 구조엔 있는데 BM25가 못 본 건을 점수 없이 뒤에 붙인다(집합 정보 보존).
+    for (const abs of poolLive) {
+      if (results.length >= cap) break;
+      if (seen.has(abs)) continue;
       seen.add(abs);
       results.push(row(abs, null, ["structural"]));
     }
+    structuralCount = results.length;
   } else {
     const bmSet = new Set(ranked.map((r) => r.path));
-    for (const abs of pool ?? []) {
-      if (excluded(st.rel(abs), ex)) continue;
+    for (const abs of poolLive) {
+      if (results.length >= cap) break;
       seen.add(abs);
       results.push(row(abs, null, bmSet.has(abs) ? ["structural", "bm25"] : ["structural"]));
     }
     structuralCount = results.length;
-    // 구조 집합은 상한을 넘어도 자르지 않는다 — 잘림을 모르면 "인덱스에 없다"와 혼동한다.
-    truncated = structuralCount > cap;
     for (const r of ranked) {
-      if (results.length >= Math.max(cap, structuralCount)) break;
+      if (results.length >= cap) break;
       if (seen.has(r.path)) continue;
       seen.add(r.path);
       results.push(row(r.path, Number(r.score.toFixed(4)), ["bm25"]));
     }
   }
+
+  // **실제로 버린 행이 있을 때만** true. 예전엔 구조 전용 분기가 아무것도 자르지 않은 채
+  // `structuralCount > cap`으로 true를 냈다 — 소비자는 "잘렸다"로 읽는데 잘린 게 없었다.
+  // 반대로 BM25 전용 질의는 553건 중 10건만 주면서 false였다.
+  const truncated = structuralTotal > structuralCount || ranked.some((r) => !seen.has(r.path));
 
   // 필수 메타를 배열 **앞에** 둔다 — 응답이 잘려도 `used`·`vault`가 살아남게.
   return {
@@ -450,6 +499,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     ...(resolvedTarget ? { resolved_target: st.rel(resolvedTarget) } : {}),
     returned: results.length,
     structural_count: structuralCount,
+    structural_total: structuralTotal,
     truncated,
     results,
   };

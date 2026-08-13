@@ -41,6 +41,13 @@ function cacheDirs(): string[] {
 
 export const norm = (s: string): string => s.normalize("NFC");
 
+/**
+ * `vault` 인자의 정규형. **`resolveVault`와 캐시 재사용 판정이 같은 함수를 써야 한다** —
+ * 한쪽만 `norm()`을 하면 후행 슬래시 하나로 매 호출 전체 재로드가 일어난다(실측).
+ */
+export const normalizeVaultArg = (v: string): string =>
+  norm(path.resolve(v)).replace(/\/+$/, "");
+
 export type ErrorKind =
   | "cache_absent"
   | "version_skew"
@@ -88,8 +95,10 @@ interface Candidate {
   key: string;
   dir: string;
   file: string;
-  /** null = 이 후보는 version_skew로 못 읽었다. */
+  /** null = 이 후보를 쓸 수 없다. 이유는 `bad`가 구분한다. */
   meta: RawMeta | null;
+  /** 왜 못 쓰는가. `null`이면 정상 후보다. */
+  bad: "corrupt" | "version_skew" | null;
   version: number;
   root: string | null;
   size: number;
@@ -114,12 +123,16 @@ function listCandidates(): Candidate[] {
       let parsed: RawMeta;
       try {
         parsed = JSON.parse(gunzipSync(readFileSync(file)).toString("utf8"));
-      } catch (e) {
-        // 손상은 조용히 넘기지 않는다 — 이 vault를 물으면 실패해야 한다.
-        out.push({ key, dir, file, meta: null, version: -1, root: null, size: -1 });
+      } catch {
+        // ⚠️ 손상을 `version_skew`와 섞지 말 것. 예전엔 둘을 같은 통에 넣고 `size: -1`로
+        // 표시했는데, 크기 비교가 `size < 0`을 "더 클 수도 있음"으로 읽어 **손상 파일
+        // 하나가 정상 vault 질의를 전부 막았다.** 게다가 메시지가
+        // "구버전 캐시가 지금 고른 것보다 크다 … v-1 -1건"으로 나가 원인을 못 짚었다.
+        out.push({ key, dir, file, meta: null, bad: "corrupt", version: -1, root: null, size: -1 });
         continue;
       }
       if (parsed.version !== CACHE_VERSION) {
+        // 아래 힌트 추출은 meta 스키마가 v6↔v7 동일하다는 사실에 기댄다.
         // ⚠️ 버려도 되는 정보가 아니다. **크기와 root는 힌트로 살린다** — 이걸 버리면
         // "다른 vault의 잔재 캐시 1건이 구버전"이라는 이유로 정상 vault 질의가 전부
         // 막힌다(실제로 그랬다: 35노트·1노트짜리 v6 잔재가 19,222노트 vault를 세웠다).
@@ -134,7 +147,16 @@ function listCandidates(): Candidate[] {
         } catch {
           /* 힌트 없음 — size -1로 남긴다 */
         }
-        out.push({ key, dir, file, meta: null, version: parsed.version, root: hintRoot, size: hintSize });
+        out.push({
+          key,
+          dir,
+          file,
+          meta: null,
+          bad: "version_skew",
+          version: parsed.version,
+          root: hintRoot,
+          size: hintSize,
+        });
         continue;
       }
       for (const i of parsed.link_infos) i.source_path = norm(i.source_path);
@@ -143,6 +165,7 @@ function listCandidates(): Candidate[] {
         dir,
         file,
         meta: parsed,
+        bad: null,
         version: parsed.version,
         root: deriveRoot(parsed.link_infos.map((i) => i.source_path)),
         size: parsed.link_infos.length,
@@ -203,10 +226,11 @@ export function resolveVault(vaultArg?: string): VaultCache {
   }
 
   const usable = cands.filter((c): c is Candidate & { meta: RawMeta } => c.meta !== null);
-  const skewed = cands.filter((c) => !c.meta);
+  const skewed = cands.filter((c) => c.bad === "version_skew");
+  const corrupt = cands.filter((c) => c.bad === "corrupt");
 
   if (vaultArg) {
-    const want = norm(path.resolve(vaultArg)).replace(/\/+$/, "");
+    const want = normalizeVaultArg(vaultArg);
     const hit = usable.find((c) => c.root === want);
     if (hit) return toCache(hit, hit.meta);
     // 요청한 vault가 **바로 그** skew 후보인지 정확히 말해준다.
@@ -224,6 +248,23 @@ export function resolveVault(vaultArg?: string): VaultCache {
         .map((c) => `${c.root ?? "(root 불명)"}${c.meta ? "" : ` [v${c.version} skew]`}`)
         .join(" · ")}`,
       "Lapis 앱에서 그 vault를 한 번 열어라.",
+    );
+  }
+
+  // 손상 파일은 **어느 vault인지 알 수 없다**(파싱 자체가 안 된다). 그래서 정상 후보를
+  // 막지 않고 경고만 남긴다 — 막으면 남의 쓰레기 파일 하나로 도구가 죽는다.
+  // 쓸 수 있는 후보가 아예 없을 때만 `corrupt`로 실패한다.
+  if (usable.length === 0 && corrupt.length > 0 && skewed.length === 0) {
+    throw new LapisError(
+      "corrupt",
+      `읽을 수 없는 캐시 ${corrupt.length}개: ${corrupt.map((c) => c.file).join(" · ")}`,
+      "해당 파일을 지우고 Lapis 앱에서 vault를 열어 인덱스를 재빌드하라.",
+    );
+  }
+  if (corrupt.length > 0) {
+    console.error(
+      `[lapis-mcp] 읽을 수 없는 캐시 ${corrupt.length}개를 건너뛴다: ` +
+        corrupt.map((c) => c.file).join(" · "),
     );
   }
 
