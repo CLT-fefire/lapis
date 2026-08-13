@@ -12,7 +12,12 @@ MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같�
 
 ## 등록
 
-`~/.claude.json` 또는 프로젝트 `.mcp.json`:
+클라이언트마다 설정 파일이 **다르다**:
+
+| 클라이언트 | 파일 |
+|---|---|
+| Claude Code | `~/.claude.json` (또는 프로젝트 `.mcp.json`) |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
 ```json
 {
@@ -21,6 +26,11 @@ MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같�
   }
 }
 ```
+
+⚠️ **PATH에 의존하지 않는다.** 클라이언트는 서버를 **최소 환경**으로 띄운다 — Claude
+Desktop은 `/usr/bin:/bin:/usr/sbin:/sbin` 정도만 준다. homebrew node(`/opt/homebrew/bin/node`)를
+바로 못 찾아 `exec: node: not found`로 **조용히 죽는 게** 기본값이라, 래퍼가 후보 경로를
+직접 훑는다. 특이한 위치에 있으면 `LAPIS_NODE`로 절대 경로를 준다.
 
 `lapis-mcp`가 호출 시점에 esbuild로 번들한다(16 KB, ~30ms). 사전 빌드 단계가 없다 —
 커밋된 산출물을 두면 소스와 어긋나도 아무 신호가 없기 때문이다.
