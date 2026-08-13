@@ -5,7 +5,7 @@
  * fingerprint가 바뀌고 ⓑ 19,000노트라 느리고 ⓒ 개인 문서 내용이 단정문에 박힌다.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -137,7 +137,14 @@ export function makeFixture(
  */
 export function addSiblingMeta(
   fx: Fixture,
-  opts: { key: string; version: number; noteCount: number; vaultRoot: string },
+  opts: {
+    key: string;
+    version: number;
+    noteCount: number;
+    vaultRoot: string;
+    /** meta 파일 mtime을 이만큼(ms) 밀어 "더 최신"으로 만든다. */
+    ageOffsetMs?: number;
+  },
 ): void {
   const infos = Array.from({ length: opts.noteCount }, (_, i) => ({
     source_path: `${opts.vaultRoot}/n${i}.md`,
@@ -151,12 +158,17 @@ export function addSiblingMeta(
     related: [],
     props: {},
   }));
-  writeGz(path.join(fx.cacheDir, `${opts.key}.meta.json.gz`), {
+  const file = path.join(fx.cacheDir, `${opts.key}.meta.json.gz`);
+  writeGz(file, {
     version: opts.version,
     fingerprint: "s1s1s1s1s1s1s1s1",
     link_infos: infos,
     shard_count: 1,
   });
+  if (opts.ageOffsetMs !== undefined) {
+    const t = new Date(statSync(file).mtimeMs + opts.ageOffsetMs);
+    utimesSync(file, t, t);
+  }
 }
 
 function writeGz(file: string, obj: unknown): void {

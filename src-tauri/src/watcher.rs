@@ -307,6 +307,13 @@ fn flush_bucket(bucket: &mut DebounceBucket, app: &AppHandle, root: &Path) {
                 to: path_str,
             },
         };
+        // 이벤트가 실제로 나갔는지 **stdout에서** 확인하는 통로. 프론트 리스너는
+        // webview 콘솔에만 찍혀서, "변경이 인덱스에 반영 안 된다"를 조사할 때
+        // Rust가 안 보낸 건지 프론트가 못 받은 건지 가르는 데 이 줄이 필요하다.
+        // (2026-08-13 실제로 이 줄로 "Rust는 정상, 프론트가 재저장까지 못 감"을 갈랐다.)
+        if cfg!(debug_assertions) {
+            eprintln!("[lapis] vault:change → {targets:?} {payload:?}");
+        }
         for label in &targets {
             let _ = app.emit_to(label.as_str(), "vault:change", payload.clone());
         }

@@ -18,12 +18,12 @@ import type { LinkInfo } from "./entry.ts";
 export const CACHE_VERSION = 7;
 
 /**
- * 캐시 위치. `tauri.conf.json`의 `identifier`가 **dev·릴리즈 공통**(`com.lapis.dev`)이라
- * 디렉터리는 하나다.
+ * 캐시 위치 — **두 곳을 본다.**
  *
- * ⚠️ 그래서 **설치된 앱과 `npm run tauri dev`가 같은 캐시를 공유한다.** 두 빌드의
- * `CACHE_VERSION`이 다르면 서로의 캐시를 번갈아 덮어쓰며 19,000노트를 반복 재빌드한다
- * (v7 작업 중 실제로 겪었다). 이 MCP의 결함은 아니지만 알고 있어야 한다.
+ * 릴리즈는 `com.lapis.dev/`, dev 빌드는 `com.lapis.dev-dev/`를 쓴다(`src-tauri/src/paths.rs`).
+ * 예전엔 하나였고 두 빌드가 서로의 캐시를 번갈아 덮어써 19,000노트를 반복 재인덱싱했다.
+ * 분리한 뒤로는 **어느 빌드를 띄웠든 최신 인덱스를 찾아 쓰려면 둘 다 봐야 한다** —
+ * 릴리즈 경로만 보면 dev만 띄운 상태에서 영구 `stale`이 된다.
  *
  * `LAPIS_CACHE_DIR`로 덮어쓸 수 있다 — 테스트 픽스처가 쓴다.
  *
@@ -34,9 +34,12 @@ export const CACHE_VERSION = 7;
  */
 function cacheDirs(): string[] {
   const override = process.env.LAPIS_CACHE_DIR;
-  return override
-    ? [override]
-    : [path.join(homedir(), "Library/Application Support/com.lapis.dev/search-cache")];
+  if (override) return [override];
+  const base = path.join(homedir(), "Library/Application Support");
+  return [
+    path.join(base, "com.lapis.dev", "search-cache"), // 릴리즈
+    path.join(base, "com.lapis.dev-dev", "search-cache"), // dev 빌드
+  ];
 }
 
 export const norm = (s: string): string => s.normalize("NFC");
@@ -102,6 +105,8 @@ interface Candidate {
   version: number;
   root: string | null;
   size: number;
+  /** meta 파일 mtime. 같은 vault가 두 디렉터리에 있을 때 최신을 고르는 기준. */
+  mtimeMs: number;
 }
 
 function listCandidates(): Candidate[] {
@@ -128,7 +133,17 @@ function listCandidates(): Candidate[] {
         // 표시했는데, 크기 비교가 `size < 0`을 "더 클 수도 있음"으로 읽어 **손상 파일
         // 하나가 정상 vault 질의를 전부 막았다.** 게다가 메시지가
         // "구버전 캐시가 지금 고른 것보다 크다 … v-1 -1건"으로 나가 원인을 못 짚었다.
-        out.push({ key, dir, file, meta: null, bad: "corrupt", version: -1, root: null, size: -1 });
+        out.push({
+          key,
+          dir,
+          file,
+          meta: null,
+          bad: "corrupt",
+          version: -1,
+          root: null,
+          size: -1,
+          mtimeMs: 0,
+        });
         continue;
       }
       if (parsed.version !== CACHE_VERSION) {
@@ -156,6 +171,7 @@ function listCandidates(): Candidate[] {
           version: parsed.version,
           root: hintRoot,
           size: hintSize,
+          mtimeMs: 0,
         });
         continue;
       }
@@ -169,6 +185,7 @@ function listCandidates(): Candidate[] {
         version: parsed.version,
         root: deriveRoot(parsed.link_infos.map((i) => i.source_path)),
         size: parsed.link_infos.length,
+        mtimeMs: statSync(file).mtimeMs,
       });
     }
   }
@@ -231,8 +248,9 @@ export function resolveVault(vaultArg?: string): VaultCache {
 
   if (vaultArg) {
     const want = normalizeVaultArg(vaultArg);
-    const hit = usable.find((c) => c.root === want);
-    if (hit) return toCache(hit, hit.meta);
+    // 같은 vault가 릴리즈·dev 양쪽에 있을 수 있다 → **최신 meta**를 고른다.
+    const hits = usable.filter((c) => c.root === want).sort((a, b) => b.mtimeMs - a.mtimeMs);
+    if (hits[0]) return toCache(hits[0], hits[0].meta);
     // 요청한 vault가 **바로 그** skew 후보인지 정확히 말해준다.
     const skewedHit = skewed.find((c) => c.root === want);
     if (skewedHit) {
@@ -292,14 +310,19 @@ export function resolveVault(vaultArg?: string): VaultCache {
   }
 
   const top = usable.filter((c) => c.size === maxUsable);
-  if (top.length > 1) {
+  // ⚠️ **같은 vault가 두 디렉터리에 있는 건 동률이 아니다.** dev와 릴리즈가 같은 vault를
+  //    색인하면 크기가 당연히 같다 — 이걸 ambiguous로 막으면 정상 상황에서 도구가 죽는다.
+  //    root가 같으면 **최신 meta**를 고른다.
+  const distinctRoots = new Set(top.map((c) => c.root));
+  if (distinctRoots.size > 1) {
     throw new LapisError(
       "vault_ambiguous",
-      `동률 캐시 ${top.length}개(각 ${maxUsable}건) — vault를 특정할 수 없다.`,
-      `vault 인자를 명시하라. 후보: ${top.map((c) => c.root).join(" · ")}`,
+      `서로 다른 vault ${distinctRoots.size}개가 동률이다(각 ${maxUsable}건).`,
+      `vault 인자를 명시하라. 후보: ${[...distinctRoots].join(" · ")}`,
     );
   }
-  return toCache(top[0], top[0].meta);
+  const freshest = [...top].sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
+  return toCache(freshest, freshest.meta);
 }
 
 function toCache(c: Candidate, meta: RawMeta): VaultCache {

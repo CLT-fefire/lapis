@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 const SETTINGS_FILENAME: &str = "lapis-settings.json";
 
@@ -30,12 +30,9 @@ impl Default for LapisSettings {
 }
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("app_data_dir 조회 실패: {e}"))?;
-    fs::create_dir_all(&dir).map_err(|e| format!("app_data_dir 생성 실패: {e}"))?;
-    Ok(dir.join(SETTINGS_FILENAME))
+    // dev/릴리즈 분기는 `paths`가 단일 진실 — 여기서 `app_data_dir()`을 직접 부르면
+    // dev 빌드가 릴리즈 설정을 덮어쓴다.
+    Ok(crate::paths::app_data_root(app)?.join(SETTINGS_FILENAME))
 }
 
 /// 파일에서 설정 읽기. 없거나 파싱 실패면 기본값. 시동 초입에서도 호출 가능 (app handle만 필요).

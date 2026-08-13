@@ -45,7 +45,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::vault::LinkInfo;
 
@@ -72,14 +72,13 @@ pub struct SearchCacheShard {
 }
 
 fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("app_data_dir: {e}"))?
-        .join("search-cache");
+    // dev/릴리즈 분기는 `paths`가 단일 진실. 예전엔 여기서 `app_data_dir()`을 직접 불러
+    // 두 빌드가 같은 캐시를 번갈아 덮어썼다(19,000노트 재인덱싱 반복).
+    let dir = crate::paths::app_data_root(app)?.join("search-cache");
     fs::create_dir_all(&dir).map_err(|e| format!("search-cache mkdir: {e}"))?;
     Ok(dir)
 }
+
 
 fn vault_key(vault_path: &str) -> String {
     let mut h = DefaultHasher::new();
