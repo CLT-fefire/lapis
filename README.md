@@ -27,9 +27,17 @@ Lapis가 만든 검색 인덱스를 **Claude Code에 노출**합니다 — 도�
 { "mcpServers": { "lapis": { "command": "<repo>/mcp/lapis-mcp" } } }
 ```
 
-구조 질의(`doc_kind`·`topic`·`tag`·`backlinks_of`)와 BM25 풀텍스트를 함께 냅니다. 계약·한계·계측 결과는 [`mcp/README.md`](mcp/README.md).
+구조 질의(`doc_kind`·`topic`·`tag`·`backlinks_of`)와 BM25 풀텍스트를 함께 냅니다.
 
-⚠️ **인덱스 생산자는 앱입니다.** MCP는 캐시를 읽기만 하고, vault가 캐시보다 새로우면 응답에 `stale`을 실어 보냅니다.
+| 문서 | 담당 |
+|---|---|
+| [`mcp/README.md`](mcp/README.md) | 계약·오류 종류·한계·계측 수치 |
+| `knowledge/_global/reference/lapis-query-usage-guide-20260813.md` | **사용 가이드** — 질문을 인자로 옮기는 법, 응답 읽는 법, 안 나올 때 |
+| `SharedDocs/rules/knowledge-hub.md` | 언제 이걸 쓰고 언제 grep을 쓰나 (라우팅) |
+
+⚠️ **인덱스 생산자는 앱입니다.** MCP는 캐시를 읽기만 하고, vault가 캐시보다 새로우면 응답에 `stale`을 실어 보냅니다 — 막지는 않습니다.
+
+⚠️ **grep을 대체하지 않습니다.** 계측상 재현율은 grep이 더 높고(AND 100% vs R@10 89.4%), 이 도구의 값은 **랭킹**입니다. 참조 추적(`backlinks_of`)만 압도적입니다 — grep이 3회·15.9KB·오탐 3을 쓴 질문을 1회·1.6KB·오탐 0으로 답합니다.
 
 ## 설치 (사용자)
 
