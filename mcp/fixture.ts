@@ -116,6 +116,34 @@ export function makeFixture(
   return { cacheDir, vaultRoot, key, fingerprint };
 }
 
+/**
+ * 이미 만든 픽스처 디렉터리에 **다른 vault의 meta**를 하나 더 놓는다.
+ * 여러 vault가 캐시된 상황(잔재 포함)을 시험한다.
+ */
+export function addSiblingMeta(
+  fx: Fixture,
+  opts: { key: string; version: number; noteCount: number; vaultRoot: string },
+): void {
+  const infos = Array.from({ length: opts.noteCount }, (_, i) => ({
+    source_path: `${opts.vaultRoot}/n${i}.md`,
+    source_name: `n${i}`,
+    title: null,
+    aliases: [],
+    targets: [],
+    tags: [],
+    doc_kind: null,
+    topic: null,
+    related: [],
+    props: {},
+  }));
+  writeGz(path.join(fx.cacheDir, `${opts.key}.meta.json.gz`), {
+    version: opts.version,
+    fingerprint: "s1s1s1s1s1s1s1s1",
+    link_infos: infos,
+    shard_count: 1,
+  });
+}
+
 function writeGz(file: string, obj: unknown): void {
   writeFileSync(file, gzipSync(JSON.stringify(obj)));
 }

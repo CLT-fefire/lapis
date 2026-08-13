@@ -120,7 +120,21 @@ function listCandidates(): Candidate[] {
         continue;
       }
       if (parsed.version !== CACHE_VERSION) {
-        out.push({ key, dir, file, meta: null, version: parsed.version, root: null, size: -1 });
+        // ⚠️ 버려도 되는 정보가 아니다. **크기와 root는 힌트로 살린다** — 이걸 버리면
+        // "다른 vault의 잔재 캐시 1건이 구버전"이라는 이유로 정상 vault 질의가 전부
+        // 막힌다(실제로 그랬다: 35노트·1노트짜리 v6 잔재가 19,222노트 vault를 세웠다).
+        // meta 스키마는 v6↔v7이 동일하다(바뀐 건 shard다). 다만 **힌트로만** 쓴다 —
+        // 읽히지 않으면 크기를 모르는 것으로 두고 보수적으로 실패시킨다.
+        let hintRoot: string | null = null;
+        let hintSize = -1;
+        try {
+          const infos = parsed.link_infos ?? [];
+          hintSize = infos.length;
+          hintRoot = deriveRoot(infos.map((i) => norm(i.source_path)));
+        } catch {
+          /* 힌트 없음 — size -1로 남긴다 */
+        }
+        out.push({ key, dir, file, meta: null, version: parsed.version, root: hintRoot, size: hintSize });
         continue;
       }
       for (const i of parsed.link_infos) i.source_path = norm(i.source_path);
@@ -188,43 +202,51 @@ export function resolveVault(vaultArg?: string): VaultCache {
     );
   }
 
+  const usable = cands.filter((c): c is Candidate & { meta: RawMeta } => c.meta !== null);
+  const skewed = cands.filter((c) => !c.meta);
+
   if (vaultArg) {
     const want = norm(path.resolve(vaultArg)).replace(/\/+$/, "");
-    const hit = cands.find((c) => c.root === want);
-    if (hit?.meta) return toCache(hit, hit.meta);
-    const skewed = cands.find((c) => !c.meta && c.version >= 0);
-    if (skewed) {
+    const hit = usable.find((c) => c.root === want);
+    if (hit) return toCache(hit, hit.meta);
+    // 요청한 vault가 **바로 그** skew 후보인지 정확히 말해준다.
+    const skewedHit = skewed.find((c) => c.root === want);
+    if (skewedHit) {
       throw new LapisError(
         "version_skew",
-        `요청한 vault의 캐시가 v${skewed.version}, 기대 v${CACHE_VERSION}.`,
-        "Lapis 앱을 최신으로 올리고 vault를 열어 인덱스를 재빌드하라.",
+        `요청한 vault의 캐시가 v${skewedHit.version}, 기대 v${CACHE_VERSION}: ${want}`,
+        "Lapis 앱을 최신으로 올리고 그 vault를 열어 인덱스를 재빌드하라.",
       );
     }
     throw new LapisError(
       "vault_not_found",
-      `캐시에 없는 vault: ${want}\n있는 것: ${cands.map((c) => c.root ?? `(v${c.version} skew)`).join(" · ")}`,
+      `캐시에 없는 vault: ${want}\n있는 것: ${cands
+        .map((c) => `${c.root ?? "(root 불명)"}${c.meta ? "" : ` [v${c.version} skew]`}`)
+        .join(" · ")}`,
       "Lapis 앱에서 그 vault를 한 번 열어라.",
     );
   }
 
-  const usable = cands.filter((c): c is Candidate & { meta: RawMeta } => c.meta !== null);
-  const maxUsable = Math.max(0, ...usable.map((c) => c.size));
-  // skew 후보가 "가장 큰 vault"였을 가능성 — 조용히 작은 걸 고르면 엉뚱한 검색이 된다.
-  const skewed = cands.filter((c) => !c.meta);
-  if (skewed.length > 0 && usable.length === 0) {
+  if (usable.length === 0) {
     throw new LapisError(
       "version_skew",
-      `유효한 v${CACHE_VERSION} 캐시가 없다. 발견: ${skewed.map((c) => `v${c.version}`).join(", ")}`,
+      `유효한 v${CACHE_VERSION} 캐시가 없다. 발견: ${skewed.map((c) => `v${c.version}`).join(", ") || "없음"}`,
       "Lapis 앱을 최신으로 올리고 vault를 열어 인덱스를 재빌드하라.",
     );
   }
-  if (skewed.length > 0) {
+
+  const maxUsable = Math.max(...usable.map((c) => c.size));
+  // **skew 후보가 고른 것보다 클 수 있을 때만** 막는다. 작은 잔재 하나 때문에 정상
+  // vault를 세우면 안 되고, 반대로 더 큰 vault가 빠진 걸 모르고 검색해도 안 된다.
+  // 크기를 못 읽은 후보(size < 0)는 "클 수도 있다"로 보아 보수적으로 막는다.
+  const blocking = skewed.filter((c) => c.size < 0 || c.size > maxUsable);
+  if (blocking.length > 0) {
     throw new LapisError(
       "version_skew",
-      `캐시 ${skewed.length}개가 구버전(${skewed.map((c) => `v${c.version}`).join(", ")})이라 ` +
-        `어느 vault가 빠졌는지 알 수 없다. 조용히 다른 vault를 검색하지 않는다.`,
+      `구버전 캐시가 지금 고른 것보다 크다 — 조용히 작은 vault를 검색하지 않는다. ` +
+        blocking.map((c) => `${c.root ?? "(불명)"} v${c.version} ${c.size}건`).join(" · "),
       `vault 인자로 대상을 지정하거나, 앱에서 해당 vault를 열어 재빌드하라. ` +
-        `쓸 수 있는 vault: ${usable.map((c) => c.root).join(" · ")}`,
+        `지금 쓸 수 있는 것: ${usable.map((c) => `${c.root}(${c.size}건)`).join(" · ")}`,
     );
   }
 

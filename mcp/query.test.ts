@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeFixture, SAMPLE_NOTES, type Fixture } from "./fixture.ts";
+import { addSiblingMeta, makeFixture, SAMPLE_NOTES, type Fixture } from "./fixture.ts";
 import {
   lapisQuery,
   resetState,
@@ -252,6 +252,43 @@ describe("vault 해소", () => {
 
   it("root를 source_path 공통 접두로 산출한다", () => {
     expect(search({ doc_kind: "adr" }).vault).toBe(fx.vaultRoot);
+  });
+
+  // ⚠️ 처음엔 "skew 후보가 하나라도 있으면 실패"로 막았는데, 그러면 **다른 vault의 작은
+  // 잔재 하나가 정상 vault 질의를 전부 세운다**. 실제로 그랬다 — 35노트·1노트짜리 v6
+  // 잔재가 19,222노트 vault를 막았다. 크기를 보고 판단해야 한다.
+  it("작은 구버전 잔재는 더 큰 정상 vault를 막지 않는다", () => {
+    addSiblingMeta(fx, { key: "leftover00000001", version: 6, noteCount: 2, vaultRoot: "/other/tiny" });
+    resetState();
+    expect(search({ doc_kind: "adr" }).vault).toBe(fx.vaultRoot);
+  });
+
+  // 반대 방향 — 더 큰 vault가 skew로 빠진 걸 모르고 작은 걸 검색하면 조용히 엉뚱한 답이다.
+  it("더 큰 구버전 캐시가 있으면 조용히 작은 걸 고르지 않고 실패", () => {
+    addSiblingMeta(fx, { key: "bigskew000000001", version: 6, noteCount: 9999, vaultRoot: "/other/big" });
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "version_skew" }),
+    );
+  });
+
+  it("vault를 명시하면 큰 구버전 잔재가 있어도 그 vault를 쓴다", () => {
+    addSiblingMeta(fx, { key: "bigskew000000001", version: 6, noteCount: 9999, vaultRoot: "/other/big" });
+    resetState();
+    expect(search({ doc_kind: "adr", vault: fx.vaultRoot }).vault).toBe(fx.vaultRoot);
+  });
+
+  it("요청한 vault가 구버전이면 그 사실을 정확히 말한다", () => {
+    addSiblingMeta(fx, { key: "oldone0000000001", version: 6, noteCount: 3, vaultRoot: "/other/old" });
+    resetState();
+    try {
+      lapisQuery({ doc_kind: "adr", vault: "/other/old" });
+      expect.unreachable();
+    } catch (e) {
+      const err = e as LapisError;
+      expect(err.kind).toBe("version_skew");
+      expect(err.message).toContain("/other/old");
+    }
   });
 });
 
