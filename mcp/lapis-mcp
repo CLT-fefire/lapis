@@ -1,0 +1,20 @@
+#!/bin/sh
+# lapis-mcp — MCP stdio 서버 실행 래퍼.
+#
+# 호출 시점에 esbuild로 번들한다. 커밋된 산출물이나 사전 빌드 단계를 두면 소스와
+# 어긋나도 아무 신호가 없다 — 캐시 skew(CACHE_VERSION v7)로 이미 겪은 계열의 결함이다.
+# 번들이 16 KB라 ~30ms면 끝나고, 서버는 stdio로 상주하므로 질의당 비용이 아니다.
+#
+# `$lib` 별칭과 확장자 없는 상대 import 때문에 Node가 앱 트리를 직접 못 읽는다.
+# `--alias:$lib=src/lib` 하나로 둘 다 풀린다.
+set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(dirname "$HERE")
+OUT="${TMPDIR:-/tmp}/lapis-mcp-$(id -u).mjs"
+
+"$REPO/node_modules/.bin/esbuild" "$HERE/server.ts" \
+  --bundle --format=esm --platform=node --log-level=warning \
+  --alias:'$lib'="$REPO/src/lib" \
+  --outfile="$OUT" >&2
+
+exec node --no-warnings "$OUT"
