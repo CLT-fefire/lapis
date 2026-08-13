@@ -329,8 +329,9 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
       "stale",
       `vault가 캐시보다 새롭다 (최신 노트 ${new Date(fresh.newestMs).toISOString()} > ` +
         `캐시 ${new Date(fresh.metaMs).toISOString()}).`,
-      "Lapis 앱을 실행해라. watcher가 2초 안에 인덱스를 갱신한다. " +
-        "MCP는 인덱스를 만들지 않는다 — 생산자는 앱이다.",
+      "Lapis 앱을 실행해라. watcher가 변경을 감지해 재색인한다 — 12,000+ 노트면 " +
+        "커밋까지 10~20초 걸린다(shard 8개를 쓴 뒤 meta를 마지막에 커밋한다). " +
+        "그 동안은 이 오류가 계속 나는 게 정상이다. MCP는 인덱스를 만들지 않는다 — 생산자는 앱이다.",
     );
   }
 
