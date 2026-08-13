@@ -35,7 +35,7 @@ tags: [welcome, getting-started]
 |---|---|
 | \`⌘K\` | Command Palette — 모든 명령 검색 |
 | \`⌘P\` | Quick File Open — 파일명 fuzzy 검색 |
-| \`⌘⇧F\` | Full-text 검색 (tantivy + 한국어 형태소) |
+| \`⌘⇧F\` | Full-text 검색 (BM25 + 한글 bigram) |
 | \`⌘F\` | 현재 노트 내 검색 |
 | \`⌘N\` | 새 노트 만들기 |
 | \`⌘S\` | 즉시 저장 (편집 시 2초마다 자동 저장됨) |
