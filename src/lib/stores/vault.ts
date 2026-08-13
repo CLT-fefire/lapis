@@ -26,6 +26,7 @@ import {
   workerToJSONShard,
   workerUpdateDoc,
   workerRemoveDoc,
+  workerReset,
   computeShardId,
   decideShardCount,
 } from "$lib/searchIndex";
@@ -115,6 +116,13 @@ let activeShardCount = 1;
 /** 한 burst에서 이 개수를 넘는 변경은 증분 대신 풀 빌드 — 그게 더 단순/안전. */
 const INCREMENTAL_MAX = 200;
 
+/**
+ * shard 결손/skew로 강제 재빌드를 이미 한 번 시도했나. **루프 방지용**이라 vault 전환에서만
+ * 리셋한다 — 재빌드가 또 실패하는 상황에서 계속 재시도하면 앱이 vault 전체 읽기를 무한
+ * 반복한다(12,000+ 노트).
+ */
+let fullTextRecoveryTried = false;
+
 export async function pickAndOpenVault(): Promise<void> {
   const selected = await openDialog({
     directory: true,
@@ -137,6 +145,7 @@ export async function openVault(path: string): Promise<void> {
   // "최초 빌드"(blocking 오버레이)로 취급(stale 검색/백링크 노출 방지). 이후 **같은**
   // vault 내 변경(watcher/편집/수동 새로고침)은 background 재빌드($indexRefreshing).
   linkIndex.set(null);
+  fullTextRecoveryTried = false;
   clearNavHistory();
   clearTabs();
 
@@ -254,18 +263,28 @@ async function buildFullTextFromPending(): Promise<void> {
   if (get(fullTextLoading)) return;
   const pending = get(pendingFullTextVault);
   if (!pending) return;
-  const { vault, shardCount } = pending;
+  const { vault, shardCount, fingerprint } = pending;
   const perf = import.meta.env.DEV;
   fullTextLoading.set(true);
   try {
     // N shard 순차 로드 — vault별 shardCount(decideShardCount). 첫 shard 완료 시
-    // fullTextIndexReady set → partial 검색 가능.
+    // fullTextIndexReady set → partial 검색 가능(progressive).
+    //
+    // ⚠️ **결손이 하나라도 있으면 전부 버린다.** 예전엔 `continue`로 넘겨서 **부분
+    // 인덱스로 검색하면서 아무 표시가 없었다**. 그건 "검색했는데 안 나온다"를 만들고,
+    // 사용자는 그걸 "없다"로 읽는다 — 없는 것보다 나쁘다. v7의 fingerprint 대조가
+    // skew된 shard를 null로 거부하기 때문에 이 경로는 이제 더 자주 열린다.
+    //
+    // progressive UX는 유지한다: shard0 후 ready를 세워 검색이 일찍 되게 하고,
+    // 뒤에서 실패하면 ready를 내리고 worker를 비운다.
+    let complete = true;
     for (let i = 0; i < shardCount; i++) {
       const t0 = perf ? performance.now() : 0;
-      const json = await readSearchCacheShard(vault, i);
+      const json = await readSearchCacheShard(vault, i, fingerprint);
       if (!json) {
-        console.warn(`[search-cache] shard${i} missing at lazy load time`);
-        continue;
+        console.warn(`[search-cache] shard${i} 부재 또는 거부(skew/id 불일치) — 풀텍스트 캐시 폐기`);
+        complete = false;
+        break;
       }
       const tFetch = perf ? performance.now() : 0;
       await workerLoadShard(i, json);
@@ -278,11 +297,27 @@ async function buildFullTextFromPending(): Promise<void> {
         );
       }
     }
-    if (!get(fullTextIndexReady)) {
-      console.warn("[search-cache] no shards loaded — keeping fullTextIndexReady=false");
+    if (!complete || shardCount === 0) {
+      fullTextIndexReady.set(false);
+      await workerReset();
+      // 여기서 멈추면 meta HIT이라 재빌드 트리거가 없어 **다음 vault 변경까지 풀텍스트가
+      // 없다**. shard가 meta와 어긋났다는 건 캐시가 실제로 깨졌다는 뜻이니 한 번 강제
+      // 재빌드해 스스로 복구한다. ⚠️ **1회 제한** — 재빌드가 또 실패하면 무한 루프다.
+      if (!fullTextRecoveryTried) {
+        fullTextRecoveryTried = true;
+        console.warn("[search-cache] shard 결손/skew — 강제 재빌드로 복구 시도(1회)");
+        // finally가 pending/loading을 정리한 뒤 재빌드가 돌아야 한다 → microtask로 미룬다.
+        void Promise.resolve().then(() =>
+          forceReindex().catch((e) => console.warn("[search-cache] 복구 재빌드 실패", e)),
+        );
+        return;
+      }
+      console.warn("[search-cache] 복구 재빌드 후에도 풀텍스트 미준비 — 포기");
     }
   } catch (e) {
     console.warn("[search-cache] worker loadShard failed", e);
+    fullTextIndexReady.set(false);
+    await workerReset().catch(() => {});
   } finally {
     pendingFullTextVault.set(null);
     fullTextLoading.set(false);
@@ -381,7 +416,9 @@ async function reloadNotesInner(force = false): Promise<void> {
     if (perf) tCacheCheckEnd = performance.now();
 
     let appliedFromCache = false;
+    let shardCountFromMeta = 0;
     if (!force && meta && meta.fingerprint === fp.fingerprint) {
+      shardCountFromMeta = meta.shard_count;
       // cache hit. link_infos는 즉시 사용. fullTextIndex는 lazy — pendingFullTextVault에
       // vault path만 박고 idle 시점에 minisearch_json 받아 loadJSON.
       const links = meta.link_infos;
@@ -397,7 +434,11 @@ async function reloadNotesInner(force = false): Promise<void> {
       fullTextIndexReady.set(false);
       // meta.shard_count는 cache miss 시 결정한 동적 값. lazy load가 같은 수로 순차 로드.
       activeShardCount = meta.shard_count;
-      pendingFullTextVault.set({ vault: root, shardCount: meta.shard_count });
+      pendingFullTextVault.set({
+        vault: root,
+        shardCount: meta.shard_count,
+        fingerprint: meta.fingerprint,
+      });
       scheduleLazyFullTextLoad();
       appliedFromCache = true;
       cacheMode = "hit";
@@ -408,6 +449,16 @@ async function reloadNotesInner(force = false): Promise<void> {
             `(minisearch_json + loadJSON deferred → idle)`,
         );
       }
+    }
+
+    // ⚠️ meta는 있는데 shard가 0인 경우 — 풀텍스트 저장이 실패했던 스냅샷이다.
+    // 구조 데이터는 위에서 이미 적용됐지만, 이 상태로 두면 lazy 로더가 0회 돌고
+    // `fullTextIndexReady`가 영구 false로 굳어 **풀텍스트가 무증상 사망**한다.
+    // → 전체 miss로 강등해 풀 빌드가 둘 다 복구하게 한다(자기치유).
+    if (appliedFromCache && shardCountFromMeta === 0) {
+      console.warn("[search-cache] meta HIT but shard_count=0 — 풀텍스트 복구를 위해 full rebuild");
+      appliedFromCache = false;
+      cacheMode = "miss";
     }
 
     if (!appliedFromCache) {
@@ -470,8 +521,24 @@ async function reloadNotesInner(force = false): Promise<void> {
 }
 
 /**
- * 풀텍스트 디스크 캐시 저장 (meta + shard JSON). cache-miss 풀 빌드와 증분 갱신 후
+ * 디스크 캐시 저장 (shard 전부 → meta 마지막). cache-miss 풀 빌드와 증분 갱신 후
  * 재저장이 공유. worker.toJSONShard는 worker thread 직렬화 → main freeze 0.
+ *
+ * ⚠️ **meta를 마지막에 쓴다 — 순서가 정합성이다.** 예전엔 meta를 먼저 쓰고 shard 8개를
+ * 순차 기록했는데, 중간에 앱이 죽으면 "새 fingerprint + 옛 shard"가 영속돼 다음 기동에서
+ * HIT 오판이 나고 **풀텍스트가 조용히 낡았다**(gzip 0.22s × 8 + 58MB IPC라 창이 μs가
+ * 아니다). meta가 커밋 지점이면 중간에 죽어도 옛 meta가 남아 옛 shard와 짝이 맞는다.
+ *
+ * ⚠️ **meta와 shard의 게이트를 분리한다.** 예전엔 함수 첫 줄이
+ * `if (!get(fullTextIndexReady)) return;` 이라 **풀텍스트가 죽으면 meta도 안 써졌다**.
+ * 그런데 meta(`link_infos`)는 풀텍스트와 무관한 **구조 데이터**다 — 백링크·태그·facet이
+ * 전부 여기서 나온다. 이제 구조는 항상 저장하고, 풀텍스트가 없으면 `shard_count: 0`으로
+ * 커밋한다. 0은 읽는 쪽에서 "풀텍스트 없음"으로 정확히 해석되고(전체 miss로 강등해
+ * 자기치유), Rust의 고아 스윕이 남은 shard 파일을 지운다.
+ *
+ * ⚠️ **shard 하나라도 실패하면 `shard_count: 0`으로 커밋한다.** 예전엔 `if (!json) continue;`
+ * 로 조용히 건너뛰면서 meta는 8개라 주장했다 → 부분 인덱스로 검색하며 표시가 없었다.
+ * 부분 풀텍스트는 "검색했는데 안 나온다"를 만들고, 그건 없는 것보다 나쁘다.
  */
 async function saveSearchCache(
   root: string,
@@ -479,15 +546,31 @@ async function saveSearchCache(
   shardCount: number,
   fingerprint: string,
 ): Promise<void> {
-  if (!get(fullTextIndexReady)) return;
-  await writeSearchCacheMeta(root, fingerprint, links, shardCount);
-  for (let i = 0; i < shardCount; i++) {
-    const json = await workerToJSONShard(i);
-    if (!json) continue;
-    await writeSearchCacheShard(root, i, json);
+  let shardsWritten = 0;
+  if (get(fullTextIndexReady)) {
+    // 순차로 쓴다 — 8개 JSON(~58MB)을 한꺼번에 들고 있을 이유가 없다. 중간에 실패하면
+    // 이미 쓴 shard는 남지만 meta가 `shard_count: 0`으로 커밋되니 읽히지 않고,
+    // Rust의 고아 스윕이 지운다. 커밋 지점이 meta라서 버퍼링 없이도 all-or-nothing이다.
+    let complete = true;
+    for (let i = 0; i < shardCount; i++) {
+      const json = await workerToJSONShard(i);
+      if (!json) {
+        console.warn(`[search-cache] shard${i} 직렬화 실패 — 풀텍스트 캐시를 포기한다`);
+        complete = false;
+        break;
+      }
+      await writeSearchCacheShard(root, i, fingerprint, json);
+    }
+    if (complete) shardsWritten = shardCount;
   }
+
+  // 커밋 — 구조 데이터는 풀텍스트 성패와 무관하게 항상 저장한다.
+  await writeSearchCacheMeta(root, fingerprint, links, shardsWritten);
   if (import.meta.env.DEV) {
-    console.debug(`[lapis-perf] search-cache saved fp=${fingerprint} shards=${shardCount}`);
+    console.debug(
+      `[lapis-perf] search-cache saved fp=${fingerprint} shards=${shardsWritten}/${shardCount}` +
+        (shardsWritten === 0 ? " (meta only — 풀텍스트 없음)" : ""),
+    );
   }
 }
 

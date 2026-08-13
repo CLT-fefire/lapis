@@ -197,7 +197,7 @@ export interface WorkerHit {
  * worker `indexes` 배열의 최대 길이 — vault별 실제 shard 수는 `decideShardCount`로 동적 결정.
  * shardId 범위는 항상 `[0, MAX_SHARDS)` 안에 들어와야 worker가 정상 동작.
  */
-export const MAX_SHARDS = 16;
+export { MAX_SHARDS } from "$lib/fullTextOptions";
 
 /**
  * vault 노트 수 기반 shard 수 결정. 각 shard 약 2000–3000 doc이 첫 shard ready 1–2초 sweet spot.
