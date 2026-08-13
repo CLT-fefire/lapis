@@ -36,6 +36,7 @@ import {
 import {
   LapisError,
   checkStale,
+  type Staleness,
   loadShards,
   norm,
   normalizeVaultArg,
@@ -73,6 +74,11 @@ export interface ResultRow {
 interface ResponseBase {
   vault: string;
   loaded_fingerprint: string;
+  /**
+   * 캐시가 vault보다 낡았을 때만 실린다. **없으면 최신이라는 뜻.**
+   * 있으면 몇 개가 얼마나 앞서는지 보고 판단하라 — 보통 몇 건이면 결과에 영향이 없다.
+   */
+  stale?: Staleness;
   excluded: string[];
 }
 
@@ -322,22 +328,15 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
 
   const st = loadStructural(vault);
 
-  // stale은 fail-closed — MCP는 인덱스를 만들 수 없다(생산자가 앱이다).
-  const fresh = checkStale(st.vc);
-  if (fresh.stale) {
-    throw new LapisError(
-      "stale",
-      `vault가 캐시보다 새롭다 (최신 노트 ${new Date(fresh.newestMs).toISOString()} > ` +
-        `캐시 ${new Date(fresh.metaMs).toISOString()}).`,
-      "Lapis 앱을 실행해라. watcher가 변경을 감지해 재색인한다 — 12,000+ 노트면 " +
-        "커밋까지 10~20초 걸린다(shard 8개를 쓴 뒤 meta를 마지막에 커밋한다). " +
-        "그 동안은 이 오류가 계속 나는 게 정상이다. MCP는 인덱스를 만들지 않는다 — 생산자는 앱이다.",
-    );
-  }
+  // staleness는 **보고**한다 — 막지 않는다. 살아 있는 vault는 커밋(10~20초) 사이에도
+  // 계속 쓰이므로, 0.016%가 새롭다는 이유로 모든 질의를 세우면 도구를 못 쓴다.
+  // 판단은 Claude Code가 한다(이 서버의 원칙).
+  const stale = checkStale(st.vc);
 
   const base = {
     vault: st.vc.root,
     loaded_fingerprint: st.vc.fingerprint,
+    ...(stale.newer_count > 0 ? { stale } : {}),
     excluded: ex,
   };
 

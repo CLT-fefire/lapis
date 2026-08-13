@@ -395,18 +395,38 @@ export function loadShards(vc: VaultCache): string[] {
 }
 
 /**
- * staleness 판정 — **mtime 프록시**다.
+ * staleness — **보고하되 막지 않는다.**
  *
- * ⚠️ meta의 `fingerprint`는 Rust `std::DefaultHasher`(SipHash-1-3)로 만든다. std가 릴리즈 간
- * 값 안정성을 **부정**하므로 JS로 재현할 수 없다 → `disk_fingerprint`를 계산할 방법이 없다.
- * 대신 "vault 안 가장 최근 `.md` mtime > meta 파일 mtime"이면 stale로 본다.
+ * ⚠️ 계획서는 `stale`을 fail-closed로 규정했지만 **실측이 그 전제를 뒤집었다.**
+ * 전제는 "앱이 2초 안에 갱신하니 stale 창이 좁다"였는데:
  *
- * **놓치는 것**: 삭제만 있고 수정이 없는 변경. 그 경우 지워진 노트가 결과에 남는다.
- * 근본 해결은 앱이 fingerprint도 FNV-1a로 바꾸는 것(계획서 §5-7).
+ * - 커밋까지 **10~20초** 걸린다(shard 8개 → meta 마지막, `search_cache.rs` v7).
+ * - 살아 있는 vault는 그 사이에도 계속 쓰인다. 2026-08-13 실측에서 **19,202개 중 3개
+ *   (0.016%)** 가 캐시보다 새로웠고, 그 상태로 모든 질의가 실패했다.
+ *
+ * 0.016% 때문에 도구 전체를 세우는 건 비례하지 않고, 무엇보다 **하드 실패 자체가 판단**이다
+ * — 이 서버의 원칙은 "판단하지 않는다"이다. 그래서 몇 개가 얼마나 새로운지 **응답에 실어
+ * 보내고** 판단은 Claude Code에 맡긴다. 조용히 낡은 답을 주는 것과는 다르다.
+ *
+ * ⚠️ mtime **프록시**다. meta의 `fingerprint`가 Rust `std::DefaultHasher`(std가 값 안정성을
+ * 부정)라 JS로 재현할 수 없다. **삭제만 있고 수정이 없는 변경은 놓친다.**
  */
-export function checkStale(vc: VaultCache): { stale: boolean; newestMs: number; metaMs: number } {
+export interface Staleness {
+  /** 캐시 커밋보다 새로운 `.md` 수. 0이면 최신. */
+  newer_count: number;
+  /** 스캔한 전체 `.md` 수. */
+  total: number;
+  /** 가장 새로운 노트가 캐시보다 몇 초 앞서는가. 0이면 최신. */
+  behind_s: number;
+  /** 새로운 파일 몇 개(최대 5) — 무엇이 빠졌는지 바로 보이게. */
+  sample: string[];
+}
+
+export function checkStale(vc: VaultCache): Staleness {
   const metaMs = statSync(vc.metaFile).mtimeMs;
-  let newestMs = 0;
+  const newer: { ms: number; rel: string }[] = [];
+  let total = 0;
+  const cut = vc.root.endsWith("/") ? vc.root.length : vc.root.length + 1;
   const walk = (dir: string): void => {
     let ents;
     try {
@@ -419,11 +439,18 @@ export function checkStale(vc: VaultCache): { stale: boolean; newestMs: number; 
       const p = path.join(dir, e.name);
       if (e.isDirectory()) walk(p);
       else if (e.name.endsWith(".md")) {
+        total++;
         const m = statSync(p).mtimeMs;
-        if (m > newestMs) newestMs = m;
+        if (m > metaMs) newer.push({ ms: m, rel: norm(p).slice(cut) });
       }
     }
   };
   walk(vc.root);
-  return { stale: newestMs > metaMs, newestMs, metaMs };
+  newer.sort((a, b) => b.ms - a.ms);
+  return {
+    newer_count: newer.length,
+    total,
+    behind_s: newer.length === 0 ? 0 : Math.round((newer[0].ms - metaMs) / 1000),
+    sample: newer.slice(0, 5).map((n) => n.rel),
+  };
 }
