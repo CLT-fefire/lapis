@@ -27,7 +27,7 @@ import {
   buildTagIndex,
   koBigramTokenize,
   normalizeTerm,
-  unionRank,
+  unionRankDetailed,
   FULLTEXT_OPTIONS,
   type FullTextDoc,
   type LinkIndex,
@@ -408,13 +408,18 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     // (실측: 이미 로드된 2·3회차도 true였다 — 지연 로드를 확인했다고 착각하게 만든다).
     const wasLoaded = BM !== null;
     const idxs = loadBm25(st);
-    ranked = unionRank(idxs, text, 0)
+    const { hits, combine } = unionRankDetailed(idxs, text, 0);
+    ranked = hits
       .map((h) => ({ path: norm(h.path), score: h.score }))
       .filter((h) => !excluded(st.rel(h.path), ex));
     used.push({
       name: "bm25",
       corpus_size: idxs.reduce((n, i) => n + i.documentCount, 0),
       matched: ranked.length,
+      // "AND"면 질의 단어가 전부 든 문서만이다(좁고 정확). "OR"는 AND가 0건이라
+      // 폴백한 것 — **질의 단어 중 일부가 인덱스에 없다는 신호**다. 오타이거나,
+      // 그 표현이 vault에 없거나. 결과가 넓으면 이 값을 먼저 본다.
+      combine,
       lazy_loaded_now: !wasLoaded,
     });
   }
