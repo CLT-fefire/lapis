@@ -1946,7 +1946,7 @@ dependencies = [
 
 [[package]]
 name = "lapis"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "flate2",
  "notify",
