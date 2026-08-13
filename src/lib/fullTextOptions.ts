@@ -15,7 +15,7 @@
  * `search_cache.rs`의 `CACHE_VERSION` bump 필수.
  */
 
-import MiniSearch, { type Options } from "minisearch";
+import MiniSearch, { type Options, type SearchOptions } from "minisearch";
 import { koBigramTokenize, normalizeTerm } from "./koTokenize";
 
 export interface FullTextDoc {
@@ -47,7 +47,28 @@ export const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
     prefix: (term) => term.length > 2,
     fuzzy: (term) => (term.length > 3 ? 0.15 : false),
     maxFuzzy: 3,
+    // 길이 보정 완화. 계측(`mcp/searchEval.ts`)에서 기본값 0.7보다 R@1 +0.6pt.
+    bm25: { k: 1.2, b: 0.3, d: 0.5 },
   },
+};
+
+/**
+ * `combineWith: "AND"` 검색 옵션 — `unionRank`가 1차로 쓴다.
+ *
+ * 계측 근거(`mcp/searchEval.ts`, 19,225 노트 · 363 케이스):
+ *
+ * | 결합 | R@1 | R@10 | MRR | 평균 매칭 |
+ * |---|---:|---:|---:|---:|
+ * | OR(기존) | 66.4% | 88.7% | 0.737 | **10,329** |
+ * | AND | **72.5%** | **90.1%** | **0.785** | **229** |
+ *
+ * 매칭이 코퍼스의 54% → 1.2%로 줄고 정확도가 오른다. ⚠️ **다만 AND 단독은 못 쓴다** —
+ * 질의에 정답 문서에 없는 단어가 **하나만** 섞여도 결과가 **0건**이 된다(실측 R@1 0.0%).
+ * grep도 똑같이 무너진다(AND 재현율 0%, 99%가 0건). 그래서 `unionRank`가 폴백을 건다.
+ */
+const AND_OPTIONS: SearchOptions = {
+  ...(FULLTEXT_OPTIONS.searchOptions as SearchOptions),
+  combineWith: "AND",
 };
 
 /**
@@ -71,17 +92,42 @@ export function unionRank(
   query: string,
   limit: number,
 ): FullTextHit[] {
-  const combined: FullTextHit[] = [];
-  for (const idx of indexes) {
-    if (!idx) continue;
-    for (const r of idx.search(query)) {
-      combined.push({
-        path: r.id as string,
-        score: r.score,
-        name: (r as unknown as { name: string }).name,
-      });
+  return unionRankDetailed(indexes, query, limit).hits;
+}
+
+/**
+ * `unionRank` + 어느 결합을 썼는지. 소비자가 "왜 이렇게 많이/적게 나왔나"를 알 수 있게.
+ *
+ * **AND 먼저, 0건이면 OR로 폴백**한다. AND는 정확하지만 단어 하나만 어긋나도 0건이
+ * 되고(위 표), OR은 코퍼스의 절반을 긁어온다. 둘의 좋은 쪽만 취한다 — 질의가 정확하면
+ * 좁고 정확한 결과, 어긋나면 최소한 뭔가는 준다.
+ */
+export function unionRankDetailed(
+  indexes: readonly (MiniSearch<FullTextDoc> | null)[],
+  query: string,
+  limit: number,
+): { hits: FullTextHit[]; combine: "AND" | "OR" } {
+  const run = (opts?: SearchOptions): FullTextHit[] => {
+    const combined: FullTextHit[] = [];
+    for (const idx of indexes) {
+      if (!idx) continue;
+      for (const r of idx.search(query, opts)) {
+        combined.push({
+          path: r.id as string,
+          score: r.score,
+          name: (r as unknown as { name: string }).name,
+        });
+      }
     }
+    combined.sort((a, b) => b.score - a.score);
+    return combined;
+  };
+
+  let hits = run(AND_OPTIONS);
+  let combine: "AND" | "OR" = "AND";
+  if (hits.length === 0) {
+    hits = run();
+    combine = "OR";
   }
-  combined.sort((a, b) => b.score - a.score);
-  return limit > 0 ? combined.slice(0, limit) : combined;
+  return { hits: limit > 0 ? hits.slice(0, limit) : hits, combine };
 }
