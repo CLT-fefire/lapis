@@ -194,19 +194,26 @@ export function writeSearchCacheMeta(
 export function readSearchCacheShard(
   vaultPath: string,
   shard_id: number,
+  expect_fingerprint: string,
 ): Promise<string | null> {
-  return invoke<string | null>("read_search_cache_shard", { vaultPath, shardId: shard_id });
+  return invoke<string | null>("read_search_cache_shard", {
+    vaultPath,
+    shardId: shard_id,
+    expectFingerprint: expect_fingerprint,
+  });
 }
 
 /** shard 저장 — worker.toJSONShard 결과 디스크 박제. */
 export function writeSearchCacheShard(
   vaultPath: string,
   shard_id: number,
+  fingerprint: string,
   minisearch_json: string,
 ): Promise<void> {
   return invoke<void>("write_search_cache_shard", {
     vaultPath,
     shardId: shard_id,
+    fingerprint,
     minisearchJson: minisearch_json,
   });
 }

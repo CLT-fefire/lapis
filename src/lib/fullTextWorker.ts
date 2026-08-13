@@ -28,53 +28,23 @@
  *
  * **제약**: worker는 Tauri invoke 불가. snippet 생성은 main thread에서 `readNote` 사용.
  *
- * **토크나이저**: 한글 bigram 하이브리드(`koTokenize.ts`) — index/query 동일 적용. 변경 시
- * `search_cache.rs`의 CACHE_VERSION bump 필수(인덱스 호환 깨짐).
+ * **옵션·shard 모델·union 랭킹은 여기 없다** — `fullTextOptions.ts`가 단일 진실이다.
+ * 이 파일은 그것을 worker 메시지 프로토콜로 감싸는 껍데기다.
  */
 
-import MiniSearch, { type Options } from "minisearch";
-import { koBigramTokenize, normalizeTerm } from "./koTokenize";
+import type MiniSearch from "minisearch";
+import MiniSearchCtor from "minisearch";
+import {
+  FULLTEXT_OPTIONS,
+  MAX_SHARDS,
+  unionRank,
+  type FullTextDoc,
+  type FullTextHit,
+} from "./fullTextOptions";
 
-interface FullTextDoc {
-  id: string;
-  name: string;
-  body: string;
-}
-
-const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
-  fields: ["name", "body"],
-  storeFields: ["name"],
-  idField: "id",
-  tokenize: koBigramTokenize,
-  processTerm: normalizeTerm,
-  searchOptions: {
-    boost: { name: 3 },
-    // 역직렬화(loadJSON) 후에도 쿼리 토큰화·정규화가 인덱스와 일치하도록 명시.
-    tokenize: koBigramTokenize,
-    processTerm: normalizeTerm,
-    // 한글 bigram(2글자)은 prefix/fuzzy 제외(정확 매칭). 영어 단어(>2)만 prefix,
-    // fuzzy는 4글자+ 에만 — 짧은 term의 radix tree 확장 폭발·오타 노이즈 억제.
-    prefix: (term) => term.length > 2,
-    fuzzy: (term) => (term.length > 3 ? 0.15 : false),
-    maxFuzzy: 3,
-  },
-};
-
-/**
- * 최대 shard 수 — main과 일치(`searchIndex.ts:MAX_SHARDS`). 실제 사용 shard 수는
- * vault별로 다름(`decideShardCount`로 main 결정). worker는 max 길이 배열을 미리
- * 할당해두고 사용하지 않는 shardId는 `null`로 유지. 메모리 영향 없음(null 16개).
- *
- * search 시 모든 인덱스 순회 — null은 자동 skip.
- */
-const MAX_SHARDS = 16;
 const indexes: (MiniSearch<FullTextDoc> | null)[] = new Array(MAX_SHARDS).fill(null);
 
-interface WorkerHit {
-  path: string;
-  score: number;
-  name: string;
-}
+type WorkerHit = FullTextHit;
 
 type InMsg =
   | { type: "loadShard"; id: number; shardId: number; jsonBytes: ArrayBuffer }
@@ -114,7 +84,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
           throw new Error(`invalid shardId=${msg.shardId}`);
         }
         const json = textDecoder.decode(new Uint8Array(msg.jsonBytes));
-        indexes[msg.shardId] = MiniSearch.loadJSON(
+        indexes[msg.shardId] = MiniSearchCtor.loadJSON(
           json,
           FULLTEXT_OPTIONS,
         ) as MiniSearch<FullTextDoc>;
@@ -129,7 +99,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         // 작은 배치로 나눠 보내므로(cache-miss postMessage clone freeze 방지) 여기선
         // 받은 배치를 그대로 addAll. 배치가 작아 worker thread 블록도 짧음.
         if (msg.reset || !indexes[msg.shardId]) {
-          indexes[msg.shardId] = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
+          indexes[msg.shardId] = new MiniSearchCtor<FullTextDoc>(FULLTEXT_OPTIONS);
         }
         if (msg.docs.length > 0) {
           indexes[msg.shardId]!.addAll(msg.docs);
@@ -158,7 +128,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         }
         let index = indexes[msg.shardId];
         if (!index) {
-          index = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
+          index = new MiniSearchCtor<FullTextDoc>(FULLTEXT_OPTIONS);
           indexes[msg.shardId] = index;
         }
         if (index.has(msg.doc.id)) index.replace(msg.doc);
@@ -177,23 +147,7 @@ self.onmessage = async (e: MessageEvent<InMsg>) => {
         break;
       }
       case "search": {
-        // 모든 ready shard에 query → union → score 내림차순 → top-N
-        // 각 shard 결과는 `{id, score, ...storeFields}` (MiniSearch SearchResult).
-        const combined: { path: string; score: number; name: string }[] = [];
-        for (const idx of indexes) {
-          if (!idx) continue;
-          const results = idx.search(msg.query);
-          for (const r of results) {
-            combined.push({
-              path: r.id as string,
-              score: r.score,
-              name: (r as unknown as { name: string }).name,
-            });
-          }
-        }
-        combined.sort((a, b) => b.score - a.score);
-        const hits: WorkerHit[] = combined.slice(0, msg.limit);
-        post({ type: "results", id: msg.id, hits });
+        post({ type: "results", id: msg.id, hits: unionRank(indexes, msg.query, msg.limit) });
         break;
       }
       case "resetAll": {

@@ -32,11 +32,15 @@ export const indexBuilding = writable<boolean>(false);
  * vault path + shard_count를 박은 뒤, idle 시점에 shard 0..N 순차 로드.
  *
  * - null: lazy 대기 없음 (이미 로드됨 또는 vault 없음)
- * - {vault, shardCount}: 그 vault의 N개 shard를 idle 시점에 로드
+ * - {vault, shardCount, fingerprint}: 그 vault의 N개 shard를 idle 시점에 로드
+ *
+ * `fingerprint`는 meta의 것 — shard를 읽을 때 대조해 **meta와 다른 스냅샷의 shard**를
+ * 걸러낸다(`search_cache.rs` v7의 skew 검출).
  */
 export const pendingFullTextVault = writable<{
   vault: string;
   shardCount: number;
+  fingerprint: string;
 } | null>(null);
 
 /** worker가 loadJSON / addAll 중일 때 true. UI에 "빌드 중" 표시용. */
