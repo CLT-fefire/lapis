@@ -75,7 +75,7 @@ npm run tauri build            # 배포 dmg 빌드
 | Backend | Rust (std::fs/std::path 중심, 외부 crate 최소) |
 | 에디터 | CodeMirror 6 |
 | 마크다운 | markdown-it 14 + js-yaml + 자체 wikilink 룰 + highlight.js |
-| 검색 | **MiniSearch**(BM25 + 한글 bigram, Web Worker + shard 캐시) |
+| 검색 | **MiniSearch**(BM25 + 한글 bigram, Web Worker + shard 캐시). ⚠️ tantivy+lindera는 v1.3.0에서 **제거**됨 |
 | 다이어그램 | Mermaid |
 | MCP | Node (SDK 무의존, 호출 시점 esbuild 번들) |
 
