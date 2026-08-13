@@ -469,6 +469,42 @@ describe("vault 동률", () => {
   });
 });
 
+describe("dev·릴리즈 캐시 분리 (2026-08-13)", () => {
+  // 앱이 dev(`com.lapis.dev-dev/`)와 릴리즈(`com.lapis.dev/`)로 캐시를 나눠 쓴다.
+  // ⚠️ 그러면 **같은 vault의 meta가 두 개** 존재한다 — 크기가 당연히 같으니 예전 규칙대로면
+  // `vault_ambiguous`로 막힌다. 정상 상황에서 도구가 죽는 것이므로 최신을 골라야 한다.
+  it("같은 vault가 둘이면 ambiguous가 아니라 최신을 고른다", () => {
+    const fixture = setup();
+    addSiblingMeta(fixture, {
+      key: "devsidecache001",
+      version: 7,
+      noteCount: SAMPLE_NOTES.length,
+      vaultRoot: fixture.vaultRoot, // ← 같은 vault
+      ageOffsetMs: 60_000, // 1분 더 최신
+    });
+    resetState();
+    const r = search({ doc_kind: "adr" });
+    expect(r.vault).toBe(fixture.vaultRoot);
+    // 최신 쪽(sibling)은 doc_kind가 전부 null인 더미라 0건이 나와야 한다 —
+    // 즉 "최신을 골랐다"가 결과로 증명된다.
+    expect(r.returned).toBe(0);
+  });
+
+  it("서로 다른 vault가 동률이면 여전히 ambiguous", () => {
+    const fixture = setup();
+    addSiblingMeta(fixture, {
+      key: "othervault00001",
+      version: 7,
+      noteCount: SAMPLE_NOTES.length,
+      vaultRoot: "/other/place", // ← 다른 vault
+    });
+    resetState();
+    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
+      expect.objectContaining({ kind: "vault_ambiguous" }),
+    );
+  });
+});
+
 describe("vault 인자 정규화", () => {
   // ⚠️ 캐시 재사용 판정만 `norm()`을 쓰고 `resolveVault`는 `path.resolve` + 후행 슬래시
   // 제거까지 했다. 그래서 슬래시 하나 차이로 매 호출 전체 재로드 + BM25 8 shard
