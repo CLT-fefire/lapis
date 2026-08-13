@@ -373,20 +373,34 @@ describe("오류 직렬화", () => {
 // `stale`은 모든 질의를 막는 fail-closed 게이트인데 테스트가 0건이었다. 픽스처가 vault
 // 파일을 meta보다 **먼저** 쓰기 때문에 이 경로가 한 번도 실행되지 않았다 — 방향이
 // 뒤집히는 회귀가 들어와도 전부 통과했을 것이다.
-describe("staleness — fail-closed", () => {
-  it("vault의 노트가 캐시보다 새로우면 stale", () => {
+describe("staleness — 보고하되 막지 않는다", () => {
+  // ⚠️ 원래는 fail-closed였는데 **실측이 전제를 뒤집었다.** 전제는 "앱이 2초 안에
+  // 갱신하니 stale 창이 좁다"였지만, 커밋에 10~20초가 걸리고 살아 있는 vault는 그 사이에도
+  // 계속 쓰인다. 2026-08-13 실측에서 **19,202개 중 3개(0.016%)** 가 새로웠고 그 상태로
+  // 모든 질의가 실패했다. 0.016%로 도구를 세우는 건 비례하지 않고, 무엇보다
+  // **하드 실패 자체가 판단**이다 — 이 서버의 원칙은 "판단하지 않는다"이다.
+  it("새로운 노트가 있으면 실패 대신 stale을 실어 보낸다", () => {
     const fixture = setup();
-    // 노트 하나를 meta보다 1시간 뒤로 밀어 앱이 아직 재색인하지 않은 상태를 만든다.
     const future = new Date(Date.now() + 3_600_000);
     utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
     resetState();
-    expect(() => lapisQuery({ doc_kind: "adr" })).toThrowError(
-      expect.objectContaining({ kind: "stale" }),
-    );
+    const r = search({ doc_kind: "adr" });
+    expect(r.returned).toBe(2); // ← 막히지 않는다
+    expect(r.stale?.newer_count).toBe(1);
+    expect(r.stale?.behind_s).toBeGreaterThan(3500);
+    expect(r.stale?.sample).toContain("proj/adr/001-abandoned.md");
   });
 
-  it("캐시가 노트보다 새로우면 통과", () => {
-    expect(search({ doc_kind: "adr" }).returned).toBe(2);
+  it("최신이면 stale 필드 자체가 없다 — 있으면 곧 낡았다는 뜻", () => {
+    expect(search({ doc_kind: "adr" }).stale).toBeUndefined();
+  });
+
+  it("list 응답에도 실린다", () => {
+    const fixture = setup();
+    const future = new Date(Date.now() + 3_600_000);
+    utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
+    resetState();
+    expect(facets({ list: "topics" }).stale?.newer_count).toBe(1);
   });
 });
 
