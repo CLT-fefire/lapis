@@ -15,6 +15,17 @@ pub struct LapisSettings {
     /// 초과 시 오래된 것부터 prune. 1-100 사이로 clamp (settings_write 단계).
     #[serde(default = "default_backup_keep")]
     pub link_rewrite_backup_keep: u32,
+
+    /// MCP(`lapis_query`)의 질의 허용 여부. **기본 false** — 명시적으로 켜야 동작한다.
+    ///
+    /// ⚠️ 이 값은 서버 **프로세스 기동**과 무관하다. `lapis-mcp`는 stdio 서버라
+    /// MCP 클라이언트(Claude Code/Desktop)가 자식 프로세스로 띄운다. 앱이 정할 수 있는
+    /// 건 "질의를 받아줄지"뿐이고, 기동까지 막으려면 클라이언트 등록에서 빼야 한다.
+    ///
+    /// ⚠️ `#[serde(default)]`라 **필드가 없는 기존 JSON도 false로 읽힌다.** 의도된
+    /// 동작이지만(기본 OFF), 업그레이드 직후 쓰던 `lapis_query`가 멈춘다.
+    #[serde(default)]
+    pub mcp_enabled: bool,
 }
 
 fn default_backup_keep() -> u32 {
@@ -25,6 +36,7 @@ impl Default for LapisSettings {
     fn default() -> Self {
         Self {
             link_rewrite_backup_keep: default_backup_keep(),
+            mcp_enabled: false,
         }
     }
 }

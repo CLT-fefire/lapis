@@ -42,6 +42,65 @@ function cacheDirs(): string[] {
   ];
 }
 
+/** 앱의 `settings.rs` `SETTINGS_FILENAME`과 같아야 한다. */
+const SETTINGS_FILENAME = "lapis-settings.json";
+
+export type GateState =
+  | { enabled: true }
+  | { enabled: false; reason: "disabled" | "settings_absent" };
+
+/**
+ * 앱 설정의 `mcp_enabled`를 읽는다. **기본은 꺼짐** — 파일이 없으면 켜지 않는다.
+ *
+ * ⚠️ 경로를 직접 조립하지 말 것. `cacheDirs()`에서 파생시켜야 "릴리즈 캐시를 읽으면서
+ * dev 설정을 보는" 어긋남이 안 생긴다(`paths.rs`가 dev만 `-dev` 형제 디렉터리를 쓴다).
+ * 설정 파일은 앱 데이터 루트에 있고 `search-cache/`는 그 하위라 **부모**가 답이다.
+ * 둘 다 있으면 앞선 후보(릴리즈)가 이긴다.
+ *
+ * ⚠️ 이 값은 서버 **프로세스 기동**과 무관하다. stdio 서버는 MCP 클라이언트가 띄운다 —
+ * 앱이 정할 수 있는 건 질의를 받아줄지뿐이다.
+ */
+export function readMcpGate(): GateState {
+  for (const dir of cacheDirs()) {
+    const file = path.join(path.dirname(dir), SETTINGS_FILENAME);
+    let raw: string;
+    try {
+      raw = readFileSync(file, "utf8");
+    } catch {
+      continue; // 이 후보엔 설정이 없다 — 다음 후보로
+    }
+    try {
+      const parsed = JSON.parse(raw) as { mcp_enabled?: unknown };
+      // 명시적 true만 켬으로 본다. 구버전 JSON엔 필드 자체가 없다.
+      return parsed.mcp_enabled === true
+        ? { enabled: true }
+        : { enabled: false, reason: "disabled" };
+    } catch {
+      // 손상된 설정을 "켜짐"으로 읽으면 안 된다 — 닫힌 쪽으로 실패한다.
+      return { enabled: false, reason: "disabled" };
+    }
+  }
+  return { enabled: false, reason: "settings_absent" };
+}
+
+/** 게이트가 닫혔을 때의 실패. 조치가 둘로 갈려서 remedy를 나눈다. */
+export function mcpDisabledError(state: Extract<GateState, { enabled: false }>): LapisError {
+  const fullyDisable =
+    "프로세스까지 막으려면 ~/.claude.json의 mcpServers.lapis를 제거해야 한다 " +
+    "— stdio 서버는 MCP 클라이언트가 띄우므로 앱 설정으로는 기동을 막지 못한다.";
+  return state.reason === "settings_absent"
+    ? new LapisError(
+        "mcp_disabled",
+        "Lapis 설정 파일을 찾지 못했다 — MCP 질의는 기본 꺼짐이다.",
+        `Lapis 앱을 한 번 실행한 뒤 설정 → "MCP 질의"를 켜라. ${fullyDisable}`,
+      )
+    : new LapisError(
+        "mcp_disabled",
+        "MCP 질의가 꺼져 있다.",
+        `Lapis 앱 → 설정 → "MCP 질의"를 켜라. ${fullyDisable}`,
+      );
+}
+
 export const norm = (s: string): string => s.normalize("NFC");
 
 /**
@@ -60,7 +119,8 @@ export type ErrorKind =
   | "vault_not_found"
   | "path_not_indexed"
   | "shard_incomplete"
-  | "no_criteria";
+  | "no_criteria"
+  | "mcp_disabled";
 
 export class LapisError extends Error {
   constructor(

@@ -136,6 +136,11 @@ The search index Lapis builds is exposed through an MCP server. There is exactly
 
 It answers structural queries (`doc_kind`, `topic`, `tag`, `backlinks_of`) and BM25 full-text in a single call. No LLM, no API key — the same arguments produce the same result.
 
+> ⚠️ **Queries are blocked by default.** Turn them on in the app under **Settings → MCP query → Allow**.
+> That switch only governs **whether queries are answered**. `lapis-mcp` is a stdio server, so the
+> process itself is spawned by the Claude client — to stop it from starting at all, remove the
+> `lapis` entry from `mcpServers` above.
+
 **Honest limitations** (measured on a vault of 19,000+ documents):
 
 - **It does not replace grep.** grep has higher recall (100% on AND search vs R@10 89.4%). What this tool adds is **ranking**.

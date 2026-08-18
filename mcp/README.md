@@ -35,6 +35,42 @@ Desktop은 `/usr/bin:/bin:/usr/sbin:/sbin` 정도만 준다. homebrew node(`/opt
 `lapis-mcp`가 호출 시점에 esbuild로 번들한다(16 KB, ~30ms). 사전 빌드 단계가 없다 —
 커밋된 산출물을 두면 소스와 어긋나도 아무 신호가 없기 때문이다.
 
+## 게이트 — 앱 설정이 꺼져 있으면 질의를 거부한다
+
+**기본값은 꺼짐이다.** Lapis 앱 → 설정 → **MCP 질의**를 "허용"으로 바꿔야 동작한다.
+설정은 앱 데이터 루트의 `lapis-settings.json` `mcp_enabled` 필드다.
+
+```
+lapis-settings.json  { "mcp_enabled": true }   ← 앱이 쓴다
+search-cache/                                   ← 같은 루트 하위
+```
+
+경로는 **캐시 디렉터리에서 파생**시킨다(`readMcpGate`). 후보 탐색을 다시 구현하면
+"릴리즈 캐시를 읽으면서 dev 설정을 보는" 어긋남이 생긴다 — `paths.rs`가 dev만
+`-dev` 형제 디렉터리를 쓰기 때문이다. 둘 다 있으면 앞선 후보(릴리즈)가 이긴다.
+
+닫힌 쪽으로 실패한다: 설정 파일이 없거나 · 필드가 없거나 · JSON이 깨졌으면 **거부**다.
+`"true"` 같은 truthy 흉내도 안 통하고 **명시적 `true`만** 켬으로 본다.
+
+### ⚠️ 이 스위치가 못 하는 것 — 프로세스 기동
+
+`lapis-mcp`는 **stdio** 서버다. stdio 서버는 **MCP 클라이언트가 자식 프로세스로 spawn**하고
+stdin/stdout으로 대화한다. 즉 프로세스를 띄우는 주체는 Claude Code / Claude Desktop이지
+**Lapis 앱이 아니다.** 앱은 캐시 생산자일 뿐이고, 둘 사이에 프로세스 관계가 없다.
+
+그래서 앱 설정으로 정할 수 있는 건 **질의를 받아줄지**뿐이다. 프로세스까지 막으려면
+클라이언트 등록에서 빼야 한다:
+
+```json
+{ "mcpServers": { } }        // ~/.claude.json에서 lapis 항목 제거
+```
+
+### 왜 `tools/call`에서 보나 — `tools/list`가 아니라
+
+MCP 클라이언트는 도구 목록을 **연결 시점에 캐시한다.** 목록을 게이트하면 앱에서 토글해도
+클라이언트를 재시작하기 전엔 반영되지 않는다. 호출마다 판정하면 즉시 먹고, 비용은 작은
+JSON 파일 하나 읽기다.
+
 ## 전제 — 인덱스 생산자는 앱이다
 
 Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인코드 제외) ·

@@ -8,6 +8,8 @@
     LINK_REWRITE_BACKUP_KEEP_MAX,
     applyBackupKeep,
     clampBackupKeep,
+    mcpEnabled,
+    applyMcpEnabled,
   } from "$lib/stores/settings";
   import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
   import { density, setDensity, type Density } from "$lib/stores/density";
@@ -34,6 +36,23 @@
     { value: true, label: "제한" },
     { value: false, label: "전체 폭" },
   ];
+
+  const MCP_OPTIONS: { value: boolean; label: string }[] = [
+    { value: true, label: "허용" },
+    { value: false, label: "차단" },
+  ];
+
+  let mcpHint = $state<string>("");
+
+  async function setMcp(v: boolean) {
+    if ($mcpEnabled === v) return;
+    try {
+      await applyMcpEnabled(v);
+      mcpHint = "";
+    } catch (e) {
+      mcpHint = `저장 실패 — ${(e as Error)?.message ?? e}`;
+    }
+  }
 
   // 백업 max_keep — 입력 중에는 local state, blur/Enter 시 적용
   let backupKeepInput = $state<number>($linkRewriteBackupKeep);
@@ -226,6 +245,41 @@
               disabled={backupKeepSaving}
               aria-label="링크 갱신 백업 보존 개수"
             />
+          </div>
+        </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">MCP 질의</span>
+              <span class="label-desc">
+                Claude Code·Desktop에서 <code>lapis_query</code>로 이 vault의 인덱스를 질의할 수
+                있게 합니다. <strong>기본은 차단</strong>이라 켜야 동작합니다.
+              </span>
+              <span class="label-hint">
+                ⚠️ 서버 프로세스는 Claude 클라이언트가 띄웁니다 — 여기서 차단하면 질의만 거부되고
+                기동 자체는 막지 못합니다. 완전히 막으려면 <code>~/.claude.json</code>의
+                <code>mcpServers.lapis</code>를 제거하세요.
+              </span>
+              {#if mcpHint}
+                <span class="label-hint">{mcpHint}</span>
+              {/if}
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label="MCP 질의 허용 여부">
+              {#each MCP_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$mcpEnabled === opt.value}
+                  aria-pressed={$mcpEnabled === opt.value}
+                  onclick={() => setMcp(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
           </div>
         </section>
 
