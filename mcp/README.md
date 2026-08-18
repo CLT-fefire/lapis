@@ -22,7 +22,7 @@ MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같�
 ```json
 {
   "mcpServers": {
-    "lapis": { "command": "/Users/Shared/Source/Personal/Lapis/mcp/lapis-mcp" }
+    "lapis": { "command": "/절대/경로/lapis/mcp/lapis-mcp" }
   }
 }
 ```
@@ -53,7 +53,7 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 
 ```json
 "stale": { "newer_count": 5, "total": 19203, "behind_s": 293,
-           "sample": ["lysn-epic/memories/MEMORY.md", "…"] }
+           "sample": ["my-project/memories/MEMORY.md", "…"] }
 ```
 
 **필드가 없으면 최신**이라는 뜻이다. 있으면 몇 개가 얼마나 앞서는지 보고 판단하라 —

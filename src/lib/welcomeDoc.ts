@@ -26,7 +26,7 @@ tags: [welcome, getting-started]
 ### 추천 vault 경로
 
 - 개인 노트: \`~/Documents/Notes\`
-- 프로젝트 문서: \`/Users/Shared/Source/<프로젝트>/docs\`
+- 프로젝트 문서: \`~/Source/<프로젝트>/docs\`
 - 빈 폴더를 새로 만들어도 됩니다 — 첫 노트는 사이드바의 "Welcome 샘플 만들기" 버튼으로 만들 수 있어요.
 
 ## 핵심 단축키
@@ -42,9 +42,9 @@ tags: [welcome, getting-started]
 | \`F2\` | 현재 노트 이름 변경 *(Mac 매직 키보드 기본은 F2가 밝기 — \`Fn+F2\` 또는 키보드 설정에서 "F1, F2를 표준 기능 키로" 켜기. 안 되면 \`⌘K\` → "Rename")* |
 | \`⌘⌫\` | 현재 노트 휴지통으로 |
 
-## 자세한 가이드
+## 더 알아보기
 
-설치 · 사용 · FAQ는 [팀 Confluence 페이지](https://everysing.atlassian.net/wiki/spaces/IMA/pages/4435017752/Lapis)에 정리되어 있습니다.
+설치 · 단축키 전체 · FAQ는 저장소 README에 정리되어 있습니다.
 
-GitHub: <https://github.com/CLT-fefire/lapis>
+GitHub: <https://github.com/eren0315/lapis>
 `;

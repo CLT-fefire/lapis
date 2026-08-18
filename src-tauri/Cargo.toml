@@ -2,7 +2,7 @@
 name = "lapis"
 version = "1.9.0"
 description = "Personal Markdown Knowledge Workbench"
-authors = ["정철화 <fefire@dearu.com>"]
+authors = ["eren0315"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
