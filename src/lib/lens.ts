@@ -1,3 +1,4 @@
+import { m } from "$lib/paraglide/messages.js";
 import type { LinkInfo, NoteEntry } from "$lib/tauri/notes";
 
 /**
@@ -11,7 +12,14 @@ import type { LinkInfo, NoteEntry } from "$lib/tauri/notes";
  */
 
 /** 값 없는 노트가 모이는 그룹 라벨. */
-export const NO_VALUE_LABEL = "(미지정)";
+/**
+ * ⚠️ **상수가 아니라 함수다.** 모듈 최상위 `const`로 두면 import 시점에 한 번만
+ * 평가돼 로케일 변경을 못 따라온다 — `{#key $activeLocale}` remount는 컴포넌트만
+ * 다시 만들지 모듈 코드를 재실행하지 않는다. 호출 시점에 해소해야 한다.
+ */
+export function noValueLabel(): string {
+  return m.lens_no_value();
+}
 
 /** 합성 그룹 path의 prefix — 실제 노트 path는 `/`로 시작하므로 충돌 불가. */
 const GROUP_PATH_PREFIX = "lens://";
@@ -113,7 +121,7 @@ export function groupNotesByField(infos: LinkInfo[], field: string): NoteEntry[]
   const buckets = new Map<string, LinkInfo[]>();
   for (const info of infos) {
     const vals = info.props?.[field];
-    const value = vals && vals.length > 0 ? vals[0] : NO_VALUE_LABEL;
+    const value = vals && vals.length > 0 ? vals[0] : noValueLabel();
     let arr = buckets.get(value);
     if (!arr) {
       arr = [];
@@ -131,8 +139,8 @@ export function groupNotesByField(infos: LinkInfo[], field: string): NoteEntry[]
   }
   entries.sort((a, b) => {
     // (미지정)은 항상 마지막
-    if (a.value === NO_VALUE_LABEL) return 1;
-    if (b.value === NO_VALUE_LABEL) return -1;
+    if (a.value === noValueLabel()) return 1;
+    if (b.value === noValueLabel()) return -1;
     return b.notes.length - a.notes.length || a.value.localeCompare(b.value);
   });
 

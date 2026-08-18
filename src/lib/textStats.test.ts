@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeTextStats, readingTimeLabel } from "./textStats";
+import { m } from "$lib/paraglide/messages.js";
 
 describe("computeTextStats", () => {
   it("빈 문자열/공백만 → 모두 0", () => {
@@ -72,7 +73,10 @@ describe("readingTimeLabel", () => {
     expect(readingTimeLabel(0)).toBe("—");
     expect(readingTimeLabel(-1)).toBe("—");
   });
-  it("양수 → '약 N분'", () => {
-    expect(readingTimeLabel(3)).toBe("약 3분");
+  // ⚠️ 로케일 의존 — vitest는 node 환경이라 `navigator`가 없어 baseLocale(en)로 해소된다.
+  // 한국어 문구를 단정하면 실행 환경에 따라 깨진다. 로케일을 명시해 양쪽을 고정한다.
+  it("양수 → 로케일별 문구", () => {
+    expect(readingTimeLabel(3)).toBe("About 3 min");
+    expect(m.stats_reading_time({ minutes: 3 }, { locale: "ko" })).toBe("약 3분");
   });
 });

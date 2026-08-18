@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import Autocomplete from "$lib/Autocomplete.svelte";
   import type { ValidationResult } from "$lib/Autocomplete.svelte";
 
@@ -65,8 +66,8 @@
       <button
         class="x"
         type="button"
-        title="제거"
-        aria-label={`${v} 제거`}
+        title={m.chip_remove()}
+        aria-label={m.chip_remove_aria({ value: v })}
         onclick={() => removeAt(i)}
       >×</button>
     </span>
@@ -84,7 +85,7 @@
       />
     </span>
   {:else}
-    <button class="add-btn" type="button" title="추가" onclick={startAdding}>+</button>
+    <button class="add-btn" type="button" title={m.chip_add()} onclick={startAdding}>+</button>
   {/if}
 </div>
 

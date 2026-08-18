@@ -1,5 +1,7 @@
 <script lang="ts">
   import FileTree from "./FileTree.svelte";
+  import { m } from "$lib/paraglide/messages.js";
+  import { welcomeNote } from "$lib/welcomeDoc";
   import TagPanel from "./TagPanel.svelte";
   import FilterPanel from "./FilterPanel.svelte";
   import FavoritesPanel from "./FavoritesPanel.svelte";
@@ -57,34 +59,34 @@
   // === vault 메뉴 (Discord 서버 헤더 드롭다운) ===
   // 헤더에 상시 노출하던 ↻ 📁 를 여기로 접고, 설정에만 있던 인덱스 재구축도 합류시킨다.
   const vaultMenuItems: PaneMenuItem[] = [
-    { id: "reload", label: "↻ 새로고침", onSelect: () => void reloadNotes() },
+    { id: "reload", label: m.sidebar_menu_refresh(), onSelect: () => void reloadNotes() },
     {
       id: "reveal",
-      label: "📂 Finder에서 보기",
+      label: m.sidebar_menu_reveal(),
       onSelect: () => {
         if ($vaultPath) void revealInFinder($vaultPath);
       },
     },
-    { id: "open-other", label: "📁 다른 vault 열기…", onSelect: () => void pickAndOpenVault() },
+    { id: "open-other", label: m.sidebar_menu_open_other(), onSelect: () => void pickAndOpenVault() },
     {
       id: "reindex",
-      label: "🔄 인덱스 재구축",
-      title: "검색·태그·관계 인덱스를 캐시 무시하고 다시 만듭니다",
+      label: m.sidebar_menu_reindex(),
+      title: m.sidebar_menu_reindex_desc(),
       onSelect: () => void forceReindex(),
     },
-    { id: "settings", label: "⚙ 설정", onSelect: openSettings },
+    { id: "settings", label: m.sidebar_menu_settings(), onSelect: openSettings },
   ];
 
   // === 하단 상태 (Discord 유저 패널 자리) ===
   // watcher 점(topbar) · 트리 로딩 스피너(헤더) · 인덱스 진행(별도 strip)으로 **세 곳에
   // 흩어져 있던** 신호를 한 줄로 모은다. 우선순위: 작업 중 > 감시 상태.
   const vaultStatus = $derived.by(() => {
-    if ($indexBuilding) return { tone: "busy", text: "인덱스 만드는 중…" };
-    if ($indexRefreshing) return { tone: "busy", text: "인덱스 갱신 중…" };
-    if ($treeLoading) return { tone: "busy", text: "트리 읽는 중…" };
-    if ($watcherStatus === "watching") return { tone: "ok", text: "변경 감시 중" };
-    if ($watcherStatus === "error") return { tone: "error", text: "감시 오류" };
-    return { tone: "idle", text: "대기" };
+    if ($indexBuilding) return { tone: "busy", text: m.sidebar_status_indexing() };
+    if ($indexRefreshing) return { tone: "busy", text: m.sidebar_status_refreshing() };
+    if ($treeLoading) return { tone: "busy", text: m.sidebar_status_reading_tree() };
+    if ($watcherStatus === "watching") return { tone: "ok", text: m.sidebar_status_watching() };
+    if ($watcherStatus === "error") return { tone: "error", text: m.sidebar_status_watch_error() };
+    return { tone: "idle", text: m.sidebar_status_idle() };
   });
 
   const noteCount = $derived($linkIndex ? $linkIndex.byPath.size : 0);
@@ -228,56 +230,6 @@
     return n > 99 ? "99+" : String(n);
   }
 
-  // 빈 vault 첫 진입 가이드용 Welcome 노트 콘텐츠. 사용자가 명시적으로 버튼을 눌렀을 때만 생성.
-  const WELCOME_NOTE_CONTENT = `---
-title: Welcome
-tags: [welcome, getting-started]
----
-
-# Welcome to Lapis
-
-이 노트는 Lapis 사용법을 익히기 위한 샘플입니다. 자유롭게 편집하거나 삭제하세요.
-
-## Wikilink 예제
-
-다른 노트로의 링크는 \`[[노트이름]]\`으로 작성합니다. 별칭도 가능: \`[[Welcome|환영]]\`.
-대상 노트가 없으면 회색 점선으로 표시됩니다 (예: [[아직-없는-노트]]).
-
-## 태그
-
-본문에 \`#태그명\` 형식으로 작성하면 자동 수집됩니다. 예: #welcome #intro.
-사이드바 **Tags** 탭에서 모든 태그를 확인할 수 있습니다.
-
-## Mermaid 다이어그램
-
-코드 펜스에 \`mermaid\` 언어를 지정하면 미리보기에서 자동 렌더링됩니다.
-
-\`\`\`mermaid
-graph LR
-  A[노트 작성] --> B[wikilink 연결]
-  B --> C[그래프 탐색]
-  C --> D[지식 정리]
-\`\`\`
-
-## 단축키 모음
-
-| 단축키 | 동작 |
-|---|---|
-| \`⌘K\` | Command Palette |
-| \`⌘P\` | Quick File Open |
-| \`⌘⇧F\` | Full-text 검색 |
-| \`⌘F\` | 노트 내 검색 |
-| \`⌘N\` | 새 노트 |
-| \`⌘S\` | 즉시 저장 |
-| \`F2\` | 노트 이름 변경 *(Mac 매직 키보드는 \`Fn+F2\` 또는 \`⌘K\` → "Rename")* |
-| \`⌘⌫\` | 노트 휴지통으로 |
-
-## 다음 단계
-
-1. \`⌘N\`으로 첫 노트를 만들어보세요
-2. 본문에 \`[[Welcome]]\`을 적어 이 노트를 가리키게 한 뒤, 사이드바 하단 **Backlinks**에서 역참조 확인
-3. \`⌘G\`로 그래프를 열어 노트 연결을 시각화
-`;
 
   let welcomeCreating = $state(false);
 
@@ -288,7 +240,7 @@ graph LR
     welcomeCreating = true;
     try {
       // parentDir에 vault root를 그대로 전달 — create_note Tauri command이 그 안에 파일 생성
-      await createNewNote(vault, "Welcome.md", WELCOME_NOTE_CONTENT);
+      await createNewNote(vault, "Welcome.md", welcomeNote());
     } catch (e) {
       console.error("[Sidebar] createWelcomeNote 실패", e);
     } finally {
@@ -304,7 +256,7 @@ graph LR
            접기(◀)는 레일에 상시 있으므로 여기서 제거(중복). -->
       <PaneMenu
         items={vaultMenuItems}
-        label="Vault 메뉴"
+        label={m.sidebar_vault_menu()}
         triggerClass="vault-trigger"
         align="left"
       >
@@ -314,14 +266,14 @@ graph LR
         {/snippet}
       </PaneMenu>
     {:else}
-      <button class="open-btn" onclick={pickAndOpenVault}>Vault 열기…</button>
+      <button class="open-btn" onclick={pickAndOpenVault}>{m.sidebar_open_vault()}</button>
     {/if}
   </header>
 
   {#if $indexBuilding || $indexRefreshing}
     <!-- 최초 빌드(blocking)·백그라운드 재빌드/증분 모두 이 얇은 strip으로 표시.
          dim 오버레이(.index-overlay)는 최초 빌드($indexBuilding)에만 — 아래 참조. -->
-    <div class="progress-strip" title="인덱스 갱신 중 (백링크/태그/검색)">
+    <div class="progress-strip" title={m.sidebar_indexing_strip()}>
       <div class="progress-fill"></div>
     </div>
   {/if}
@@ -329,12 +281,12 @@ graph LR
   <div class="sidebar-body">
     {#if !$vaultPath}
       <div class="empty">
-        <p>vault 폴더를 선택하면<br />.md 파일들이 여기 표시됩니다.</p>
+        <p>{m.sidebar_pick_vault_hint()}</p>
       </div>
     {:else}
       <SidebarSection
         icon={FileText}
-        label="Files"
+        label={m.section_files()}
         open={$sidebarNav.sectionOpen.files}
         onToggle={() => toggleSection("files")}
         height={sectionHeight("files")}
@@ -345,14 +297,14 @@ graph LR
         {#snippet children()}
           {#if $notes.length > 0}
             <div class="lens-bar">
-              <span class="lens-label">보기</span>
+              <span class="lens-label">{m.sidebar_lens_label()}</span>
               <select
                 class="lens-select"
                 value={$groupingField ?? ""}
                 onchange={(e) => setGroupingField(e.currentTarget.value || null)}
-                title="frontmatter 필드 값으로 그룹핑 (폴더 트리는 '폴더')"
+                title={m.sidebar_lens_title()}
               >
-                <option value="">폴더</option>
+                <option value="">{m.sidebar_lens_folder()}</option>
                 {#each groupingCandidatesList as c (c.field)}
                   <option value={c.field}>{c.field} · {c.noteCount}</option>
                 {/each}
@@ -364,14 +316,14 @@ graph LR
                   <FileTree entries={groupedEntries} disableDnd />
                 </div>
               {:else}
-                <div class="filter-empty">이 필드를 가진 노트가 없습니다</div>
+                <div class="filter-empty">{m.sidebar_lens_empty()}</div>
               {/if}
             {:else}
               <div class="tree-filter">
                 <input
                   type="text"
                   class="tree-filter-input"
-                  placeholder="파일 필터…"
+                  placeholder={m.sidebar_filter_placeholder()}
                   value={$treeFilterQuery}
                   oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
                   onkeydown={onTreeFilterKeydown}
@@ -379,17 +331,17 @@ graph LR
                   autocomplete="off"
                 />
                 {#if treeFilterActive}
-                  <span class="match-count" title="매칭된 파일 수">{filteredMatchCount}</span>
+                  <span class="match-count" title={m.sidebar_filter_count_title()}>{filteredMatchCount}</span>
                   <button
                     class="filter-clear"
                     onclick={clearTreeFilter}
-                    title="필터 지우기 (Esc)"
-                    aria-label="필터 지우기"
+                    title={m.sidebar_filter_clear_title()}
+                    aria-label={m.sidebar_filter_clear_aria()}
                   >✕</button>
                 {/if}
               </div>
               {#if treeFilterActive && filteredNotes.length === 0}
-                <div class="filter-empty">매칭되는 파일이 없습니다</div>
+                <div class="filter-empty">{m.sidebar_filter_empty()}</div>
               {:else}
                 <div class="files-pane" bind:this={filesPaneEl}>
                   <FileTree
@@ -402,16 +354,16 @@ graph LR
             {/if}
           {:else}
             <div class="empty">
-              <p>이 폴더에 .md 파일이 없습니다.</p>
-              <p class="empty-hint">처음이신가요? 단축키와 wikilink 예제가 담긴 샘플 노트로 시작해보세요.</p>
+              <p>{m.sidebar_folder_empty()}</p>
+              <p class="empty-hint">{m.sidebar_first_time_hint()}</p>
               <button
                 class="btn btn--primary welcome-btn"
                 onclick={createWelcomeNote}
                 disabled={welcomeCreating}
               >
-                {welcomeCreating ? "생성 중…" : "Welcome 샘플 만들기"}
+                {welcomeCreating ? m.sidebar_welcome_creating() : m.sidebar_welcome_create()}
               </button>
-              <button class="link-btn" onclick={pickAndOpenVault}>다른 vault 선택</button>
+              <button class="link-btn" onclick={pickAndOpenVault}>{m.sidebar_pick_other_vault()}</button>
             </div>
           {/if}
         {/snippet}
@@ -419,7 +371,7 @@ graph LR
 
       <SidebarSection
         icon={Hash}
-        label="Tags"
+        label={m.section_tags()}
         open={$sidebarNav.sectionOpen.tags}
         count={$tagIndex?.sortedTags.length ?? 0}
         onToggle={() => toggleSection("tags")}
@@ -433,7 +385,7 @@ graph LR
 
       <SidebarSection
         icon={SlidersHorizontal}
-        label="Filters"
+        label={m.section_filters()}
         open={$sidebarNav.sectionOpen.filters}
         count={$selectedDocKinds.size + $selectedTopics.size || $docKindCounts.size + $topicCounts.size}
         onToggle={() => toggleSection("filters")}
@@ -447,7 +399,7 @@ graph LR
 
       <SidebarSection
         icon={Star}
-        label="Favorites"
+        label={m.section_favorites()}
         open={$sidebarNav.sectionOpen.favorites}
         count={$pinnedNotePaths.length}
         onToggle={() => toggleSection("favorites")}
@@ -468,12 +420,15 @@ graph LR
         <div class="index-overlay-card">
           <div class="spinner" aria-hidden="true"></div>
           <div class="index-overlay-text">
-            <div class="primary">인덱스 빌드 중…</div>
+            <div class="primary">{m.sidebar_index_building()}</div>
             <div class="secondary">
               {#if $buildProgress && $buildProgress.total > 0}
-                풀텍스트 {$buildProgress.done.toLocaleString()} / {$buildProgress.total.toLocaleString()} 노트
+                {m.sidebar_index_fulltext_progress({
+            done: $buildProgress.done.toLocaleString(),
+            total: $buildProgress.total.toLocaleString(),
+          })}
               {:else}
-                백링크 · 태그 · 풀텍스트 검색 재구성
+                {m.sidebar_index_building_desc()}
               {/if}
             </div>
           </div>
@@ -486,7 +441,7 @@ graph LR
     <!-- Discord 유저 패널 자리 — 상태 전용.
          설정 버튼은 두지 않는다: 여기에 라벨 없는 작은 ⚙를 놓으면 "작은 글리프는 인지가
          어렵다"는 과거 피드백을 되돌리게 된다. 진입 경로는 레일 ⚙(툴팁 있음) ·
-         vault 메뉴 "⚙ 설정" · ⌘K 로 이미 셋이다. -->
+         vault 메뉴 m.sidebar_menu_settings() · ⌘K 로 이미 셋이다. -->
     {#if $vaultPath}
       <div class="vault-status" title={$vaultPath}>
         <span

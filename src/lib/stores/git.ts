@@ -1,3 +1,4 @@
+import { m } from "$lib/paraglide/messages.js";
 import { writable, get } from "svelte/store";
 import { gitIsRepo, gitInit, gitCommitAll, gitCommitPaths } from "$lib/tauri/git";
 
@@ -111,10 +112,18 @@ function resetAutoCommitState(): void {
   needsFullSweep = false;
 }
 
-/** 자동 스냅샷 커밋 메시지(시각). 순수. */
+/**
+ * 자동 스냅샷 커밋 메시지(시각).
+ *
+ * ⚠️ 시각 자체는 **로케일화하지 않는다.** `YYYY-MM-DD HH:mm`은 로케일 중립이고
+ * 정렬 가능해서 로그·타임스탬프엔 `Intl` 형식보다 낫다. 문구만 번역한다.
+ * ⚠️ 커밋 메시지는 사용자 저장소에 **영구히 남는다** — 도중에 언어를 바꾸면 이력에
+ * 두 언어가 섞이지만, 만든 시점의 언어로 남기는 게 사후 재작성보다 옳다.
+ */
 export function autoCommitMessage(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
-  return `Lapis 자동 스냅샷 — ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const timestamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return m.git_auto_commit_message({ timestamp });
 }
 
 // === 이력 뷰어(V3) 표시 헬퍼 — 순수 ===

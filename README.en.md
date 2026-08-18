@@ -122,6 +122,12 @@ The full-text index is built in a **Web Worker** and **cached to disk per shard*
 
 ---
 
+## Language
+
+The interface is available in **English and Korean**. By default it **follows your OS language**, falling back to English when that language is not supported. Pick System / 한국어 / English under Settings → **Language**.
+
+The Welcome sample note created in an empty vault is written in whatever language is active at the time. Files that already exist are left alone when you switch languages.
+
 ## Claude Code integration — knowledge query MCP
 
 The search index Lapis builds is exposed through an MCP server. There is exactly **one** tool (`lapis_query`).

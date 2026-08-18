@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import {
     tagIndex,
     selectedTag,
@@ -46,8 +47,9 @@
 
 {#if !$tagIndex || ($tagIndex.sortedTags.length === 0 && $tagIndex.rootPrefixes.length === 0)}
   <div class="empty">
-    <p>태그가 발견되지 않았습니다.</p>
-    <p class="hint">frontmatter <code>tags:</code> 항목 (kebab-case, <code>/</code> nested 지원)</p>
+    <p>{m.tags_empty()}</p>
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      <p class="hint">{@html m.tags_hint()}</p>
   </div>
 {:else if $selectedTag}
   {@const key = $selectedTag}
@@ -58,7 +60,7 @@
     <span class="filter-chip selected" class:prefix={kind === "prefix"}>
       {kind === "prefix" ? `${display}/` : `#${display}`}
       <span class="count">{list.length}</span>
-      <button class="chip-close" title="필터 해제" onclick={() => selectTag(null)}>×</button>
+      <button class="chip-close" title={m.tags_clear_filter()} onclick={() => selectTag(null)}>×</button>
     </span>
   </div>
   <ul class="note-list">
@@ -88,13 +90,13 @@
           <button
             class="prefix-toggle"
             onclick={() => togglePrefix(prefix)}
-            title={isOpen ? "접기" : "펼치기"}
+            title={isOpen ? m.tags_collapse() : m.tags_expand()}
           >
             <span class="caret" class:open={isOpen}>▸</span>
           </button>
           <button
             class="prefix-name"
-            title="이 prefix 하위 모든 노트 보기"
+            title={m.tags_prefix_all()}
             onclick={() => selectTag(prefix, "prefix")}
           >
             <span class="name">{prefix}/</span>
@@ -127,7 +129,7 @@
     <!-- flat 태그 (prefix 없는 단일 단어 태그) -->
     {#if $tagIndex.flatTags.length > 0}
       <div class="flat-section">
-        <div class="flat-header">기타</div>
+        <div class="flat-header">{m.tags_flat_other()}</div>
         <ul class="flat-list">
           {#each $tagIndex.flatTags as tagKey (tagKey)}
             {@const display = $tagIndex.display.get(tagKey) ?? tagKey}
@@ -159,7 +161,9 @@
     color: var(--text-disabled);
   }
 
-  .empty code {
+  /* ⚠️ `:global()` — 인라인 마크업이 있어 `{@html}`로 그린다. Svelte scoped CSS는
+     `{@html}` 주입 요소에 안 붙는다(스코프 클래스 미부착). */
+  .empty :global(code) {
     background: var(--surface-overlay);
     padding: 1px 5px;
     border-radius: var(--r-xs);

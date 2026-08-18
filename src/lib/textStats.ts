@@ -2,6 +2,8 @@
 // 한국어(+CJK)와 라틴 텍스트가 섞인 노트를 합리적으로 다루기 위해
 // 읽기 시간은 "CJK 글자 ~500자/분 + 라틴 단어 ~200단어/분" 블렌딩으로 추정한다.
 
+import { m } from "$lib/paraglide/messages.js";
+
 export interface TextStats {
   /** 공백으로 구분된 토큰 수 (한글 어절 + 영문 단어). */
   words: number;
@@ -55,5 +57,5 @@ export function computeTextStats(raw: string): TextStats {
 
 /** topbar 표시용 읽기 시간 레이블. */
 export function readingTimeLabel(minutes: number): string {
-  return minutes <= 0 ? "—" : `약 ${minutes}분`;
+  return minutes <= 0 ? m.stats_reading_none() : m.stats_reading_time({ minutes });
 }

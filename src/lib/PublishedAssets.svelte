@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { vaultPath } from "$lib/stores/vault";
@@ -50,7 +51,7 @@
         <button
           class="thumb"
           type="button"
-          title={`${a.name} — 시스템 기본 뷰어로 열기`}
+          title={m.assets_open_title({ name: a.name })}
           onclick={() => openInSystem(a)}
         >
           <img src={convertFileSrc(a.abs_path)} alt={a.name} loading="lazy" />

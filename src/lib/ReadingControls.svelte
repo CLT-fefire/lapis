@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import {
     readingFontSize,
     increaseFontSize,
@@ -37,51 +38,53 @@
   <button
     class="btn btn--icon btn--sm"
     class:active={open}
-    title="프리뷰 글꼴 크기"
-    aria-label="프리뷰 글꼴 크기 조절"
+    title={m.reading_font_size_title()}
+    aria-label={m.reading_font_size_aria()}
     aria-expanded={open}
     onclick={() => (open = !open)}
   >Aa</button>
 
   {#if open}
-    <div class="reading-popover" role="group" aria-label="읽기 설정">
+    <div class="reading-popover" role="group" aria-label={m.reading_popover_aria()}>
       <div class="row">
-        <span class="row-label">글꼴</span>
+        <span class="row-label">{m.reading_font_row()}</span>
         <button
           class="btn btn--icon btn--sm"
-          title="글꼴 작게"
-          aria-label="글꼴 작게"
+          title={m.reading_font_smaller()}
+          aria-label={m.reading_font_smaller()}
           disabled={$readingFontSize <= READING_FONT_MIN}
           onclick={decreaseFontSize}
         >A−</button>
         <span class="row-value">{$readingFontSize}px</span>
         <button
           class="btn btn--icon btn--sm"
-          title="글꼴 크게"
-          aria-label="글꼴 크게"
+          title={m.reading_font_larger()}
+          aria-label={m.reading_font_larger()}
           disabled={$readingFontSize >= READING_FONT_MAX}
           onclick={increaseFontSize}
         >A+</button>
       </div>
 
       <div class="row">
-        <span class="row-label">본문 폭</span>
+        <span class="row-label">{m.reading_measure_row()}</span>
         <button
           class="btn btn--icon btn--sm"
-          title="본문 폭 좁게"
-          aria-label="본문 폭 좁게"
+          title={m.reading_measure_narrower()}
+          aria-label={m.reading_measure_narrower()}
           disabled={$readingMeasureLimited && $readingMeasureEm <= READING_MEASURE_MIN}
           onclick={narrowMeasure}
         >◀</button>
         <!-- 한글은 전각이라 `Nem ≈ 한 줄 N자`가 거의 그대로 성립한다 — em보다 읽는 사람에게
              의미 있는 단위. -->
         <span class="row-value">
-          {$readingMeasureLimited ? `약 ${$readingMeasureEm}자` : "무제한"}
+          {$readingMeasureLimited
+            ? m.reading_measure_value({ chars: $readingMeasureEm })
+            : m.reading_measure_unlimited()}
         </span>
         <button
           class="btn btn--icon btn--sm"
-          title="본문 폭 넓게 (더 넓히면 무제한)"
-          aria-label="본문 폭 넓게"
+          title={m.reading_measure_wider()}
+          aria-label={m.reading_measure_wider()}
           disabled={!$readingMeasureLimited}
           onclick={widenMeasure}
         >▶</button>
@@ -89,12 +92,12 @@
 
       <button
         class="btn btn--sm btn--plain reset"
-        title="기본값({READING_FONT_DEFAULT}px · 약 {READING_MEASURE_DEFAULT}자)으로"
+        title={m.reading_reset_title({ font: READING_FONT_DEFAULT, measure: READING_MEASURE_DEFAULT })}
         disabled={$readingFontSize === READING_FONT_DEFAULT &&
           $readingMeasureLimited &&
           $readingMeasureEm === READING_MEASURE_DEFAULT}
         onclick={resetReading}
-      >리셋</button>
+      >{m.reading_reset()}</button>
     </div>
   {/if}
 </div>

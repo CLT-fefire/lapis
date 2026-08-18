@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import type { ComponentProps } from "svelte";
   import { FileCode2, ListTree, Share2, Paperclip } from "@lucide/svelte";
   import SidebarSection from "./SidebarSection.svelte";
@@ -32,10 +33,10 @@
   );
 </script>
 
-<aside class="context-panel" aria-label="문서 컨텍스트">
+<aside class="context-panel" aria-label={m.ctxpanel_aria()}>
   <SidebarSection
     icon={FileCode2}
-    label="속성"
+    label={m.ctxpanel_properties()}
     open={$contextSections.properties}
     onToggle={() => toggleContextSection("properties")}
   >
@@ -44,7 +45,7 @@
 
   <SidebarSection
     icon={ListTree}
-    label="목차"
+    label={m.ctxpanel_outline()}
     open={$contextSections.outline}
     count={$outlineHeadings.length || null}
     onToggle={() => toggleContextSection("outline")}
@@ -55,7 +56,7 @@
   {#if neighborhood}
     <SidebarSection
       icon={Share2}
-      label="관계 · 백링크"
+      label={m.ctxpanel_relations()}
       open={$contextSections.relations}
       count={relationCount}
       onToggle={() => toggleContextSection("relations")}
@@ -67,7 +68,7 @@
   {#if notePath}
     <SidebarSection
       icon={Paperclip}
-      label="발행 자산"
+      label={m.ctxpanel_assets()}
       open={$contextSections.assets}
       onToggle={() => toggleContextSection("assets")}
     >

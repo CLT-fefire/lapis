@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import {
     outlineHeadings,
     activeHeadingSlug,
@@ -8,11 +9,12 @@
 
 {#if $outlineHeadings.length === 0}
   <div class="outline-empty">
-    <p>이 노트에 헤딩(<code>#</code>)이 없습니다.</p>
-    <p class="hint">헤딩을 추가하면 여기 아웃라인이 표시됩니다.</p>
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    <p>{@html m.outline_empty()}</p>
+    <p class="hint">{m.outline_empty_hint()}</p>
   </div>
 {:else}
-  <nav class="outline" aria-label="문서 아웃라인">
+  <nav class="outline" aria-label={m.outline_aria()}>
     {#each $outlineHeadings as h (h.slug)}
       <button
         class="outline-item lvl-{h.level}"
@@ -102,7 +104,8 @@
   .outline-empty .hint {
     font-size: var(--fs-xs);
   }
-  .outline-empty code {
+  /* ⚠️ `:global()` — `{@html}` 주입 요소엔 scoped CSS가 안 붙는다. */
+  .outline-empty :global(code) {
     font-family: var(--font-mono);
     background: var(--surface-sunken);
     padding: 1px var(--sp-2);

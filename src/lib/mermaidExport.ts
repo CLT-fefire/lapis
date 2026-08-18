@@ -12,6 +12,7 @@
  *   mermaid-runtime.ts에서 `flowchart.htmlLabels: false`로 `<text>` 라벨을 강제한다.
  */
 
+import { m } from "$lib/paraglide/messages.js";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
 import { resolveEffectiveTheme } from "$lib/stores/theme";
@@ -137,7 +138,7 @@ export async function exportMermaidHostToPng(
     blob = await svgElementToPngBlob(svg as SVGSVGElement);
   } catch (err) {
     // 다이얼로그 전 단계(taint/면적 한계 등) 실패 — 버튼이 죽은 듯 보이지 않게 알림
-    await notifyExportError("이 다이어그램을 PNG로 변환할 수 없습니다.", err);
+    await notifyExportError(m.mermaid_convert_failed(), err);
     return;
   }
 
@@ -155,7 +156,7 @@ export async function exportMermaidHostToPng(
     await writeBinaryFile(targetPath, bytes);
   } catch (err) {
     // 저장 단계(권한/디스크/경로) 실패 — 파일이 안 생기는데 무반응이 되지 않게 알림
-    await notifyExportError("PNG 파일을 저장하지 못했습니다.", err);
+    await notifyExportError(m.mermaid_save_failed(), err);
   }
 }
 
@@ -164,7 +165,7 @@ async function notifyExportError(summary: string, err: unknown): Promise<void> {
   console.error("mermaid PNG 내보내기 실패:", err);
   try {
     await message(`${summary}\n\n${detail}`, {
-      title: "PNG 내보내기 실패",
+      title: m.mermaid_export_error_title(),
       kind: "error",
     });
   } catch {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { selectNote, vaultPath } from "$lib/stores/vault";
   import { fetchBacklinkContext, type BacklinkContext } from "$lib/backlinks";
   import { gitRepo, formatCommitDate, diffLineClass } from "$lib/stores/git";
@@ -192,8 +193,8 @@
                   class="chevron"
                   type="button"
                   aria-expanded={isOpen}
-                  aria-label={isOpen ? "스니펫 접기" : "스니펫 펼치기"}
-                  title={isOpen ? "접기" : "본문 인용 위치 보기"}
+                  aria-label={isOpen ? m.nb_snippet_collapse_aria() : m.nb_snippet_expand_aria()}
+                  title={isOpen ? m.nb_snippet_collapse() : m.nb_snippet_expand()}
                   onclick={() => toggle(bl)}
                 >{isOpen ? "▾" : "▸"}</button>
                 <button
@@ -211,12 +212,12 @@
                   {:else if ctx && ctx.matched}
                     <p class="snippet">{ctx.snippet}</p>
                   {:else if ctx}
-                    <p class="snippet no-match">본문에 직접 인용 없음</p>
+                    <p class="snippet no-match">{m.nb_no_direct_citation()}</p>
                   {:else}
                     <span class="placeholder">…</span>
                   {/if}
                   <button class="open-link" type="button" onclick={() => selectNote(bl.source_path)}>
-                    노트 열기 →
+                    {m.nb_open_note()}
                   </button>
                 </div>
               {/if}
@@ -241,7 +242,7 @@
                   class="commit-row"
                   type="button"
                   aria-expanded={isOpen}
-                  title={`${c.short} · ${c.author} · 클릭하면 변경 내용`}
+                  title={m.nb_commit_title({ short: c.short, author: c.author })}
                   onclick={() => toggleCommit(c.hash)}
                 >
                   <span class="commit-chevron">{isOpen ? "▾" : "▸"}</span>
@@ -254,7 +255,7 @@
                     {#if diff == null}
                       <span class="placeholder">…</span>
                     {:else if diff.trim() === ""}
-                      <span class="placeholder">이 커밋에 이 노트의 변경 없음</span>
+                      <span class="placeholder">{m.nb_commit_no_change()}</span>
                     {:else}
                       <div class="diff">
                         {#each diff.split("\n") as ln}

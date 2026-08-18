@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import {
     inDocSearch,
@@ -71,9 +72,9 @@
     vm.query === ""
       ? ""
       : vm.regexError
-        ? "정규식 오류"
+        ? m.search_regex_error()
         : vm.total === 0
-          ? "매치 없음"
+          ? m.search_no_match()
           : `${vm.current} / ${vm.total}`,
   );
 
@@ -85,7 +86,7 @@
     <input
       bind:this={inputEl}
       type="text"
-      placeholder={vm.options.regex ? "정규식 (JS regex)" : "현재 노트에서 찾기"}
+      placeholder={vm.options.regex ? m.search_placeholder_regex() : m.search_placeholder_plain()}
       value={vm.query}
       oninput={handleInput}
       onkeydown={handleKeydown}
@@ -97,28 +98,28 @@
       type="button"
       class="opt"
       class:active={vm.options.caseSensitive}
-      title="대소문자 구분 (Aa)"
+      title={m.search_case_title()}
       onclick={() => onToggle("caseSensitive")}
       aria-pressed={vm.options.caseSensitive}
-      aria-label="대소문자 구분"
+      aria-label={m.search_case_aria()}
     >Aa</button>
     <button
       type="button"
       class="opt"
       class:active={vm.options.wholeWord}
-      title="단어 단위 매치 (\b\w\b)"
+      title={m.search_word_title()}
       onclick={() => onToggle("wholeWord")}
       aria-pressed={vm.options.wholeWord}
-      aria-label="단어 단위 매치"
+      aria-label={m.search_word_aria()}
     >W</button>
     <button
       type="button"
       class="opt"
       class:active={vm.options.regex}
-      title="정규식 사용 (JS RegExp)"
+      title={m.search_regex_title()}
       onclick={() => onToggle("regex")}
       aria-pressed={vm.options.regex}
-      aria-label="정규식 사용"
+      aria-label={m.search_regex_aria()}
     >.*</button>
     <span class="count" class:none={vm.query !== "" && (vm.total === 0 || vm.regexError)}>
       {countLabel}
@@ -126,25 +127,25 @@
     <button
       type="button"
       class="nav"
-      title="이전 (Shift+Enter)"
+      title={m.search_prev_title()}
       onclick={() => onPrev?.()}
       disabled={disabled}
-      aria-label="이전 매치"
+      aria-label={m.search_prev_aria()}
     >▲</button>
     <button
       type="button"
       class="nav"
-      title="다음 (Enter)"
+      title={m.search_next_title()}
       onclick={() => onNext?.()}
       disabled={disabled}
-      aria-label="다음 매치"
+      aria-label={m.search_next_aria()}
     >▼</button>
     <button
       type="button"
       class="close"
-      title="닫기 (Esc)"
+      title={m.search_close_title()}
       onclick={close}
-      aria-label="검색 닫기"
+      aria-label={m.search_close_aria()}
     >✕</button>
   </div>
 {/if}

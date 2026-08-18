@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { fade, scale } from "svelte/transition";
   import { backdropFade, cardPop } from "$lib/motion";
@@ -152,12 +153,12 @@
 
   // placeholder — hint mode와 prefix에 따라 안내
   const placeholder = $derived.by(() => {
-    if ($paletteHintMode === "files") return "파일명·alias·title…";
-    if ($paletteHintMode === "fulltext") return "본문 키워드…";
-    if (query.startsWith(">")) return "> 명령 검색";
-    if (query.startsWith("#")) return "# 태그 검색";
-    if (query.startsWith(":")) return ": doc_kind / topic 필터";
-    return "통합 검색 — > 명령, # 태그, : facet";
+    if ($paletteHintMode === "files") return m.palette_ph_names();
+    if ($paletteHintMode === "fulltext") return m.palette_ph_content();
+    if (query.startsWith(">")) return m.palette_ph_commands();
+    if (query.startsWith("#")) return m.palette_ph_tags();
+    if (query.startsWith(":")) return m.palette_ph_facets();
+    return m.palette_ph_all();
   });
 
   // 활성 결과 실행
@@ -274,7 +275,7 @@
       class="modal"
       role="dialog"
       aria-modal="true"
-      aria-label="Command palette"
+      aria-label={m.palette_aria()}
       transition:scale={cardPop()}
     >
       <input
@@ -289,18 +290,19 @@
       />
 
       {#if showContentBuildingHint}
-        <div class="status">본문 인덱스 빌드 중…</div>
+        <div class="status">{m.palette_status_building()}</div>
       {:else if displayList.length === 0 && query}
-        <div class="status">결과 없음</div>
+        <div class="status">{m.palette_status_empty()}</div>
       {:else if displayList.length === 0}
         <div class="status hint">
-          입력해서 검색하세요. <kbd>&gt;</kbd> 명령 · <kbd>#</kbd> 태그 · <kbd>:</kbd> facet
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html m.palette_hint_full()}
         </div>
       {/if}
 
       <div class="results" bind:this={listEl}>
         {#if showRecents}
-          <div class="group-header">RECENT</div>
+          <div class="group-header">{m.palette_group_recent()}</div>
           {#each groups.recents as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "recent"}
@@ -321,7 +323,7 @@
         {/if}
 
         {#if showNotes}
-          <div class="group-header">NOTES</div>
+          <div class="group-header">{m.palette_group_notes()}</div>
           {#each groups.notes as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "note"}
@@ -342,7 +344,7 @@
         {/if}
 
         {#if showContent}
-          <div class="group-header">CONTENT</div>
+          <div class="group-header">{m.palette_group_content()}</div>
           {#each groups.content as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "content"}
@@ -363,7 +365,7 @@
         {/if}
 
         {#if showTagsGroup}
-          <div class="group-header">TAGS</div>
+          <div class="group-header">{m.palette_group_tags()}</div>
           {#each groups.tags as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "tag"}
@@ -387,7 +389,7 @@
         {/if}
 
         {#if showFacets}
-          <div class="group-header">FACETS</div>
+          <div class="group-header">{m.palette_group_facets()}</div>
           {#each groups.facets as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "facet"}
@@ -434,9 +436,9 @@
       </div>
 
       <footer class="palette-foot">
-        <span>↑↓ 탐색</span>
-        <span>↵ 실행</span>
-        <span>Esc 닫기</span>
+        <span>{m.palette_key_navigate()}</span>
+        <span>{m.palette_key_run()}</span>
+        <span>{m.palette_key_close()}</span>
       </footer>
     </div>
   </div>
@@ -490,7 +492,9 @@
     font-size: var(--fs-base);
   }
 
-  .status.hint kbd {
+  /* ⚠️ `:global()` — 이 문구는 인라인 마크업이 있어 `{@html}`로 그린다.
+     Svelte scoped CSS는 `{@html}` 주입 요소에 안 붙는다(스코프 클래스 미부착). */
+  .status.hint :global(kbd) {
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     border-radius: var(--r-xs);

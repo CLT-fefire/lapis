@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { m } from "$lib/paraglide/messages.js";
 import {
   bannerDismissKey,
   shouldShowBanner,
@@ -24,10 +25,15 @@ describe("bannerDismissKey", () => {
 });
 
 describe("autoCommitMessage", () => {
+  // ⚠️ 문구는 로케일 의존(node 환경엔 navigator가 없어 baseLocale=en). 시각 포맷은
+  // 로케일 중립이라 양쪽 공통 — 그래서 시각만 무조건 단정하고 문구는 로케일별로 본다.
   it("시각 포맷(0-패딩) 포함", () => {
     const msg = autoCommitMessage(new Date(2026, 0, 5, 9, 7)); // 2026-01-05 09:07
-    expect(msg).toContain("Lapis 자동 스냅샷");
     expect(msg).toContain("2026-01-05 09:07");
+    expect(msg).toContain("Lapis auto snapshot");
+    expect(m.git_auto_commit_message({ timestamp: "x" }, { locale: "ko" })).toContain(
+      "Lapis 자동 스냅샷",
+    );
   });
 });
 

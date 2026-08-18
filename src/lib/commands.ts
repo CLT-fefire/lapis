@@ -1,3 +1,4 @@
+import { m } from "$lib/paraglide/messages.js";
 import { get } from "svelte/store";
 import { fuzzyMatch } from "$lib/searchIndex";
 import {
@@ -34,10 +35,17 @@ export interface CommandHit {
 }
 
 /** 빌트인 명령. 가짓수 적고 정적이라 hard-code. */
+/**
+ * ⚠️ `label`이 **getter**인 이유 — 이 배열은 모듈 최상위라 일반 프로퍼티로 두면
+ * import 시점에 한 번 평가돼 로케일 변경을 못 따라온다(`lens.ts`에서 겪은 함정).
+ * getter면 접근할 때마다 해소되므로 호출부는 그대로 `c.label`을 쓴다.
+ */
 export const BUILTIN_COMMANDS: Command[] = [
   {
     id: "new-note",
-    label: "New Note",
+    get label() {
+      return m.cmd_new_note();
+    },
     shortcut: "⌘N",
     disabled: () => !get(vaultPath),
     run() {
@@ -47,20 +55,24 @@ export const BUILTIN_COMMANDS: Command[] = [
       const parentDir = cur ? cur.split("/").slice(0, -1).join("/") : vault;
       const parentLabel = cur
         ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
-        : "(vault root)";
+        : m.cmd_vault_root();
       openNewNote(parentDir, parentLabel);
     },
   },
   {
     id: "open-vault",
-    label: "Open Vault…",
+    get label() {
+      return m.cmd_open_vault();
+    },
     run() {
       void pickAndOpenVault();
     },
   },
   {
     id: "reload-vault",
-    label: "Reload Vault",
+    get label() {
+      return m.cmd_reload_vault();
+    },
     disabled: () => !get(vaultPath),
     run() {
       void reloadNotes();
@@ -68,7 +80,9 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "toggle-sidebar",
-    label: "Toggle Sidebar",
+    get label() {
+      return m.cmd_toggle_sidebar();
+    },
     shortcut: "⌘B",
     run() {
       toggleSidebar();
@@ -76,7 +90,9 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "new-tab",
-    label: "New Tab",
+    get label() {
+      return m.cmd_new_tab();
+    },
     shortcut: "⌘T",
     disabled: () => !get(vaultPath),
     run() {
@@ -86,7 +102,9 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "new-window",
-    label: "New Window",
+    get label() {
+      return m.cmd_new_window();
+    },
     shortcut: "⌘⇧T",
     run() {
       // 새 창은 vault 없이 뜬다 — 거기서 다른 vault를 고르면 그 창만 바뀐다.
@@ -95,7 +113,9 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "toggle-main-pane",
-    label: "Toggle Editor / Preview",
+    get label() {
+      return m.cmd_toggle_editor_preview();
+    },
     shortcut: "⌘E",
     run() {
       toggleMainPane();
@@ -103,7 +123,9 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "toggle-context-panel",
-    label: "Toggle Context Panel",
+    get label() {
+      return m.cmd_toggle_context();
+    },
     shortcut: "⌘⌥B",
     run() {
       toggleContext();
@@ -111,14 +133,18 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "reset-layout",
-    label: "Reset Layout",
+    get label() {
+      return m.cmd_reset_layout();
+    },
     run() {
       resetLayout();
     },
   },
   {
     id: "rename-current-note",
-    label: "Rename Current Note",
+    get label() {
+      return m.cmd_rename_note();
+    },
     shortcut: "F2",
     disabled: () => !get(currentNotePath),
     run() {
@@ -128,20 +154,24 @@ export const BUILTIN_COMMANDS: Command[] = [
   },
   {
     id: "delete-current-note",
-    label: "Delete Current Note (move to Trash)",
+    get label() {
+      return m.cmd_delete_note();
+    },
     shortcut: "⌘⌫",
     disabled: () => !get(currentNotePath),
     async run() {
       const cur = get(currentNotePath);
       if (!cur) return;
       const name = cur.split("/").pop() ?? cur;
-      if (!confirm(`노트 "${name}"을(를) 휴지통으로 이동할까요?`)) return;
+      if (!confirm(m.ctx_confirm_trash({ label: m.ctx_label_note({ name }) }))) return;
       await deletePath(cur);
     },
   },
   {
     id: "copy-current-note-path",
-    label: "Copy Current Note Path",
+    get label() {
+      return m.cmd_copy_note_path();
+    },
     shortcut: "⌘⇧C",
     disabled: () => !get(currentNotePath),
     async run() {

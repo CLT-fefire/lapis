@@ -14,6 +14,7 @@
  * Neighborhood(백링크)는 문서가 아니라 앱 UI라 제외한다.
  */
 
+import { m } from "$lib/paraglide/messages.js";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
 import renderedCss from "$lib/styles/rendered.css?raw";
@@ -128,7 +129,7 @@ export async function exportPreviewToHtml(
       bodyHtml: clone.innerHTML,
     });
   } catch (err) {
-    await notifyExportError("프리뷰를 HTML로 변환하지 못했습니다.", err);
+    await notifyExportError(m.export_html_convert_failed(), err);
     return;
   }
 
@@ -141,7 +142,7 @@ export async function exportPreviewToHtml(
   try {
     await writeBinaryFile(targetPath, new TextEncoder().encode(html));
   } catch (err) {
-    await notifyExportError("HTML 파일을 저장하지 못했습니다.", err);
+    await notifyExportError(m.export_html_save_failed(), err);
     return;
   }
 
@@ -149,9 +150,8 @@ export async function exportPreviewToHtml(
   // 그 이미지는 어디서 열든 깨진 상태다.
   if (images.failed > 0) {
     await message(
-      `이미지 ${images.failed}개를 파일에 넣지 못했습니다.\n` +
-        `나머지 ${images.inlined}개는 정상 포함됐습니다. 자세한 내용은 콘솔을 확인하세요.`,
-      { title: "일부 이미지 누락", kind: "warning" },
+      m.export_images_missing_body({ failed: images.failed, inlined: images.inlined }),
+      { title: m.export_images_missing_title(), kind: "warning" },
     );
   }
 }
@@ -161,7 +161,7 @@ async function notifyExportError(summary: string, err: unknown): Promise<void> {
   console.error("[export] HTML 내보내기 실패:", err);
   try {
     await message(`${summary}\n\n${detail}`, {
-      title: "HTML 내보내기 실패",
+      title: m.export_html_error_title(),
       kind: "error",
     });
   } catch {
