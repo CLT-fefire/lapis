@@ -277,8 +277,6 @@ graph LR
 1. \`⌘N\`으로 첫 노트를 만들어보세요
 2. 본문에 \`[[Welcome]]\`을 적어 이 노트를 가리키게 한 뒤, 사이드바 하단 **Backlinks**에서 역참조 확인
 3. \`⌘G\`로 그래프를 열어 노트 연결을 시각화
-
-자세한 사용 가이드는 [팀 Confluence 페이지](https://everysing.atlassian.net/wiki/spaces/IMA/pages/4435017752/Lapis)를 참고하세요.
 `;
 
   let welcomeCreating = $state(false);
