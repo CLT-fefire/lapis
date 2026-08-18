@@ -1,0 +1,6 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "settings_language_title": "Language",
+  "settings_language_desc": "Language for the app interface. \"System\" follows your OS language and falls back to English when it is not supported.",
+  "settings_language_system": "System"
+}

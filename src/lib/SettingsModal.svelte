@@ -18,6 +18,8 @@
     setReadingMeasureLimited,
   } from "$lib/stores/reading";
   import { vaultPath, forceReindex } from "$lib/stores/vault";
+  import { localeMode, setLocaleMode, type LocaleMode } from "$lib/stores/locale";
+  import { m } from "$lib/paraglide/messages.js";
   import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
   import { get } from "svelte/store";
 
@@ -35,6 +37,14 @@
   const MEASURE_OPTIONS: { value: boolean; label: string }[] = [
     { value: true, label: "제한" },
     { value: false, label: "전체 폭" },
+  ];
+
+  // 언어명은 **그 언어로** 표기한다(시스템만 번역 대상) — 어느 로케일에서 보든
+  // 자기 언어를 찾을 수 있어야 하기 때문. OS·브라우저 설정 UI의 관행이다.
+  const LOCALE_OPTIONS: { value: LocaleMode; label: string }[] = [
+    { value: "system", label: m.settings_language_system() },
+    { value: "ko", label: "한국어" },
+    { value: "en", label: "English" },
   ];
 
   const MCP_OPTIONS: { value: boolean; label: string }[] = [
@@ -135,6 +145,30 @@
       </header>
 
       <div class="settings-body">
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_language_title()}</span>
+              <span class="label-desc">{m.settings_language_desc()}</span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label={m.settings_language_title()}>
+              {#each LOCALE_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$localeMode === opt.value}
+                  aria-pressed={$localeMode === opt.value}
+                  onclick={() => setLocaleMode(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
