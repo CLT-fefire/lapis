@@ -23,20 +23,22 @@
   import { gitRepo, gitBusy, startVersioning, refreshGitStatus } from "$lib/stores/git";
   import { get } from "svelte/store";
 
+  // ⚠️ `{#key $activeLocale}`(+layout)이 로케일 변경 시 컴포넌트를 재생성하므로
+  // 이 const들도 다시 평가된다 — 그래서 최상위 const로 둬도 로케일을 따라온다.
   const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-    { value: "system", label: "시스템" },
-    { value: "light", label: "라이트" },
-    { value: "dark", label: "다크" },
+    { value: "system", label: m.settings_theme_system() },
+    { value: "light", label: m.settings_theme_light() },
+    { value: "dark", label: m.settings_theme_dark() },
   ];
 
   const DENSITY_OPTIONS: { value: Density; label: string }[] = [
-    { value: "default", label: "기본" },
-    { value: "compact", label: "촘촘하게" },
+    { value: "default", label: m.settings_density_default() },
+    { value: "compact", label: m.settings_density_compact() },
   ];
 
   const MEASURE_OPTIONS: { value: boolean; label: string }[] = [
-    { value: true, label: "제한" },
-    { value: false, label: "전체 폭" },
+    { value: true, label: m.settings_measure_limited() },
+    { value: false, label: m.settings_measure_full() },
   ];
 
   // 언어명은 **그 언어로** 표기한다(시스템만 번역 대상) — 어느 로케일에서 보든
@@ -48,8 +50,8 @@
   ];
 
   const MCP_OPTIONS: { value: boolean; label: string }[] = [
-    { value: true, label: "허용" },
-    { value: false, label: "차단" },
+    { value: true, label: m.settings_mcp_allow() },
+    { value: false, label: m.settings_mcp_block() },
   ];
 
   let mcpHint = $state<string>("");
@@ -60,7 +62,7 @@
       await applyMcpEnabled(v);
       mcpHint = "";
     } catch (e) {
-      mcpHint = `저장 실패 — ${(e as Error)?.message ?? e}`;
+      mcpHint = m.settings_mcp_save_failed({ error: (e as Error)?.message ?? String(e) });
     }
   }
 
@@ -68,6 +70,8 @@
   let backupKeepInput = $state<number>($linkRewriteBackupKeep);
   let backupKeepSaving = $state(false);
   let backupKeepHint = $state<string>("");
+  /** "저장됨" 힌트 자동 소거용 — 표시 문자열을 비교하지 않기 위한 세대 카운터. */
+  let backupKeepHintToken = 0;
 
   // store가 외부에서 갱신되면 (예: 다른 모달, restoreSettings) input도 동기화
   $effect(() => {
@@ -80,7 +84,10 @@
     const clamped = clampBackupKeep(raw);
     if (clamped !== raw) {
       backupKeepInput = clamped;
-      backupKeepHint = `${LINK_REWRITE_BACKUP_KEEP_MIN}–${LINK_REWRITE_BACKUP_KEEP_MAX} 범위로 조정됨`;
+      backupKeepHint = m.settings_backup_clamped({
+        min: LINK_REWRITE_BACKUP_KEEP_MIN,
+        max: LINK_REWRITE_BACKUP_KEEP_MAX,
+      });
     } else {
       backupKeepHint = "";
     }
@@ -88,13 +95,17 @@
     backupKeepSaving = true;
     try {
       await applyBackupKeep(clamped);
-      backupKeepHint = `저장됨 (max_keep=${clamped})`;
+      backupKeepHint = m.settings_backup_saved({ count: clamped });
+      // ⚠️ 예전엔 `backupKeepHint.startsWith("저장됨")`으로 지웠는데, **표시 문자열을
+      // 비교하는 건 번역되면 깨진다**(영어에선 항상 false → 힌트가 안 사라진다).
+      // 토큰으로 "지금 지워도 되는 힌트인지"를 판정한다.
+      const token = ++backupKeepHintToken;
       setTimeout(() => {
-        if (backupKeepHint.startsWith("저장됨")) backupKeepHint = "";
+        if (backupKeepHintToken === token) backupKeepHint = "";
       }, 2000);
     } catch (e) {
       console.error("[Settings] backup_keep apply failed", e);
-      backupKeepHint = "저장 실패 — 콘솔 확인";
+      backupKeepHint = m.settings_backup_save_failed();
     } finally {
       backupKeepSaving = false;
     }
@@ -121,7 +132,7 @@
     const vault = get(vaultPath);
     if (!vault || $gitBusy) return;
     await startVersioning(vault);
-    gitHint = $gitRepo ? "버전관리를 시작했습니다 — 변경 시 자동으로 커밋됩니다." : "시작 실패 — 콘솔 확인";
+    gitHint = $gitRepo ? m.settings_git_started() : m.settings_git_start_failed();
   }
 
   // === 인덱스 강제 재구축 ===
@@ -137,11 +148,11 @@
 </script>
 
 {#if $settingsOpen}
-  <ModalShell onClose={closeSettings} label="설정">
+  <ModalShell onClose={closeSettings} label={m.settings_title()}>
     <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <header class="settings-head">
-        <h2 id="settings-title">설정</h2>
-        <button class="btn btn--icon btn--sm btn--plain" aria-label="닫기" onclick={closeSettings}>×</button>
+        <h2 id="settings-title">{m.settings_title()}</h2>
+        <button class="btn btn--icon btn--sm btn--plain" aria-label={m.settings_close()} onclick={closeSettings}>×</button>
       </header>
 
       <div class="settings-body">
@@ -172,14 +183,12 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">테마</span>
-              <span class="label-desc">
-                앱 색상 테마. "시스템"은 macOS 라이트/다크 설정을 따릅니다.
-              </span>
+              <span class="label-title">{m.settings_theme_title()}</span>
+              <span class="label-desc">{m.settings_theme_desc()}</span>
             </span>
           </div>
           <div class="setting-control">
-            <div class="segmented" role="group" aria-label="테마 선택">
+            <div class="segmented" role="group" aria-label={m.settings_theme_aria()}>
               {#each THEME_OPTIONS as opt (opt.value)}
                 <button
                   type="button"
@@ -198,15 +207,12 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">밀도</span>
-              <span class="label-desc">
-                사이드바·목록·버튼의 여백을 조절합니다. "촘촘하게"는 한 화면에 더 많은 항목을
-                보여줍니다(글자 크기는 그대로).
-              </span>
+              <span class="label-title">{m.settings_density_title()}</span>
+              <span class="label-desc">{m.settings_density_desc()}</span>
             </span>
           </div>
           <div class="setting-control">
-            <div class="segmented" role="group" aria-label="밀도 선택">
+            <div class="segmented" role="group" aria-label={m.settings_density_aria()}>
               {#each DENSITY_OPTIONS as opt (opt.value)}
                 <button
                   type="button"
@@ -225,18 +231,13 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">본문 폭</span>
-              <span class="label-desc">
-                프리뷰 본문 폭을 제한하고 가운데 정렬합니다. 창이 넓을수록 한 줄이 길어져
-                줄을 놓치기 쉬워집니다. <strong>폭 값은 Preview 툴바의 Aa</strong>에서
-                글자 크기와 함께 조절합니다(여기서는 켜고 끄기만). 표는 이 폭에 맞춰
-                줄어들고, 코드 블록처럼 더 줄일 수 없는 내용은 자체 가로 스크롤이 생깁니다.
-                내보낸 HTML도 이 설정을 따릅니다.
-              </span>
+              <span class="label-title">{m.settings_measure_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_measure_desc()}</span>
             </span>
           </div>
           <div class="setting-control">
-            <div class="segmented" role="group" aria-label="본문 폭 선택">
+            <div class="segmented" role="group" aria-label={m.settings_measure_aria()}>
               {#each MEASURE_OPTIONS as opt (opt.value)}
                 <button
                   type="button"
@@ -255,11 +256,13 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">링크 갱신 백업 보존 개수</span>
+              <span class="label-title">{m.settings_backup_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               <span class="label-desc">
-                노트 이름을 바꿀 때 영향 노트의 스냅샷이 vault 안
-                <code>.lapis/link-rewrite-backup/</code>에 저장됩니다. 이 개수를 초과하면
-                오래된 것부터 자동 삭제합니다. (범위 {LINK_REWRITE_BACKUP_KEEP_MIN}–{LINK_REWRITE_BACKUP_KEEP_MAX})
+                {@html m.settings_backup_desc({
+                  min: LINK_REWRITE_BACKUP_KEEP_MIN,
+                  max: LINK_REWRITE_BACKUP_KEEP_MAX,
+                })}
               </span>
               {#if backupKeepHint}
                 <span class="label-hint">{backupKeepHint}</span>
@@ -277,7 +280,7 @@
               onblur={commitBackupKeep}
               onkeydown={onBackupKeepKeydown}
               disabled={backupKeepSaving}
-              aria-label="링크 갱신 백업 보존 개수"
+              aria-label={m.settings_backup_aria()}
             />
           </div>
         </section>
@@ -285,23 +288,18 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">MCP 질의</span>
-              <span class="label-desc">
-                Claude Code·Desktop에서 <code>lapis_query</code>로 이 vault의 인덱스를 질의할 수
-                있게 합니다. <strong>기본은 차단</strong>이라 켜야 동작합니다.
-              </span>
-              <span class="label-hint">
-                ⚠️ 서버 프로세스는 Claude 클라이언트가 띄웁니다 — 여기서 차단하면 질의만 거부되고
-                기동 자체는 막지 못합니다. 완전히 막으려면 <code>~/.claude.json</code>의
-                <code>mcpServers.lapis</code>를 제거하세요.
-              </span>
+              <span class="label-title">{m.settings_mcp_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_mcp_desc()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-hint">{@html m.settings_mcp_warn()}</span>
               {#if mcpHint}
                 <span class="label-hint">{mcpHint}</span>
               {/if}
             </span>
           </div>
           <div class="setting-control">
-            <div class="segmented" role="group" aria-label="MCP 질의 허용 여부">
+            <div class="segmented" role="group" aria-label={m.settings_mcp_aria()}>
               {#each MCP_OPTIONS as opt (opt.value)}
                 <button
                   type="button"
@@ -320,11 +318,9 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">Git 버전관리</span>
-              <span class="label-desc">
-                vault 변경을 자동으로 커밋해 이력을 남깁니다(노트 하단 <strong>History</strong>에서 확인).
-                <code>_memories</code> 등은 제외하고 로컬 <code>.git</code>만 생성합니다.
-              </span>
+              <span class="label-title">{m.settings_git_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_git_desc()}</span>
               {#if gitHint}
                 <span class="label-hint">{gitHint}</span>
               {/if}
@@ -332,16 +328,16 @@
           </div>
           <div class="setting-control">
             {#if !$vaultPath}
-              <span class="setting-status">vault 없음</span>
+              <span class="setting-status">{m.settings_git_no_vault()}</span>
             {:else if $gitRepo}
-              <span class="setting-status on">활성</span>
+              <span class="setting-status on">{m.settings_git_active()}</span>
             {:else}
               <button
                 class="btn btn--primary btn--sm"
                 disabled={$gitBusy}
                 onclick={onStartVersioning}
               >
-                {$gitBusy ? "시작 중…" : "버전관리 시작"}
+                {$gitBusy ? m.settings_git_starting() : m.settings_git_start()}
               </button>
             {/if}
           </div>
@@ -350,27 +346,23 @@
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
-              <span class="label-title">인덱스 재구축</span>
-              <span class="label-desc">
-                검색·태그·관계 인덱스를 캐시를 무시하고 처음부터 다시 만듭니다. 외부에서 문서나
-                속성을 대량으로 바꿨는데 검색에 반영이 안 될 때 사용하세요.
-                <strong>보통은 자동 반영</strong>되므로 평소엔 필요 없습니다. 누르면 설정이 닫히고
-                사이드바에 진행 표시가 나타납니다(완료까지 검색은 잠시 막힘, 읽기는 계속 가능).
-              </span>
+              <span class="label-title">{m.settings_reindex_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_reindex_desc()}</span>
             </span>
           </div>
           <div class="setting-control">
             {#if !$vaultPath}
-              <span class="setting-status">vault 없음</span>
+              <span class="setting-status">{m.settings_git_no_vault()}</span>
             {:else}
-              <button class="btn btn--sm" onclick={onRebuildIndex}>재구축</button>
+              <button class="btn btn--sm" onclick={onRebuildIndex}>{m.settings_reindex_button()}</button>
             {/if}
           </div>
         </section>
       </div>
 
       <footer class="settings-foot">
-        <button class="btn btn--ghost" onclick={closeSettings}>닫기</button>
+        <button class="btn btn--ghost" onclick={closeSettings}>{m.settings_close()}</button>
       </footer>
     </div>
   </ModalShell>
@@ -484,7 +476,11 @@
     font-size: var(--fs-xs);
     color: var(--accent);
   }
-  .label-text code {
+  /* ⚠️ `:global()`이 필요하다 — 설명 문구는 번역 문자열에 인라인 마크업(`<code>`·
+     `<strong>`)이 들어 있어 `{@html}`로 그린다. **Svelte scoped CSS는 `{@html}`이
+     주입한 요소에 안 붙는다**(스코프 클래스가 안 찍힌다) → 그냥 `code`로 두면
+     "Unused CSS selector" 경고와 함께 스타일이 죽는다. 실제로 그렇게 한 번 깨졌다. */
+  .label-text :global(code) {
     background: var(--surface-sunken);
     padding: 1px 5px;
     border-radius: var(--r-sm);

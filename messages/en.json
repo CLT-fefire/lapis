@@ -1,6 +1,57 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+
+  "settings_title": "Settings",
+  "settings_close": "Close",
+
   "settings_language_title": "Language",
   "settings_language_desc": "Language for the app interface. \"System\" follows your OS language and falls back to English when it is not supported.",
-  "settings_language_system": "System"
+  "settings_language_system": "System",
+
+  "settings_theme_title": "Theme",
+  "settings_theme_desc": "App color theme. \"System\" follows the macOS light/dark setting.",
+  "settings_theme_aria": "Select theme",
+  "settings_theme_system": "System",
+  "settings_theme_light": "Light",
+  "settings_theme_dark": "Dark",
+
+  "settings_density_title": "Density",
+  "settings_density_desc": "Adjusts padding in the sidebar, lists, and buttons. \"Compact\" fits more items on screen (text size is unchanged).",
+  "settings_density_aria": "Select density",
+  "settings_density_default": "Default",
+  "settings_density_compact": "Compact",
+
+  "settings_measure_title": "Content width",
+  "settings_measure_desc": "Limits the preview content width and centers it. The wider the window, the longer each line gets and the easier it is to lose your place. <strong>The width value lives under Aa in the Preview toolbar</strong>, next to text size — this switch only turns it on and off. Tables shrink to fit, and content that cannot shrink further (such as code blocks) gets its own horizontal scroll. Exported HTML follows this setting too.",
+  "settings_measure_aria": "Select content width",
+  "settings_measure_limited": "Limited",
+  "settings_measure_full": "Full width",
+
+  "settings_backup_title": "Link-rewrite backups to keep",
+  "settings_backup_desc": "When you rename a note, snapshots of the affected notes are saved inside the vault under <code>.lapis/link-rewrite-backup/</code>. Anything beyond this count is deleted oldest-first. (Range {min}–{max})",
+  "settings_backup_aria": "Link-rewrite backups to keep",
+  "settings_backup_clamped": "Adjusted to the {min}–{max} range",
+  "settings_backup_saved": "Saved (max_keep={count})",
+  "settings_backup_save_failed": "Save failed — check the console",
+
+  "settings_mcp_title": "MCP query",
+  "settings_mcp_desc": "Lets Claude Code and Desktop query this vault's index through <code>lapis_query</code>. <strong>Blocked by default</strong> — you have to allow it.",
+  "settings_mcp_warn": "⚠️ The server process is spawned by the Claude client — blocking here only refuses queries, it cannot stop the process from starting. To stop it entirely, remove <code>mcpServers.lapis</code> from <code>~/.claude.json</code>.",
+  "settings_mcp_aria": "Allow MCP queries",
+  "settings_mcp_allow": "Allow",
+  "settings_mcp_block": "Block",
+  "settings_mcp_save_failed": "Save failed — {error}",
+
+  "settings_git_title": "Git version control",
+  "settings_git_desc": "Commits vault changes automatically so you keep a history (see <strong>History</strong> at the bottom of a note). Excludes paths like <code>_memories</code> and only creates a local <code>.git</code>.",
+  "settings_git_no_vault": "No vault",
+  "settings_git_active": "Active",
+  "settings_git_starting": "Starting…",
+  "settings_git_start": "Start version control",
+  "settings_git_started": "Version control started — changes are committed automatically.",
+  "settings_git_start_failed": "Could not start — check the console",
+
+  "settings_reindex_title": "Rebuild index",
+  "settings_reindex_desc": "Rebuilds the search, tag, and relation indexes from scratch, ignoring the cache. Use it when you changed documents or properties in bulk outside the app and search has not caught up. <strong>Changes normally propagate on their own</strong>, so you rarely need this. Pressing it closes Settings and shows progress in the sidebar (search is briefly blocked until it finishes; reading keeps working).",
+  "settings_reindex_button": "Rebuild"
 }
