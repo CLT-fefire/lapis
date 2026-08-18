@@ -4,7 +4,7 @@
 
 ## 현재 상태
 
-🎉 **v1.9.0 released** — [Releases](https://github.com/CLT-fefire/lapis/releases) (dmg, Apple Silicon).
+🎉 **v1.9.0 released** — [Releases](https://github.com/eren0315/lapis/releases) (dmg, Apple Silicon).
 
 로컬 파일시스템의 `.md`만 다룹니다. 외부 동기화·클라우드 전송은 일절 없습니다.
 
@@ -41,7 +41,7 @@ Lapis가 만든 검색 인덱스를 **Claude Code에 노출**합니다 — 도�
 
 ## 설치 (사용자)
 
-1. [Releases](https://github.com/CLT-fefire/lapis/releases)에서 최신 `Lapis_x.y.z_aarch64.dmg` 다운로드 (Apple Silicon · macOS 11+)
+1. [Releases](https://github.com/eren0315/lapis/releases)에서 최신 `Lapis_x.y.z_aarch64.dmg` 다운로드 (Apple Silicon · macOS 11+)
 2. dmg를 열고 `Lapis.app`을 `/Applications`로 드래그
 3. **첫 실행만** 열기 확인 — Developer ID 서명 빌드이지만 **공증은 하지 않습니다**
    - macOS 14 이하: `Lapis.app` 우클릭 → **열기** → **열기**
@@ -99,7 +99,7 @@ Lapis/
 
 ## 문서 · 링크
 
-- [GitHub Releases](https://github.com/CLT-fefire/lapis/releases)
+- [GitHub Releases](https://github.com/eren0315/lapis/releases)
 - [팀 Confluence 가이드](https://everysing.atlassian.net/wiki/spaces/IMA/pages/4435017752/Lapis) — 설치·사용·FAQ
 - [`mcp/README.md`](mcp/README.md) — 지식 질의 MCP 계약·한계
 - `docs/STATE.md` — 개발 진행 상태 (Source of Truth)

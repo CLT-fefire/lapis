@@ -46,5 +46,5 @@ tags: [welcome, getting-started]
 
 설치 · 사용 · FAQ는 [팀 Confluence 페이지](https://everysing.atlassian.net/wiki/spaces/IMA/pages/4435017752/Lapis)에 정리되어 있습니다.
 
-GitHub: <https://github.com/CLT-fefire/lapis>
+GitHub: <https://github.com/eren0315/lapis>
 `;
