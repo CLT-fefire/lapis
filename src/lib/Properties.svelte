@@ -577,7 +577,7 @@
     border-radius: var(--r-md);
     font-size: var(--fs-sm);
     max-width: var(--modal-w-sm);
-    z-index: 1200;
+    z-index: var(--z-toast);
     cursor: pointer;
     box-shadow: var(--shadow-md);
   }

@@ -42,6 +42,65 @@
   let activeIndex = $state(0);
   let dropdownVisible = $state(false);
 
+  /**
+   * 드롭다운 위치 — `position: fixed` 좌표.
+   *
+   * ⚠️ `position: absolute`로는 안 된다. 이 컴포넌트는 `.context-panel`
+   * (`overflow-y: auto`) 안에서 렌더되므로 absolute 드롭다운이 패널 경계에서 잘린다.
+   * fixed는 뷰포트 기준이라 안 잘리는 대신 좌표를 직접 계산하고, 스크롤·리사이즈마다
+   * 다시 맞춰야 한다. ContextMenu와 같은 방식.
+   */
+  let pos = $state<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
+  let flipped = $state(false);
+
+  /** 드롭다운 최대 높이 — 뒤집기 판정과 CSS `max-height` 양쪽이 이 값을 쓴다. */
+  const DROPDOWN_MAX_H = 240;
+  /** 입력 필드와의 간격 — `--sp-1`. */
+  const GAP = 2;
+
+  /**
+   * 입력을 잘라내는 조상들 — 드롭다운을 열 때 한 번만 찾아 캐시한다.
+   * `getComputedStyle`은 비싸서 스크롤 핸들러에서 매번 돌 게 못 된다.
+   */
+  let clippers: HTMLElement[] = [];
+
+  function collectClippers() {
+    const found: HTMLElement[] = [];
+    for (let el = inputEl?.parentElement ?? null; el; el = el.parentElement) {
+      const { overflowX, overflowY } = getComputedStyle(el);
+      if (/auto|scroll|hidden/.test(overflowX + overflowY)) found.push(el);
+    }
+    clippers = found;
+  }
+
+  /**
+   * 입력이 스크롤 컨테이너 밖으로 밀려났는지. fixed 드롭다운은 조상 `overflow`에
+   * 안 잘리므로, 안 잘리는 만큼 "언제 숨길지"를 직접 판정해야 한다. 안 그러면
+   * 패널을 스크롤했을 때 드롭다운만 허공에 남는다.
+   */
+  function clippedOutOfView(r: DOMRect): boolean {
+    for (const el of clippers) {
+      const cr = el.getBoundingClientRect();
+      if (r.bottom <= cr.top || r.top >= cr.bottom) return true;
+    }
+    return r.bottom <= 0 || r.top >= window.innerHeight;
+  }
+
+  function measure() {
+    if (!inputEl) return;
+    const r = inputEl.getBoundingClientRect();
+    if (clippedOutOfView(r)) {
+      pos = null;
+      return;
+    }
+    const below = window.innerHeight - r.bottom;
+    // 아래가 좁고 위가 더 넓을 때만 뒤집는다 — 둘 다 좁으면 아래 유지가 자연스럽다.
+    flipped = below < DROPDOWN_MAX_H + GAP && r.top > below;
+    pos = flipped
+      ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + GAP }
+      : { left: r.left, width: r.width, top: r.bottom + GAP };
+  }
+
   $effect(() => {
     if (autofocus) {
       tick().then(() => {
@@ -57,6 +116,24 @@
   $effect(() => {
     const len = suggestions.length;
     if (activeIndex >= len) activeIndex = Math.max(0, len - 1);
+  });
+
+  // 드롭다운이 열려 있는 동안만 좌표를 유지한다. scroll은 버블링하지 않으므로 capture로
+  // 받아야 조상 스크롤 컨테이너(.context-panel 등)의 스크롤까지 잡힌다.
+  $effect(() => {
+    if (!dropdownVisible || suggestions.length === 0) {
+      pos = null;
+      return;
+    }
+    collectClippers();
+    measure();
+    const onReflow = () => measure();
+    window.addEventListener("scroll", onReflow, true);
+    window.addEventListener("resize", onReflow);
+    return () => {
+      window.removeEventListener("scroll", onReflow, true);
+      window.removeEventListener("resize", onReflow);
+    };
   });
 
   const validation = $derived.by<ValidationResult>(() => {
@@ -156,8 +233,18 @@
   {#if !validation.ok && query.trim() !== "" && validation.reason}
     <div class="hint invalid">{validation.reason}</div>
   {/if}
-  {#if dropdownVisible && suggestions.length > 0}
-    <ul class="dropdown" role="listbox" transition:scale={menuPop()}>
+  {#if dropdownVisible && suggestions.length > 0 && pos}
+    <ul
+      class="dropdown"
+      class:flip={flipped}
+      role="listbox"
+      transition:scale={menuPop()}
+      style:left="{pos.left}px"
+      style:width="{pos.width}px"
+      style:top={pos.top != null ? `${pos.top}px` : "auto"}
+      style:bottom={pos.bottom != null ? `${pos.bottom}px` : "auto"}
+      style:max-height="{DROPDOWN_MAX_H}px"
+    >
       {#each suggestions as s, i}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <li
@@ -179,7 +266,7 @@
 
 <style>
   .autocomplete {
-    position: relative;
+    /* 드롭다운이 fixed라 여기엔 position이 필요 없다. */
     display: inline-block;
     width: 100%;
   }
@@ -210,22 +297,23 @@
   }
 
   .dropdown {
-    position: absolute;
-    /* 입력 필드 바로 아래에서 펼쳐진다. */
+    /* 좌표는 measure()가 인라인으로 준다. */
+    position: fixed;
+    /* 입력 필드 쪽에서 자라난다 — 아래로 펼치면 윗변, 뒤집으면 아랫변이 기준. */
     transform-origin: top center;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin: var(--sp-1) 0 0 0;
+    margin: 0;
     padding: var(--sp-2) 0;
     list-style: none;
     background: var(--surface-overlay);
     border: 1px solid var(--border-default);
     border-radius: var(--r-sm);
     box-shadow: var(--shadow-md);
-    max-height: 240px;
     overflow-y: auto;
-    z-index: 50;
+    z-index: var(--z-dropdown);
+  }
+
+  .dropdown.flip {
+    transform-origin: bottom center;
   }
 
   .item {
