@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import ModalShell from "$lib/ModalShell.svelte";
   import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
 
@@ -14,23 +15,27 @@
 </script>
 
 {#if req}
-  <ModalShell onClose={() => close(false)} label="링크 자동 갱신">
+  <ModalShell onClose={() => close(false)} label={m.linkrw_title()}>
     <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <header>
-        <h2>링크 자동 갱신</h2>
-        <button class="x" onclick={() => close(false)} aria-label="닫기">✕</button>
+        <h2>{m.linkrw_title()}</h2>
+        <button class="x" onclick={() => close(false)} aria-label={m.linkrw_close()}>✕</button>
       </header>
 
       <p class="summary">
         <code>[[{req.preview.oldStem}]]</code> → <code>[[{req.preview.newStem}]]</code>
         <br />
-        <strong>{req.preview.items.length}</strong>개 노트 ·
-        총 <strong>{req.preview.totalOccurrences}</strong>건 인용 갱신 예정
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html m.linkrw_summary({
+          notes: req.preview.items.length,
+          total: req.preview.totalOccurrences,
+        })}
       </p>
 
       <p class="hint">
-        적용하면 원본은 <code>.lapis/link-rewrite-backup/&lt;timestamp&gt;/</code>에 백업됩니다.
-        문제가 생기면 백업 폴더에서 수동 복구 가능.
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html m.linkrw_backup_note()}
+        {m.linkrw_backup_hint()}
       </p>
 
       <ul class="affected">
@@ -43,8 +48,8 @@
       </ul>
 
       <footer>
-        <button class="btn btn--ghost" data-autofocus onclick={() => close(false)}>취소</button>
-        <button class="btn btn--primary" onclick={() => close(true)}>적용</button>
+        <button class="btn btn--ghost" data-autofocus onclick={() => close(false)}>{m.linkrw_cancel()}</button>
+        <button class="btn btn--primary" onclick={() => close(true)}>{m.linkrw_apply()}</button>
       </footer>
     </div>
   </ModalShell>
@@ -111,7 +116,9 @@
     line-height: 1.5;
   }
 
-  .hint code {
+  /* ⚠️ `:global()` — 이 문구는 인라인 마크업이 있어 `{@html}`로 그린다.
+     Svelte scoped CSS는 `{@html}` 주입 요소에 안 붙는다(스코프 클래스 미부착). */
+  .hint :global(code) {
     background: var(--surface-sunken);
     padding: 1px 5px;
     border-radius: var(--r-xs);

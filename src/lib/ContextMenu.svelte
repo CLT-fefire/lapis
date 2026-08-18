@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { scale } from "svelte/transition";
   import { menuPop } from "$lib/motion";
   import {
@@ -29,7 +30,7 @@
         openNewNote(parentDir, parentLabel);
         break;
       case "new-folder": {
-        const name = window.prompt("새 폴더 이름:");
+        const name = window.prompt(m.ctx_new_folder_prompt());
         if (name && name.trim()) await createNewFolder(parentDir, name.trim());
         break;
       }
@@ -52,8 +53,8 @@
   }
 
   async function handleDelete(path: string, name: string, isDir: boolean) {
-    const label = isDir ? `폴더 "${name}"` : `노트 "${name}.md"`;
-    if (!confirm(`${label}을(를) 휴지통으로 이동할까요?`)) return;
+    const label = isDir ? m.ctx_label_folder({ name }) : m.ctx_label_note({ name });
+    if (!confirm(m.ctx_confirm_trash({ label }))) return;
     await deletePath(path);
   }
 
@@ -95,22 +96,22 @@
     style:top="{target.y}px"
   >
     {#if isDir}
-      <li><button onclick={() => onAction("new-note")}>📄 New Note</button></li>
-      <li><button onclick={() => onAction("new-folder")}>📁 New Folder</button></li>
+      <li><button onclick={() => onAction("new-note")}>{m.ctx_new_note()}</button></li>
+      <li><button onclick={() => onAction("new-folder")}>{m.ctx_new_folder()}</button></li>
       <li class="sep"></li>
     {/if}
-    <li><button onclick={() => onAction("rename")}>✏️ Rename</button></li>
-    <li><button onclick={() => onAction("delete")} class="danger">🗑 Delete (휴지통)</button></li>
+    <li><button onclick={() => onAction("rename")}>{m.ctx_rename()}</button></li>
+    <li><button onclick={() => onAction("delete")} class="danger">{m.ctx_delete()}</button></li>
     <li class="sep"></li>
     {#if !isDir}
       <li>
         <button onclick={() => onAction("pin")}>
-          {$pinnedNotePaths.includes(target.entry.path) ? "📌 Unpin (즐겨찾기 해제)" : "📌 Pin (즐겨찾기)"}
+          {$pinnedNotePaths.includes(target.entry.path) ? m.ctx_unpin() : m.ctx_pin()}
         </button>
       </li>
     {/if}
-    <li><button onclick={() => onAction("copy-path")}>📋 Copy Path</button></li>
-    <li><button onclick={() => onAction("reveal")}>📂 Finder에서 보기</button></li>
+    <li><button onclick={() => onAction("copy-path")}>{m.ctx_copy_path()}</button></li>
+    <li><button onclick={() => onAction("reveal")}>{m.ctx_reveal()}</button></li>
   </ul>
 {/if}
 

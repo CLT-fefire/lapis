@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import {
     DOC_KIND_ENUM,
     docKindCounts,
@@ -54,8 +55,9 @@
 
 {#if $docKindCounts.size === 0 && $topicCounts.size === 0}
   <div class="empty">
-    <p>이 vault에 <code>doc_kind</code>/<code>topic</code> 메타가 있는 노트가 없습니다.</p>
-    <p class="hint">frontmatter 4키 스키마 적용 후 사용 가능합니다.</p>
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    <p>{@html m.filters_empty()}</p>
+    <p class="hint">{m.filters_empty_hint()}</p>
   </div>
 {:else}
   <div class="facet-area">
@@ -112,14 +114,14 @@
     {#if hasAnySelection}
       <div class="action-bar">
         <span class="match-count">{filteredNotes.length} matched</span>
-        <button class="clear-btn" onclick={clearFilters}>필터 해제</button>
+        <button class="clear-btn" onclick={clearFilters}>{m.filters_clear()}</button>
       </div>
     {/if}
   </div>
 
   {#if hasAnySelection}
     {#if filteredNotes.length === 0}
-      <div class="empty small">조건을 만족하는 노트가 없습니다.</div>
+      <div class="empty small">{m.filters_no_match()}</div>
     {:else}
       <ul class="note-list">
         {#each filteredNotes as item (item.path)}
@@ -141,7 +143,7 @@
       </ul>
     {/if}
   {:else}
-    <div class="empty small">필터를 선택하면 매칭 노트가 표시됩니다.</div>
+    <div class="empty small">{m.filters_pick_hint()}</div>
   {/if}
 {/if}
 
@@ -159,7 +161,9 @@
     font-size: var(--fs-xs);
   }
 
-  .empty code {
+  /* ⚠️ `:global()` — 인라인 마크업이 있어 `{@html}`로 그린다. Svelte scoped CSS는
+     `{@html}` 주입 요소에 안 붙는다(스코프 클래스 미부착). */
+  .empty :global(code) {
     background: var(--surface-overlay);
     padding: 1px 5px;
     border-radius: var(--r-xs);

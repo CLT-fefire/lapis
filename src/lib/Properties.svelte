@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { get } from "svelte/store";
   import { patchFrontmatter, addFrontmatterKey, isKebab } from "$lib/frontmatter";
@@ -182,22 +183,22 @@
 
   // === 검증 ===
   function validateTopic(v: string): ValidationResult {
-    if (!v.trim()) return { ok: false, reason: "비어 있음" };
-    if (v.includes("/")) return { ok: false, reason: "topic은 nested 금지 — 단일 kebab" };
-    if (!isKebab(v)) return { ok: false, reason: "kebab-case (소문자 + 하이픈)" };
+    if (!v.trim()) return { ok: false, reason: m.props_validate_empty() };
+    if (v.includes("/")) return { ok: false, reason: m.props_validate_topic_flat() };
+    if (!isKebab(v)) return { ok: false, reason: m.props_validate_kebab() };
     return { ok: true };
   }
   function validateTag(v: string): ValidationResult {
-    if (!v.trim()) return { ok: false, reason: "비어 있음" };
-    if (!isKebab(v)) return { ok: false, reason: "kebab-case + 옵션 `/` nested" };
+    if (!v.trim()) return { ok: false, reason: m.props_validate_empty() };
+    if (!isKebab(v)) return { ok: false, reason: m.props_validate_kebab_nested() };
     return { ok: true };
   }
   function validateStem(v: string): ValidationResult {
-    if (!v.trim()) return { ok: false, reason: "비어 있음" };
+    if (!v.trim()) return { ok: false, reason: m.props_validate_empty() };
     return { ok: true };
   }
   function validateNonEmpty(v: string): ValidationResult {
-    if (!v.trim()) return { ok: false, reason: "비어 있음" };
+    if (!v.trim()) return { ok: false, reason: m.props_validate_empty() };
     return { ok: true };
   }
 
@@ -231,7 +232,7 @@
 
 {#snippet addEntry()}
   {#if addPickerOpen}
-    <span class="picker-label">추가할 필드:</span>
+    <span class="picker-label">{m.props_add_field_label()}</span>
     {#each ADDABLE_FIELDS as field}
       <button
         type="button"
@@ -243,14 +244,14 @@
       type="button"
       class="picker-cancel"
       onclick={() => (addPickerOpen = false)}
-    >취소</button>
+    >{m.props_cancel()}</button>
   {:else}
     <button
       type="button"
       class="add-properties-btn"
       onclick={() => (addPickerOpen = true)}
-      title="이 노트에 frontmatter 필드를 추가합니다"
-    >＋ Properties 추가</button>
+      title={m.props_add_title()}
+    >{m.props_add_button()}</button>
   {/if}
 {/snippet}
 
@@ -292,7 +293,7 @@
                   {#each docKindOptions as opt}
                     <option value={opt}>{opt}</option>
                   {/each}
-                  <option value="">— 비움 —</option>
+                  <option value="">{m.props_option_empty()}</option>
                 </select>
               {:else if !isAuto && editingKey === key && key === "topic"}
                 <Autocomplete
@@ -307,7 +308,7 @@
               {:else if isSingleEditable(key)}
                 <button class="edit-trigger" onclick={() => enterEdit(key)}>
                   {#if value === "" || value === null || value === undefined}
-                    <span class="empty">— 비어 있음 — (클릭하여 편집)</span>
+                    <span class="empty">{m.props_empty_click()}</span>
                   {:else}
                     {value}
                   {/if}
@@ -317,7 +318,7 @@
                 <ChipEditor
                   values={arrayOf(value)}
                   displayPrefix="#"
-                  placeholder="태그 (kebab-case)"
+                  placeholder={m.props_tag_placeholder()}
                   suggest={suggestTags}
                   validate={validateTag}
                   onchange={(next) => commitChips("tags", next)}
@@ -342,7 +343,7 @@
                   {#if key === "tags"}
                     <button
                       class="chip chip-tag"
-                      title="이 태그로 사이드바 필터"
+                      title={m.props_tag_filter_title()}
                       onclick={() => {
                         selectTag(String(v));
                         showTagsTab();
@@ -372,8 +373,8 @@
 {#if showNotice}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="notice" onclick={dismissNotice} title="닫기">
-    Properties 편집 시 frontmatter의 코멘트와 일부 공백이 정규화될 수 있습니다.
+  <div class="notice" onclick={dismissNotice} title={m.props_notice_close()}>
+    {m.props_notice()}
   </div>
 {/if}
 

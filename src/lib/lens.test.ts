@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupingCandidates, groupNotesByField, NO_VALUE_LABEL } from "./lens";
+import { groupingCandidates, groupNotesByField, noValueLabel } from "./lens";
 import type { LinkInfo } from "./tauri/notes";
 
 function mkInfo(
@@ -80,13 +80,13 @@ describe("groupNotesByField", () => {
   it("값별 그룹 + (미지정) 버킷", () => {
     const groups = groupNotesByField(infos, "status");
     const names = groups.map((g) => g.rel_path); // rel_path = 원본 값
-    expect(names).toEqual(["done", "in-progress", NO_VALUE_LABEL]);
+    expect(names).toEqual(["done", "in-progress", noValueLabel()]);
   });
 
   it("그룹은 노트 수 내림차순, (미지정)은 항상 마지막", () => {
     const groups = groupNotesByField(infos, "status");
     expect(groups[0].rel_path).toBe("done"); // 2개
-    expect(groups[groups.length - 1].rel_path).toBe(NO_VALUE_LABEL);
+    expect(groups[groups.length - 1].rel_path).toBe(noValueLabel());
   });
 
   it("그룹은 합성 dir, leaf는 실제 노트 path + 이름순", () => {

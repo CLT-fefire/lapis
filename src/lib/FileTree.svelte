@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { changedNotes } from "$lib/stores/unread";
   import type { NoteEntry } from "$lib/tauri/notes";
@@ -183,8 +184,10 @@
   }
 
   async function handleDelete(entry: NoteEntry) {
-    const label = entry.is_dir ? `폴더 "${entry.name}"` : `노트 "${entry.name}.md"`;
-    if (!confirm(`${label}을(를) 휴지통으로 이동할까요?`)) return;
+    const label = entry.is_dir
+      ? m.ctx_label_folder({ name: entry.name })
+      : m.ctx_label_note({ name: entry.name });
+    if (!confirm(m.ctx_confirm_trash({ label }))) return;
     await deletePath(entry.path);
   }
 

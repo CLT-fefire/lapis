@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import ModalShell from "$lib/ModalShell.svelte";
   import { newNoteRequest, closeNewNote } from "$lib/stores/tree-ui";
   import { createNewNote, vaultPath } from "$lib/stores/vault";
@@ -18,7 +19,7 @@
     if (!req || !$vaultPath) return;
     const name = fileName.trim();
     if (!name) {
-      error = "이름을 입력하세요";
+      error = m.newnote_name_required();
       return;
     }
     // 단순 default 콘텐츠 — Phase 4.2에서 템플릿으로 확장 예정
@@ -30,7 +31,7 @@
     if (newPath) {
       closeNewNote();
     } else {
-      error = "생성 실패 — 같은 이름 파일이 이미 있거나 경로가 잘못되었습니다";
+      error = m.newnote_create_failed();
     }
   }
 
@@ -49,7 +50,7 @@
     <div class="modal" role="dialog" aria-modal="true" aria-label="New note">
       <header class="modal-head">
         <span>New Note</span>
-        <button class="btn btn--icon btn--sm btn--plain" onclick={closeNewNote} title="닫기 (Esc)">×</button>
+        <button class="btn btn--icon btn--sm btn--plain" onclick={closeNewNote} title={m.newnote_close()}>×</button>
       </header>
       <div class="modal-body">
         <div class="row">

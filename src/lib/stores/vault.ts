@@ -1,3 +1,4 @@
+import { m } from "$lib/paraglide/messages.js";
 import { writable, get } from "svelte/store";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -127,7 +128,7 @@ export async function pickAndOpenVault(): Promise<void> {
   const selected = await openDialog({
     directory: true,
     multiple: false,
-    title: "Lapis — Vault 선택",
+    title: m.vault_picker_title(),
   });
   if (typeof selected === "string") {
     await openVault(selected);

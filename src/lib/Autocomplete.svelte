@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { tick, untrack } from "svelte";
   import { scale } from "svelte/transition";
   import { menuPop } from "$lib/motion";
@@ -138,7 +139,7 @@
 
   const validation = $derived.by<ValidationResult>(() => {
     if (validate) return validate(query);
-    return query.trim() ? { ok: true } : { ok: false, reason: "비어 있음" };
+    return query.trim() ? { ok: true } : { ok: false, reason: m.props_validate_empty() };
   });
 
   function tryCommit(rawValue: string) {

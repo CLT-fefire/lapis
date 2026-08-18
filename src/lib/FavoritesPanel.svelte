@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { pinnedNotePaths, removePin } from "$lib/stores/pins";
   import { recentNotePaths } from "$lib/stores/recent";
   import { currentNotePath, selectNote, linkIndex } from "$lib/stores/vault";
@@ -28,9 +29,10 @@
 
 <div class="favorites">
   <section class="group">
-    <h3 class="group-title">⭐ 즐겨찾기</h3>
+    <h3 class="group-title">{m.fav_title()}</h3>
     {#if pinned.length === 0}
-      <p class="empty">파일을 우클릭 → <strong>📌 Pin</strong>으로 추가하세요.</p>
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    <p class="empty">{@html m.fav_empty()}</p>
     {:else}
       <ul class="list">
         {#each pinned as path (path)}
@@ -46,8 +48,8 @@
             </button>
             <button
               class="btn btn--icon btn--sm btn--plain unpin"
-              title="즐겨찾기 해제"
-              aria-label="즐겨찾기 해제"
+              title={m.fav_unpin()}
+              aria-label={m.fav_unpin()}
               onclick={(e) => onUnpin(e, path)}
             >✕</button>
           </li>
@@ -58,7 +60,7 @@
 
   {#if recent.length > 0}
     <section class="group">
-      <h3 class="group-title">🕘 최근</h3>
+      <h3 class="group-title">{m.fav_recent_title()}</h3>
       <ul class="list">
         {#each recent as path (path)}
           <li>

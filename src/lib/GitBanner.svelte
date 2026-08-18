@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { gitBannerVisible, gitBusy, startVersioning, dismissBanner } from "$lib/stores/git";
   import { vaultPath } from "$lib/stores/vault";
   import { GitBranch } from "@lucide/svelte";
@@ -11,11 +12,12 @@
 </script>
 
 {#if $gitBannerVisible}
-  <div class="git-banner" role="region" aria-label="버전관리 권유">
+  <div class="git-banner" role="region" aria-label={m.git_banner_aria()}>
     <span class="icon" aria-hidden="true"><GitBranch size={15} /></span>
     <span class="msg">
-      이 vault는 버전관리되지 않습니다. 시작하면 변경이 자동으로 이력에 기록됩니다.
-      <span class="hint">(<code>_memories</code> 등 제외)</span>
+      {m.git_banner_body()}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    <span class="hint">{@html m.git_banner_hint()}</span>
     </span>
     <div class="actions">
       <button
@@ -23,13 +25,13 @@
         disabled={$gitBusy || !$vaultPath}
         onclick={() => $vaultPath && startVersioning($vaultPath)}
       >
-        {$gitBusy ? "시작 중…" : "버전관리 시작"}
+        {$gitBusy ? m.git_banner_starting() : m.git_banner_start()}
       </button>
       <button
         class="btn btn--plain btn--sm"
         disabled={$gitBusy || !$vaultPath}
         onclick={() => $vaultPath && dismissBanner($vaultPath)}
-      >나중에</button>
+      >{m.git_banner_later()}</button>
     </div>
   </div>
 {/if}
@@ -62,7 +64,9 @@
     color: var(--text-muted);
   }
 
-  .hint code {
+  /* ⚠️ `:global()` — 인라인 마크업이 있어 `{@html}`로 그린다. Svelte scoped CSS는
+     `{@html}` 주입 요소에 안 붙는다(스코프 클래스 미부착). */
+  .hint :global(code) {
     font-size: 0.92em;
   }
 

@@ -9,6 +9,7 @@
  * DOM에서 제거된 host의 observer 참조는 자동 dropreference — 별도 cleanup 불필요.
  */
 
+import { m } from "$lib/paraglide/messages.js";
 import { resolveEffectiveTheme } from "$lib/stores/theme";
 
 type MermaidModule = typeof import("mermaid");
@@ -74,7 +75,7 @@ function appendExportButton(host: HTMLElement): void {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "mermaid-export-btn";
-  btn.title = "PNG로 저장";
+  btn.title = m.mermaid_save_png();
   btn.textContent = "⬇ PNG";
   host.appendChild(btn);
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import { slide } from "svelte/transition";
   import { tabChip } from "$lib/motion";
   import { openTabs } from "$lib/stores/tabs";
@@ -148,19 +149,19 @@
       >
         <button
           class="pin-icon"
-          title={$pinnedNotePaths.includes(path) ? "즐겨찾기 해제" : "즐겨찾기에 추가"}
-          aria-label="즐겨찾기 토글"
+          title={$pinnedNotePaths.includes(path) ? m.tab_pin_remove() : m.tab_pin_add()}
+          aria-label={m.tab_pin_aria()}
           aria-pressed={$pinnedNotePaths.includes(path)}
           onclick={(e) => onPinToggle(e, path)}
         >{$pinnedNotePaths.includes(path) ? "★" : "☆"}</button>
         {#if path === $currentNotePath && $isDirty}
-          <span class="dirty" aria-label="저장되지 않음">●</span>
+          <span class="dirty" aria-label={m.tab_dirty_aria()}>●</span>
         {/if}
         <span class="label">{noteStem(path)}</span>
         <button
           class="btn btn--icon btn--sm btn--plain close"
-          title="탭 닫기 (⌘W)"
-          aria-label="탭 닫기"
+          title={m.tab_close_title()}
+          aria-label={m.tab_close_aria()}
           onclick={(e) => onClose(e, path)}
         >✕</button>
       </div>
@@ -175,7 +176,7 @@
   <ul class="tab-ctx-menu" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
     <li>
       <button role="menuitem" onclick={() => { const p = menu.path; closeCtxMenu(); void closeTab(p); }}>
-        탭 닫기
+        {m.tab_close()}
       </button>
     </li>
     <li>
@@ -183,14 +184,14 @@
         role="menuitem"
         disabled={$openTabs.length <= 1}
         onclick={() => { const p = menu.path; closeCtxMenu(); void closeOtherTabs(p); }}
-      >다른 탭 닫기</button>
+      >{m.tab_close_others()}</button>
     </li>
     <li>
       <button
         role="menuitem"
         disabled={!hasRight}
         onclick={() => { const p = menu.path; closeCtxMenu(); void closeTabsToRight(p); }}
-      >오른쪽 탭 닫기</button>
+      >{m.tab_close_right()}</button>
     </li>
     <li class="sep"></li>
     <li>
@@ -199,7 +200,7 @@
       <button
         role="menuitem"
         onclick={() => { const p = menu.path; closeCtxMenu(); void revealInFinder(p); }}
-      >📂 Finder에서 보기</button>
+      >{m.tab_reveal()}</button>
     </li>
   </ul>
 {/if}

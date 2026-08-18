@@ -1,3 +1,4 @@
+import { m } from "$lib/paraglide/messages.js";
 import { get } from "svelte/store";
 import { fuzzyMatch } from "$lib/searchIndex";
 import {
@@ -135,7 +136,7 @@ export const BUILTIN_COMMANDS: Command[] = [
       const cur = get(currentNotePath);
       if (!cur) return;
       const name = cur.split("/").pop() ?? cur;
-      if (!confirm(`노트 "${name}"을(를) 휴지통으로 이동할까요?`)) return;
+      if (!confirm(m.ctx_confirm_trash({ label: m.ctx_label_note({ name }) }))) return;
       await deletePath(cur);
     },
   },
