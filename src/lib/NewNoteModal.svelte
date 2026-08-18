@@ -46,19 +46,19 @@
 
 {#if $newNoteRequest}
   {@const req = $newNoteRequest}
-  <ModalShell onClose={closeNewNote} align="top" label="New note">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="New note">
+  <ModalShell onClose={closeNewNote} align="top" label={m.newnote_aria()}>
+    <div class="modal" role="dialog" aria-modal="true" aria-label={m.newnote_aria()}>
       <header class="modal-head">
-        <span>New Note</span>
+        <span>{m.newnote_title()}</span>
         <button class="btn btn--icon btn--sm btn--plain" onclick={closeNewNote} title={m.newnote_close()}>×</button>
       </header>
       <div class="modal-body">
         <div class="row">
-          <span class="label-text">Folder</span>
+          <span class="label-text">{m.newnote_folder()}</span>
           <span class="folder">{req.parentLabel}</span>
         </div>
         <div class="row">
-          <label for="newnote-name">File name</label>
+          <label for="newnote-name">{m.newnote_filename()}</label>
           <input
             id="newnote-name"
             data-autofocus
@@ -75,7 +75,7 @@
         {/if}
       </div>
       <footer class="modal-foot">
-        <button class="btn btn--ghost" onclick={closeNewNote}>Cancel</button>
+        <button class="btn btn--ghost" onclick={closeNewNote}>{m.newnote_cancel()}</button>
         <button class="btn btn--primary" onclick={submit}>Create &amp; Open</button>
       </footer>
     </div>

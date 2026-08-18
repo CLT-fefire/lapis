@@ -1359,11 +1359,11 @@
           onclick={toggleContext}
         >
           <span class="strip-icon">◀</span>
-          <span class="strip-label">Context</span>
+          <span class="strip-label">{m.page_context_panel()}</span>
         </button>
       {:else}
         <div class="pane-title">
-          <span>Context</span>
+          <span>{m.page_context_panel()}</span>
           <div class="pane-actions">
             <button
               class="btn btn--icon btn--sm btn--plain"

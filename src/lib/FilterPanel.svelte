@@ -65,7 +65,7 @@
     {#if $docKindCounts.size > 0}
       <section class="facet">
         <header class="facet-header">
-          <span>Kind</span>
+          <span>{m.filters_kind()}</span>
           <span class="facet-meta">{$docKindCounts.size}</span>
         </header>
         <div class="chip-row">
@@ -90,7 +90,7 @@
     {#if $topicCounts.size > 0}
       <section class="facet">
         <header class="facet-header">
-          <span>Topic</span>
+          <span>{m.filters_topic()}</span>
           <span class="facet-meta">{$topicCounts.size}</span>
         </header>
         <div class="chip-row">

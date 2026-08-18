@@ -275,7 +275,7 @@
       class="modal"
       role="dialog"
       aria-modal="true"
-      aria-label="Command palette"
+      aria-label={m.palette_aria()}
       transition:scale={cardPop()}
     >
       <input
@@ -302,7 +302,7 @@
 
       <div class="results" bind:this={listEl}>
         {#if showRecents}
-          <div class="group-header">RECENT</div>
+          <div class="group-header">{m.palette_group_recent()}</div>
           {#each groups.recents as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "recent"}
@@ -323,7 +323,7 @@
         {/if}
 
         {#if showNotes}
-          <div class="group-header">NOTES</div>
+          <div class="group-header">{m.palette_group_notes()}</div>
           {#each groups.notes as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "note"}
@@ -344,7 +344,7 @@
         {/if}
 
         {#if showContent}
-          <div class="group-header">CONTENT</div>
+          <div class="group-header">{m.palette_group_content()}</div>
           {#each groups.content as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "content"}
@@ -365,7 +365,7 @@
         {/if}
 
         {#if showTagsGroup}
-          <div class="group-header">TAGS</div>
+          <div class="group-header">{m.palette_group_tags()}</div>
           {#each groups.tags as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "tag"}
@@ -389,7 +389,7 @@
         {/if}
 
         {#if showFacets}
-          <div class="group-header">FACETS</div>
+          <div class="group-header">{m.palette_group_facets()}</div>
           {#each groups.facets as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "facet"}
