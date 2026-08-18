@@ -2,6 +2,8 @@
 
 > 로컬 마크다운을 **백링크 · 태그 · 풀텍스트 검색**으로 항해하는 개인용 지식 워크벤치 — macOS 네이티브
 
+**한국어** · [English](README.en.md)
+
 ![release](https://img.shields.io/github/v/release/eren0315/lapis?label=release&color=1f6feb)
 ![platform](https://img.shields.io/badge/platform-macOS_11%2B_(Apple_Silicon)-black)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
