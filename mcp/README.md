@@ -22,7 +22,7 @@ MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같�
 ```json
 {
   "mcpServers": {
-    "lapis": { "command": "/Users/Shared/Source/Personal/Lapis/mcp/lapis-mcp" }
+    "lapis": { "command": "/절대/경로/lapis/mcp/lapis-mcp" }
   }
 }
 ```
