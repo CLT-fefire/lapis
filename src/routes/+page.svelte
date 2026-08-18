@@ -120,14 +120,14 @@
     TOP_ANCHOR,
     type PaneAnchor,
   } from "$lib/paneAnchor";
-  import { WELCOME_DOC } from "$lib/welcomeDoc";
+  import { welcomeDoc } from "$lib/welcomeDoc";
 
 
-  // vault 미선택 상태에서만 WELCOME_DOC 사용. 노트 선택 후엔 editor store가 진실의 원천.
+  // vault 미선택 상태에서만 welcomeDoc() 사용. 노트 선택 후엔 editor store가 진실의 원천.
   // vault 있고 노트 미선택 (예: 삭제 후 / 초기 상태) → 빈 placeholder
   const EMPTY_NOTE_PLACEHOLDER = m.page_welcome_placeholder();
 
-  let raw = $state(WELCOME_DOC);
+  let raw = $state(welcomeDoc());
 
   $effect(() => {
     if ($currentNotePath) {
@@ -142,9 +142,9 @@
       }
     } else {
       // vault 미선택 → welcome
-      if (raw !== WELCOME_DOC) {
-        raw = WELCOME_DOC;
-        markSaved(WELCOME_DOC);
+      if (raw !== welcomeDoc()) {
+        raw = welcomeDoc();
+        markSaved(welcomeDoc());
       }
     }
   });
@@ -152,7 +152,7 @@
   // Editor onChange로 들어오는 사용자 입력 → store에 위임 (dirty + autosave)
   function handleEditorChange(next: string) {
     if (!$currentNotePath) {
-      // WELCOME_DOC 편집은 무시 (저장 대상 없음)
+      // welcomeDoc() 편집은 무시 (저장 대상 없음)
       return;
     }
     noteContentChanged(next);

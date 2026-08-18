@@ -280,5 +280,6 @@
   "export_images_missing_title": "Some images missing",
   "export_images_missing_body": "Could not embed {failed} image(s) in the file.\nThe other {inlined} were included normally. See the console for details.",
   "export_html_error_title": "HTML export failed",
-  "vault_picker_title": "Lapis — Choose a vault"
+  "vault_picker_title": "Lapis — Choose a vault",
+  "git_auto_commit_message": "Lapis auto snapshot — {timestamp}"
 }

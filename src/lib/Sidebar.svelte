@@ -1,6 +1,7 @@
 <script lang="ts">
   import FileTree from "./FileTree.svelte";
   import { m } from "$lib/paraglide/messages.js";
+  import { welcomeNote } from "$lib/welcomeDoc";
   import TagPanel from "./TagPanel.svelte";
   import FilterPanel from "./FilterPanel.svelte";
   import FavoritesPanel from "./FavoritesPanel.svelte";
@@ -229,56 +230,6 @@
     return n > 99 ? "99+" : String(n);
   }
 
-  // 빈 vault 첫 진입 가이드용 Welcome 노트 콘텐츠. 사용자가 명시적으로 버튼을 눌렀을 때만 생성.
-  const WELCOME_NOTE_CONTENT = `---
-title: Welcome
-tags: [welcome, getting-started]
----
-
-# Welcome to Lapis
-
-이 노트는 Lapis 사용법을 익히기 위한 샘플입니다. 자유롭게 편집하거나 삭제하세요.
-
-## Wikilink 예제
-
-다른 노트로의 링크는 \`[[노트이름]]\`으로 작성합니다. 별칭도 가능: \`[[Welcome|환영]]\`.
-대상 노트가 없으면 회색 점선으로 표시됩니다 (예: [[아직-없는-노트]]).
-
-## 태그
-
-본문에 \`#태그명\` 형식으로 작성하면 자동 수집됩니다. 예: #welcome #intro.
-사이드바 **Tags** 탭에서 모든 태그를 확인할 수 있습니다.
-
-## Mermaid 다이어그램
-
-코드 펜스에 \`mermaid\` 언어를 지정하면 미리보기에서 자동 렌더링됩니다.
-
-\`\`\`mermaid
-graph LR
-  A[노트 작성] --> B[wikilink 연결]
-  B --> C[그래프 탐색]
-  C --> D[지식 정리]
-\`\`\`
-
-## 단축키 모음
-
-| 단축키 | 동작 |
-|---|---|
-| \`⌘K\` | Command Palette |
-| \`⌘P\` | Quick File Open |
-| \`⌘⇧F\` | Full-text 검색 |
-| \`⌘F\` | 노트 내 검색 |
-| \`⌘N\` | 새 노트 |
-| \`⌘S\` | 즉시 저장 |
-| \`F2\` | 노트 이름 변경 *(Mac 매직 키보드는 \`Fn+F2\` 또는 \`⌘K\` → "Rename")* |
-| \`⌘⌫\` | 노트 휴지통으로 |
-
-## 다음 단계
-
-1. \`⌘N\`으로 첫 노트를 만들어보세요
-2. 본문에 \`[[Welcome]]\`을 적어 이 노트를 가리키게 한 뒤, 사이드바 하단 **Backlinks**에서 역참조 확인
-3. \`⌘G\`로 그래프를 열어 노트 연결을 시각화
-`;
 
   let welcomeCreating = $state(false);
 
@@ -289,7 +240,7 @@ graph LR
     welcomeCreating = true;
     try {
       // parentDir에 vault root를 그대로 전달 — create_note Tauri command이 그 안에 파일 생성
-      await createNewNote(vault, "Welcome.md", WELCOME_NOTE_CONTENT);
+      await createNewNote(vault, "Welcome.md", welcomeNote());
     } catch (e) {
       console.error("[Sidebar] createWelcomeNote 실패", e);
     } finally {
