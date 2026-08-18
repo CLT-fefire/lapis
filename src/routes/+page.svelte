@@ -10,6 +10,7 @@
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
+  import { m } from "$lib/paraglide/messages.js";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
@@ -124,7 +125,7 @@
 
   // vault 미선택 상태에서만 WELCOME_DOC 사용. 노트 선택 후엔 editor store가 진실의 원천.
   // vault 있고 노트 미선택 (예: 삭제 후 / 초기 상태) → 빈 placeholder
-  const EMPTY_NOTE_PLACEHOLDER = `# 노트를 선택하세요\n\n좌측 사이드바에서 노트를 클릭하거나, **Cmd+N**으로 새 노트를 만드세요.`;
+  const EMPTY_NOTE_PLACEHOLDER = m.page_welcome_placeholder();
 
   let raw = $state(WELCOME_DOC);
 
@@ -257,7 +258,7 @@
         try {
           await exportMermaidHostToPng(host, base);
         } catch (err) {
-          console.error("mermaid PNG 내보내기 실패", err);
+          console.error(m.page_mermaid_export_failed(), err);
         }
       }
       return;
@@ -589,7 +590,7 @@
 
   let editorCopied = $state(false);
   let previewCopied = $state(false);
-  /** 경로 복사 버튼은 Editor/Preview 양쪽에 있지만 한 state 공유 — 어느 쪽을 눌러도 "✓ 복사됨"이 두 버튼에 모두 표시되어 일관 UX. */
+  /** 경로 복사 버튼은 Editor/Preview 양쪽에 있지만 한 state 공유 — 어느 쪽을 눌러도 m.page_menu_copied()이 두 버튼에 모두 표시되어 일관 UX. */
   let pathCopied = $state(false);
   let editorCopyTimer: ReturnType<typeof setTimeout> | null = null;
   let previewCopyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -661,7 +662,7 @@
   /**
    * 페인 툴바 `⋯` 메뉴 항목.
    *
-   * 복사류는 `keepOpen: true` — 결과가 레이블 자체("✓ 복사됨")로 표시되므로
+   * 복사류는 `keepOpen: true` — 결과가 레이블 자체(m.page_menu_copied())로 표시되므로
    * 메뉴를 닫으면 피드백이 보이지 않는다. 바깥에 남긴 것은 빈도가 높은 `Aa`(글꼴)와
    * 구조적인 접기 버튼뿐이다.
    */
@@ -673,8 +674,8 @@
     const path = $currentNotePath;
     return {
       id: "reveal",
-      label: "📂 Finder에서 보기",
-      title: "현재 노트를 Finder에서 선택된 상태로 열기",
+      label: m.page_menu_reveal(),
+      title: m.page_menu_reveal_desc(),
       disabled: !path,
       onSelect: () => revealInFinder(path ?? ""),
     };
@@ -683,16 +684,16 @@
   const editorMenuItems: PaneMenuItem[] = $derived([
     {
       id: "copy-path",
-      label: pathCopied ? "✓ 복사됨" : "🔗 경로 복사",
-      title: "현재 노트의 절대 경로 복사 (⌘⇧C)",
+      label: pathCopied ? m.page_menu_copied() : m.page_menu_copy_path(),
+      title: m.page_menu_copy_path_desc(),
       disabled: !$currentNotePath,
       keepOpen: true,
       onSelect: copyCurrentPath,
     },
     {
       id: "copy-markdown",
-      label: editorCopied ? "✓ 복사됨" : "📋 마크다운 복사",
-      title: "마크다운 원본 전체 복사",
+      label: editorCopied ? m.page_menu_copied() : m.page_menu_copy_md(),
+      title: m.page_menu_copy_md_desc(),
       keepOpen: true,
       onSelect: copyEditor,
     },
@@ -702,23 +703,23 @@
   const previewMenuItems: PaneMenuItem[] = $derived([
     {
       id: "copy-path",
-      label: pathCopied ? "✓ 복사됨" : "🔗 경로 복사",
-      title: "현재 노트의 절대 경로 복사 (⌘⇧C)",
+      label: pathCopied ? m.page_menu_copied() : m.page_menu_copy_path(),
+      title: m.page_menu_copy_path_desc(),
       disabled: !$currentNotePath,
       keepOpen: true,
       onSelect: copyCurrentPath,
     },
     {
       id: "copy-rich",
-      label: previewCopied ? "✓ 복사됨" : "📋 리치 텍스트 복사",
-      title: "리치 텍스트로 복사 (Confluence·메일 등 서식 유지)",
+      label: previewCopied ? m.page_menu_copied() : m.page_menu_copy_rich(),
+      title: m.page_menu_copy_rich_desc(),
       keepOpen: true,
       onSelect: copyPreview,
     },
     {
       id: "export-html",
-      label: "💾 HTML로 저장…",
-      title: "프리뷰 내용을 자립형 HTML 파일로 저장 (CSS·이미지 포함)",
+      label: m.page_menu_save_html(),
+      title: m.page_menu_save_html_desc(),
       disabled: !$currentNotePath,
       onSelect: () => exportPreviewToHtml(renderedArticleEl, $currentNotePath),
     },
@@ -904,7 +905,7 @@
 
   async function confirmAndDeleteCurrent(path: string) {
     const name = path.split("/").pop() ?? path;
-    if (!confirm(`노트 "${name}"을(를) 휴지통으로 이동할까요?`)) return;
+    if (!confirm(m.page_confirm_trash({ name }))) return;
     await deletePath(path);
   }
 
@@ -1109,21 +1110,21 @@
     <div class="conflict-modal" role="dialog" aria-modal="true">
       <header class="conflict-head">
         <span class="conflict-icon">⚠</span>
-        <span>외부에서 노트가 변경되었습니다</span>
+        <span>{m.page_conflict_title()}</span>
       </header>
       <div class="conflict-body">
-        <p>이 노트를 다른 도구에서 수정한 것 같습니다. 동시에 Lapis에서도 편집 중입니다 (저장되지 않은 변경 있음).</p>
+        <p>{m.page_conflict_body()}</p>
         <p class="path">{$externalConflict.path}</p>
-        <p class="hint">어떻게 처리할까요?</p>
+        <p class="hint">{m.page_conflict_question()}</p>
       </div>
       <footer class="conflict-foot">
         <button class="btn keep" onclick={resolveConflictKeepLocal}>
-          내 변경 유지
-          <span class="hint">다음 저장 시 외부 변경을 덮어씁니다</span>
+          {m.page_conflict_keep_mine()}
+          <span class="hint">{m.page_conflict_keep_mine_desc()}</span>
         </button>
         <button class="btn accept" onclick={resolveConflictAcceptExternal}>
-          외부 변경 사용
-          <span class="hint">현재 편집 중인 내용을 폐기하고 외부 버전 로드</span>
+          {m.page_conflict_use_external()}
+          <span class="hint">{m.page_conflict_use_external_desc()}</span>
         </button>
       </footer>
     </div>
@@ -1134,7 +1135,7 @@
   <header class="topbar">
     <span class="brand" class:debug={isDebug}>Lapis</span>
     {#if isDebug}
-      <span class="debug-badge" title="디버그 빌드 — 릴리즈 앱이 아닙니다">DEBUG</span>
+      <span class="debug-badge" title={m.page_debug_badge()}>DEBUG</span>
     {/if}
     {#if appVersion}
       <span class="phase">v{appVersion}</span>
@@ -1142,23 +1143,23 @@
     <div class="nav-history">
       <button
         class="btn btn--icon btn--sm"
-        title="뒤로 (⌘⌃←)"
-        aria-label="뒤로 가기"
+        title={m.page_nav_back()}
+        aria-label={m.page_nav_back_aria()}
         disabled={!$canGoBack}
         onclick={() => void goBackNote()}
       >◀</button>
       <button
         class="btn btn--icon btn--sm"
-        title="앞으로 (⌘⌃→)"
-        aria-label="앞으로 가기"
+        title={m.page_nav_forward()}
+        aria-label={m.page_nav_forward_aria()}
         disabled={!$canGoForward}
         onclick={() => void goForwardNote()}
       >▶</button>
       <button
         class="btn btn--icon btn--sm nav-history-toggle"
         class:active={historyMenuOpen}
-        title="방문 기록"
-        aria-label="방문 기록 목록"
+        title={m.page_nav_history()}
+        aria-label={m.page_nav_history_aria()}
         aria-expanded={historyMenuOpen}
         disabled={!($canGoBack || $canGoForward)}
         onclick={() => (historyMenuOpen = !historyMenuOpen)}
@@ -1173,7 +1174,9 @@
         <button
           class="meta-path"
           class:copied={pathCopied}
-          title={pathCopied ? "복사됨" : `클릭하면 절대 경로 복사 (⌘⇧C)\n${$currentNotePath}`}
+          title={pathCopied
+            ? m.page_path_copied()
+            : m.page_path_copy_title({ path: $currentNotePath })}
           onclick={() => void copyCurrentPath()}
         >
           {pathCopied ? "✓ " : ""}{noteDisplayName($currentNotePath)}
@@ -1183,17 +1186,21 @@
         {:else if $lastSaveError}
           <span class="save-badge error" title={$lastSaveError}>save failed</span>
         {:else if $isDirty}
-          <span class="save-badge dirty" title="저장되지 않음 (자동 저장 2초 / Cmd+S)">● modified</span>
+          <span class="save-badge dirty" title={m.page_unsaved()}>● modified</span>
         {/if}
       {:else if $vaultPath}
-        노트를 선택하세요
+        {m.page_pick_a_note()}
       {:else}
         Welcome
       {/if}
     </span>
     {#if $currentNotePath}
-      <span class="doc-stats" title="단어 · 글자(공백 제외) · 예상 읽기 시간">
-        {docStats.words.toLocaleString()}단어 · {docStats.charsNoSpaces.toLocaleString()}자 · {readingTimeLabel(docStats.readingMinutes)}
+      <span class="doc-stats" title={m.page_stats_title()}>
+        {m.page_doc_stats({
+          words: docStats.words.toLocaleString(),
+          chars: docStats.charsNoSpaces.toLocaleString(),
+          time: readingTimeLabel(docStats.readingMinutes),
+        })}
       </span>
     {/if}
     <div class="topbar-actions">
@@ -1228,8 +1235,8 @@
       class:rz-hidden={$sidebarCollapsed}
       role="separator"
       aria-orientation="vertical"
-      aria-label="사이드바 폭 조절 (더블클릭으로 기본값 복원)"
-      title="드래그로 폭 조절 · 더블클릭으로 복원"
+      aria-label={m.page_sidebar_resize()}
+      title={m.page_pane_resize()}
       onmousedown={startSidebarResize}
       ondblclick={resetSidebarWidth}
     ></div>
@@ -1240,32 +1247,32 @@
     <section class="pane main-pane">
       <TabBar />
       <div class="pane-title">
-        <div class="pane-switch" role="group" aria-label="본문 표시 모드">
+        <div class="pane-switch" role="group" aria-label={m.page_mode_group()}>
           <button
             class="switch-opt"
             class:active={$mainPane === "preview"}
             aria-pressed={$mainPane === "preview"}
-            title="읽기 모드 (⌘E로 교대)"
+            title={m.page_mode_read_title()}
             onclick={() => void switchMainPane("preview")}
           >
-            읽기
+            {m.page_mode_read()}
           </button>
           <button
             class="switch-opt"
             class:active={$mainPane === "editor"}
             aria-pressed={$mainPane === "editor"}
-            title="편집 모드 (⌘E로 교대)"
+            title={m.page_mode_edit_title()}
             onclick={() => void switchMainPane("editor")}
           >
-            편집
+            {m.page_mode_edit()}
           </button>
         </div>
         <div class="pane-actions">
           {#if $mainPane === "preview"}
             <ReadingControls />
-            <PaneMenu label="Preview 추가 작업" items={previewMenuItems} />
+            <PaneMenu label={m.page_preview_more()} items={previewMenuItems} />
           {:else}
-            <PaneMenu label="Editor 추가 작업" items={editorMenuItems} />
+            <PaneMenu label={m.page_editor_more()} items={editorMenuItems} />
           {/if}
         </div>
       </div>
@@ -1285,7 +1292,7 @@
                읽기·탐색이라 그게 시작 payload의 절반이었다(1089 → 543KB).
                ⚠️ 실패를 삼키지 말 것 — 조용히 빈 화면이 되면 원인을 못 찾는다. -->
           {#await import("$lib/Editor.svelte")}
-            <div class="editor-loading">에디터 불러오는 중…</div>
+            <div class="editor-loading">{m.page_editor_loading()}</div>
           {:then EditorModule}
             <EditorModule.default
               bind:value={raw}
@@ -1294,7 +1301,7 @@
             />
           {:catch err}
             <div class="editor-loading editor-error">
-              에디터를 불러오지 못했습니다 — {err instanceof Error ? err.message : String(err)}
+              {m.page_editor_load_failed({ error: err instanceof Error ? err.message : String(err) })}
             </div>
           {/await}
         </div>
@@ -1337,8 +1344,8 @@
       class:rz-hidden={$contextCollapsed}
       role="separator"
       aria-orientation="vertical"
-      aria-label="컨텍스트 패널 폭 조절 (더블클릭으로 기본값 복원)"
-      title="드래그로 폭 조절 · 더블클릭으로 복원"
+      aria-label={m.page_context_resize()}
+      title={m.page_pane_resize()}
       onmousedown={startContextResize}
       ondblclick={resetContextWidth}
     ></div>
@@ -1347,8 +1354,8 @@
       {#if $contextCollapsed}
         <button
           class="collapsed-strip"
-          title="컨텍스트 패널 펼치기 (⌘⌥B)"
-          aria-label="컨텍스트 패널 펼치기"
+          title={m.page_context_expand()}
+          aria-label={m.page_context_expand_aria()}
           onclick={toggleContext}
         >
           <span class="strip-icon">◀</span>
@@ -1360,8 +1367,8 @@
           <div class="pane-actions">
             <button
               class="btn btn--icon btn--sm btn--plain"
-              title="컨텍스트 패널 접기 (⌘⌥B)"
-              aria-label="컨텍스트 패널 접기"
+              title={m.page_context_collapse()}
+              aria-label={m.page_context_collapse_aria()}
               onclick={toggleContext}
             >
               ▶
