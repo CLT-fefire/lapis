@@ -7,7 +7,7 @@
  */
 
 import { lapisQuery, type QueryArgs } from "./query.ts";
-import { LapisError } from "./cache.ts";
+import { LapisError, mcpDisabledError, readMcpGate } from "./cache.ts";
 
 const TOOL = {
   name: "lapis_query",
@@ -106,6 +106,11 @@ function handle(line: string): void {
         return;
       }
       try {
+        // ⚠️ 게이트는 **호출마다** 본다. `tools/list`에서 도구를 숨기면 클라이언트가
+        // 목록을 연결 시점에 캐시해 앱에서 토글해도 재시작 전엔 안 먹는다. 여기서
+        // 판정하면 즉시 반영되고, 비용은 작은 JSON 파일 하나 읽기다.
+        const gate = readMcpGate();
+        if (!gate.enabled) throw mcpDisabledError(gate);
         const out = lapisQuery((params.arguments ?? {}) as QueryArgs);
         return reply({ content: [{ type: "text", text: JSON.stringify(out) }] });
       } catch (e) {
