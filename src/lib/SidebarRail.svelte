@@ -17,6 +17,7 @@
   } from "$lib/stores/sidebar";
   import { expandSidebar, toggleSidebar, sidebarCollapsed } from "$lib/stores/layout";
   import { openSettings } from "$lib/stores/settings";
+  import { m } from "$lib/paraglide/messages.js";
   import { get } from "svelte/store";
 
   /**
@@ -30,10 +31,10 @@
    * 상태를 미리 알려준다.
    */
   const items: { key: SidebarSectionKey; icon: LucideIcon; label: string }[] = [
-    { key: "files", icon: FileText, label: "Files" },
-    { key: "tags", icon: Hash, label: "Tags" },
-    { key: "filters", icon: SlidersHorizontal, label: "Filters" },
-    { key: "favorites", icon: Star, label: "Favorites" },
+    { key: "files", icon: FileText, label: m.section_files() },
+    { key: "tags", icon: Hash, label: m.section_tags() },
+    { key: "filters", icon: SlidersHorizontal, label: m.section_filters() },
+    { key: "favorites", icon: Star, label: m.section_favorites() },
   ];
 
   // {@const}는 블록/컴포넌트의 직계 자식만 허용되므로(<nav> 안에서는 불가) 룬으로 뽑는다.
@@ -49,16 +50,16 @@
   }
 </script>
 
-<nav class="rail" aria-label="사이드바 레일">
+<nav class="rail" aria-label={m.rail_aria()}>
   <button
     class="rail-btn"
-    aria-label={$sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
+    aria-label={$sidebarCollapsed ? m.rail_expand() : m.rail_collapse()}
     aria-expanded={!$sidebarCollapsed}
     onclick={toggleSidebar}
   >
     <ToggleIcon size={18} />
     <span class="rail-tip" aria-hidden="true">
-      {$sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기"}
+      {$sidebarCollapsed ? m.rail_expand() : m.rail_collapse()}
       <kbd>⌘B</kbd>
     </span>
   </button>
@@ -78,9 +79,9 @@
     </button>
   {/each}
   <div class="rail-spacer"></div>
-  <button class="rail-btn" aria-label="설정 열기" onclick={openSettings}>
+  <button class="rail-btn" aria-label={m.rail_settings_open()} onclick={openSettings}>
     <Settings size={18} />
-    <span class="rail-tip" aria-hidden="true">설정</span>
+    <span class="rail-tip" aria-hidden="true">{m.rail_settings()}</span>
   </button>
 </nav>
 

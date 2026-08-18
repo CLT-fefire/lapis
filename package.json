@@ -7,12 +7,13 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:mcp": "tsc -p mcp/tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "check:watch": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "npm run i18n && vitest run",
+    "test:watch": "vitest",
+    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy baseLocale --silent"
   },
   "license": "MIT",
   "dependencies": {

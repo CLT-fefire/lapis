@@ -3,6 +3,7 @@
   import { ChevronRight, type LucideIcon } from "@lucide/svelte";
   import { fly } from "svelte/transition";
   import { sectionReveal } from "$lib/motion";
+  import { m } from "$lib/paraglide/messages.js";
 
   /**
    * 사이드바 세로 아코디언 섹션 1개 (옵션 B). 헤더(chevron + lucide 아이콘 + 레이블 + badge)
@@ -99,8 +100,8 @@
         class:dragging
         role="separator"
         aria-orientation="horizontal"
-        aria-label="{label} 섹션 높이 조절"
-        title="드래그로 높이 조절 · 더블클릭 = 자동"
+        aria-label={m.section_resize_aria({ label })}
+        title={m.section_resize_title()}
         onpointerdown={onHandleDown}
         onpointermove={onHandleMove}
         onpointerup={onHandleUp}
