@@ -77,13 +77,18 @@ Lapis는 이미 쌓인 마크다운 더미를 **읽고 찾는** 데 최적화된
 
 ## 설치
 
-1. [Releases](https://github.com/eren0315/lapis/releases)에서 최신 `Lapis_x.y.z_aarch64.dmg`를 내려받습니다. (**Apple Silicon** · macOS 11+)
-2. dmg를 열고 `Lapis.app`을 `/Applications`로 드래그합니다.
-3. **첫 실행에만** 열기 확인이 필요합니다. Developer ID로 서명했지만 **공증(notarization)은 하지 않습니다**:
-   - macOS 14 이하 — `Lapis.app` 우클릭 → **열기** → **열기**
-   - macOS 15 이상 — 실행 후 시스템 설정 → 개인정보 보호 및 보안 → **"확인 없이 열기"**
+**빌드된 바이너리는 배포하지 않습니다.** 소스에서 빌드하세요 — 요구사항과 명령은 아래 [개발](#개발)에 있습니다.
 
-> Intel Mac용 바이너리는 배포하지 않습니다. 필요하면 소스에서 빌드하세요(아래 [개발](#개발)).
+```bash
+git clone https://github.com/eren0315/lapis.git
+cd lapis
+npm install
+npm run tauri build
+```
+
+산출물은 `src-tauri/target/release/bundle/`에 생깁니다. `Lapis.app`을 `/Applications`로 옮기면 됩니다.
+
+> 개인용 도구라 배포·지원을 전제로 만들지 않았습니다. macOS 11+ / Apple Silicon에서 개발·검증합니다.
 
 ## 시작하기
 
@@ -235,7 +240,7 @@ npm run tauri build -- --target universal-apple-darwin # universal binary
 ## 트러블슈팅
 
 **앱이 열리지 않습니다 / "확인할 수 없는 개발자"**
-공증하지 않은 빌드입니다. 위 [설치](#설치) 3번을 따르세요.
+직접 빌드한 앱은 서명이 없어 Gatekeeper가 막습니다. `xattr -dr com.apple.quarantine /Applications/Lapis.app` 후 다시 여세요.
 
 **검색 결과가 안 나옵니다**
 첫 인덱싱이 아직 도는 중일 수 있습니다. 태그·백링크가 비어 보이는 것도 같은 이유입니다. 큰 vault는 잠시 기다리세요.
