@@ -48,7 +48,7 @@ logs/
 # 개인 바이브 코딩 셋업 (commit 안 함, 본인만 사용)
 # - CLAUDE.md: AI 에이전트 행동 강령
 # - docs/: SharedDocs/knowledge/lapis 로의 symlink (모든 문서 = STATE/plans/brainstorms/solutions/adr/diagrams/todos)
-#   본인 로컬에서만 작업·관리. GitHub에는 README.md만 노출.
+#   본인 로컬에서만 작업·관리. GitHub에는 README·CHANGELOG(en/ko)만 노출.
 #   docs는 디렉토리가 아닌 symlink라 trailing slash 없는 패턴 사용.
 /CLAUDE.md
 /docs

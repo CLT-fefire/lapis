@@ -1,374 +1,393 @@
 # Changelog
 
-Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르되,
-1인 프로젝트에 맞게 축약했다. 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/)을 느슨하게 따른다.
+**English** · [한국어](CHANGELOG.ko.md)
 
-> **바이너리 배포는 하지 않는다.** GitHub Releases에 올려둔 산출물이 없고 태그만 단다.
-> 설치는 [README의 설치 절](README.md#설치)대로 소스에서 빌드한다.
+Version history for Lapis. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+trimmed down for a one-person project. Versioning follows [Semantic Versioning](https://semver.org/) loosely.
 
-> **⚠️ 히스토리 재작성 고지 (2026-08-18)** — 저장소를 개인 계정으로 옮기면서 `git filter-repo`로
-> 전체 히스토리를 재작성했다. **v1.10.0 이전 커밋의 SHA는 전부 바뀌었다.** 태그는 새 SHA를 가리키도록
-> 갱신됐지만, 외부 문서·PR 페이지에 남은 옛 SHA 참조는 더 이상 해소되지 않는다.
+> **No binaries are published.** Nothing is attached to GitHub Releases — only tags are pushed.
+> Build from source as described in [the README's install section](README.md#installation).
+
+> **⚠️ History rewrite notice (2026-08-18)** — the whole history was rewritten with `git filter-repo`
+> when the repository moved to a personal account. **Every commit SHA before v1.10.0 changed.** Tags were
+> updated to point at the new SHAs, but old SHA references in external documents and PR pages no longer resolve.
 
 ---
 
 ## [Unreleased]
 
+### Added
+- **CI** — `.github/workflows/ci.yml`. On pull requests and pushes to `main`, it runs `svelte-check`,
+  the MCP type check, vitest, and the vite build on Ubuntu, plus `cargo check` and `cargo test` on macOS.
+- **`CHANGELOG.md`** — this file. With GitHub Releases unused, it stands in for release notes.
+
 ### Changed
-- 설치 안내를 Releases 다운로드에서 소스 빌드로 교체. 바이너리 배포를 중단했다.
+- Install instructions moved from a Releases download to building from source. Binary distribution stopped.
+- **English is now the primary language for published documents.** `README.md` and `CHANGELOG.md` are the
+  English originals; Korean lives in `README.ko.md` and `CHANGELOG.ko.md`. The former `README.en.md`
+  became `README.md`.
+
+### Fixed
+- The release badge in the README was dead — with every release deleted, `github/v/release` had nothing
+  to resolve. Replaced with a tag-based `github/v/tag`.
 
 ---
 
 ## [1.10.0] — 2026-08-19
 
-UI 로컬라이제이션과 MCP 질의 토글. 저장소를 개인 계정으로 이전하면서 공개 저장소용 정리도 함께 했다.
+UI localization and an MCP query toggle. Moving the repository to a personal account brought along
+a round of cleanup for public consumption.
 
 ### Added
-- **UI 로컬라이제이션 (ko/en)** — Paraglide JS 2 기반, 원본 언어는 영어이고 한국어는 번역본이다.
-  기본은 OS 언어 추종이며 설정에서 직접 고를 수도 있다. 메시지 309개 ([#171])
-- **MCP 질의 토글** — 앱 설정에서 `lapis_query` 도구를 켜고 끈다. **기본은 차단**이고, 게이트는
-  `tools/list`가 아니라 `tools/call`에 있어 재시작 없이 즉시 반영된다 ([#170])
-- MIT LICENSE ([#166]), 영어 README와 언어 스위처 ([#168])
+- **UI localization (ko/en)** — built on Paraglide JS 2. English is the source language and Korean is the
+  translation. It follows the OS language by default and can be overridden in settings. 309 messages ([#171])
+- **MCP query toggle** — turn the `lapis_query` tool on and off from app settings. **Blocked by default**,
+  and the gate sits on `tools/call` rather than `tools/list`, so it takes effect without a restart ([#170])
+- MIT LICENSE ([#166]), an English README and a language switcher ([#168])
 
 ### Fixed
-- 속성 자동완성 드롭다운이 컨텍스트 패널 바깥으로 나가지 못하고 잘리던 문제 ([#169])
-- MCP 래퍼가 `PATH`에 의존해 Claude Desktop에서 서버가 뜨지 않던 문제 ([#163])
-- 설정 부분 쓰기 — 일부 필드만 담아 저장하면 나머지 필드가 기본값으로 되돌아가던 문제.
-  필드가 하나뿐이던 동안은 증상이 없었다 ([#170])
+- The properties autocomplete dropdown was clipped instead of escaping the context panel ([#169])
+- The MCP wrapper depended on `PATH`, so the server never started under Claude Desktop ([#163])
+- Partial settings writes — saving only some fields reset the rest to their defaults. The symptom stayed
+  hidden while there was only one field ([#170])
 
 ### Docs
-- README 전면 재작성 + 저장소 URL 갱신 ([#165]), 개인 도구 면책 문구 ([#167])
-- 검색 스택 기술 오류 정정 — README가 오랫동안 "tantivy + lindera"라고 적고 있었지만
-  그 스택은 v1.3.0에서 제거됐다 ([#161], [#164])
-- MCP 사용 가이드 추가 ([#162])
+- README rewritten, repository URLs updated ([#165]), personal-tool disclaimer added ([#167])
+- Corrected the search stack — the README had long claimed "tantivy + lindera", but that stack was removed
+  in v1.3.0 ([#161], [#164])
+- Added an MCP usage guide ([#162])
 
 ---
 
 ## [1.9.0] — 2026-08-13
 
-지식 vault를 Claude Code에서 질의할 수 있게 열고, 그 과정에서 조용히 잘못 동작하던 캐시 결함들을 걷어냈다.
+Opened the knowledge vault up to queries from Claude Code, and cleared out several cache faults that had
+been failing silently along the way.
 
 ### Added
-- **`lapis_query` MCP 서버** — 앱이 만든 인덱스 위에서 풀텍스트와 구조 질의(백링크·토픽·태그·doc_kind)를
-  함께 낸다. 도구는 하나뿐이다 ([#156])
-- 읽던 위치에서 편집 시작 — 읽기↔편집 전환 시 섹션 앵커를 이월한다 ([#154])
+- **`lapis_query` MCP server** — serves full-text and structural queries (backlinks, topic, tag, doc_kind)
+  over the index the app builds. It exposes exactly one tool ([#156])
+- Start editing where you were reading — the section anchor carries across the read/edit switch ([#154])
 
 ### Changed
-- 풀텍스트 결합을 AND 우선 + OR 폴백으로 전환. 계측 결과 병목은 토크나이저가 아니라 결합 방식이었다 ([#159])
+- Full-text combination switched to AND-first with an OR fallback. Measurement showed the bottleneck was
+  the combination strategy, not the tokenizer ([#159])
 
 ### Fixed
-- 캐시 meta와 shard가 어긋나던 결함 6건 ([#155])
-- 편집해도 디스크 캐시가 갱신되지 않던 문제 — 호출부 중복 게이트 ([#158])
-- 개발 빌드와 릴리즈 빌드가 앱 데이터 디렉터리를 공유하던 것을 분리 ([#157])
+- Six faults where cache meta and shards drifted apart ([#155])
+- Edits did not refresh the on-disk cache — a duplicated gate at the call site ([#158])
+- Development and release builds shared an app data directory; they are now separate ([#157])
 
 ---
 
 ## [1.8.0] — 2026-08-11
 
-창 단위 멀티 vault와 읽기↔편집 단일 토글. 비활성 상태로 남아 있던 그래프 코드를 걷어냈다.
+Per-window vaults and a single read/edit toggle. The dormant graph code was removed.
 
 ### Added
-- **창마다 다른 vault** — watcher refcount + 창별 이벤트 라우팅
-- ⌘T 새 탭 / ⌘P는 활성 탭 교체로 정리
-- topbar 경로 라벨 클릭으로 절대 경로 복사
+- **A different vault per window** — watcher refcounting plus per-window event routing
+- `⌘T` opens a new tab; `⌘P` now replaces the active tab
+- Click the topbar path label to copy the absolute path
 
 ### Changed
-- **Editor/Preview 분할을 제거하고 읽기↔편집 단일 토글로 전환**
-- Editor 지연 로드 — 시작 payload 1089 KB → 543 KB
-- 단축키 매칭을 `keymap.ts`로 분리 (테스트 27건), welcome 문서를 `welcomeDoc.ts`로 분리
-- 비활성 그래프 기능 제거 (3,135줄)
+- **Removed the Editor/Preview split in favor of a single read↔edit toggle**
+- Editor loads lazily — startup payload 1089 KB → 543 KB
+- Shortcut matching extracted to `keymap.ts` (27 tests); the welcome document to `welcomeDoc.ts`
+- Removed the dormant graph feature (3,135 lines)
 
 ### Fixed
-- 새 창이 이전 vault를 그대로 열던 문제 — 창별 키를 지연 평가로 전환
+- New windows opened the previous vault — the per-window key is now evaluated lazily
 
 ---
 
 ## [1.7.0] — 2026-08-06
 
 ### Added
-- 읽기 타이포그래피 교정 — 본문 폭 조절, 헤딩 위계, 문단 간격 ([#144])
-- 디버그 빌드 표식 — 창 제목과 topbar 배지 ([#146])
+- Reading typography pass — adjustable measure, heading hierarchy, paragraph spacing ([#144])
+- Debug build markers — window title and a topbar badge ([#146])
 
 ### Fixed
-- 페인 툴바 ⋯ 메뉴가 한 자씩 줄바꿈되던 문제 (v1.6.0 회귀) ([#145])
+- The pane toolbar's ⋯ menu wrapped one character per line (a v1.6.0 regression) ([#145])
 
 ---
 
 ## [1.6.0] — 2026-08-05
 
-UI 전면 개편. 채팅 앱(Discord)의 셸 레이아웃을 참조해 좌측 아이콘 레일 + 우측 컨텍스트 패널 구조로 바꿨다.
+A full UI overhaul. The shell layout borrows from chat apps (Discord): a left icon rail and a right
+context panel.
 
 ### Added
-- 디자인 토큰 — 표면 3계층, radius 상향, 밀도 2단 ([#130])
-- 좌측 아이콘 레일 상시화와 활성 섹션 표시 ([#132]), 우측 컨텍스트 패널 신설 ([#133])
-- vault 헤더 드롭다운 + 하단 상태 줄 ([#139]), 레일 툴팁 ([#138])
-- **안 본 사이 바뀐 노트 표시** — unread 은유 ([#140])
-- 오버레이 등장/퇴장 모션 ([#137]), 탭 칩·카테고리 접기 모션 ([#141])
+- Design tokens — three surface layers, larger radii, two density steps ([#130])
+- A permanent left icon rail with active-section indication ([#132]), and a new right context panel ([#133])
+- Vault header dropdown and a bottom status bar ([#139]), rail tooltips ([#138])
+- **Unread markers for notes that changed while you were away** ([#140])
+- Enter/exit motion for overlays ([#137]); tab chip and category collapse motion ([#141])
 
 ### Changed
-- 하드보더 제거 + 표면 3계층 적용 ([#131]), 액센트 색 전환 ([#135])
-- 신규 설치 기본 레이아웃을 Editor 접힘으로, topbar 슬림화 ([#134])
-- 아이템 칩화 · 레일 pill 모프 · 카테고리 대문자 ([#136])
+- Removed hard borders in favor of the three surface layers ([#131]); new accent color ([#135])
+- Fresh installs default to a collapsed Editor; slimmer topbar ([#134])
+- Items rendered as chips, rail pill morphing, uppercase categories ([#136])
 
 ### Fixed
-- 목차 항목 하단 잘림 + 섹션 배지 상한 9999+ ([#142])
+- Outline entries clipped at the bottom; section badges capped at 9999+ ([#142])
 
 ---
 
 ## [1.5.0] — 2026-08-03
 
 ### Added
-- Finder에서 보기 — 파일 트리·탭·Editor/Preview 전부에서 ([#127])
-- 프리뷰 내용을 자립형 HTML로 내보내기 ([#128])
-- 페인 툴바 ⋯ 오버플로 메뉴 ([#126])
+- Reveal in Finder — from the file tree, tabs, and both panes ([#127])
+- Export the preview as a self-contained HTML file ([#128])
+- A ⋯ overflow menu on the pane toolbar ([#126])
 
 ---
 
 ## [1.4.0] — 2026-06-22
 
-검색 품질과 응답성.
+Search quality and responsiveness.
 
 ### Added
-- **Quick Switcher 초성 검색** — 한국어 자음 매칭 ([#119])
-- **풀텍스트 한국어 bigram 토크나이저** — 합성어·어미 변형 recall ([#120])
-- 설정에 인덱스 강제 재구축 — 캐시 무시, 워커 초기화, 전체 재빌드 ([#123])
+- **Initial-consonant search in the Quick Switcher** — Korean jamo matching ([#119])
+- **A Korean bigram tokenizer for full-text** — recall for compounds and inflections ([#120])
+- Force index rebuild in settings — ignore the cache, reset the worker, rebuild everything ([#123])
 
 ### Changed
-- 팔레트 검색 디바운스 + 스니펫 지연 생성 ([#121])
-- Quick Switcher 정규화 캐시 + 점진 필터링 ([#122])
-- git 자동 커밋을 변경 경로만 `add` — 전체 워킹트리 스캔 회피 ([#118])
+- Debounced palette search with lazily generated snippets ([#121])
+- Quick Switcher normalization cache and progressive filtering ([#122])
+- Git auto-commit now `add`s only changed paths, avoiding a full working-tree scan ([#118])
 
 ---
 
 ## [1.3.0] — 2026-06-18
 
 ### Removed
-- **claude-mem 통합 기능 전체 제거** ([#117]). 이때 함께 쓰이던 **tantivy + lindera 형태소 검색 엔진도
-  같이 빠졌다** — 이후 검색은 MiniSearch 단일 스택이다. README가 한동안 이 사실을 반영하지 못했고,
-  v1.10.0에서야 정정됐다.
+- **The entire claude-mem integration** ([#117]). **The tantivy + lindera morphological search engine went
+  with it** — search has been a single MiniSearch stack ever since. The README failed to reflect this for
+  a long time and was only corrected in v1.10.0.
 
 ---
 
 ## [1.2.2] — 2026-06-18
 
 ### Changed
-- 그래프 기능 일시 비활성화 — 3D 재설계 검토 ([#114])
-- watcher 재인덱싱을 백그라운드로 — 실시간 변경 시 사이드바 blocking 제거 ([#113])
+- Graph feature temporarily disabled pending a 3D redesign ([#114])
+- Watcher reindexing moved to the background, so live changes no longer block the sidebar ([#113])
 
 ### Fixed
-- mirror sync 표시가 영구 "진행중"으로 stuck 되던 문제 — 리스너 재등록 race ([#115])
+- The mirror sync indicator got stuck on "syncing" forever — a listener re-registration race ([#115])
 
 ---
 
 ## [1.2.1] — 2026-06-18
 
 ### Fixed
-- **`strip_md_extension`의 UTF-8 문자 경계 panic** — 릴리즈 직후 즉시 크래시. 바이트 슬라이스 비교로 교체 ([#110])
-- 인덱스 빌드 스피너 freeze, watcher가 검색 인덱스를 놓치던 문제 ([#111], [#112])
+- **A UTF-8 character boundary panic in `strip_md_extension`** — an immediate crash after release.
+  Replaced with byte-slice comparison ([#110])
+- Index build spinner freeze; the watcher missing the search index ([#111], [#112])
 
 ### Added
-- 증분 인덱싱, `.mmd` watcher ([#112])
+- Incremental indexing and a `.mmd` watcher ([#112])
 
 ---
 
 ## [1.2.0] — 2026-06-15
 
-vault를 git으로 버전 관리.
+Version control the vault with git.
 
 ### Added
-- vault git 버전관리 백엔드 — shell-out 명령 ([#104])
-- 자동 커밋 + 버전관리 시작 배너 ([#105])
-- git 이력 뷰어 — Neighborhood "History" 구획 ([#106])
-- 설정에 Git 버전관리 진입점 — 배너를 "나중에"로 닫은 뒤 재접근 ([#107])
+- A git version-control backend for the vault — shell-out commands ([#104])
+- Auto-commit plus a banner for starting version control ([#105])
+- Git history viewer — a "History" section in Neighborhood ([#106])
+- A settings entry point for git version control, reachable after dismissing the banner ([#107])
 
 ### Fixed
-- git 명령이 IPC 스레드를 블로킹해 UI가 30초 freeze 되던 문제 — async + `spawn_blocking` ([#108])
+- Git commands blocked the IPC thread and froze the UI for 30 seconds — async + `spawn_blocking` ([#108])
 
 ---
 
 ## [1.1.0] — 2026-06-11
 
 ### Added
-- betweenness 온디맨드 "다리 노트" 토글 ([#97]), 무방향 환산 + 가중 토글 ([#101])
-- disparity filter 백본 모드 ([#98])
-- 그래프 Global type(`doc_kind`) 필터 ([#100])
-- MOC 자동제안 진단 패널 — MOC 후보·다리 노트·고아 노트 ([#102])
-- 사이드바 펼친 섹션 드래그 리사이즈 ([#99])
+- On-demand betweenness with a "bridge notes" toggle ([#97]); undirected conversion and a weighting toggle ([#101])
+- Disparity filter backbone mode ([#98])
+- A global `doc_kind` type filter for the graph ([#100])
+- MOC suggestion diagnostics — MOC candidates, bridge notes, orphan notes ([#102])
+- Drag-resizable expanded sidebar sections ([#99])
 
 ---
 
 ## [1.0.0] — 2026-06-08
 
-문서 단위 지식 그래프와 사이드바 재구성.
+A document-level knowledge graph and a restructured sidebar.
 
 ### Added
-- frontmatter 타입 관계 인덱스 + Neighborhood 패널 ([#92])
-- 필드 렌즈 그룹핑 — Files 탭 ([#93])
-- 문서 단위 지식 그래프 — 데이터 모델과 Local/ego 모드 ([#94]), Global 모드와 인코딩 ([#95])
-- 세로 아코디언 사이드바 네비 + 아이콘 레일 ([#96])
+- Frontmatter type relation index and the Neighborhood panel ([#92])
+- Field lens grouping in the Files tab ([#93])
+- Document-level knowledge graph — data model and Local/ego mode ([#94]), Global mode and encoding ([#95])
+- Vertical accordion sidebar navigation with an icon rail ([#96])
 
-> 그래프 기능은 v1.2.2에서 비활성화되고 v1.8.0에서 코드까지 제거됐다. 현재 앱에는 없다.
+> The graph feature was disabled in v1.2.2 and its code removed in v1.8.0. It is not in the app today.
 
 ---
 
 ## [0.12.1] — 2026-06-05
 
 ### Fixed
-- 탭 우클릭 "다른 탭 닫기" 등이 동작하지 않던 버그 ([#90])
+- Tab context-menu actions like "Close other tabs" did nothing ([#90])
 
 ---
 
 ## [0.12.0] — 2026-06-04
 
 ### Added
-- 노트 탭 영속화 — vault별 복원 ([#85])
-- 탭 드래그 재정렬 + 우클릭 다른 탭 닫기 ([#86])
-- 프리뷰 글꼴 크기(줌) 조절 ([#87])
+- Persisted note tabs, restored per vault ([#85])
+- Drag to reorder tabs; "close other tabs" from the context menu ([#86])
+- Preview font size (zoom) control ([#87])
 
 ### Fixed
-- 앱 내 rename/delete/move 시 백링크 캐시 즉시 무효화 ([#88])
+- Backlink cache now invalidates immediately on in-app rename, delete, and move ([#88])
 
 ---
 
 ## [0.11.0] — 2026-06-04
 
-노트 네비게이션 묶음.
+A note navigation bundle.
 
 ### Added
-- **위키링크 자동완성(`[[`)** — CodeMirror 자동완성 드롭다운 ([#79])
-- 노트 뒤로/앞으로 가기 ([#80])와 히스토리 목록 드롭다운 ([#81])
-- **노트 탭 (멀티 오픈)** ([#82])
-- 즐겨찾기/핀 사이드바 탭 + 최근 노트 ([#83])
+- **Wikilink autocomplete (`[[`)** — a CodeMirror completion dropdown ([#79])
+- Note back/forward navigation ([#80]) and a history dropdown ([#81])
+- **Note tabs (multiple open notes)** ([#82])
+- A favorites/pins sidebar tab with recent notes ([#83])
 
 ---
 
 ## [0.10.0] — 2026-06-02
 
 ### Added
-- 문서 아웃라인(TOC) 패널 — 에디터·프리뷰 양방향 동기 ([#73])
-- 노트 워드/글자수·읽기시간 topbar 표시 ([#72])
-- 빈 frontmatter에서도 Properties를 추가할 수 있는 진입점 ([#77])
+- Document outline (TOC) panel, synced both ways with the editor and preview ([#73])
+- Word/character count and reading time in the topbar ([#72])
+- An entry point for adding Properties even when frontmatter is empty ([#77])
 
 ### Changed
-- 간격 토큰화 — 정확일치 px를 `--sp-*`로 ([#74])
-- 모달 셸 프리미티브 `ModalShell` + z-index 토큰 정규화 ([#75])
-- 자동 링크 갱신의 코드영역 식별을 정규식에서 AST(markdown-it)로 ([#76])
-- 아이콘 버튼을 `.btn--icon`으로 통합 ([#77])
+- Spacing tokenized — exact-match px values replaced with `--sp-*` ([#74])
+- A `ModalShell` primitive and normalized z-index tokens ([#75])
+- Automatic link updating now identifies code regions via an AST (markdown-it) instead of regex ([#76])
+- Icon buttons unified under `.btn--icon` ([#77])
 
 ---
 
 ## [0.9.1] — 2026-06-01
 
 ### Fixed
-- Mermaid PNG 내보내기 — WKWebView canvas taint 회피 (blob → data URL) ([#71])
+- Mermaid PNG export — worked around WKWebView canvas tainting (blob → data URL) ([#71])
 
 ---
 
 ## [0.9.0] — 2026-06-01
 
 ### Added
-- 프리뷰 코드블록 구문 하이라이팅 — highlight.js를 `--cm-*` 토큰에 연결 ([#68])
+- Syntax highlighting for preview code blocks — highlight.js wired to the `--cm-*` tokens ([#68])
 
 ### Changed
-- **디자인 시스템 전면 개편** — 토큰 도입 + 3-way 테마(라이트/다크/시스템) ([#64])
-- 크기·형태 정규화 + 버튼 프리미티브 ([#67])
+- **A full design system overhaul** — tokens plus a three-way theme (light/dark/system) ([#64])
+- Normalized sizes and shapes; a button primitive ([#67])
 
 ### Fixed
-- 라이트 모드에서 Mermaid 다이어그램 가독성 — 테마 적응 렌더 ([#66])
+- Mermaid diagram legibility in light mode — theme-adaptive rendering ([#66])
 
 ---
 
 ## [0.8.0] — 2026-05-29
 
 ### Added
-- Mermaid 다이어그램 PNG 내보내기 — hover 버튼에서 atomic 저장 ([#62])
+- Mermaid diagram PNG export — atomic save from a hover button ([#62])
 
 ---
 
 ## [0.7.0] — 2026-05-27
 
 ### Added
-- 사이드바 접기/펼치기 — ⌘B, 헤더 버튼, 접힌 strip ([#60])
+- Collapsible sidebar — `⌘B`, a header button, and a collapsed strip ([#60])
 
 ---
 
 ## [0.6.0] — 2026-05-21
 
-큰 vault 대비 성능 묶음.
+A performance bundle for large vaults.
 
 ### Changed
-- 검색 cold init 제거 + LRU 캐시 + release profile ([#49])
-- vault cold-start 묶음 — `read_vault_bundle`(rayon) ([#50])
-- MiniSearch 디스크 캐시 ([#51]), 캐시 gzip + `fullTextIndex` lazy load ([#52])
-- 캐시 메타/JSON IPC 분리 + MiniSearch Web Worker ([#53])
-- 파일 트리 가상 스크롤 ([#55])
-- 검색 인덱스 sharded progressive load — 첫 shard 1.8초 뒤 부분 검색 가능 ([#56]),
-  shard 수를 vault 크기로 동적 조정 ([#57])
+- Removed search cold init; added an LRU cache and a release profile ([#49])
+- Vault cold-start bundle — `read_vault_bundle` on rayon ([#50])
+- MiniSearch disk cache ([#51]); gzipped cache and lazy `fullTextIndex` loading ([#52])
+- Split cache meta and JSON IPC; moved MiniSearch into a Web Worker ([#53])
+- Virtualized the file tree ([#55])
+- Sharded progressive loading of the search index — partial search 1.8s in, after the first shard ([#56]),
+  with the shard count scaled to vault size ([#57])
 
 ### Added
-- 현재 노트 절대 경로 복사 + 사이드바 트리 검색 필터 ([#54])
+- Copy the current note's absolute path; filter the sidebar tree by search ([#54])
 
 ---
 
 ## [0.5.1] — 2026-05-19
 
 ### Added
-- 백업 `max_keep`을 설정에서 노출 (1–100) ([#47])
+- Backup `max_keep` exposed in settings (1–100) ([#47])
 
 ### Removed
-- 그래프 뷰 기능 완전 제거 — ADR-001 ([#45])
+- The graph view, removed entirely — ADR-001 ([#45])
 
 ---
 
 ## [0.5.0] — 2026-05-18
 
 ### Added
-- 링크 자동 갱신 dry-run 미리보기 + `.lapis` 스냅샷 백업 ([#42])
-- 백업 prune(최대 20개) + write 실패 시 자동 롤백 ([#43])
-- in-doc 검색 옵션 — regex / case / whole-word ([#39])
-- vitest 도입 + linkRewrite 골든 테스트 ([#41])
+- Dry-run preview for automatic link updating, with `.lapis` snapshot backups ([#42])
+- Backup pruning (max 20) and automatic rollback on write failure ([#43])
+- In-document search options — regex, case, whole word ([#39])
+- vitest adopted, with golden tests for linkRewrite ([#41])
 
 ---
 
 ## [0.4.0] — 2026-05-14
 
 ### Added
-- F2 rename / ⌘⌫ 삭제, Properties 추가, 백링크 무효화 ([#34])
-- Command Palette에 F2 보조 항목 + Mac 매직 키보드 안내 ([#35])
-- `.mmd` 단일 파일 지원 ([#36])
+- F2 rename and `⌘⌫` delete, Properties add, backlink invalidation ([#34])
+- An F2 fallback in the Command Palette plus a note about Mac Magic Keyboards ([#35])
+- Support for standalone `.mmd` files ([#36])
 
 ---
 
 ## [0.3.0] — 2026-05-14
 
 ### Added
-- claude-mem 세션 요약을 vault로 export, 메모리 FTS 검색과 관련 메모리 패널
-- `lapis-mem.db` mirror + 실시간 sync 엔진
-- tantivy + lindera 한국어 형태소 검색 엔진
-- claude-mem 통합을 옵션화 (기본 OFF) ([#30])
+- Export claude-mem session summaries into the vault; memory FTS search and a related-memory panel
+- A `lapis-mem.db` mirror and a live sync engine
+- The tantivy + lindera Korean morphological search engine
+- The claude-mem integration made optional, off by default ([#30])
 
-> 이 문단의 기능은 **v1.3.0에서 전부 제거**됐다.
+> Everything in this section was **removed in v1.3.0**.
 
 ---
 
 ## [0.2.0] — 2026-05-12
 
-첫 태그. Phase 0–5.0의 기반 기능이 모두 여기 들어 있다.
+The first tag. Everything from Phase 0 through 5.0 landed here.
 
 ### Added
-- Tauri 2 + SvelteKit + TypeScript 스캐폴딩, CodeMirror 6 + markdown-it + frontmatter PoC
-- vault 열기, 파일 트리, 스크롤 동기화
-- Wikilink + 백링크 패널 + 안전한 링크 navigation
-- Quick Switcher(⌘P), 풀텍스트 검색(⌘⇧F), 태그 인덱스와 Files/Tags 탭
-- 편집·저장(⌘S + autosave) + **atomic write**
-- frontmatter 4키 스키마 인식, nested tags 계층 색인, `doc_kind`/`topic` facet 필터
-- file watcher — 외부 변경 자동 감지 + 충돌 처리
-- vault 조작(생성·삭제·rename·이동) + 자동 링크 갱신
-- ⌘K 통합 명령 팔레트, 백링크 칩 펼침과 컨텍스트 스니펫
-- frontmatter 인라인 편집, Mermaid 코드블록 인라인 렌더, 이미지 상대 경로와 발행물 갤러리
-- 인-도큐먼트 검색 — Editor·Preview 각각 ⌘F
+- Tauri 2 + SvelteKit + TypeScript scaffolding; a CodeMirror 6 + markdown-it + frontmatter proof of concept
+- Open a vault, file tree, scroll sync
+- Wikilinks, a backlinks panel, and safe link navigation
+- Quick Switcher (`⌘P`), full-text search (`⌘⇧F`), a tag index, and Files/Tags sidebar tabs
+- Editing and saving (`⌘S` + autosave) with **atomic writes**
+- Frontmatter four-key schema recognition, hierarchical nested tags, `doc_kind`/`topic` facet filters
+- A file watcher — external changes detected automatically, with conflict handling
+- Vault operations (create, delete, rename, move) with automatic link updating
+- The `⌘K` command palette; expandable backlink chips with context snippets
+- Inline frontmatter editing, inline Mermaid code block rendering, relative image paths and a published-asset gallery
+- In-document search — `⌘F` in each of the editor and preview
 
-<!-- 링크 참조 -->
+<!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.10.0...main
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
