@@ -90,6 +90,8 @@ npm run tauri build
 
 > 개인용 도구라 배포·지원을 전제로 만들지 않았습니다. macOS 11+ / Apple Silicon에서 개발·검증합니다.
 
+버전별 변경 내역은 [`CHANGELOG.md`](CHANGELOG.md)에 있습니다 — GitHub Releases를 쓰지 않으므로 여기가 릴리즈 노트를 대신합니다.
+
 ## 시작하기
 
 1. 좌측 사이드바 상단 **Vault 열기…** 로 `.md`가 들어 있는 폴더를 고릅니다. 빈 폴더도 됩니다.

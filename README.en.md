@@ -90,6 +90,8 @@ The output lands in `src-tauri/target/release/bundle/`. Move `Lapis.app` into `/
 
 > This is a personal tool, not built with distribution or support in mind. Development and testing happen on macOS 11+ / Apple Silicon.
 
+Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) (written in Korean) — this repository does not use GitHub Releases, so that file stands in for release notes.
+
 ## Getting started
 
 1. Use **Open Vault…** at the top of the left sidebar to pick a folder containing `.md` files. An empty folder is fine.
