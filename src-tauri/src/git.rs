@@ -50,9 +50,12 @@ fn rel_for_add(vault: &Path, path: &str) -> Option<String> {
     };
     // 탈출(`..`)·절대 성분 거부 + 빈 경로 거부.
     if rel.as_os_str().is_empty()
-        || rel
-            .components()
-            .any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
+        || rel.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
     {
         return None;
     }
@@ -74,7 +77,8 @@ fn run_git(repo: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 /// 버전관리 시작 시 생성하는 `.gitignore` — claude-mem export 등 노이즈 제외.
-const GITIGNORE: &str = "# Lapis 버전관리 — 노이즈 제외 (ADR-004)\n_memories/\n.DS_Store\n.lapis/\n*.tmp.lapis-*\n";
+const GITIGNORE: &str =
+    "# Lapis 버전관리 — 노이즈 제외 (ADR-004)\n_memories/\n.DS_Store\n.lapis/\n*.tmp.lapis-*\n";
 
 /// 노트 1건의 commit 이력 항목.
 #[derive(Debug, Serialize)]
@@ -124,7 +128,11 @@ fn git_commit_all_inner(vault_path: &str, message: &str) -> Result<bool, String>
     commit_inner(&vault, message)
 }
 
-fn git_commit_paths_inner(vault_path: &str, paths: &[String], message: &str) -> Result<bool, String> {
+fn git_commit_paths_inner(
+    vault_path: &str,
+    paths: &[String],
+    message: &str,
+) -> Result<bool, String> {
     let vault = canon_vault(vault_path)?;
     commit_paths_inner(&vault, paths, message)
 }
@@ -265,7 +273,11 @@ pub async fn git_commit_paths(
 
 /// 노트 1건의 commit 이력(최신순, `--follow`). limit는 1~500 clamp.
 #[tauri::command]
-pub async fn git_log(vault_path: String, path: String, limit: u32) -> Result<Vec<GitCommit>, String> {
+pub async fn git_log(
+    vault_path: String,
+    path: String,
+    limit: u32,
+) -> Result<Vec<GitCommit>, String> {
     spawn_blocking(move || git_log_inner(&vault_path, &path, limit))
         .await
         .map_err(|e| format!("git_log spawn_blocking join: {e}"))?
@@ -273,7 +285,11 @@ pub async fn git_log(vault_path: String, path: String, limit: u32) -> Result<Vec
 
 /// 특정 commit에서 그 노트의 diff. rev는 16진 hash만 허용.
 #[tauri::command]
-pub async fn git_show_diff(vault_path: String, path: String, rev: String) -> Result<String, String> {
+pub async fn git_show_diff(
+    vault_path: String,
+    path: String,
+    rev: String,
+) -> Result<String, String> {
     spawn_blocking(move || git_show_diff_inner(&vault_path, &path, &rev))
         .await
         .map_err(|e| format!("git_show_diff spawn_blocking join: {e}"))?
@@ -296,7 +312,12 @@ mod tests {
             .as_nanos();
         let seq = SEQ.fetch_add(1, Ordering::Relaxed);
         let mut p = std::env::temp_dir();
-        p.push(format!("lapis-git-test-{}-{}-{}", std::process::id(), nanos, seq));
+        p.push(format!(
+            "lapis-git-test-{}-{}-{}",
+            std::process::id(),
+            nanos,
+            seq
+        ));
         fs::create_dir_all(&p).unwrap();
         // canonicalize로 /var→/private/var 등 정규화(우리 함수가 canonicalize하므로 일치 필요).
         p.canonicalize().unwrap()

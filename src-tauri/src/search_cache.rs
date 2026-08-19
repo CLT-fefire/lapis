@@ -79,7 +79,6 @@ fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-
 fn vault_key(vault_path: &str) -> String {
     let mut h = DefaultHasher::new();
     vault_path.hash(&mut h);
@@ -91,7 +90,11 @@ fn meta_file(app: &AppHandle, vault_path: &str) -> Result<PathBuf, String> {
 }
 
 fn shard_file(app: &AppHandle, vault_path: &str, shard_id: u32) -> Result<PathBuf, String> {
-    Ok(cache_root(app)?.join(format!("{}.shard{}.json.gz", vault_key(vault_path), shard_id)))
+    Ok(cache_root(app)?.join(format!(
+        "{}.shard{}.json.gz",
+        vault_key(vault_path),
+        shard_id
+    )))
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

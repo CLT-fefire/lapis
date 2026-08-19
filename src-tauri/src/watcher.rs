@@ -23,10 +23,20 @@ pub enum VaultChange {
     /// 현재 정책상 emit하지 않음 (모두 Modified로 통합) — frontend가 인덱스 존재 여부로 신규/변경 구분.
     /// 향후 필요 시 활성화.
     #[allow(dead_code)]
-    Created { path: String },
-    Modified { path: String, mtime_ms: u64 },
-    Removed { path: String },
-    Renamed { from: String, to: String },
+    Created {
+        path: String,
+    },
+    Modified {
+        path: String,
+        mtime_ms: u64,
+    },
+    Removed {
+        path: String,
+    },
+    Renamed {
+        from: String,
+        to: String,
+    },
 }
 
 /// 한 vault root에 걸린 watcher + **그 root를 보고 있는 창들**.
@@ -211,10 +221,9 @@ fn process_event(
             EventKind::Create(_) => {
                 // rename 의 destination일 수도 있음 — last_rename_from 확인
                 if let Some(from) = last_rename_from.take() {
-                    bucket.pending.insert(
-                        path.clone(),
-                        PendingChange::RenamedFrom(from),
-                    );
+                    bucket
+                        .pending
+                        .insert(path.clone(), PendingChange::RenamedFrom(from));
                 } else {
                     bucket
                         .pending
@@ -226,10 +235,9 @@ fn process_event(
                 if path.exists() {
                     // To 이벤트
                     if let Some(from) = last_rename_from.take() {
-                        bucket.pending.insert(
-                            path.clone(),
-                            PendingChange::RenamedFrom(from),
-                        );
+                        bucket
+                            .pending
+                            .insert(path.clone(), PendingChange::RenamedFrom(from));
                     } else {
                         bucket
                             .pending
@@ -247,9 +255,7 @@ fn process_event(
                     .insert(path.clone(), PendingChange::CreatedOrModified);
             }
             EventKind::Remove(_) => {
-                bucket
-                    .pending
-                    .insert(path.clone(), PendingChange::Removed);
+                bucket.pending.insert(path.clone(), PendingChange::Removed);
             }
             _ => {}
         }
@@ -332,7 +338,10 @@ fn is_relevant_path(path: &Path, root: &Path) -> bool {
     if !is_dir_event {
         // 파일이면 지원 확장자(.md/.mmd)만 — 트리/인덱스 워커와 동일 술어 공유.
         // (이전엔 .md만 감시 → .mmd 외부 생성/수정/삭제가 reindex를 안 깨움)
-        if path.extension().is_none_or(|e| !crate::vault::is_supported_note_ext(e)) {
+        if path
+            .extension()
+            .is_none_or(|e| !crate::vault::is_supported_note_ext(e))
+        {
             return false;
         }
     }

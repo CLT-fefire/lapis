@@ -18,7 +18,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ### Added
 - **CI** — `.github/workflows/ci.yml`. On pull requests and pushes to `main`, it runs `svelte-check`,
-  the MCP type check, vitest, and the vite build on Ubuntu, plus `cargo check` and `cargo test` on macOS.
+  the MCP type check, vitest, and the vite build on Ubuntu, plus `cargo fmt --check`, `cargo clippy`
+  (warnings as errors), `cargo check`, and `cargo test` on macOS.
 - **`CHANGELOG.md`** — this file. With GitHub Releases unused, it stands in for release notes.
 
 ### Changed

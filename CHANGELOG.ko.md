@@ -34,7 +34,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ### Added
 - **CI** — `.github/workflows/ci.yml`. PR과 `main` push에서 `svelte-check` · MCP 타입 체크 ·
-  vitest · vite 빌드(ubuntu)와 `cargo check` · `cargo test`(macOS)를 돌린다.
+  vitest · vite 빌드(ubuntu)와 `cargo fmt --check` · `cargo clippy`(경고를 오류로) ·
+  `cargo check` · `cargo test`(macOS)를 돌린다.
 - **`CHANGELOG.md`** — 이 문서. GitHub Releases를 쓰지 않으므로 릴리즈 노트를 대신한다.
 
 ### Fixed
