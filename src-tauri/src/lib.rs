@@ -73,6 +73,32 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // 창 위치·크기를 재시작 너머로 잇는다. `on_window_ready`에 걸리므로 `main`뿐 아니라
+        // `new_window`가 만드는 `w2`/`w3`도 각자 라벨의 마지막 위치로 열린다 — 라벨이 빈 번호를
+        // 재사용하니(`next_window_label`) "직전에 닫은 그 자리"가 된다.
+        //
+        // ⚠️ **직접 구현하지 않은 이유**: 저장한 좌표의 모니터가 사라졌을 때(외장 디스플레이를
+        // 뽑은 뒤 재시작) 창이 화면 밖에 복원돼 잡을 수 없게 된다. 이 플러그인은
+        // `available_monitors()`와 교차 검사해 그 경우 기본 위치로 떨어뜨린다.
+        //
+        // ⚠️ 상태 파일(`.window-state.json`)은 죽은 `wN` 라벨 항목을 **회수하지 않는다**
+        // — `windowScope.ts`의 `pruneOrphanScopedKeys`가 localStorage에서 하는 청소를
+        // 플러그인은 안 한다. 항목당 수십 바이트라 방치해도 무해하지만, 라벨 재사용 규칙이
+        // 바뀌어 번호가 단조 증가하게 되면 그때는 자란다.
+        //
+        // ⚠️ `VISIBLE`·`DECORATIONS`는 **일부러 뺐다**. 앱이 창을 숨기는 경로가 생기면
+        // `VISIBLE`이 "숨김"을 복원해 **앱이 안 뜨는 것처럼 보인다**. 장식은 Lapis가 토글하지
+        // 않으므로 저장할 값이 아니다. 남긴 4개가 실제로 사용자가 바꾸는 것들이다.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .manage(watcher::WatcherState::default())
         .setup(|app| {
             // 디버그 빌드는 창 제목에 표식을 단다 — 창 제목 막대뿐 아니라

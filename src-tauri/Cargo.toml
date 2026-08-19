@@ -30,6 +30,7 @@ trash = "5"
 rayon = "1"
 # gzip — search-cache JSON(30MB → ~5MB) 압축. IPC + disk read 큰 폭 단축.
 flate2 = "1"
+tauri-plugin-window-state = "2.4.1"
 
 # release dmg 최적화 — 빌드 시간 증가 vs 런타임/바이너리 크기 트레이드오프.
 # - lto = "thin": 모듈 간 inline + dead code 제거. "fat"보다 빌드 시간 절약.
