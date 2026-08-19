@@ -4,7 +4,8 @@
 
 [한국어](README.md) · **English**
 
-![release](https://img.shields.io/github/v/release/eren0315/lapis?label=release&color=1f6feb)
+[![CI](https://github.com/eren0315/lapis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/eren0315/lapis/actions/workflows/ci.yml)
+![version](https://img.shields.io/github/v/tag/eren0315/lapis?label=version&color=1f6feb)
 ![platform](https://img.shields.io/badge/platform-macOS_11%2B_(Apple_Silicon)-black)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
