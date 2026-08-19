@@ -416,9 +416,10 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
       name: "bm25",
       corpus_size: idxs.reduce((n, i) => n + i.documentCount, 0),
       matched: ranked.length,
-      // "AND"면 질의 단어가 전부 든 문서만이다(좁고 정확). "OR"는 AND가 0건이라
-      // 폴백한 것 — **질의 단어 중 일부가 인덱스에 없다는 신호**다. 오타이거나,
-      // 그 표현이 vault에 없거나. 결과가 넓으면 이 값을 먼저 본다.
+      // 어느 단계에서 나왔는지 — `AND`(전부 든 문서) → `AND-1`(하나 빼고 AND) →
+      // `OR-min`(OR + 매칭 term 임계) → `OR`(마지막 수단). **AND가 아니면 질의 단어 중
+      // 일부가 인덱스에 없다는 신호**다(오타이거나, 그 표현이 vault에 없거나).
+      // 결과가 넓으면 이 값을 먼저 본다. 값 목록은 `mcp/README.md` 동작 5번.
       combine,
       lazy_loaded_now: !wasLoaded,
     });

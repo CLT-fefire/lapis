@@ -22,12 +22,25 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 - **`CHANGELOG.md`** — this file. With GitHub Releases unused, it stands in for release notes.
 
 ### Changed
+- **Full-text combination now degrades in four steps instead of two.** It was AND-then-OR: if a single
+  query word was missing from the target, AND returned nothing and the whole query fell back to OR,
+  matching **10,346 documents on average** — 53% of the corpus. Typing a half-remembered title is not an
+  edge case, and that was the worst path. Two stages now fill the gap: `AND-1` (drop one word, AND the
+  rest) and `OR-min` (OR results filtered by matched-term count). Measured on 19,292 notes / 360 cases,
+  queries carrying one bogus word went from **10,346 matches to 220 (−98%)** with R@1 **67.2% → 68.9%**.
+  Clean queries are byte-for-byte unchanged — the new stages are only reachable when AND finds nothing.
+  `AND-1` is capped at 8 words because it is O(n²): uncapped it scored 1.1pt higher but ran 4× slower
+  (118ms average against 29ms before, and 860ms on a 32-word query).
+- The MCP response field `used[].combine` gained two values, `AND-1` and `OR-min`. See `mcp/README.md`.
 - Install instructions moved from a Releases download to building from source. Binary distribution stopped.
 - **English is now the primary language for published documents.** `README.md` and `CHANGELOG.md` are the
   English originals; Korean lives in `README.ko.md` and `CHANGELOG.ko.md`. The former `README.en.md`
   became `README.md`.
 
 ### Fixed
+- `mcp/lapis-eval` silently ignored its sample-size argument — the wrapper did not forward `"$@"`, so
+  every run used the default. Two measurements were compared under different case counts before this
+  surfaced.
 - The release badge in the README was dead — with every release deleted, `github/v/release` had nothing
   to resolve. Replaced with a tag-based `github/v/tag`.
 
