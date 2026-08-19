@@ -20,13 +20,13 @@ const w = (s: string) => [...s].reduce((a, c) => a + (c.charCodeAt(0) > 0x1000 ?
 const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - w(s)));
 
 console.log(`vault ${vc.infos.length} 노트 · 케이스 ${clean.length}건\n`);
-console.log(pad("질의 집합", 26) + "R@1     R@10    MRR     결과수   AND비율");
-console.log("-".repeat(70));
+console.log(pad("질의 집합", 26) + "R@1     R@10    MRR     결과수   단계 분포");
+console.log("-".repeat(88));
 for (const [label, cs] of [["깨끗한 질의", clean], ["오염 질의(무관 단어 1개)", noisy]] as const) {
-  let and = 0;
+  const stage: Record<string, number> = {};
   const results: CaseResult[] = cs.map((c) => {
     const { hits, combine } = unionRankDetailed(index, c.query, 0);
-    if (combine === "AND") and++;
+    stage[combine] = (stage[combine] ?? 0) + 1;
     const at = hits.findIndex((h) => h.path === c.target);
     return {
       ...c,
@@ -40,7 +40,12 @@ for (const [label, cs] of [["깨끗한 질의", clean], ["오염 질의(무관 �
   console.log(
     pad(label, 26) +
       `${(r.recallAt1 * 100).toFixed(1).padStart(5)}%  ${(r.recallAt10 * 100).toFixed(1).padStart(5)}%  ` +
-      `${r.mrr.toFixed(3)}  ${String(Math.round(r.meanMatched)).padStart(6)}   ${((and / cs.length) * 100).toFixed(0).padStart(4)}%`,
+      `${r.mrr.toFixed(3)}  ${String(Math.round(r.meanMatched)).padStart(6)}   ` +
+      // 단계 분포가 "왜 이만큼 나왔나"를 설명한다. OR 비중이 크면 결과수가 터진다.
+      (["AND", "AND-1", "OR-min", "OR"] as const)
+        .filter((k) => stage[k])
+        .map((k) => `${k} ${((stage[k] / cs.length) * 100).toFixed(0)}%`)
+        .join(" · "),
   );
   if (label === "깨끗한 질의") {
     console.log("\n  질의 종류별 (깨끗한 질의):");
@@ -50,4 +55,7 @@ for (const [label, cs] of [["깨끗한 질의", clean], ["오염 질의(무관 �
     console.log();
   }
 }
-console.log("\n기준선(2026-08-13, OR 결합): R@1 66.4% · MRR 0.737 · 평균 매칭 10,329");
+console.log("\n기준선 이력 — 같은 하네스, vault 규모만 다름:");
+console.log("  2026-08-13 OR 단독        : R@1 66.4% · MRR 0.737 · 평균 매칭 10,329");
+console.log("  2026-08-13 AND→OR         : R@1 71.1% · MRR 0.767 · 평균 매칭    229 (오염 질의 10,346)");
+console.log("  2026-08-19 AND→AND-1→OR-min: 오염 질의 R@1 67.2%→70.0% · 평균 매칭 10,346→199");

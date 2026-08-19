@@ -1,5 +1,5 @@
 /**
- * 풀텍스트 인덱스의 **단일 진실** — MiniSearch 옵션 · shard 모델 · union 랭킹.
+ * 풀텍스트 인덱스의 **단일 진실** — MiniSearch 옵션 · shard 모델 · union 랭킹(4단계 결합).
  *
  * 이 파일은 **리프 모듈**이다: `minisearch`와 `koTokenize` 외에 아무것도 import 하지 않는다.
  * 그래서 Web Worker(`fullTextWorker.ts`)와 main thread(`searchIndex.ts`)뿐 아니라
@@ -15,7 +15,7 @@
  * `search_cache.rs`의 `CACHE_VERSION` bump 필수.
  */
 
-import MiniSearch, { type Options, type SearchOptions } from "minisearch";
+import MiniSearch, { type Options, type Query, type SearchOptions } from "minisearch";
 import { koBigramTokenize, normalizeTerm } from "./koTokenize";
 
 export interface FullTextDoc {
@@ -96,26 +96,124 @@ export function unionRank(
 }
 
 /**
- * `unionRank` + 어느 결합을 썼는지. 소비자가 "왜 이렇게 많이/적게 나왔나"를 알 수 있게.
+ * 어느 단계에서 결과가 나왔는지. **MCP 응답 필드다**(`mcp/query.ts`의 `used[].combine`) —
+ * 값을 바꾸면 계약이 바뀐다.
  *
- * **AND 먼저, 0건이면 OR로 폴백**한다. AND는 정확하지만 단어 하나만 어긋나도 0건이
- * 되고(위 표), OR은 코퍼스의 절반을 긁어온다. 둘의 좋은 쪽만 취한다 — 질의가 정확하면
- * 좁고 정확한 결과, 어긋나면 최소한 뭔가는 준다.
+ * - `AND` — 질의 단어가 전부 든 문서. 좁고 정확하다.
+ * - `AND-1` — 단어 하나를 빼고 AND. 질의에 정답에 없는 단어가 섞였다는 신호.
+ * - `OR-min` — OR 결과 중 매칭 term이 임계 이상인 것만. 단어 여럿이 어긋났다.
+ * - `OR` — 마지막 수단. 코퍼스를 넓게 긁으므로 결과를 신뢰하기 어렵다.
+ */
+export type Combine = "AND" | "AND-1" | "OR-min" | "OR";
+
+/**
+ * `OR` 폴백에서 요구하는 최소 매칭 term 비율.
+ *
+ * 계측(2026-08-19, 19,292 노트 · 360 케이스, 오염 질의 = 무관 단어 1개 삽입):
+ *
+ * | 변형 | R@1 | R@10 | MRR | 평균 매칭 |
+ * |---|---:|---:|---:|---:|
+ * | AND→OR (기존) | 67.2% | 86.9% | 0.741 | **10,346** |
+ * | OR 후필터만 | 67.8% | **82.5%** | 0.732 | 226 |
+ * | AND→AND-1→OR | **70.3%** | **88.6%** | **0.766** | **6,946** |
+ * | **AND→AND-1→OR-min(.6)** | **70.0%** | 86.7% | 0.758 | **199** |
+ * | AND→AND-1→OR-min(.8) | 70.0% | 86.4% | 0.756 | 339 |
+ *
+ * `.6`을 쓴다 — `.8`과 R@1이 같은데 매칭이 199 vs 339로 더 좁다. 후필터 단독은 R@10을
+ * 4.4pt 깎고, `AND-1` 단독은 매칭을 못 줄인다. **둘을 겹쳐야 양쪽을 얻는다.**
+ *
+ * ⚠️ 위 표는 `AND1_MAX_WORDS` **상한을 넣기 전** 측정이다. 실제 출하 설정(상한 8)은
+ * 오염 질의 **R@1 68.9% · 매칭 220**이다 — 상한이 품질을 1.1pt 깎는 대신 지연을 1/4로 줄인다.
+ *
+ * ⚠️ 깨끗한 질의는 네 변형 모두 **기준선과 완전히 동일**하다(R@1 73.9% · 매칭 228) —
+ * 새 단계는 AND가 0건일 때만 도달하므로 주 경로를 건드리지 않는다. 상한을 넣어도 그대로다.
+ */
+const OR_MIN_RATIO = 0.6;
+
+/**
+ * `AND-1`을 시도할 **최대 어절 수**. 넘으면 건너뛰고 `OR-min`으로 간다.
+ *
+ * `partialAndQuery`가 O(n²)이라 긴 질의에서 비용이 폭발한다. 실측(오염 질의 180건, 19,292 노트):
+ *
+ * | 상한 | 평균 | p95 | 32어절 병리 | R@1 | 평균 매칭 |
+ * |---|---:|---:|---:|---:|---:|
+ * | 기존 AND→OR | 29ms | 82ms | 88ms | 66.7% | 10,682 |
+ * | 없음 | **118ms** | **356ms** | **860ms** | **71.1%** | 265 |
+ * | 10 | 86ms | 298ms | — | 70.6% | 266 |
+ * | **8** | **36ms** | **118ms** | **85ms** | **69.4%** | 290 |
+ * | 6 | 30ms | 79ms | — | 69.4% | 290 |
+ *
+ * `8`을 쓴다 — 지연이 기존 대비 +24%로 돌아오면서 R@1은 여전히 +2.7pt다. 상한을 없애면
+ * R@1이 1.7pt 더 오르지만 **4배 느려진다**: 팔레트는 타이핑 중에 도는 경로다(디바운스가
+ * 있어도 p95 356ms는 체감된다). `6`과 `8`은 이 표본에서 품질이 같지만, 7~8어절 실질의에
+ * 여유를 남긴다.
+ *
+ * ⚠️ **앱과 MCP에 같은 값을 쓴다.** 소비자별로 다르게 두고 싶어지지만, 이 모듈이 **단일
+ * 진실**인 이유가 그 갈라짐이 조용한 랭킹 차이를 만들었기 때문이다(헤더 주석 참조).
+ */
+const AND1_MAX_WORDS = 8;
+
+/** 질의를 인덱스와 같은 방식으로 토큰화했을 때의 **서로 다른** term 수. */
+function queryTermCount(query: string): number {
+  const seen = new Set<string>();
+  for (const t of koBigramTokenize(query)) {
+    const n = normalizeTerm(t);
+    if (n) seen.add(n);
+  }
+  return seen.size;
+}
+
+/**
+ * 단어 하나씩 뺀 (n-1)-AND들의 OR — MiniSearch 합성 질의.
+ *
+ * ⚠️ **2어절 질의엔 쓰지 않는다.** 하나 빼면 1어절이라 사실상 OR이 된다
+ * (실측: `멀티 윈도우`가 AND 45건 → 이 방식 484건, OR 486건과 거의 같다).
+ *
+ * ⚠️ **어절 수 상한도 있다** — 부질의가 n개, 각 n-1항이라 **O(n²)**다. 상한 없이 두면
+ * 32어절 질의가 **860ms**(기존 88ms), 오염 질의 평균이 **118ms**(기존 29ms)로 4배가 된다.
+ * 호출부가 `AND1_MAX_WORDS`를 지킨다.
+ */
+function partialAndQuery(words: readonly string[]): Query {
+  return {
+    combineWith: "OR",
+    queries: words.map((_, i) => ({
+      combineWith: "AND",
+      queries: words.filter((_, j) => j !== i),
+    })),
+  };
+}
+
+/**
+ * `unionRank` + 어느 단계에서 나왔는지. 소비자가 "왜 이렇게 많이/적게 나왔나"를 알 수 있게.
+ *
+ * **4단계로 좁은 쪽부터 시도하고, 결과가 나온 첫 단계에서 멈춘다.**
+ *
+ * 1. `AND` — 전부 든 문서.
+ * 2. `AND-1` — 3~8어절일 때만. 단어 하나를 빼고 AND(합성 질의).
+ * 3. `OR-min` — OR 결과를 매칭 term 수로 걸러낸다.
+ * 4. `OR` — 그래도 없으면 넓게.
+ *
+ * 원래는 1·4 이분법이었다. AND는 단어 하나만 어긋나도 0건이 되고(위 표), 그러면 통째로
+ * OR로 떨어져 코퍼스의 절반(10,346건)을 긁어왔다. **절반쯤 기억하는 제목을 치는 건 예외가
+ * 아니라 기본 사용 패턴인데 그 경로가 가장 나빴다.** 중간 두 단계가 그 구간을 메운다 —
+ * 실측 도달 분포(오염 질의, 출하 설정): `AND` 1% · `AND-1` 23% · `OR-min` 71% · `OR` 5%.
  */
 export function unionRankDetailed(
   indexes: readonly (MiniSearch<FullTextDoc> | null)[],
   query: string,
   limit: number,
-): { hits: FullTextHit[]; combine: "AND" | "OR" } {
-  const run = (opts?: SearchOptions): FullTextHit[] => {
-    const combined: FullTextHit[] = [];
+): { hits: FullTextHit[]; combine: Combine } {
+  /** 매칭 term 수(`nMatched`)를 함께 보존한다 — `OR-min` 단계가 그걸로 걸러낸다. */
+  const run = (q: Query, opts?: SearchOptions): (FullTextHit & { nMatched: number })[] => {
+    const combined: (FullTextHit & { nMatched: number })[] = [];
     for (const idx of indexes) {
       if (!idx) continue;
-      for (const r of idx.search(query, opts)) {
+      for (const r of idx.search(q, opts)) {
         combined.push({
           path: r.id as string,
           score: r.score,
           name: (r as unknown as { name: string }).name,
+          nMatched: Object.keys(r.match ?? {}).length,
         });
       }
     }
@@ -123,11 +221,22 @@ export function unionRankDetailed(
     return combined;
   };
 
-  let hits = run(AND_OPTIONS);
-  let combine: "AND" | "OR" = "AND";
-  if (hits.length === 0) {
-    hits = run();
-    combine = "OR";
+  const cut = (hits: FullTextHit[], combine: Combine) => ({
+    hits: limit > 0 ? hits.slice(0, limit) : hits,
+    combine,
+  });
+
+  const strict = run(query, AND_OPTIONS);
+  if (strict.length > 0) return cut(strict, "AND");
+
+  const words = query.split(/\s+/).filter(Boolean);
+  if (words.length >= 3 && words.length <= AND1_MAX_WORDS) {
+    const partial = run(partialAndQuery(words), AND_OPTIONS);
+    if (partial.length > 0) return cut(partial, "AND-1");
   }
-  return { hits: limit > 0 ? hits.slice(0, limit) : hits, combine };
+
+  const loose = run(query);
+  const need = Math.max(1, Math.ceil(queryTermCount(query) * OR_MIN_RATIO));
+  const filtered = loose.filter((h) => h.nMatched >= need);
+  return filtered.length > 0 ? cut(filtered, "OR-min") : cut(loose, "OR");
 }

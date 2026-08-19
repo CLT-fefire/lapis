@@ -33,4 +33,6 @@ trap 'rm -f "$OUT"' HUP INT TERM
   --alias:'$lib'="$REPO/src/lib" \
   --outfile="$OUT" --allow-overwrite >&2
 
-exec node --no-warnings "$OUT"
+# ⚠️ `"$@"`를 빼면 `./lapis-eval 120`의 표본 수가 **조용히 무시된다**(기본 150으로 돈다).
+# 2026-08-19에 실제로 겪었다 — 인자를 준 줄 알고 두 측정을 비교했는데 케이스 수가 달랐다.
+exec node --no-warnings "$OUT" "$@"
