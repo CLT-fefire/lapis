@@ -77,13 +77,18 @@ The full-text index is built in a **Web Worker** and **cached to disk per shard*
 
 ## Installation
 
-1. Download the latest `Lapis_x.y.z_aarch64.dmg` from [Releases](https://github.com/eren0315/lapis/releases). (**Apple Silicon** · macOS 11+)
-2. Open the dmg and drag `Lapis.app` into `/Applications`.
-3. **On first launch only** you need to confirm opening it. The build is signed with a Developer ID but **is not notarized**:
-   - macOS 14 and earlier — right-click `Lapis.app` → **Open** → **Open**
-   - macOS 15 and later — after trying to launch it, go to System Settings → Privacy & Security → **"Open Anyway"**
+**No prebuilt binaries are published.** Build from source — requirements and commands are under [Development](#development) below.
 
-> No Intel Mac binary is published. Build from source if you need one (see [Development](#development)).
+```bash
+git clone https://github.com/eren0315/lapis.git
+cd lapis
+npm install
+npm run tauri build
+```
+
+The output lands in `src-tauri/target/release/bundle/`. Move `Lapis.app` into `/Applications`.
+
+> This is a personal tool, not built with distribution or support in mind. Development and testing happen on macOS 11+ / Apple Silicon.
 
 ## Getting started
 
@@ -236,7 +241,7 @@ npm run tauri build -- --target universal-apple-darwin # universal binary
 ## Troubleshooting
 
 **The app won't open / "unidentified developer"**
-The build isn't notarized. Follow step 3 of [Installation](#installation).
+A self-built app is unsigned, so Gatekeeper blocks it. Run `xattr -dr com.apple.quarantine /Applications/Lapis.app` and open it again.
 
 **No search results**
 The first index build may still be running — the same reason tags and backlinks can look empty. Give a large vault a moment.
