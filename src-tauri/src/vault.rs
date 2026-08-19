@@ -16,7 +16,14 @@ pub struct NoteEntry {
     pub children: Option<Vec<NoteEntry>>,
 }
 
-const SKIP_DIRS: &[&str] = &["node_modules", "target", ".svelte-kit", "build", "dist", ".git"];
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    ".svelte-kit",
+    "build",
+    "dist",
+    ".git",
+];
 
 /// `LAPIS_PERF=1`이면 perf 계측 로그를 stderr로 출력.
 fn perf_enabled() -> bool {
@@ -156,9 +163,7 @@ pub fn rename_note(
     };
     sanitize_file_name(&name)?;
 
-    let parent = old_canon
-        .parent()
-        .ok_or_else(|| "no parent".to_string())?;
+    let parent = old_canon.parent().ok_or_else(|| "no parent".to_string())?;
     let new_path = parent.join(&name);
 
     if new_path == old_canon {
@@ -316,8 +321,7 @@ pub fn backup_notes(
 ) -> Result<String, String> {
     let vault = canonicalize_vault(&vault_path)?;
     let backup_root = vault.join(&backup_dir_rel);
-    fs::create_dir_all(&backup_root)
-        .map_err(|e| format!("backup dir create failed: {e}"))?;
+    fs::create_dir_all(&backup_root).map_err(|e| format!("backup dir create failed: {e}"))?;
     let backup_root_canon = backup_root
         .canonicalize()
         .map_err(|e| format!("backup dir canonicalize failed: {e}"))?;
@@ -334,8 +338,7 @@ pub fn backup_notes(
             .map_err(|e| format!("strip_prefix failed ({src}): {e}"))?;
         let dst = backup_root_canon.join(rel);
         if let Some(parent) = dst.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("backup parent create failed: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("backup parent create failed: {e}"))?;
         }
         fs::copy(&src_canon, &dst).map_err(|e| format!("backup copy failed ({src}): {e}"))?;
     }
@@ -353,10 +356,7 @@ pub fn backup_notes(
 ///
 /// 백업 root가 없으면 0 반환 (에러 X). 개별 디렉토리 삭제 실패는 stderr 로그 + 계속 진행.
 #[tauri::command]
-pub fn prune_link_rewrite_backups(
-    vault_path: String,
-    max_keep: usize,
-) -> Result<usize, String> {
+pub fn prune_link_rewrite_backups(vault_path: String, max_keep: usize) -> Result<usize, String> {
     let vault = canonicalize_vault(&vault_path)?;
     let backup_root = vault.join(".lapis/link-rewrite-backup");
     if !backup_root.is_dir() {
@@ -512,11 +512,9 @@ fn atomic_write(target: &Path, content: &str) -> Result<(), String> {
 /// bytes는 Frontend에서 `Array.from(Uint8Array)` → `Vec<u8>`로 역직렬화됨.
 #[tauri::command]
 pub async fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        atomic_write_bytes(&PathBuf::from(&path), &bytes)
-    })
-    .await
-    .map_err(|e| format!("write_binary_file join: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || atomic_write_bytes(&PathBuf::from(&path), &bytes))
+        .await
+        .map_err(|e| format!("write_binary_file join: {e}"))?
 }
 
 // Deserialize 추가: search-cache가 디스크에서 LinkInfo를 역직렬화해서 frontend로 그대로 돌려줌.
@@ -859,7 +857,10 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
 
     let mut targets = extract_wikilinks(body);
     for t in extract_md_links(body) {
-        if !targets.iter().any(|existing| existing.eq_ignore_ascii_case(&t)) {
+        if !targets
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&t))
+        {
             targets.push(t);
         }
     }
@@ -899,7 +900,10 @@ fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
     if let Some(close_idx) = after_open_line.find("\n---") {
         let yaml = &after_open_line[..close_idx];
         let after_close = &after_open_line[close_idx + 4..]; // skip "\n---"
-        let body_offset = after_close.find('\n').map(|n| n + 1).unwrap_or(after_close.len());
+        let body_offset = after_close
+            .find('\n')
+            .map(|n| n + 1)
+            .unwrap_or(after_close.len());
         return (Some(yaml), &after_close[body_offset..]);
     }
     (None, content)
@@ -1060,7 +1064,11 @@ fn collect_prop_values(after_key: &str, lines: &[&str], start_line: usize) -> (V
     // scalar — 원형 보존 (콤마 split·경로 정규화는 frontend)
     if !rest.is_empty() {
         let v = strip_quotes(rest);
-        let out = if v.is_empty() { Vec::new() } else { vec![v.to_string()] };
+        let out = if v.is_empty() {
+            Vec::new()
+        } else {
+            vec![v.to_string()]
+        };
         return (out, start_line + 1);
     }
     // 빈 값 → 뒤따르는 들여쓴 `- item` block list
@@ -1155,7 +1163,9 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
                 // - #/path, #-foo (구분자 시작)
                 let starts_with_letter = trimmed.chars().next().is_some_and(|c| c.is_alphabetic());
                 if starts_with_letter
-                    && !result.iter().any(|t: &String| t.eq_ignore_ascii_case(trimmed))
+                    && !result
+                        .iter()
+                        .any(|t: &String| t.eq_ignore_ascii_case(trimmed))
                 {
                     result.push(trimmed.to_string());
                 }
@@ -1387,14 +1397,20 @@ mod tests {
     #[test]
     fn props_inline_bracket_list() {
         let p = props_of("depends_on: [phase-5.1.md]");
-        assert_eq!(p.get("depends_on").unwrap(), &vec!["phase-5.1.md".to_string()]);
+        assert_eq!(
+            p.get("depends_on").unwrap(),
+            &vec!["phase-5.1.md".to_string()]
+        );
     }
 
     #[test]
     fn props_inline_comma_scalar_not_split() {
         // 콤마 split은 frontend(normalizeRef) 책임 — 파서는 원형 1원소 보존.
         let p = props_of("supersedes: a.md, b.md");
-        assert_eq!(p.get("supersedes").unwrap(), &vec!["a.md, b.md".to_string()]);
+        assert_eq!(
+            p.get("supersedes").unwrap(),
+            &vec!["a.md, b.md".to_string()]
+        );
     }
 
     #[test]
@@ -1453,8 +1469,14 @@ mod tests {
         assert_eq!(info.tags, vec!["alpha".to_string(), "beta".to_string()]);
         assert_eq!(info.related, vec!["other-note".to_string()]);
         // generic props 동시 수집 (그룹핑용 type/status 포함).
-        assert_eq!(info.props.get("type").unwrap(), &vec!["brainstorm".to_string()]);
-        assert_eq!(info.props.get("status").unwrap(), &vec!["draft".to_string()]);
+        assert_eq!(
+            info.props.get("type").unwrap(),
+            &vec!["brainstorm".to_string()]
+        );
+        assert_eq!(
+            info.props.get("status").unwrap(),
+            &vec!["draft".to_string()]
+        );
         // 본문 wikilink는 targets (props 아님).
         assert!(info.targets.iter().any(|t| t == "wiki-target"));
     }
@@ -1490,17 +1512,27 @@ mod tests {
 
         // fingerprint 워커: a.md / b.mmd / c.MD 3개 (hidden·txt·node_modules 제외)
         let fp = vault_fingerprint_inner(&dir_str).unwrap();
-        assert_eq!(fp.file_count, 3, "fingerprint은 .md+.mmd(대소문자 무관) 3개를 세야 함");
+        assert_eq!(
+            fp.file_count, 3,
+            "fingerprint은 .md+.mmd(대소문자 무관) 3개를 세야 함"
+        );
 
         // bundle 워커: 동일하게 3개 LinkInfo
         let bundle = read_vault_bundle_inner(&dir_str).unwrap();
-        assert_eq!(bundle.links.len(), 3, "bundle도 .md+.mmd 3개를 인덱싱해야 함");
+        assert_eq!(
+            bundle.links.len(),
+            3,
+            "bundle도 .md+.mmd 3개를 인덱싱해야 함"
+        );
 
         // .mmd 파일을 추가하면 fingerprint가 달라져야(=캐시 무효화) 한다.
         let fp_before = fp.fingerprint.clone();
         fs::write(dir.join("d.mmd"), "graph LR;").unwrap();
         let fp_after = vault_fingerprint_inner(&dir_str).unwrap();
-        assert_ne!(fp_before, fp_after.fingerprint, ".mmd 추가 시 fingerprint 변경되어야 함");
+        assert_ne!(
+            fp_before, fp_after.fingerprint,
+            ".mmd 추가 시 fingerprint 변경되어야 함"
+        );
         assert_eq!(fp_after.file_count, 4);
 
         fs::remove_dir_all(&dir).ok();

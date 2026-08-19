@@ -35,8 +35,7 @@ fn apply_debug_title(window: &tauri::WebviewWindow) {
 /// ⚠️ 단조 증가로 만들면 안 된다. 라벨이 창별 localStorage 키의 접미사가 되므로,
 /// 창을 열고 닫을 때마다 새 번호를 쓰면 죽은 키가 무한히 쌓인다.
 fn next_window_label(app: &tauri::AppHandle) -> String {
-    let taken: std::collections::HashSet<String> =
-        app.webview_windows().keys().cloned().collect();
+    let taken: std::collections::HashSet<String> = app.webview_windows().keys().cloned().collect();
     (2..)
         .map(|n| format!("w{n}"))
         .find(|label| !taken.contains(label))
@@ -47,17 +46,14 @@ fn next_window_label(app: &tauri::AppHandle) -> String {
 #[tauri::command]
 fn new_window(app: tauri::AppHandle) -> Result<String, String> {
     let label = next_window_label(&app);
-    let window = tauri::WebviewWindowBuilder::new(
-        &app,
-        &label,
-        tauri::WebviewUrl::App("index.html".into()),
-    )
-    .title("Lapis")
-    .inner_size(1200.0, 800.0)
-    // 탭 DnD가 WKWebView 기본 drag&drop과 충돌한다 — tauri.conf.json의 main 창과 동일 설정.
-    .disable_drag_drop_handler()
-    .build()
-    .map_err(|e| format!("창 생성 실패: {e}"))?;
+    let window =
+        tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+            .title("Lapis")
+            .inner_size(1200.0, 800.0)
+            // 탭 DnD가 WKWebView 기본 drag&drop과 충돌한다 — tauri.conf.json의 main 창과 동일 설정.
+            .disable_drag_drop_handler()
+            .build()
+            .map_err(|e| format!("창 생성 실패: {e}"))?;
 
     apply_debug_title(&window);
     if cfg!(debug_assertions) {
