@@ -1146,17 +1146,14 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
             }
             if j > i + 1 {
                 let raw: String = chars[i + 1..j].iter().collect();
-                let trimmed = raw.trim_end_matches(|c: char| c == '-' || c == '/');
+                let trimmed = raw.trim_end_matches(['-', '/']);
                 // 첫 글자가 알파벳(영문/한글/Unicode letter)이어야 태그로 인정.
                 // 다음 패턴 모두 거름:
                 // - #1, #2026, #404 (PR/연도/이슈 번호)
                 // - #1-chatroom, #4-image-loading (숫자 prefix — 의도적이라면 #chatroom-v2 식으로 재작성 권장)
                 // - #4의, #3의, #10에 (한국어 조사 패턴)
                 // - #/path, #-foo (구분자 시작)
-                let starts_with_letter = trimmed
-                    .chars()
-                    .next()
-                    .map_or(false, |c| c.is_alphabetic());
+                let starts_with_letter = trimmed.chars().next().is_some_and(|c| c.is_alphabetic());
                 if starts_with_letter
                     && !result.iter().any(|t: &String| t.eq_ignore_ascii_case(trimmed))
                 {
@@ -1427,23 +1424,23 @@ mod tests {
     fn props_skips_nested_objects() {
         // 중첩 객체(들여쓴 child)는 top-level 아님 → 미수집. 빈 값 부모도 미수집.
         let p = props_of("metadata:\n  type: feedback\n  scope: x");
-        assert!(p.get("metadata").is_none());
-        assert!(p.get("type").is_none());
-        assert!(p.get("scope").is_none());
+        assert!(!p.contains_key("metadata"));
+        assert!(!p.contains_key("type"));
+        assert!(!p.contains_key("scope"));
     }
 
     #[test]
     fn props_skips_comments_and_blanks() {
         let p = props_of("# comment\n\nstatus: done");
         assert_eq!(p.get("status").unwrap(), &vec!["done".to_string()]);
-        assert!(p.get("# comment").is_none());
+        assert!(!p.contains_key("# comment"));
     }
 
     #[test]
     fn props_empty_value_then_next_key() {
         // 빈 값 키(`related_brainstorm:`) 다음 줄이 또 다른 top-level 키면 미수집 + 다음 키 정상 처리.
         let p = props_of("related_brainstorm:\ndepends_on: [x.md]");
-        assert!(p.get("related_brainstorm").is_none());
+        assert!(!p.contains_key("related_brainstorm"));
         assert_eq!(p.get("depends_on").unwrap(), &vec!["x.md".to_string()]);
     }
 
