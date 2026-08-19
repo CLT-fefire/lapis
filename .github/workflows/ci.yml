@@ -7,12 +7,13 @@
 #   npm run check:mcp  MCP 서버 tsc
 #   npm test           vitest (src/ + mcp/)
 #   npm run build      vite 빌드
+#   cargo fmt --check  Rust 포맷
+#   cargo clippy       Rust 린트 (경고를 오류로)
 #   cargo check        Rust 타입 체크
 #   cargo test         Rust 단위 테스트
 #
-# 아직 게이트로 걸지 않은 것: `cargo fmt --check`와 `cargo clippy -- -D warnings`.
-# 현재 코드가 둘 다 통과하지 못한다(fmt 3건 · clippy 9건). 먼저 고쳐서 초록으로
-# 만든 다음에 여기 추가한다 — 처음부터 빨간 CI는 아무도 안 본다.
+# fmt·clippy는 2026-08-19에 게이트로 승격했다. 그전엔 코드가 둘 다 통과하지 못해
+# 일부러 빼뒀다 — 처음부터 빨간 CI는 아무도 안 본다. 먼저 고치고 나서 걸었다.
 name: CI
 
 on:
@@ -58,7 +59,7 @@ jobs:
         run: npm run build
 
   rust:
-    name: Rust — check · test (macOS)
+    name: Rust — fmt · clippy · check · test (macOS)
     # Tauri 앱은 macOS 전용이다. Linux에서 cargo check를 돌리면 webkit2gtk 계열
     # 의존을 요구해 실제 타깃과 다른 것을 검증하게 된다.
     runs-on: macos-latest
@@ -82,6 +83,15 @@ jobs:
       # 없으면 build.rs 단계에서 실패하므로 cargo보다 먼저 만들어 둔다.
       - name: 프런트엔드 산출물 준비 (tauri-build 요구사항)
         run: npm run build
+
+      # 포맷·린트를 먼저 — 컴파일보다 싸고, 실패 원인이 한눈에 보인다.
+      - name: cargo fmt --check
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: cargo check
         working-directory: src-tauri
