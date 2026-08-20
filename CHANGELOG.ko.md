@@ -37,6 +37,10 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   vitest · vite 빌드(ubuntu)와 `cargo fmt --check` · `cargo clippy`(경고를 오류로) ·
   `cargo check` · `cargo test`(macOS)를 돌린다.
 - **`CHANGELOG.md`** — 이 문서. GitHub Releases를 쓰지 않으므로 릴리즈 노트를 대신한다.
+- **DOM·반응성 테스트 프로젝트 신설**(`*.dom.test.ts`). 기존 node 프로젝트와 나란히 둔다.
+  프리뷰 DOM 후처리와 Svelte effect 발화 시점을 **컴포넌트를 띄우지 않고** 잴 수 있다.
+  카나리아를 함께 넣었다 — `resolve.conditions: ["browser"]`가 없으면 vitest가 SSR로 컴파일해
+  `$effect`가 no-op이 되고 반응성 테스트가 전부 공허하게 통과한다. 카나리아가 그때 실패한다.
 - **`⌘⇧F` 풀텍스트 검색이 구조 팔도 함께 낸다** — 걸리는 태그와 `doc_kind`/`topic` facet이 본문
   결과 아래에 붙는다. 종전엔 `⌘K`에만 있었다.
   짧은 질의를 도우려던 것인데 **실측 결과 그 효과는 없다**: 구조 팔의 어휘가 영문이다(고유 태그
