@@ -586,18 +586,22 @@
   });
 
   // Preview 재렌더 시 mark가 다음 markdown 출력으로 덮어쓰여짐 → 검색 활성이면 재적용
+  //
+  // ⚠️ `inDocSearch`는 `get()`으로 **추적하지 않고** 읽는다(기존 동작). 즉 이 effect를
+  // 깨우는 것은 오직 프리뷰 HTML이다 — 그래서 `trackPreviewHtml()`이 분기 **밖**에,
+  // 맨 앞에 있어야 한다. 분기 안으로 들어가면 검색이 닫힌 동안 의존성이 풀려서 다시는
+  // 깨어나지 않는다(가드 뒤 읽기의 함정 — `runesHarness.dom.test.ts`가 고정한다).
   $effect(() => {
-    const _html = parsed.html;
-    if (!previewBodyEl) return;
+    trackPreviewHtml();
     const s = get(inDocSearch);
     if (s.open && s.target === "preview" && s.query) {
-      void tick().then(() => {
-        if (!previewBodyEl) return;
+      afterPreviewRender(() => {
         // 새 DOM 기준으로 mark 다시 적용. currentIdx는 0으로 리셋(노트 내용 자체가 바뀜).
         previewQuery = s.query;
         previewApply(s.query, 0);
       });
-    } else {
+    } else if (previewBodyEl) {
+      // 프리뷰가 떠 있을 때만 지운다 — 기존 널 가드가 하던 일을 그대로 남긴다.
       previewQuery = "";
       previewTotal = 0;
       previewCurrentIdx = -1;
