@@ -151,6 +151,7 @@
   "props_tag_filter_title": "이 태그로 사이드바 필터",
   "props_notice_close": "닫기",
   "props_notice": "Properties 편집 시 frontmatter의 코멘트와 일부 공백이 정규화될 수 있습니다.",
+  "props_yaml_error": "이 노트의 frontmatter가 올바른 YAML이 아니라 그대로 두었습니다. 에디터(⌘E)에서 먼저 고쳐 주세요 — 덮어쓰면 기존 속성이 사라집니다.",
   "props_validate_empty": "비어 있음",
   "props_validate_topic_flat": "topic은 nested 금지 — 단일 kebab",
   "props_validate_kebab": "kebab-case (소문자 + 하이픈)",
