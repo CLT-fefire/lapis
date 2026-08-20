@@ -10,7 +10,13 @@
     fullTextLoading,
     pendingFullTextVault,
   } from "$lib/stores/search";
-  import { unifiedSearch, groupResults, type PaletteResult, type PaletteEntry } from "$lib/palette";
+  import {
+    unifiedSearch,
+    groupResults,
+    isGroupVisible,
+    type PaletteResult,
+    type PaletteEntry,
+  } from "$lib/palette";
   import { selectNote, ensureFullTextIndex } from "$lib/stores/vault";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
   import { toggleDocKind, toggleTopic } from "$lib/stores/filters";
@@ -240,17 +246,21 @@
   }
 
   // hint 모드별 표시할 그룹 결정 (Cmd+P/Cmd+Shift+F는 단일 그룹)
+  // 모드별 가시성 규칙은 `palette.ts`의 `isGroupVisible`에 있다 — 여기 두면 테스트가 못 붙는다
+  // (vitest가 environment:"node"라 컴포넌트를 못 띄운다). 여기선 "비어 있지 않은가"만 곱한다.
   const showRecents = $derived(groups.recents.length > 0);
-  const showNotes = $derived($paletteHintMode !== "fulltext" && groups.notes.length > 0);
-  const showContent = $derived($paletteHintMode !== "files" && groups.content.length > 0);
+  const showNotes = $derived(isGroupVisible($paletteHintMode, "notes") && groups.notes.length > 0);
+  const showContent = $derived(
+    isGroupVisible($paletteHintMode, "content") && groups.content.length > 0,
+  );
   const showTagsGroup = $derived(
-    ($paletteHintMode === "all" || $paletteHintMode === "tag") && groups.tags.length > 0,
+    isGroupVisible($paletteHintMode, "tags") && groups.tags.length > 0,
   );
   const showFacets = $derived(
-    ($paletteHintMode === "all" || $paletteHintMode === "facet") && groups.facets.length > 0,
+    isGroupVisible($paletteHintMode, "facets") && groups.facets.length > 0,
   );
   const showCommands = $derived(
-    ($paletteHintMode === "all" || $paletteHintMode === "command") && groups.commands.length > 0,
+    isGroupVisible($paletteHintMode, "commands") && groups.commands.length > 0,
   );
 
   // 빈 입력 시 COMMANDS 그룹은 "QUICK ACTIONS"로 라벨
