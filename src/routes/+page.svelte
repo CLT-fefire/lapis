@@ -352,23 +352,17 @@
 
   // Preview 갱신 시 mermaid 코드블록 렌더 (lazy + dynamic import) — Phase 4.4.a
   $effect(() => {
-    const _html = parsed.html;
-    if (!previewBodyEl) return;
-    tick().then(() => {
-      if (!previewBodyEl) return;
-      renderMermaidIn(previewBodyEl);
-    });
+    trackPreviewHtml();
+    afterPreviewRender((body) => renderMermaidIn(body));
   });
 
   // 테마 전환 시 mermaid 재렌더 — SVG는 테마별로 baked되어 토큰처럼 자동 적응 못 함.
   // $themeMode 변경을 추적해 렌더 가드를 풀고 현재 테마로 다시 그린다.
   $effect(() => {
-    const _mode = $themeMode;
-    if (!previewBodyEl) return;
-    tick().then(() => {
-      if (!previewBodyEl) return;
-      resetMermaidHosts(previewBodyEl);
-      renderMermaidIn(previewBodyEl);
+    void $themeMode; // 의존성 — 테마가 바뀌면 다시 그린다. HTML 변경과는 무관하다.
+    afterPreviewRender((body) => {
+      resetMermaidHosts(body);
+      renderMermaidIn(body);
     });
   });
 
@@ -385,13 +379,10 @@
 
   // Preview 갱신 시 이미지 src 재작성 (상대 경로 → asset 프로토콜) — Phase 4.4.b
   $effect(() => {
-    const _html = parsed.html;
+    trackPreviewHtml();
     const path = $currentNotePath;
-    if (!previewBodyEl || !path) return;
-    tick().then(() => {
-      if (!previewBodyEl) return;
-      rewriteImageSources(previewBodyEl, path);
-    });
+    if (!path) return;
+    afterPreviewRender((body) => rewriteImageSources(body, path));
   });
 
   // --- in-document search (Phase 5.0) ---
