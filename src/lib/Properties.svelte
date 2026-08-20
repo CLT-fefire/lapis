@@ -2,7 +2,12 @@
   import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { get } from "svelte/store";
-  import { patchFrontmatter, addFrontmatterKey, isKebab } from "$lib/frontmatter";
+  import {
+    patchFrontmatter,
+    addFrontmatterKey,
+    isKebab,
+    FrontmatterParseError,
+  } from "$lib/frontmatter";
   import { DOC_KIND_ENUM, topicCounts } from "$lib/stores/filters";
   import { selectTag, showTagsTab, tagIndex } from "$lib/stores/tags";
   import { linkIndex } from "$lib/stores/vault";
@@ -43,10 +48,30 @@
     { key: "related", defaultValue: [] as string[], label: "related" },
   ];
 
+  /**
+   * frontmatter를 다시 쓰는 **유일한 통로**. YAML을 못 읽는 노트면 `patchFrontmatter`가
+   * 던지고(그러지 않으면 원문이 통째로 날아간다) 여기서 안내로 바꾼다.
+   *
+   * 반환값은 "썼는가" — 호출부가 후속 동작(편집 진입 등)을 이어갈지 정한다.
+   */
+  function writeRaw(produce: () => string): boolean {
+    let next: string;
+    try {
+      next = produce();
+    } catch (err) {
+      if (err instanceof FrontmatterParseError) {
+        showYamlError();
+        return false;
+      }
+      throw err;
+    }
+    if (next === rawNote) return false; // 바뀐 게 없다
+    noteContentChanged(next);
+    return true;
+  }
+
   async function addField(key: string, defaultValue: unknown) {
-    const newRaw = addFrontmatterKey(rawNote, key, defaultValue);
-    if (newRaw === rawNote) return; // 이미 존재 — noop
-    noteContentChanged(newRaw);
+    if (!writeRaw(() => addFrontmatterKey(rawNote, key, defaultValue))) return;
     addPickerOpen = false;
     // 단일 필드는 추가 직후 편집 진입. chip 필드는 ChipEditor가 직접 chip 추가.
     if ((SINGLE_FIELDS as readonly string[]).includes(key)) {
@@ -91,8 +116,7 @@
     const current = stringOf(data[key]);
     editingKey = null;
     if (next === current) return;
-    const newRaw = patchFrontmatter(rawNote, { [key]: next === "" ? null : next });
-    noteContentChanged(newRaw);
+    writeRaw(() => patchFrontmatter(rawNote, { [key]: next === "" ? null : next }));
   }
 
   // Autocomplete 용 — 명시적 value 전달
@@ -100,16 +124,14 @@
     editingKey = null;
     const current = stringOf(data[key]);
     if (value === current) return;
-    const newRaw = patchFrontmatter(rawNote, { [key]: value === "" ? null : value });
-    noteContentChanged(newRaw);
+    writeRaw(() => patchFrontmatter(rawNote, { [key]: value === "" ? null : value }));
   }
 
   function commitChips(key: ChipField, next: string[]) {
     const current = arrayOf(data[key]);
     if (sameArray(current, next)) return;
     showNoticeIfFirst();
-    const newRaw = patchFrontmatter(rawNote, { [key]: next });
-    noteContentChanged(newRaw);
+    writeRaw(() => patchFrontmatter(rawNote, { [key]: next }));
   }
 
   function onInputKey(e: KeyboardEvent) {
@@ -219,6 +241,22 @@
   function dismissNotice() {
     showNotice = false;
     if (noticeTimer) clearTimeout(noticeTimer);
+  }
+
+  // YAML을 못 읽어 쓰기를 거부했을 때. 안내 토스트와 같은 자리를 쓰되 색과 지속이 다르다 —
+  // "안 됐다"는 신호라 1회 제한 없이 매번 뜨고, 읽을 시간을 더 준다.
+  let showYamlErr = $state(false);
+  let yamlErrTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function showYamlError() {
+    showYamlErr = true;
+    if (yamlErrTimer) clearTimeout(yamlErrTimer);
+    yamlErrTimer = setTimeout(() => (showYamlErr = false), 8000);
+  }
+
+  function dismissYamlError() {
+    showYamlErr = false;
+    if (yamlErrTimer) clearTimeout(yamlErrTimer);
   }
 
   // doc_kind dropdown용 옵션 — enum 외 값이 현재 들어 있으면 보존
@@ -375,6 +413,21 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="notice" onclick={dismissNotice} title={m.props_notice_close()}>
     {m.props_notice()}
+  </div>
+{/if}
+
+{#if showYamlErr}
+  <!-- 클릭으로 닫히지만 버튼은 아니다 — `role="alert"`라 스크린리더가 즉시 읽는다.
+       (자동으로도 사라지므로 클릭은 편의일 뿐, 유일한 해제 수단이 아니다.) -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="notice notice--error"
+    role="alert"
+    onclick={dismissYamlError}
+    title={m.props_notice_close()}
+  >
+    {m.props_yaml_error()}
   </div>
 {/if}
 
@@ -581,5 +634,10 @@
     z-index: var(--z-toast);
     cursor: pointer;
     box-shadow: var(--shadow-md);
+  }
+
+  .notice--error {
+    border-color: var(--danger);
+    color: var(--text-primary);
   }
 </style>

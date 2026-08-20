@@ -151,6 +151,7 @@
   "props_tag_filter_title": "Filter the sidebar by this tag",
   "props_notice_close": "Close",
   "props_notice": "Editing properties may normalize comments and some whitespace in the frontmatter.",
+  "props_yaml_error": "This note's frontmatter is not valid YAML, so it was left untouched. Fix it in the editor (⌘E) first — saving over it would discard the existing properties.",
   "props_validate_empty": "empty",
   "props_validate_topic_flat": "topic cannot be nested — a single kebab word",
   "props_validate_kebab": "kebab-case (lowercase + hyphens)",

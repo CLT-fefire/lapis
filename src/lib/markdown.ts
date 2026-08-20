@@ -21,6 +21,7 @@ import markdownLang from "highlight.js/lib/languages/markdown";
 import sql from "highlight.js/lib/languages/sql";
 import diff from "highlight.js/lib/languages/diff";
 import toml from "highlight.js/lib/languages/ini";
+import { FRONTMATTER_YAML_SCHEMA } from "$lib/frontmatter";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
 import {
@@ -107,7 +108,10 @@ export function parseNote(raw: string): ParsedNote {
   const [, fmRaw, body] = match;
   let data: Record<string, unknown> = {};
   try {
-    const parsed = yaml.load(fmRaw);
+    // 스키마를 명시한다 — 기본값이면 `date: 2026-08-20`이 Date 객체가 돼 Properties 패널에
+    // `Thu Aug 20 2026 09:00:00 GMT+0900`으로 뜨고, 편집 시 그대로 파일에 되박힌다.
+    // 근거는 `frontmatter.ts`의 `FRONTMATTER_YAML_SCHEMA` 주석.
+    const parsed = yaml.load(fmRaw, { schema: FRONTMATTER_YAML_SCHEMA });
     if (parsed && typeof parsed === "object") {
       data = parsed as Record<string, unknown>;
     }
