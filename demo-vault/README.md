@@ -24,9 +24,10 @@ None of this is real documentation. It is sample content shaped to exercise feat
 - **Backlinks** — open `search/full-text-search-design.md` and look at the context
   panel (`⌥B`). Eight notes point at it; that reverse list is the primary way to move
   around a vault.
-- **Korean full-text search** — press `⌘⇧F` and search `인덱스로`. That exact word form
-  appears in **no** note, yet 20 notes come back: the bigram index matches `인덱스를`,
-  `인덱스가`, and `인덱싱` without needing the particle stripped.
+- **Korean full-text search** — press `⌘⇧F` and search for `인덱스` with the
+  instrumental particle attached — that is, `인덱스` followed directly by `로`. That
+  exact form appears in **no** note, yet 20 notes come back: the bigram index matches
+  `인덱스를`, `인덱스가`, and `인덱싱` without needing the particle stripped.
 - **Tag tree** — the Tags tab in the sidebar renders `subject/`, `issue/`, `tech/`, and
   `architecture/` as a prefix tree. 23 tags across 4 groups.
 - **Code is not a link** — `markdown/code-fence-exclusion.md` contains
