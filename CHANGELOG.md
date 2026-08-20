@@ -14,6 +14,40 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [1.12.0] — 2026-08-21
+
+### Fixed
+- **Editing a property could wipe a note's entire frontmatter** ([#184]). When the YAML failed to parse,
+  the app read it as "no properties at all" and rewrote the block with only the key you just edited —
+  everything else was gone. It now refuses the write and tells you to fix the YAML in the editor first.
+  Measured on the author's vault: 1 note out of 19,213 is in exactly that state today.
+- **Dates were rewritten on every property edit** ([#184]). `created: 2026-08-13` came back as
+  `2026-08-13T00:00:00.000Z`, because js-yaml's default schema turns timestamps into `Date` objects.
+  Reading and writing now both use the CORE schema, so dates stay text. The same bug leaked into the
+  UI, where the properties panel showed `Thu Aug 20 2026 09:00:00 GMT+0900`.
+- **The blank line between frontmatter and body vanished** on every property edit ([#184]) — the
+  separator pattern swallowed the newline. Automatic link updates shared the same splitter and the
+  same bug.
+
+### Added
+- **The search measurement harness now gates cost, not just quality** ([#182]). `lapis-eval` reports
+  p50/p95/max latency next to R@1/R@10/MRR, adds a long-query probe (16 and 32 words — the quality
+  cases can never produce one), and exits non-zero when a latency budget is exceeded. A previous
+  change passed every quality metric while being four times slower; that was caught by hand.
+- **`lapis-bench`** ([#182]) — index build cost: milliseconds per 1,000 notes, growth ratio from n/2 to
+  n (to catch superlinear regressions), and **JSON bytes per note**. The size metric is the primary
+  gate: it is deterministic, so a 15% margin is enough, while a wall-clock budget loose enough to
+  survive a busy machine cannot detect a tokenizer regression at all.
+- **42 tests for the frontmatter parser** ([#184]), which had none, and one more for effect dependency
+  registration through a helper call ([#185]).
+
+### Changed
+- **Preview post-processing effects were rewritten** ([#185]). Five `$effect`s declared their
+  dependency by assigning to a variable they never used (`const _html = parsed.html`); the pattern
+  breaks silently if a guard moves in front of it. They now call a named `trackPreviewHtml()`, and the
+  repeated "null check → `tick()` → null check again → post-process" sequence moved into one helper.
+  No behavior change — verified by hand across wikilink colors, mermaid, theme switching, and `⌘F`.
+
 ## [1.11.0] — 2026-08-20
 
 ### Added
@@ -418,6 +452,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.11.0...main
+[1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/eren0315/lapis/compare/v1.8.0...v1.9.0
@@ -447,6 +482,9 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#185]: https://github.com/eren0315/lapis/pull/185
+[#184]: https://github.com/eren0315/lapis/pull/184
+[#182]: https://github.com/eren0315/lapis/pull/182
 [#171]: https://github.com/eren0315/lapis/pull/171
 [#170]: https://github.com/eren0315/lapis/pull/170
 [#169]: https://github.com/eren0315/lapis/pull/169
