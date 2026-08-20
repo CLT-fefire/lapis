@@ -306,44 +306,63 @@
     if (!ok) console.info("note link unresolved:", href);
   }
 
-  // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
   let previewBodyEl: HTMLElement | null = $state(null);
-  $effect(() => {
-    const _html = parsed.html;
-    const idx = $linkIndex;
+
+  /**
+   * "프리뷰 HTML이 바뀌면 다시 돌아라"를 **명시적으로** 거는 읽기. 값은 쓰지 않는다 —
+   * 읽는 행위 자체가 의존성 등록이다.
+   *
+   * ⚠️ `$effect` 본문에서 **조건 없이 먼저** 부를 것. 가드 뒤로 밀리면 그 경로를 한 번
+   * 지나간 뒤 영영 안 돌 수 있다(effect는 마지막 실행에서 읽은 것만 의존한다).
+   * 두 성질 다 `runesHarness.dom.test.ts`가 고정한다 — 함수 안 읽기도 등록된다는 것,
+   * 가드 뒤 읽기는 그 전의 변경을 놓친다는 것.
+   */
+  function trackPreviewHtml(): void {
+    void parsed.html;
+  }
+
+  /**
+   * 프리뷰 DOM이 새 HTML로 갱신된 **뒤**(tick) 후처리를 돌린다.
+   *
+   * 프리뷰 후처리 네 갈래(위키링크 클래스·mermaid·이미지 경로·검색 하이라이트)가 전부
+   * 같은 순서를 손으로 반복하고 있었다: 엘리먼트 널 체크 → `tick()` → **다시** 널 체크
+   * (await 사이에 노트가 바뀌면 사라진다) → 후처리. 그 절차만 여기 모은다.
+   * ⚠️ 의존성 등록은 하지 않는다 — 호출부가 `trackPreviewHtml()`로 직접 건다.
+   */
+  function afterPreviewRender(run: (body: HTMLElement) => void): void {
     if (!previewBodyEl) return;
-    (async () => {
-      await tick();
-      if (!previewBodyEl) return;
-      const links = previewBodyEl.querySelectorAll<HTMLElement>(".wikilink");
-      for (const a of links) {
+    void tick().then(() => {
+      if (previewBodyEl) run(previewBodyEl);
+    });
+  }
+
+  // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
+  $effect(() => {
+    trackPreviewHtml();
+    const idx = $linkIndex;
+    afterPreviewRender((body) => {
+      for (const a of body.querySelectorAll<HTMLElement>(".wikilink")) {
         const target = a.getAttribute("data-target");
         const resolved = idx && target ? !!resolveTarget(target, idx) : false;
         a.classList.toggle("resolved", resolved);
         a.classList.toggle("unresolved", !resolved);
       }
-    })();
+    });
   });
 
   // Preview 갱신 시 mermaid 코드블록 렌더 (lazy + dynamic import) — Phase 4.4.a
   $effect(() => {
-    const _html = parsed.html;
-    if (!previewBodyEl) return;
-    tick().then(() => {
-      if (!previewBodyEl) return;
-      renderMermaidIn(previewBodyEl);
-    });
+    trackPreviewHtml();
+    afterPreviewRender((body) => renderMermaidIn(body));
   });
 
   // 테마 전환 시 mermaid 재렌더 — SVG는 테마별로 baked되어 토큰처럼 자동 적응 못 함.
   // $themeMode 변경을 추적해 렌더 가드를 풀고 현재 테마로 다시 그린다.
   $effect(() => {
-    const _mode = $themeMode;
-    if (!previewBodyEl) return;
-    tick().then(() => {
-      if (!previewBodyEl) return;
-      resetMermaidHosts(previewBodyEl);
-      renderMermaidIn(previewBodyEl);
+    void $themeMode; // 의존성 — 테마가 바뀌면 다시 그린다. HTML 변경과는 무관하다.
+    afterPreviewRender((body) => {
+      resetMermaidHosts(body);
+      renderMermaidIn(body);
     });
   });
 
@@ -360,13 +379,10 @@
 
   // Preview 갱신 시 이미지 src 재작성 (상대 경로 → asset 프로토콜) — Phase 4.4.b
   $effect(() => {
-    const _html = parsed.html;
+    trackPreviewHtml();
     const path = $currentNotePath;
-    if (!previewBodyEl || !path) return;
-    tick().then(() => {
-      if (!previewBodyEl) return;
-      rewriteImageSources(previewBodyEl, path);
-    });
+    if (!path) return;
+    afterPreviewRender((body) => rewriteImageSources(body, path));
   });
 
   // --- in-document search (Phase 5.0) ---
@@ -570,18 +586,22 @@
   });
 
   // Preview 재렌더 시 mark가 다음 markdown 출력으로 덮어쓰여짐 → 검색 활성이면 재적용
+  //
+  // ⚠️ `inDocSearch`는 `get()`으로 **추적하지 않고** 읽는다(기존 동작). 즉 이 effect를
+  // 깨우는 것은 오직 프리뷰 HTML이다 — 그래서 `trackPreviewHtml()`이 분기 **밖**에,
+  // 맨 앞에 있어야 한다. 분기 안으로 들어가면 검색이 닫힌 동안 의존성이 풀려서 다시는
+  // 깨어나지 않는다(가드 뒤 읽기의 함정 — `runesHarness.dom.test.ts`가 고정한다).
   $effect(() => {
-    const _html = parsed.html;
-    if (!previewBodyEl) return;
+    trackPreviewHtml();
     const s = get(inDocSearch);
     if (s.open && s.target === "preview" && s.query) {
-      void tick().then(() => {
-        if (!previewBodyEl) return;
+      afterPreviewRender(() => {
         // 새 DOM 기준으로 mark 다시 적용. currentIdx는 0으로 리셋(노트 내용 자체가 바뀜).
         previewQuery = s.query;
         previewApply(s.query, 0);
       });
-    } else {
+    } else if (previewBodyEl) {
+      // 프리뷰가 떠 있을 때만 지운다 — 기존 널 가드가 하던 일을 그대로 남긴다.
       previewQuery = "";
       previewTotal = 0;
       previewCurrentIdx = -1;
