@@ -62,6 +62,49 @@ fn new_window(app: tauri::AppHandle) -> Result<String, String> {
     Ok(label)
 }
 
+/// 창 기하를 stderr에 찍는다 — **창 위치 복원 검증용**(debug 빌드 전용).
+///
+/// 플러그인이 조용히 동작하므로 "복원됐는지"를 밖에서 볼 방법이 없다. 실행할 때마다
+/// 같은 형식으로 찍어두면 **두 번의 실행 로그를 비교**하는 것만으로 판정이 된다.
+fn log_geometry(tag: &str, window: &tauri::Window) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    let pos = window.outer_position();
+    let size = window.outer_size();
+    let maximized = window.is_maximized();
+    eprintln!(
+        "[lapis/geom] {tag} label={} pos={:?} size={:?} maximized={:?}",
+        window.label(),
+        pos.map(|p| (p.x, p.y)),
+        size.map(|s| (s.width, s.height)),
+        maximized,
+    );
+}
+
+/// 창 상태 파일의 위치와 내용을 찍는다 — 저장이 **실제로 일어났는지** 확인용.
+fn log_window_state_file(app: &tauri::AppHandle) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    let Ok(dir) = app.path().app_config_dir() else {
+        eprintln!("[lapis/geom] app_config_dir 조회 실패");
+        return;
+    };
+    let file = dir.join(".window-state.json");
+    match std::fs::read_to_string(&file) {
+        Ok(body) => eprintln!(
+            "[lapis/geom] state file {} = {}",
+            file.display(),
+            body.trim()
+        ),
+        Err(e) => eprintln!(
+            "[lapis/geom] state file {} 없음/못읽음 ({e})",
+            file.display()
+        ),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // release `panic = "abort"`라 패닉은 크래시 리포트로만 남아 진단이 어렵다.
@@ -106,7 +149,10 @@ pub fn run() {
             // (앱 이름 자체는 번들에서 오므로 여기서 못 바꾼다).
             if let Some(window) = app.get_webview_window("main") {
                 apply_debug_title(&window);
+                // 창 위치 복원 검증용 — 플러그인이 `on_window_ready`에서 이미 복원한 뒤다.
+                log_geometry("startup", &window.as_ref().window());
             }
+            log_window_state_file(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -115,6 +161,11 @@ pub fn run() {
             // 창이 구독자로 남아 그 vault의 watcher가 영영 해제되지 않는다.
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 watcher::release_window(window.app_handle(), window.label());
+            }
+            // 닫히기 **직전** 기하 — 다음 실행의 startup 로그가 이 값과 같아야 복원 성공이다.
+            // `Destroyed`는 이미 창이 사라진 뒤라 좌표를 못 읽는다.
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                log_geometry("close", window);
             }
         })
         .invoke_handler(tauri::generate_handler![

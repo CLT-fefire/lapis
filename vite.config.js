@@ -29,15 +29,24 @@ export default defineConfig(async () => ({
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
+  //
+  // ⚠️ **1420이 아니다.** Tauri 기본값이 1420인데 이 개발 머신에서 다른 앱이 그 포트를
+  // 점유하고 있다. `strictPort: true`라 충돌하면 조용히 다른 포트로 새지 않고 **실패**한다.
+  // 바꿀 때는 `tauri.conf.json`의 `devUrl`과 **반드시 함께** 고칠 것 — 한쪽만 고치면
+  // Tauri가 빈 창을 띄운다(흰 화면).
+  //
+  // ⚠️ 포트가 곧 **localStorage 오리진**이다(`src-tauri/src/paths.rs` 참조). 포트를 바꾸면
+  // dev 앱의 탭·`last-vault-path`·페인 상태가 **처음 쓰는 것처럼 비어 보인다.** vault 파일과
+  // Rust가 쓰는 디스크 상태(검색 캐시·창 위치)는 그대로다 — 잃는 게 아니라 갈리는 것이다.
   server: {
-    port: 1420,
+    port: 1430,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: "ws",
           host,
-          port: 1421,
+          port: 1431,
         }
       : undefined,
     watch: {
