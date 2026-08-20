@@ -44,6 +44,8 @@ export interface CaseResult extends EvalCase {
   topScore: number | null;
   /** 이 질의에 걸린 전체 문서 수. 과매칭 지표. */
   matched: number;
+  /** 이 질의 한 건의 검색 소요(ms). 인덱스 로드는 제외한 순수 질의 비용. */
+  ms: number;
 }
 
 export interface EvalSummary {
@@ -57,7 +59,43 @@ export interface EvalSummary {
   mrr: number;
   /** 질의당 평균 매칭 문서 수. 클수록 과매칭. */
   meanMatched: number;
+  /**
+   * 질의 지연(ms). ⚠️ **품질 지표와 같은 비중으로 본다.**
+   *
+   * 2026-08-19에 `AND-1` 단계를 넣을 때 게이트가 R@1·R@10·MRR·결과수뿐이라 **지연이 빠져
+   * 있었다**. 네 지표를 전부 통과한 변형이 평균 29→118ms, 32어절 860ms였고, 그걸 손측정으로
+   * 발견해 상한 8어절로 되돌렸다. 손측정은 다음 사람에게 남지 않는다 → 하네스가 낸다.
+   */
+  latency: LatencyStats;
   byKind: Record<string, { n: number; recallAt1: number; mrr: number }>;
+}
+
+/** 지연 분포 요약. p95를 본다 — 평균은 병리 케이스를 감춘다(실측: 평균 118ms에 최악 860ms). */
+export interface LatencyStats {
+  meanMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
+/**
+ * nearest-rank 백분위. 표본이 작아 보간하지 않는다 — 실제 관측값 하나를 고른다.
+ * (보간하면 "이 질의가 이만큼 걸렸다"고 지목할 수 없다.)
+ */
+function percentile(sortedMs: readonly number[], p: number): number {
+  if (sortedMs.length === 0) return 0;
+  const i = Math.min(sortedMs.length - 1, Math.max(0, Math.ceil(p * sortedMs.length) - 1));
+  return sortedMs[i];
+}
+
+export function latencyOf(msList: readonly number[]): LatencyStats {
+  const sorted = [...msList].sort((a, b) => a - b);
+  return {
+    meanMs: msList.reduce((a, b) => a + b, 0) / Math.max(1, msList.length),
+    p50Ms: percentile(sorted, 0.5),
+    p95Ms: percentile(sorted, 0.95),
+    maxMs: sorted[sorted.length - 1] ?? 0,
+  };
 }
 
 const RANK_LIMIT = 10;
@@ -102,12 +140,11 @@ const words = (s: string) => s.split(/\s+/).filter(Boolean);
  * 평가 케이스 생성. `seed`로 표본을 고정해 변형 간 비교가 같은 질의로 이뤄지게 한다.
  * (`Math.random`을 쓰면 변형마다 다른 질의를 재게 돼 비교가 무의미해진다.)
  */
-export function buildCases(vc: VaultCache, sampleSize: number, seed = 12345): EvalCase[] {
-  // 아카이브는 제외 — 세션 로그라 title이 거의 없고, 있어도 서로 비슷해 known-item이 성립 안 한다.
-  const cut = vc.root.endsWith("/") ? vc.root.length : vc.root.length + 1;
-  const pool = vc.infos.filter((i) => !norm(i.source_path).slice(cut).startsWith("_memories"));
-
-  // 결정론적 셔플 (mulberry32)
+/**
+ * 결정론적 셔플(mulberry32). `seed`가 같으면 같은 순서 → 변형 간 비교가 **같은 표본**으로
+ * 이뤄진다. (`Math.random`을 쓰면 비교가 무의미해진다.)
+ */
+export function deterministicShuffle<T>(items: readonly T[], seed: number): T[] {
   let s = seed >>> 0;
   const rnd = () => {
     s = (s + 0x6d2b79f5) >>> 0;
@@ -115,16 +152,36 @@ export function buildCases(vc: VaultCache, sampleSize: number, seed = 12345): Ev
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  const order = pool.map((_, i) => i);
-  for (let i = order.length - 1; i > 0; i--) {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
+    [out[i], out[j]] = [out[j], out[i]];
   }
+  return out;
+}
 
+/**
+ * **품질 계측용** 표본 순서. 아카이브(`_memories`)는 제외 — 세션 로그라 title이 거의 없고,
+ * 있어도 서로 비슷해 known-item이 성립하지 않는다.
+ *
+ * ⚠️ **빌드 비용 벤치에는 쓰지 않는다.** 이 vault에서 `_memories`가 **94%**(19,313 중
+ * 18,000+)라, 이 함수를 벤치 표본으로 쓰면 코퍼스의 6%만 재고 "전체 환산"이 그만큼
+ * 어긋난다. 실제로 `./lapis-bench 3000`이 1,274건만 잡아서 발견했다. 벤치는
+ * `deterministicShuffle(vc.infos, …)`로 **전량에서** 뽑는다.
+ */
+export function shuffledPool(vc: VaultCache, seed: number): VaultCache["infos"] {
+  const cut = vc.root.endsWith("/") ? vc.root.length : vc.root.length + 1;
+  return deterministicShuffle(
+    vc.infos.filter((i) => !norm(i.source_path).slice(cut).startsWith("_memories")),
+    seed,
+  );
+}
+
+/** 평가 케이스 생성 — 문서 1건당 `title` · `title-short` · `body` 3종. */
+export function buildCases(vc: VaultCache, sampleSize: number, seed = 12345): EvalCase[] {
   const cases: EvalCase[] = [];
-  for (const idx of order) {
+  for (const info of shuffledPool(vc, seed)) {
     if (cases.length >= sampleSize * 3) break;
-    const info = pool[idx];
     const target = info.source_path;
     let raw: string;
     try {
@@ -149,6 +206,54 @@ export function buildCases(vc: VaultCache, sampleSize: number, seed = 12345): Ev
   return cases.slice(0, sampleSize * 3);
 }
 
+/** 지연 프로브 한 건 — 정답 판정을 하지 않는다(비용만 잰다). */
+export interface ProbeQuery {
+  /** 어절 수. 결합 사다리의 비용이 여기에 O(n²)로 붙는다. */
+  words: number;
+  query: string;
+}
+
+/**
+ * **긴 질의 지연 프로브.** 품질 케이스와 분리해 둔 이유가 있다.
+ *
+ * `buildCases`가 만드는 질의는 title(대개 2~8어절)과 body **앞 8어절**뿐이다. 즉
+ * **하네스 구성상 긴 질의가 아예 생기지 않는다** — 32어절 860ms 병리를 품질 케이스로는
+ * 영원히 못 본다. 그걸 잡으려고 별도 집합을 둔다.
+ *
+ * 품질 표에 섞지 않는다. 섞으면 케이스 수와 종류 분포가 달라져 기록된 기준선
+ * (R@1 73.9% 등)과 **비교가 끊긴다**.
+ *
+ * 한 줄로 어절 수가 안 차면 다음 산문 줄을 이어 붙인다 — 실제로 긴 질의가 들어오는
+ * 경로가 "문단 붙여넣기"라서 그쪽이 오히려 실사용에 가깝다.
+ */
+export function buildLongQueries(
+  vc: VaultCache,
+  count: number,
+  wordCount: number,
+  seed = 12345,
+): ProbeQuery[] {
+  const out: ProbeQuery[] = [];
+  for (const info of shuffledPool(vc, seed)) {
+    if (out.length >= count) break;
+    let raw: string;
+    try {
+      raw = readFileSync(info.source_path, "utf8");
+    } catch {
+      continue;
+    }
+    const prose = proseLines(bodyOf(raw));
+    if (prose.length === 0) continue;
+    const acc: string[] = [];
+    for (const line of prose) {
+      acc.push(...words(line));
+      if (acc.length >= wordCount) break;
+    }
+    if (acc.length < wordCount) continue;
+    out.push({ words: wordCount, query: acc.slice(0, wordCount).join(" ") });
+  }
+  return out;
+}
+
 export interface Variant {
   name: string;
   options?: Partial<Options<FullTextDoc>>;
@@ -168,7 +273,9 @@ export function runVariant(
 ): EvalSummary {
   const results: CaseResult[] = [];
   for (const c of cases) {
+    const t0 = performance.now();
     const hits = searchOptions ? rankWith(index, c.query, searchOptions) : unionRank(index, c.query, 0);
+    const ms = performance.now() - t0;
     const at = hits.findIndex((h) => norm(h.path) === norm(c.target));
     results.push({
       ...c,
@@ -176,6 +283,7 @@ export function runVariant(
       score: at >= 0 ? hits[at].score : null,
       topScore: hits[0]?.score ?? null,
       matched: hits.length,
+      ms,
     });
   }
   return summarize(name, results);
@@ -216,6 +324,7 @@ export function summarize(variant: string, results: CaseResult[]): EvalSummary {
     recallAt10: at(10),
     mrr: results.reduce((a, r) => a + (r.rank ? 1 / r.rank : 0), 0) / n,
     meanMatched: results.reduce((a, r) => a + r.matched, 0) / n,
+    latency: latencyOf(results.map((r) => r.ms)),
     byKind,
   };
 }

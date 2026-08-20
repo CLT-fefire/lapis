@@ -1,9 +1,9 @@
 #!/bin/sh
-# lapis-mcp — MCP stdio 서버 실행 래퍼.
+# lapis-bench — 인덱스 빌드 비용 벤치 실행 래퍼.
 #
 # 호출 시점에 esbuild로 번들한다. 커밋된 산출물이나 사전 빌드 단계를 두면 소스와
 # 어긋나도 아무 신호가 없다 — 캐시 skew(CACHE_VERSION v7)로 이미 겪은 계열의 결함이다.
-# 번들이 16 KB라 ~30ms면 끝나고, 서버는 stdio로 상주하므로 질의당 비용이 아니다.
+# 번들 비용(~30ms)은 벤치가 재는 구간(초 단위 addAll)에 비해 무시할 수 있다.
 #
 # `$lib` 별칭과 확장자 없는 상대 import 때문에 Node가 앱 트리를 직접 못 읽는다.
 # `--alias:$lib=src/lib` 하나로 둘 다 풀린다.
@@ -25,10 +25,10 @@ REPO=$(dirname "$HERE")
 # 그러면 고유해지지 않아 레이스가 그대로 남는다(실측: 동시 4개 기동이 전부 빈 응답).
 # 셸 pid는 살아 있는 프로세스 사이에서 고유하고, 그게 정확히 막으려는 레이스의 범위다.
 find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'lapis-*.mjs' -mtime +1 -delete 2>/dev/null || true
-OUT="${TMPDIR:-/tmp}/lapis-eval-$$.mjs"
+OUT="${TMPDIR:-/tmp}/lapis-bench-$$.mjs"
 trap 'rm -f "$OUT"' HUP INT TERM
 
-"$REPO/node_modules/.bin/esbuild" "$HERE/evalRun.ts" \
+"$REPO/node_modules/.bin/esbuild" "$HERE/benchRun.ts" \
   --bundle --format=esm --platform=node --log-level=warning \
   --alias:'$lib'="$REPO/src/lib" \
   --outfile="$OUT" --allow-overwrite >&2

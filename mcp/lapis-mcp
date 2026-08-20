@@ -41,7 +41,7 @@ NODE=$(find_node) || {
 # `.mjs` 확장자가 필요해서 `…XXXXXXXX.mjs`로 쓰면 **글자 그대로** 그 이름의 파일을 만든다.
 # 그러면 고유해지지 않아 레이스가 그대로 남는다(실측: 동시 4개 기동이 전부 빈 응답).
 # 셸 pid는 살아 있는 프로세스 사이에서 고유하고, 그게 정확히 막으려는 레이스의 범위다.
-find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'lapis-mcp-*.mjs' -mtime +1 -delete 2>/dev/null || true
+find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'lapis-*.mjs' -mtime +1 -delete 2>/dev/null || true
 OUT="${TMPDIR:-/tmp}/lapis-mcp-$$.mjs"
 trap 'rm -f "$OUT"' HUP INT TERM
 
