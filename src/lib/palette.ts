@@ -280,29 +280,21 @@ export async function unifiedSearch(
   }
   if (mode === "fulltext") {
     if (!query) return recentAsResults();
-    // ⌘⇧F에서도 **구조 팔을 함께 낸다**(2026-08-19). 짧은 질의는 풀텍스트가 원래 못 푼다 —
-    // `title-short` R@1 37.5%이고, 토크나이저 교체(+1pt)와 결합 4단계화(#175, 변화 없음)로
-    // 두 번 확인했다. 2어절이 vault의 30개 문서에 나오면 그중 하나를 1위로 올릴 **근거가
-    // 없다** — 사용자가 원한 게 "그 문서 하나"가 아니라 "그 주제 문서들"일 수 있다.
-    // 그 대안이 여기엔 화면에 아예 없었다(`all` 모드에만 있었다).
+    // ⌘⇧F에서도 구조 팔(태그·facet)을 함께 낸다. 종전엔 `all` 모드에만 있었다.
+    //
+    // ⚠️ **원래 노렸던 효과는 못 낸다 — 실측(2026-08-19)으로 확인했다.** 짧은 한국어 질의
+    // (`title-short` R@1 37.5%)를 구조 팔로 유도하려던 것인데, **구조 팔의 어휘가 영문이다**:
+    // 고유 태그 4,643개 중 한글 4개(0.1%) · `topic` 299개 중 5개(1.7%) · `doc_kind` 0개.
+    // 한국어 2어절 질의는 여기 **닿을 수가 없다**(`캐시 정합성`·`멀티 윈도우` 실측 0건).
+    // 파일명·태그를 영문 kebab-case로 강제하는 규약의 필연적 귀결이다.
+    //
+    // 그래서 이 분기가 실제로 돕는 것은 **영문 질의**다(`z` → 태그 8 · facet 5).
+    // 짧은 한국어 질의는 여전히 미해결이고, 그 답은 여기가 아니다.
     const contentP = matchContent(query);
     const tags = matchTags(query, get(tagIndex), FULLTEXT_STRUCTURAL_LIMIT);
     const facets = matchFacets(query, FULLTEXT_STRUCTURAL_LIMIT);
     const content = await contentP;
     await fillContentSnippets(content, query); // 전부 표시되므로 모두 생성
-    // 구조 팔이 실제로 뭘 냈는지 dev에서만 찍는다 — 화면에 안 보이는 이유가
-    // "계산이 0건"인지 "그룹이 숨겨짐"인지 로그 없이는 구분이 안 된다.
-    if (import.meta.env.DEV) {
-      console.debug(
-        `[lapis/palette] fulltext q=${JSON.stringify(query)} words=${query.split(/\s+/).filter(Boolean).length}`,
-        { content: content.length, tags: tags.length, facets: facets.length },
-        tags.map((t) => (t.entry as { display: string }).display),
-        facets.map((f) => {
-          const e = f.entry as { field: string; value: string };
-          return `${e.field}:${e.value}`;
-        }),
-      );
-    }
     // 순서는 UI가 그룹으로 정한다(content가 위). 여기선 붙이기만 한다.
     return [...content, ...tags, ...facets];
   }
