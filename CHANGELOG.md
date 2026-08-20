@@ -21,6 +21,12 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   the MCP type check, vitest, and the vite build on Ubuntu, plus `cargo fmt --check`, `cargo clippy`
   (warnings as errors), `cargo check`, and `cargo test` on macOS.
 - **`CHANGELOG.md`** — this file. With GitHub Releases unused, it stands in for release notes.
+- **`⌘⇧F` full-text search now offers the structural arm too** — matching tags and `doc_kind`/`topic`
+  facets appear below the content hits. Short queries are something full-text cannot solve: two words
+  scoring 37.5% R@1 against 90%+ for longer ones, confirmed twice (a tokenizer swap moved it 1 point,
+  and the four-step combination did not move it at all). When two words appear in thirty documents
+  there is no basis for ranking one of them first — what the reader wanted may well be the *set*.
+  That alternative existed only in `⌘K` before; now it is on the surface where it is needed.
 - **Window position and size survive a restart.** Every window remembers its own geometry, keyed by
   label, so a second window reopens where the last one was. If the monitor it was on is gone, the
   window falls back to a default position instead of restoring off-screen.

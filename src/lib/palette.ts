@@ -79,6 +79,13 @@ export function normalizedScore(kind: PaletteEntry["kind"], raw: number): number
   }
 }
 
+/**
+ * `fulltext` 모드에서 함께 낼 구조 팔 항목 수. `all` 모드(20)보다 **작게 잡는다** —
+ * 여기서 사용자는 풀텍스트를 요청했고, 구조 팔은 "이쪽도 있다"는 대안 제시다.
+ * 20개가 content 밑에 붙으면 대안이 아니라 두 번째 목록이 된다.
+ */
+const FULLTEXT_STRUCTURAL_LIMIT = 8;
+
 function matchTags(query: string, index: TagIndex | null, limit = 20): PaletteResult[] {
   if (!index) return [];
   const q = query.trim();
@@ -273,9 +280,18 @@ export async function unifiedSearch(
   }
   if (mode === "fulltext") {
     if (!query) return recentAsResults();
-    const content = await matchContent(query);
+    // ⌘⇧F에서도 **구조 팔을 함께 낸다**(2026-08-19). 짧은 질의는 풀텍스트가 원래 못 푼다 —
+    // `title-short` R@1 37.5%이고, 토크나이저 교체(+1pt)와 결합 4단계화(#175, 변화 없음)로
+    // 두 번 확인했다. 2어절이 vault의 30개 문서에 나오면 그중 하나를 1위로 올릴 **근거가
+    // 없다** — 사용자가 원한 게 "그 문서 하나"가 아니라 "그 주제 문서들"일 수 있다.
+    // 그 대안이 여기엔 화면에 아예 없었다(`all` 모드에만 있었다).
+    const contentP = matchContent(query);
+    const tags = matchTags(query, get(tagIndex), FULLTEXT_STRUCTURAL_LIMIT);
+    const facets = matchFacets(query, FULLTEXT_STRUCTURAL_LIMIT);
+    const content = await contentP;
     await fillContentSnippets(content, query); // 전부 표시되므로 모두 생성
-    return content;
+    // 순서는 UI가 그룹으로 정한다(content가 위). 여기선 붙이기만 한다.
+    return [...content, ...tags, ...facets];
   }
 
   // all 모드 — 빈 query면 Recent + Quick Actions
@@ -352,4 +368,37 @@ export function groupResults(results: PaletteResult[]): ResultGroups {
     }
   }
   return groups;
+}
+
+/** `ResultGroups`의 그룹 이름. 화면에 그리는 순서이기도 하다. */
+export const GROUP_ORDER = ["recents", "notes", "content", "tags", "facets", "commands"] as const;
+export type GroupName = (typeof GROUP_ORDER)[number];
+
+/**
+ * 모드별로 **어떤 그룹을 화면에 낼지**. 컴포넌트가 아니라 여기 두는 이유는 테스트 때문이다 —
+ * vitest가 `environment: "node"`이고 svelte 플러그인이 없어 컴포넌트를 못 띄운다.
+ * 규칙이 컴포넌트 안에 있으면 **모드 분기에 테스트가 영영 안 붙는다**.
+ *
+ * - `files`(⌘P) — 파일 이름만. content 제외.
+ * - `fulltext`(⌘⇧F) — 본문 + **구조 팔**. 노트 이름 매칭은 ⌘P의 몫이라 제외.
+ * - `tag`/`facet`/`command` — prefix로 진입한 단일 목적 모드.
+ * - `all`(⌘K) — 전부.
+ *
+ * `recents`·`commands`는 종전 규칙 그대로다.
+ */
+export function isGroupVisible(mode: PaletteMode, group: GroupName): boolean {
+  switch (group) {
+    case "recents":
+      return true;
+    case "notes":
+      return mode !== "fulltext";
+    case "content":
+      return mode !== "files";
+    case "tags":
+      return mode === "all" || mode === "tag" || mode === "fulltext";
+    case "facets":
+      return mode === "all" || mode === "facet" || mode === "fulltext";
+    case "commands":
+      return mode === "all" || mode === "command";
+  }
 }
