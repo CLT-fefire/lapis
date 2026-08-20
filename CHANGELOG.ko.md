@@ -37,6 +37,9 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   vitest · vite 빌드(ubuntu)와 `cargo fmt --check` · `cargo clippy`(경고를 오류로) ·
   `cargo check` · `cargo test`(macOS)를 돌린다.
 - **`CHANGELOG.md`** — 이 문서. GitHub Releases를 쓰지 않으므로 릴리즈 노트를 대신한다.
+- **창 위치·크기가 재시작 너머로 유지된다.** 창마다 라벨 기준으로 자기 위치를 기억하므로,
+  두 번째 창도 직전에 닫은 그 자리에 열린다. 그 창이 있던 모니터가 사라졌으면 화면 밖으로
+  복원하지 않고 기본 위치로 떨어진다.
 
 ### Fixed
 - `mcp/lapis-eval`이 표본 수 인자를 조용히 무시하던 것 — 래퍼가 `"$@"`를 안 넘겨 항상 기본값으로
