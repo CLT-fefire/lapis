@@ -290,6 +290,19 @@ export async function unifiedSearch(
     const facets = matchFacets(query, FULLTEXT_STRUCTURAL_LIMIT);
     const content = await contentP;
     await fillContentSnippets(content, query); // 전부 표시되므로 모두 생성
+    // 구조 팔이 실제로 뭘 냈는지 dev에서만 찍는다 — 화면에 안 보이는 이유가
+    // "계산이 0건"인지 "그룹이 숨겨짐"인지 로그 없이는 구분이 안 된다.
+    if (import.meta.env.DEV) {
+      console.debug(
+        `[lapis/palette] fulltext q=${JSON.stringify(query)} words=${query.split(/\s+/).filter(Boolean).length}`,
+        { content: content.length, tags: tags.length, facets: facets.length },
+        tags.map((t) => (t.entry as { display: string }).display),
+        facets.map((f) => {
+          const e = f.entry as { field: string; value: string };
+          return `${e.field}:${e.value}`;
+        }),
+      );
+    }
     // 순서는 UI가 그룹으로 정한다(content가 위). 여기선 붙이기만 한다.
     return [...content, ...tags, ...facets];
   }

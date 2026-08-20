@@ -23,7 +23,9 @@
 //! ## webview localStorage는 이미 갈려 있다
 //!
 //! 탭·`last-vault-path`·페인 상태는 localStorage에 있고 오리진으로 격리된다 —
-//! dev는 `http://localhost:1420`, 릴리즈는 `tauri://localhost`. 그래서 이 모듈이 다루는
+//! dev는 `http://localhost:1430`(vite 포트 = 오리진), 릴리즈는 `tauri://localhost`.
+//! ⚠️ **vite 포트를 바꾸면 오리진이 바뀌어 dev 앱의 localStorage가 통째로 갈린다.**
+//! 그래서 이 모듈이 다루는
 //! 것은 **Rust가 쓰는 디스크 경로뿐**이다.
 
 use std::fs;
