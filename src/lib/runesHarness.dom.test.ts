@@ -3,7 +3,7 @@
  * `dom` 프로젝트 설정(`conditions: ["browser"]` · svelte 플러그인 · happy-dom)을 본다.
  */
 import { describe, expect, it } from "vitest";
-import { observeEffect, observeGuardedRead } from "./runesHarness.svelte";
+import { observeEffect, observeGuardedRead, observeHelperRead } from "./runesHarness.svelte";
 
 describe("룬 하네스 카나리아", () => {
   // ⚠️ 이 테스트가 없으면 `conditions: ["browser"]`가 사라져도 **아무 신호가 없다**.
@@ -28,5 +28,16 @@ describe("의존성 등록 — 가드 위치가 발화를 바꾼다", () => {
     // h1(초기)과 h2(가드가 닫혀 있던 동안의 변경)를 못 봤다.
     expect(guarded).toEqual(["h2", "h3"]);
     expect(guarded.length).toBeLessThan(eager.length);
+  });
+});
+
+describe("의존성 등록 — 함수 안에서 읽어도 등록된다", () => {
+  // `+page.svelte`의 `trackPreviewHtml()`이 서 있는 전제. 어휘 위치가 아니라 실행 시점의
+  // 동적 스코프를 따르므로, effect 안에서 호출된 함수의 읽기도 그 effect의 의존성이 된다.
+  it("effect가 호출한 함수의 읽기도 그 effect의 의존성이다", () => {
+    const { direct, viaHelper } = observeHelperRead();
+    expect(direct).toEqual(["h1", "h2", "h3"]);
+    // 값을 쓰지 않고 읽기만 했는데도 같은 횟수로 발화한다.
+    expect(viaHelper).toEqual(["fired", "fired", "fired"]);
   });
 });

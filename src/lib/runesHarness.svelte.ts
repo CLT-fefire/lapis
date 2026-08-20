@@ -57,3 +57,42 @@ export function observeGuardedRead(): { eager: string[]; guarded: string[] } {
   stop();
   return { eager, guarded };
 }
+
+/**
+ * 의존성을 **함수 안에서** 읽어도 등록되는가. `+page.svelte`가 `const _html = parsed.html`
+ * 관용구를 `trackPreviewHtml()` 호출로 바꾸면서 기대는 성질이다 — 추적은 어휘 위치가 아니라
+ * **실행 시점의 동적 스코프**를 따른다는 것.
+ *
+ * ⚠️ 이게 깨지면 프리뷰 후처리(위키링크 클래스·mermaid·이미지 경로·검색 하이라이트)가
+ * **노트를 넘겨도 안 도는** 버그가 된다. 에러는 안 난다.
+ */
+export function observeHelperRead(): { direct: string[]; viaHelper: string[] } {
+  const direct: string[] = [];
+  const viaHelper: string[] = [];
+  const stop = $effect.root(() => {
+    let html = $state("h1");
+    // effect 본문이 아니라 **여기서** 읽는다. 호출은 effect 안에서 일어난다.
+    const track = () => {
+      void html;
+    };
+
+    $effect(() => {
+      direct.push(html);
+    });
+    $effect(() => {
+      // ⚠️ 본문에서 `html`을 **직접 읽지 않는다.** 한 번이라도 직접 읽으면 그 읽기가
+      // 의존성을 걸어버려, `track()`이 아무것도 안 읽어도 테스트가 통과한다(실제로 그렇게
+      // 한 번 헛돌았다 — 카나리아로 잡았다). 등록 경로를 `track()` 하나로 묶는다.
+      track();
+      viaHelper.push("fired");
+    });
+
+    flushSync();
+    html = "h2";
+    flushSync();
+    html = "h3";
+    flushSync();
+  });
+  stop();
+  return { direct, viaHelper };
+}
