@@ -16,6 +16,38 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [1.12.0] — 2026-08-21
+
+### Fixed
+- **속성 하나를 고치면 노트의 frontmatter가 통째로 날아갈 수 있었다** ([#184]). YAML 파싱이
+  실패하면 앱이 "속성이 아예 없는 노트"로 읽고, 방금 고친 키만 남긴 블록을 새로 썼다 —
+  나머지는 사라졌다. 이제는 쓰기를 거부하고 에디터에서 YAML을 먼저 고치라고 알린다.
+  실측: 작성자 vault의 19,213개 노트 중 1개가 지금 정확히 그 상태다.
+- **속성을 고칠 때마다 날짜가 다시 쓰였다** ([#184]). `created: 2026-08-13`이
+  `2026-08-13T00:00:00.000Z`로 돌아왔다 — js-yaml 기본 스키마가 timestamp를 `Date` 객체로
+  만들기 때문이다. 읽기·쓰기 모두 CORE 스키마를 쓰도록 바꿔 날짜가 문자열로 남는다.
+  같은 결함이 UI에도 샜다: 속성 패널이 `Thu Aug 20 2026 09:00:00 GMT+0900`을 보여줬다.
+- **frontmatter와 본문 사이의 빈 줄이 속성 편집 때마다 사라졌다** ([#184]) — 구분자 패턴이
+  개행까지 삼켰다. 자동 링크 갱신도 같은 분리기를 써서 같은 결함을 갖고 있었다.
+
+### Added
+- **검색 계측 하네스가 품질뿐 아니라 비용도 게이트한다** ([#182]). `lapis-eval`이 R@1/R@10/MRR
+  옆에 p50/p95/max 지연을 함께 내고, 긴 질의 프로브(16·32어절 — 품질 케이스로는 구성상
+  만들어지지 않는다)를 더했으며, 지연 예산을 넘기면 종료 코드가 0이 아니다. 직전 변경이
+  품질 지표를 전부 통과하면서 4배 느렸고, 그건 손측정으로 잡았다.
+- **`lapis-bench`** ([#182]) — 인덱스 빌드 비용: 1,000노트당 밀리초, n/2→n 증가 배율(초선형
+  회귀 감지), **노트당 JSON 바이트**. 크기가 주 게이트다 — 결정론적이라 15% 여유면 충분한
+  반면, 바쁜 머신에서 오검출을 피할 만큼 느슨한 벽시계 예산은 토크나이저 회귀를 아예 못 잡는다.
+- **frontmatter 파서 테스트 42건** ([#184], 그전엔 0건) + 헬퍼 호출을 통한 effect 의존성
+  등록 테스트 1건 ([#185]).
+
+### Changed
+- **프리뷰 후처리 effect를 다시 썼다** ([#185]). 다섯 개의 `$effect`가 쓰지도 않는 변수에
+  대입하는 방식으로 의존성을 선언하고 있었고(`const _html = parsed.html`), 이 관용구는 가드가
+  앞으로 오면 조용히 깨진다. 이제 이름이 있는 `trackPreviewHtml()`을 부르고, 반복되던
+  "널 체크 → `tick()` → 다시 널 체크 → 후처리" 절차는 헬퍼 하나로 모았다. 동작 변화는 없다 —
+  위키링크 색·mermaid·테마 전환·`⌘F`를 손으로 확인했다.
+
 ## [1.11.0] — 2026-08-20
 
 ### Changed
@@ -411,6 +443,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.11.0...main
+[1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/eren0315/lapis/compare/v1.8.0...v1.9.0
@@ -440,6 +473,9 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#185]: https://github.com/eren0315/lapis/pull/185
+[#184]: https://github.com/eren0315/lapis/pull/184
+[#182]: https://github.com/eren0315/lapis/pull/182
 [#171]: https://github.com/eren0315/lapis/pull/171
 [#170]: https://github.com/eren0315/lapis/pull/170
 [#169]: https://github.com/eren0315/lapis/pull/169
