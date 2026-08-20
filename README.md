@@ -95,6 +95,11 @@ Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository d
 
 ## Getting started
 
+> **No notes of your own to try it on?** This repository ships a sample vault at
+> [`demo-vault/`](demo-vault) — 74 notes with backlinks, a nested tag tree, and
+> frontmatter cross-refs, shaped so every feature below has something to show.
+> Pick that folder in step 1. See [`demo-vault/README.md`](demo-vault/README.md).
+
 1. Use **Open Vault…** at the top of the left sidebar to pick a folder containing `.md` files. An empty folder is fine.
 2. The first index build runs. It creates links, tags, and full-text in one pass — a few seconds at around 1,000 notes. It **does not block the file tree**, so you can open documents while it works.
 3. `⌘P` finds files by name, `⌘⇧F` by content.
