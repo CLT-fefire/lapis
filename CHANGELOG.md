@@ -21,6 +21,10 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   the MCP type check, vitest, and the vite build on Ubuntu, plus `cargo fmt --check`, `cargo clippy`
   (warnings as errors), `cargo check`, and `cargo test` on macOS.
 - **`CHANGELOG.md`** — this file. With GitHub Releases unused, it stands in for release notes.
+- **A test project for DOM and reactivity** (`*.dom.test.ts`), alongside the existing node one. Preview
+  post-processing and Svelte effect timing can now be tested without mounting a component. It carries a
+  canary: without `resolve.conditions: ["browser"]` vitest compiles for SSR, `$effect` becomes a no-op,
+  and every reactivity test passes vacuously — the canary fails loudly instead.
 - **`⌘⇧F` full-text search now offers the structural arm too** — matching tags and `doc_kind`/`topic`
   facets appear below the content hits. This alternative existed only in `⌘K` before.
   It was meant to help short queries, and measurement says it does not: the structural vocabulary is
