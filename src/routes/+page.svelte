@@ -306,23 +306,48 @@
     if (!ok) console.info("note link unresolved:", href);
   }
 
-  // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
   let previewBodyEl: HTMLElement | null = $state(null);
-  $effect(() => {
-    const _html = parsed.html;
-    const idx = $linkIndex;
+
+  /**
+   * "프리뷰 HTML이 바뀌면 다시 돌아라"를 **명시적으로** 거는 읽기. 값은 쓰지 않는다 —
+   * 읽는 행위 자체가 의존성 등록이다.
+   *
+   * ⚠️ `$effect` 본문에서 **조건 없이 먼저** 부를 것. 가드 뒤로 밀리면 그 경로를 한 번
+   * 지나간 뒤 영영 안 돌 수 있다(effect는 마지막 실행에서 읽은 것만 의존한다).
+   * 두 성질 다 `runesHarness.dom.test.ts`가 고정한다 — 함수 안 읽기도 등록된다는 것,
+   * 가드 뒤 읽기는 그 전의 변경을 놓친다는 것.
+   */
+  function trackPreviewHtml(): void {
+    void parsed.html;
+  }
+
+  /**
+   * 프리뷰 DOM이 새 HTML로 갱신된 **뒤**(tick) 후처리를 돌린다.
+   *
+   * 프리뷰 후처리 네 갈래(위키링크 클래스·mermaid·이미지 경로·검색 하이라이트)가 전부
+   * 같은 순서를 손으로 반복하고 있었다: 엘리먼트 널 체크 → `tick()` → **다시** 널 체크
+   * (await 사이에 노트가 바뀌면 사라진다) → 후처리. 그 절차만 여기 모은다.
+   * ⚠️ 의존성 등록은 하지 않는다 — 호출부가 `trackPreviewHtml()`로 직접 건다.
+   */
+  function afterPreviewRender(run: (body: HTMLElement) => void): void {
     if (!previewBodyEl) return;
-    (async () => {
-      await tick();
-      if (!previewBodyEl) return;
-      const links = previewBodyEl.querySelectorAll<HTMLElement>(".wikilink");
-      for (const a of links) {
+    void tick().then(() => {
+      if (previewBodyEl) run(previewBodyEl);
+    });
+  }
+
+  // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
+  $effect(() => {
+    trackPreviewHtml();
+    const idx = $linkIndex;
+    afterPreviewRender((body) => {
+      for (const a of body.querySelectorAll<HTMLElement>(".wikilink")) {
         const target = a.getAttribute("data-target");
         const resolved = idx && target ? !!resolveTarget(target, idx) : false;
         a.classList.toggle("resolved", resolved);
         a.classList.toggle("unresolved", !resolved);
       }
-    })();
+    });
   });
 
   // Preview 갱신 시 mermaid 코드블록 렌더 (lazy + dynamic import) — Phase 4.4.a
