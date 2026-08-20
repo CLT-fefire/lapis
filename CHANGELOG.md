@@ -14,7 +14,7 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
-## [Unreleased]
+## [1.11.0] — 2026-08-20
 
 ### Added
 - **CI** — `.github/workflows/ci.yml`. On pull requests and pushes to `main`, it runs `svelte-check`,
@@ -417,7 +417,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.10.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.11.0...main
+[1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/eren0315/lapis/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/eren0315/lapis/compare/v1.7.0...v1.8.0

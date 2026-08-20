@@ -16,7 +16,7 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
-## [Unreleased]
+## [1.11.0] — 2026-08-20
 
 ### Changed
 - **풀텍스트 결합이 2단계에서 4단계로 늘었다.** 종전은 AND 다음 OR이었다 — 질의 단어 하나가
@@ -410,7 +410,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.10.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.11.0...main
+[1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/eren0315/lapis/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/eren0315/lapis/compare/v1.7.0...v1.8.0
