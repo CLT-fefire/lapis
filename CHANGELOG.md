@@ -14,6 +14,16 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [1.12.1] — 2026-08-21
+
+### Fixed
+- **A broken diagram left a "Syntax error in text" graphic stuck on screen** ([#187]). Mermaid draws
+  its own error graphic into a temporary `div` it appends to `document.body`, and on a parse failure it
+  throws without removing it. So the bomb icon floated at the bottom of the window, survived every note
+  switch, and only went away when the app restarted — the note on screen did not even need to contain a
+  diagram, because the wreckage came from some earlier note. Mermaid's error rendering is now suppressed
+  and the temporary nodes are cleaned up; the failure is reported inline, where the broken block is.
+
 ## [1.12.0] — 2026-08-21
 
 ### Fixed
@@ -451,7 +461,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.11.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
@@ -482,6 +493,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#187]: https://github.com/eren0315/lapis/pull/187
 [#185]: https://github.com/eren0315/lapis/pull/185
 [#184]: https://github.com/eren0315/lapis/pull/184
 [#182]: https://github.com/eren0315/lapis/pull/182

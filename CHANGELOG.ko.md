@@ -16,6 +16,16 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [1.12.1] — 2026-08-21
+
+### Fixed
+- **다이어그램 하나가 깨지면 "Syntax error in text" 그림이 화면에 박혀 있었다** ([#187]). mermaid는
+  자기 에러 그림을 `document.body`에 붙인 임시 `div`에 그리는데, 파싱이 실패하면 그 노드를 지우지
+  않고 throw 한다. 그래서 폭탄 아이콘이 창 하단에 떠서 노트를 바꿔도 안 없어지고 앱을 재실행할
+  때까지 남았다 — 화면에 열린 노트에 다이어그램이 없어도 그랬다. 잔해가 이전에 열었던 다른 노트에서
+  온 것이기 때문이다. 이제 mermaid의 에러 렌더링을 끄고 임시 노드를 정리한다. 실패는 깨진 블록이
+  있는 자리에 인라인으로 표시된다.
+
 ## [1.12.0] — 2026-08-21
 
 ### Fixed
@@ -442,7 +452,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.11.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/eren0315/lapis/compare/v1.9.0...v1.10.0
@@ -473,6 +484,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#187]: https://github.com/eren0315/lapis/pull/187
 [#185]: https://github.com/eren0315/lapis/pull/185
 [#184]: https://github.com/eren0315/lapis/pull/184
 [#182]: https://github.com/eren0315/lapis/pull/182
