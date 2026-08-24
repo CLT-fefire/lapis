@@ -16,6 +16,18 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [1.12.2] — 2026-08-24
+
+### Fixed
+- **표가 가로로 터지고, 정작 줄이면 들어갈 열이 한 줄에 한 글자씩 접혔다** ([#189]). 인라인 코드에
+  줄바꿈 선언이 없어 공백 없는 긴 경로(`dontalk/…/Foo.swift:1234`, brace 축약 `A/{B,C,D}`)가 끊을 곳
+  없는 한 덩어리로 남았다. 문단에서는 페인 전체를 가로로 밀고, 표에서는 그 열의 최소 폭을 키워
+  자동 레이아웃이 남은 폭을 다른 열에서 짜냈다 — 한글은 어느 글자에서나 끊기므로 그 압박이
+  **한 줄에 한 글자**로, 높이 545px짜리 셀로 나타났다. 이제 인라인 코드에 `overflow-wrap: anywhere`가
+  걸린다. 최소 폭까지 낮추는 값은 이것뿐이다(`break-word`는 낮추지 않아 표에는 듣지 않는다).
+  코드블록은 배제해 그대로 가로 스크롤하고, 내보낸 HTML에도 같은 규칙이 실린다. 허브 실측: md
+  1,301개 중 **321개(24.7%)**가 공백 없는 60자 초과 인라인 코드 토큰을 갖고 있다.
+
 ## [1.12.1] — 2026-08-21
 
 ### Fixed
@@ -453,6 +465,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
@@ -484,6 +497,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#189]: https://github.com/eren0315/lapis/pull/189
 [#187]: https://github.com/eren0315/lapis/pull/187
 [#185]: https://github.com/eren0315/lapis/pull/185
 [#184]: https://github.com/eren0315/lapis/pull/184
