@@ -146,6 +146,12 @@ export async function openVault(path: string): Promise<void> {
   // "최초 빌드"(blocking 오버레이)로 취급(stale 검색/백링크 노출 방지). 이후 **같은**
   // vault 내 변경(watcher/편집/수동 새로고침)은 background 재빌드($indexRefreshing).
   linkIndex.set(null);
+  // ⚠️ 풀텍스트 워커도 함께 비운다. `linkIndex`만 비우면 백링크·태그는 갈아끼워지는데
+  // **shard는 이전 vault 문서를 그대로 들고 있다** — `addToShard`의 reset은 새 vault가
+  // 쓰는 shard만 새로 만들고, `decideShardCount`는 노트 수로 정해지므로 큰 vault(8 shard)
+  // → 작은 vault(1 shard) 전환이면 shard 1–7이 남는다. `unionRank`는 ready된 **모든**
+  // shard에 질의하니 이전 vault 문서가 검색 결과로 새어 나온다.
+  clearIndexes();
   fullTextRecoveryTried = false;
   clearNavHistory();
   clearTabs();
