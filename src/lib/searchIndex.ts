@@ -1,6 +1,6 @@
 import type { NoteContent, LinkInfo } from "$lib/tauri/notes";
 import { readNote } from "$lib/tauri/notes";
-import { extractSnippetAround } from "$lib/snippet";
+import { snippetForQuery } from "$lib/snippet";
 import { chosungOf, isChosungQuery } from "$lib/hangul";
 import FullTextWorker from "./fullTextWorker?worker";
 
@@ -421,16 +421,10 @@ const SNIPPET_RADIUS = 60;
  * 최종 표시 결과에만 호출(불필요한 디스크 IO 회피).
  */
 export async function buildContentSnippet(path: string, query: string): Promise<string> {
-  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  let body = "";
   try {
-    body = await readNote(path);
+    return snippetForQuery(await readNote(path), query, SNIPPET_RADIUS);
   } catch (e) {
     console.warn(`[search] readNote failed for ${path}`, e);
     return "";
   }
-  const { snippet, matched } = extractSnippetAround(body, tokens, SNIPPET_RADIUS);
-  return matched
-    ? snippet
-    : body.slice(0, SNIPPET_RADIUS * 2).replace(/\s+/g, " ").trim() + "…";
 }
