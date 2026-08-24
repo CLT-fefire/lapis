@@ -14,6 +14,20 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [1.12.2] — 2026-08-24
+
+### Fixed
+- **Tables blew out sideways, while the columns that would have fit folded to one character per line**
+  ([#189]). Inline code carried no line-breaking rule, so a long path without spaces
+  (`dontalk/…/Foo.swift:1234`, or a brace shorthand like `A/{B,C,D}`) stayed a single unbreakable chunk.
+  In a paragraph it pushed the whole pane sideways; in a table it inflated that column's minimum width,
+  and the automatic table layout squeezed whatever was left over to the other columns — Korean breaks
+  between any two characters, so the squeeze showed up as **one character per line** in a cell 545px tall.
+  Inline code now wraps with `overflow-wrap: anywhere`, the one value that also lowers the minimum width
+  (`break-word` does not, and would have left the table alone). Code blocks are excluded and still scroll
+  horizontally, and exported HTML picks up the same rule. Measured on the author's vault: 321 of 1,301
+  notes (24.7%) carry an inline code token longer than 60 characters with no space in it.
+
 ## [1.12.1] — 2026-08-21
 
 ### Fixed
@@ -462,6 +476,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/eren0315/lapis/compare/v1.10.0...v1.11.0
@@ -493,6 +508,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#189]: https://github.com/eren0315/lapis/pull/189
 [#187]: https://github.com/eren0315/lapis/pull/187
 [#185]: https://github.com/eren0315/lapis/pull/185
 [#184]: https://github.com/eren0315/lapis/pull/184
