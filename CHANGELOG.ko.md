@@ -16,6 +16,34 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [1.13.0] — 2026-08-24
+
+### Changed
+- **노트 하나를 고쳐도 기동 때 vault 전량을 다시 읽던 것** ([#192]). 캐시 키가 모든 파일의
+  `(경로, mtime, 크기)`를 한 덩어리로 해싱한 값이라, 노트 한 개가 바뀌면 전부가 무효였다.
+  작성자 vault 기준으로 그건 본문 **52.6 MB** 재읽기 + **약 5.3 s** 재색인인데, 실제 방아쇠는
+  19,364개 중 **38개(0.2%)** 변경이다. vault를 쓰는 게 Lapis가 아니라 바깥 도구들이라 평상시
+  기동의 대다수가 그 경로였다 — 최근 30일 중 **19일**에 변경이 있었다. 이제 기동 시 파일별 stat
+  스냅샷을 이전 것과 대조해, 움직인 파일이 적으면 그것만 고친다(파일 watcher가 이미 쓰던 증분
+  기계장치 그대로). 변경이 많거나, shard 수가 바뀌거나, 스냅샷이 없거나 어긋나면 예전처럼 전체를
+  다시 만든다. 스냅샷은 매 기동 읽히는 메타데이터가 아니라 **별도 파일**에 둔다(gzip 231 KB,
+  캐시의 +1.6%) — 바뀐 게 없는 vault는 추가 비용이 0이다.
+
+### Fixed
+- **검색 결과 스니펫이 매치된 본문 대신 노트의 YAML 머리말을 보여줄 수 있었다** ([#191]).
+  랭킹은 한국어를 글자 bigram으로 찾는데 스니펫 추출기는 입력한 질의 그대로만 찾았다. 조사가
+  다르면 — 질의 `인덱스로`, 본문 `인덱스를` — 매치가 0이 되고 폴백이 본문 앞 120자를 냈다.
+  규약상 그 자리는 frontmatter 블록이다. 검색이 찾아낸 문서를 두고 왜 걸렸는지 못 보여준 셈이다.
+  이제 어절 그대로 → 랭킹과 같은 bigram 순으로 내려가고, frontmatter에서는 시작하지 않는다.
+- **vault를 바꾸면 이전 vault의 노트가 검색 결과로 새어 나올 수 있었다** ([#191]). vault를 열 때
+  링크 인덱스는 비웠지만 풀텍스트 워커는 그대로 남았다. shard는 새 vault가 쓰는 것만 초기화되고
+  shard 수는 노트 수를 따르므로, 큰 vault(8 shard) → 작은 vault(1 shard) 전환이면 shard 1–7이
+  메모리에 남는다. 그리고 준비된 shard는 전부 질의에 답한다.
+- **코드펜스 5종이 하이라이트 없이 그려졌다** ([#193]). vault 전량 실측: `svelte`(18개) ·
+  `dart`(15) · `ruby`(7) · `http`(4) · `objective-c`(2). 앞 셋은 언어가 등록돼 있지 않았고,
+  뒤 둘은 등록된 alias가 커버하지 않는 표기였다. `svelte`는 XML 문법에 연결했다 — 마크업과
+  `<script>`/`<style>` 안쪽은 그대로 칠해진다.
+
 ## [1.12.2] — 2026-08-24
 
 ### Fixed
@@ -465,6 +493,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
@@ -497,6 +526,9 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#193]: https://github.com/eren0315/lapis/pull/193
+[#192]: https://github.com/eren0315/lapis/pull/192
+[#191]: https://github.com/eren0315/lapis/pull/191
 [#189]: https://github.com/eren0315/lapis/pull/189
 [#187]: https://github.com/eren0315/lapis/pull/187
 [#185]: https://github.com/eren0315/lapis/pull/185
