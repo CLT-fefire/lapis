@@ -37,6 +37,7 @@ describe("resolveShortcut — 기본 매핑", () => {
     ["⌘N", chord({ key: "n" }), "new-note"],
     ["⌘⇧C", chord({ key: "c", shiftKey: true }), "copy-path"],
     ["⌘B", chord({ key: "b" }), "toggle-sidebar"],
+    ["⌘⇧B", chord({ key: "b", shiftKey: true }), "table-view"],
     ["⌘⇧O", chord({ key: "o", shiftKey: true }), "show-outline"],
     ["⌘W", chord({ key: "w" }), "close-tab"],
     ["⌘,", chord({ key: "," }), "nav-back"],
