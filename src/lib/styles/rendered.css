@@ -95,6 +95,17 @@
   color: var(--violet);
 }
 
+/* 인라인 코드에만 줄바꿈을 허용한다. 공백 없는 긴 토큰(`ViewControllers/…/Foo.swift:123`
+   같은 경로, `A/{B,C,D}` brace 축약)은 끊을 곳이 없는 한 덩어리라, 문단에서는 본문 폭을
+   넘어 페인을 가로로 밀고 표에서는 그 열의 min-content를 키운다. 표는 자동 레이아웃이라
+   남는 폭을 잃은 다른 열이 **한 줄에 한 글자씩** 접힌다(한글은 어느 글자에서나 끊긴다).
+   ⚠️ `break-word`가 아니라 `anywhere`다 — 둘 다 넘칠 때만 끊지만 **min-content를 줄이는
+   것은 `anywhere`뿐**이라, 열 폭 계산이 원인인 이 증상은 `break-word`로는 안 고쳐진다.
+   `pre` 안 코드블록은 셀렉터에서 뺀다 — 거기는 `.rendered pre`의 가로 스크롤이 맞다. */
+.rendered :not(pre) > code {
+  overflow-wrap: anywhere;
+}
+
 .rendered pre {
   background: var(--surface-sunken);
   padding: var(--sp-5);
