@@ -36,10 +36,13 @@ vi.mock("$lib/tauri/notes", () => ({
   // ⚠️ vitest는 `import.meta.env.DEV`가 true라 perf 로깅 경로가 돈다 → `stats` 필요.
   readVaultBundle: vi.fn(async () => ({ links: [], contents: [], stats: { file_count: 0 } })),
   vaultFingerprint: vi.fn(async () => ({ fingerprint: "fp", file_count: 0 })),
+  vaultFileStats: vi.fn(async () => ({ fingerprint: "fp", files: [], walk_ms: 0 })),
   readSearchCacheMeta: vi.fn(async () => null),
   readSearchCacheShard: vi.fn(async () => null),
+  readSearchCacheStats: vi.fn(async () => null),
   writeSearchCacheMeta: vi.fn(async () => {}),
   writeSearchCacheShard: vi.fn(async () => {}),
+  writeSearchCacheStats: vi.fn(async () => {}),
   createNote: vi.fn(),
   createFolder: vi.fn(),
   deleteNote: vi.fn(),

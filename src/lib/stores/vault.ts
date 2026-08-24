@@ -6,10 +6,14 @@ import {
   readNote,
   readVaultBundle,
   vaultFingerprint,
+  vaultFileStats,
   readSearchCacheMeta,
   readSearchCacheShard,
+  readSearchCacheStats,
   writeSearchCacheMeta,
   writeSearchCacheShard,
+  writeSearchCacheStats,
+  type FileStat,
   createNote as createNoteTauri,
   createFolder as createFolderTauri,
   deleteNote as deleteNoteTauri,
@@ -36,6 +40,7 @@ import {
   quickEntries,
   pendingFullTextVault,
   fullTextLoading,
+  type FullTextPatch,
 } from "$lib/stores/search";
 import {
   computeLinkRewritePreview,
@@ -46,6 +51,7 @@ import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
 import { markOpened, syncFromDisk } from "./unread";
 import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
+import { diffFileStats, deltaGate, touchedPaths, type CacheDelta } from "$lib/cacheDelta";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
 import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
 import {
@@ -263,6 +269,176 @@ export async function ensureFullTextIndex(): Promise<void> {
   await buildFullTextFromPending();
 }
 
+/**
+ * 기동 델타 재조정의 **구조 절반** — 앱이 꺼져 있던 동안의 변경을 바뀐 파일만 반영.
+ *
+ * `vault_fingerprint`가 어긋났다는 것만으로 vault 전량을 다시 읽던 자리다. 이전 스냅샷의
+ * 파일별 stat(`*.stats.json.gz`)과 대조해 실제로 바뀐 것이 적으면, watcher 증분과 같은
+ * 방식으로 그것만 고친다.
+ *
+ * @returns `true`=델타를 적용했다(호출자는 풀 빌드를 건너뛴다) · `false`=풀 빌드로 가라.
+ *
+ * ⚠️ **스토어는 마지막에 한 번에 갈아끼운다.** 중간에 실패하면 `false`를 내고 풀 빌드가
+ * 이어받아야 하는데, 그 전에 스토어를 건드려 두면 반쯤 적용된 인덱스가 남는다.
+ */
+async function tryDeltaReindex(
+  root: string,
+  meta: import("$lib/tauri/notes").SearchCacheMeta,
+): Promise<boolean> {
+  const perf = import.meta.env.DEV;
+  const t0 = perf ? performance.now() : 0;
+
+  const prev = await readSearchCacheStats(root, meta.fingerprint);
+  if (!prev) {
+    // 이 기능 이전에 저장된 캐시이거나 meta와 어긋난 스냅샷 — 예전대로 풀 빌드.
+    if (perf) console.debug("[lapis-perf] delta skip — stats 없음/거부");
+    return false;
+  }
+
+  const cur = await vaultFileStats(root);
+  const delta = diffFileStats(prev, cur.files);
+  const verdict = deltaGate({
+    delta,
+    metaShardCount: meta.shard_count,
+    decideShardCount,
+    max: INCREMENTAL_MAX,
+  });
+  if (!verdict.apply) {
+    if (perf) {
+      console.debug(
+        `[lapis-perf] delta skip — ${verdict.reason} ` +
+          `(+${delta.added.length}/~${delta.modified.length}/-${delta.removed.length})`,
+      );
+    }
+    return false;
+  }
+
+  // 스캔을 먼저 전부 끝낸다 — 하나라도 실패하면 스토어를 건드리지 않고 풀 빌드로 넘긴다.
+  // 실패를 건너뛰고 진행하면 인덱스는 낡았는데 fingerprint는 최신으로 커밋돼,
+  // 다음 기동이 그걸 HIT으로 읽는다. 이 프로젝트가 반복해서 만난 실패 방향이다.
+  const changed = touchedPaths(delta);
+  const infosMap = new Map(meta.link_infos.map((i) => [i.source_path, i]));
+  for (const path of delta.removed) infosMap.delete(path);
+  for (const path of changed) {
+    try {
+      const info = await scanLinkSingle(root, path);
+      infosMap.set(info.source_path, info);
+    } catch (e) {
+      console.warn("[delta] scanLinkSingle 실패 — 풀 빌드로 넘긴다", path, e);
+      return false;
+    }
+  }
+
+  // 여기부터 스토어 갱신 — cache hit 경로와 같은 순서.
+  const infos = Array.from(infosMap.values());
+  linkIndex.set(await buildIndexChunked(infos));
+  await nextTick();
+  tagIndex.set(buildTagIndex(infos));
+  await nextTick();
+  const facets = buildFacetCounts(infos);
+  docKindCounts.set(facets.docKindCounts);
+  topicCounts.set(facets.topicCounts);
+  await nextTick();
+  quickEntries.set(buildQuickEntries(infos));
+
+  // 풀텍스트는 lazy — shard는 **옛 fingerprint**로 읽고(디스크의 실제 스냅샷이다),
+  // 로드가 끝나면 `applyFullTextPatch`가 바뀐 노트만 덮어쓴 뒤 새 fingerprint로 재커밋한다.
+  activeShardCount = meta.shard_count;
+  fullTextIndexReady.set(false);
+  pendingFullTextVault.set({
+    vault: root,
+    shardCount: meta.shard_count,
+    fingerprint: meta.fingerprint,
+    patch: {
+      fingerprint: cur.fingerprint,
+      fileStats: cur.files,
+      changed,
+      removed: delta.removed,
+    },
+  });
+  scheduleLazyFullTextLoad();
+
+  if (perf) {
+    console.debug(
+      `[lapis-perf] delta applied +${delta.added.length}/~${delta.modified.length}/` +
+        `-${delta.removed.length} of ${cur.files.length} ` +
+        `walk=${cur.walk_ms}ms total=${(performance.now() - t0).toFixed(0)}ms`,
+    );
+  }
+  return true;
+}
+
+/**
+ * 기동 델타 재조정의 **풀텍스트 절반** — 옛 스냅샷 shard 위에 바뀐 노트만 덮어쓴다.
+ *
+ * 구조(link/tag/facet)는 `reloadNotesInner`가 이미 델타를 반영해 뒀다. 풀텍스트는
+ * lazy 로드라 그 시점에 shard가 아직 메모리에 없어서, 로드가 끝나는 여기까지 미룬 것이다.
+ *
+ * 끝나면 **캐시를 새 fingerprint로 다시 커밋한다.** 안 하면 다음 기동이 같은 델타를
+ * 또 계산한다(안전하지만 매번 헛일이고, 델타가 상한을 넘는 순간 풀 빌드로 떨어진다).
+ */
+async function applyFullTextPatch(
+  vault: string,
+  shardCount: number,
+  patch: FullTextPatch,
+): Promise<void> {
+  const perf = import.meta.env.DEV;
+  const t0 = perf ? performance.now() : 0;
+
+  let failed = 0;
+  for (const path of patch.removed) {
+    try {
+      await workerRemoveDoc(computeShardId(path, shardCount), path);
+    } catch (e) {
+      failed++;
+      console.warn("[delta] removeDoc 실패", path, e);
+    }
+  }
+
+  const idx = get(linkIndex);
+  for (const path of patch.changed) {
+    try {
+      // 이름은 구조 델타가 이미 갱신해 둔 `byPath`에서 — 여기서 다시 scan 하지 않는다.
+      const info = idx?.byPath.get(path);
+      const body = await readNote(path);
+      await workerUpdateDoc(computeShardId(path, shardCount), {
+        id: path,
+        name: info?.source_name ?? path,
+        body,
+      });
+    } catch (e) {
+      failed++;
+      console.warn("[delta] updateDoc 실패", path, e);
+    }
+  }
+
+  fullTextIndexReady.set(true);
+  if (perf) {
+    console.debug(
+      `[lapis-perf] delta.fulltext-patch changed=${patch.changed.length} ` +
+        `removed=${patch.removed.length} elapsed=${(performance.now() - t0).toFixed(0)}ms`,
+    );
+  }
+
+  // ⚠️ **하나라도 실패했으면 커밋하지 않는다.** 새 fingerprint를 박으면 "이 인덱스는
+  // 그 스냅샷이다"라고 주장하는 셈인데 실제로는 그 노트가 낡았다 → 다음 기동이 HIT으로
+  // 읽고 낡음이 영구화된다. 커밋을 걸러 두면 옛 meta가 남아 다음 기동이 같은 델타를
+  // 다시(또는 풀 빌드로) 처리한다 — 헛일이지만 스스로 낫는다.
+  if (failed > 0) {
+    console.warn(`[delta] 패치 ${failed}건 실패 — 캐시 재커밋 생략(다음 기동이 다시 시도)`);
+    return;
+  }
+
+  // 캐시 재커밋 — fire-and-forget. `saveSearchCache`는 `fullTextIndexReady`를 보고
+  // shard를 쓸지 정하는데, 바로 위에서 세웠으므로 여기선 전량 재직렬화가 돈다.
+  const infos = idx ? Array.from(idx.byPath.values()) : [];
+  setTimeout(() => {
+    void saveSearchCache(vault, infos, shardCount, patch.fingerprint, patch.fileStats).catch(
+      (e) => console.warn("[delta] 캐시 재커밋 실패", e),
+    );
+  }, 0);
+}
+
 async function buildFullTextFromPending(): Promise<void> {
   if (get(fullTextIndexReady)) return;
   // race 방지 — idle callback + CommandPalette open이 같은 함수를 두 번 호출 시
@@ -270,7 +446,7 @@ async function buildFullTextFromPending(): Promise<void> {
   if (get(fullTextLoading)) return;
   const pending = get(pendingFullTextVault);
   if (!pending) return;
-  const { vault, shardCount, fingerprint } = pending;
+  const { vault, shardCount, fingerprint, patch } = pending;
   const perf = import.meta.env.DEV;
   fullTextLoading.set(true);
   try {
@@ -295,7 +471,8 @@ async function buildFullTextFromPending(): Promise<void> {
       }
       const tFetch = perf ? performance.now() : 0;
       await workerLoadShard(i, json);
-      if (i === 0) fullTextIndexReady.set(true);
+      // ⚠️ 패치가 있으면 여기서 ready를 세우지 않는다 — 아래 참조(`applyFullTextPatch`).
+      if (i === 0 && !patch) fullTextIndexReady.set(true);
       if (perf) {
         const tLoad = performance.now();
         console.debug(
@@ -303,6 +480,10 @@ async function buildFullTextFromPending(): Promise<void> {
             `worker.loadJSON=${(tLoad - tFetch).toFixed(0)}ms`,
         );
       }
+    }
+    if (complete && shardCount > 0 && patch) {
+      // 옛 스냅샷의 shard가 다 올라왔다 → 바뀐 노트만 덮어쓰고 그제서야 ready.
+      await applyFullTextPatch(vault, shardCount, patch);
     }
     if (!complete || shardCount === 0) {
       fullTextIndexReady.set(false);
@@ -381,7 +562,7 @@ async function reloadNotesInner(force = false): Promise<void> {
   let tCacheCheckEnd = 0;
   let tEnd = 0;
   let noteCount = 0;
-  let cacheMode: "hit" | "miss" = "miss";
+  let cacheMode: "hit" | "delta" | "miss" = "miss";
   let fingerprint = "";
 
   // 전체 인덱스 재빌드 시 백링크 snippet 캐시도 stale — 안전하게 전부 비움.
@@ -468,8 +649,23 @@ async function reloadNotesInner(force = false): Promise<void> {
       cacheMode = "miss";
     }
 
+    // 델타 경로 — fingerprint는 어긋났지만 **바뀐 파일이 적으면 그것만 고친다.**
+    // 이 갈래가 없으면 노트 1개 변경에도 52.6 MB 재읽기 + 5.3 s 재빌드였다.
+    // 풀텍스트가 없는 스냅샷(`shard_count: 0`)은 대상이 아니다 — 패치할 shard가 없다.
+    if (!appliedFromCache && !force && meta && meta.shard_count > 0) {
+      if (await tryDeltaReindex(root, meta)) {
+        appliedFromCache = true;
+        cacheMode = "delta";
+      }
+    }
+
     if (!appliedFromCache) {
-      // cache miss(또는 loadJSON 실패) — 풀 빌드 + 캐시 저장
+      // cache miss(또는 loadJSON 실패) — 풀 빌드 + 캐시 저장.
+      //
+      // ⚠️ 저장에 쓸 fingerprint는 **본문을 읽기 직전**에 뜬 값이어야 한다. 저장 시점에
+      // 다시 걷으면 그 사이 바뀐 파일까지 포함한 해시가 박혀, 다음 기동이 "안 바뀌었다"로
+      // 읽고 낡은 인덱스를 HIT 판정한다. stat 목록도 같은 walk에서 나와야 짝이 맞는다.
+      const snapshot = await vaultFileStats(root);
       const bundle = await readVaultBundle(root);
       if (perf) {
         console.debug(
@@ -497,12 +693,15 @@ async function reloadNotesInner(force = false): Promise<void> {
       activeShardCount = shardCount;
 
       // 캐시 저장 — 진짜 fire-and-forget. setTimeout(0)으로 macrotask 분리.
-      const fpForSave = fp.fingerprint;
       const linksForSave = links;
       setTimeout(() => {
-        void saveSearchCache(root, linksForSave, shardCount, fpForSave).catch((e) =>
-          console.warn("[search-cache] write failed", e),
-        );
+        void saveSearchCache(
+          root,
+          linksForSave,
+          shardCount,
+          snapshot.fingerprint,
+          snapshot.files,
+        ).catch((e) => console.warn("[search-cache] write failed", e));
       }, 0);
     }
   } catch (e) {
@@ -552,6 +751,7 @@ async function saveSearchCache(
   links: import("$lib/tauri/notes").LinkInfo[],
   shardCount: number,
   fingerprint: string,
+  fileStats: FileStat[],
 ): Promise<void> {
   let shardsWritten = 0;
   if (get(fullTextIndexReady)) {
@@ -569,6 +769,17 @@ async function saveSearchCache(
       await writeSearchCacheShard(root, i, fingerprint, json);
     }
     if (complete) shardsWritten = shardCount;
+  }
+
+  // stats는 **meta보다 먼저** — meta가 커밋 지점이라 중간에 죽으면 옛 meta가 남고,
+  // 옛 meta의 fingerprint는 방금 쓴 stats와 어긋나 다음 기동이 이 stats를 거부한다
+  // (= 예전처럼 풀 빌드). 반대 순서로 쓰면 새 meta + 옛 stats가 남아 **델타가 바뀐
+  // 파일을 안 바뀐 것으로 판정**한다.
+  try {
+    await writeSearchCacheStats(root, fingerprint, fileStats);
+  } catch (e) {
+    // 델타는 최적화지 정확성이 아니다 — 실패해도 meta는 써야 한다(다음 기동 풀 빌드).
+    console.warn("[search-cache] stats 저장 실패 — 다음 기동은 풀 빌드", e);
   }
 
   // 커밋 — 구조 데이터는 풀텍스트 성패와 무관하게 항상 저장한다.
@@ -692,8 +903,14 @@ export async function reindexIncremental(
     setTimeout(() => {
       void (async () => {
         try {
-          const fp = await vaultFingerprint(root);
-          await saveSearchCache(root, infosForSave, shardForSave, fp.fingerprint);
+          const snapshot = await vaultFileStats(root);
+          await saveSearchCache(
+            root,
+            infosForSave,
+            shardForSave,
+            snapshot.fingerprint,
+            snapshot.files,
+          );
         } catch (e) {
           console.warn("[reindex] 캐시 재저장 실패", e);
         }

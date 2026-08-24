@@ -8,7 +8,7 @@ import {
   type QuickEntry,
   type FullTextDoc,
 } from "$lib/searchIndex";
-import type { LinkInfo, NoteContent } from "$lib/tauri/notes";
+import type { FileStat, LinkInfo, NoteContent } from "$lib/tauri/notes";
 
 /**
  * 검색 인덱스 store. 모달 open/mode 상태는 Phase 4.5에서 `stores/palette.ts`로 이관.
@@ -37,11 +37,34 @@ export const indexBuilding = writable<boolean>(false);
  * `fingerprint`는 meta의 것 — shard를 읽을 때 대조해 **meta와 다른 스냅샷의 shard**를
  * 걸러낸다(`search_cache.rs` v7의 skew 검출).
  */
-export const pendingFullTextVault = writable<{
+/**
+ * 기동 델타 재조정 — shard를 옛 스냅샷에서 로드한 **직후** 적용할 패치.
+ *
+ * 디스크의 shard는 이전 fingerprint의 것이라 그대로 쓰면 바뀐 노트의 본문이 낡는다.
+ * 로드 → 패치 → `fingerprint`로 캐시 재커밋까지가 한 단위다.
+ *
+ * ⚠️ 패치가 있으면 shard0 완료 시점에 `fullTextIndexReady`를 **세우지 않는다**.
+ * 그 창(≈1.4s) 동안 검색이 바뀐 노트의 옛 본문을 낸다 — "검색했는데 안 나온다"보다
+ * "검색했는데 틀린 게 나온다"가 나쁘다. progressive는 여기서만 포기한다.
+ */
+export interface FullTextPatch {
+  /** 패치 적용 후의 fingerprint. 이 값으로 캐시를 다시 커밋한다. */
+  fingerprint: string;
+  /** 같은 walk에서 나온 stat 목록 — 다음 기동의 델타 근거. */
+  fileStats: FileStat[];
+  changed: string[];
+  removed: string[];
+}
+
+export interface PendingFullText {
   vault: string;
   shardCount: number;
+  /** **디스크 shard의** fingerprint. 델타 경로에서는 이게 옛 스냅샷의 값이다. */
   fingerprint: string;
-} | null>(null);
+  patch?: FullTextPatch;
+}
+
+export const pendingFullTextVault = writable<PendingFullText | null>(null);
 
 /** worker가 loadJSON / addAll 중일 때 true. UI에 "빌드 중" 표시용. */
 export const fullTextLoading = writable<boolean>(false);
