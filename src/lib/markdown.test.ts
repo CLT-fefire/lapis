@@ -61,3 +61,42 @@ describe("parseNote headings (아웃라인)", () => {
     expect(html).toContain('id="hello-world"');
   });
 });
+
+describe("코드펜스 하이라이트 — vault 실측으로 뚫린 구멍", () => {
+  /**
+   * 2026-08-24 실측: vault 전량의 펜스 info string을 실제 등록 목록과 대조해
+   * 무색으로 그려지던 5종을 찾았다. 괄호 안은 그때의 사용 건수.
+   *
+   * ⚠️ 2026-08-21 감사 문서가 지목한 `jsonc`(28)는 **이미 커버돼 있었다** —
+   * hljs `json`의 alias다. 지적을 그대로 믿지 않고 다시 잰 것이 이 목록이다.
+   */
+  //
+  // ⚠️ 샘플은 **그 언어답게** 써야 한다. 전부 `let x = 1;`로 두면 http·svelte에서
+  // 토큰이 하나도 안 나와, 등록이 됐는데도 실패한다(= 단언이 언어가 아니라 샘플을 잰다).
+  const REGISTERED: [string, string][] = [
+    ["dart", "void main() { print('hi'); }"],
+    ["ruby", "def foo\n  :bar\nend"],
+    ["http", "GET /api/v1 HTTP/1.1\nHost: example.com"],
+    ["objective-c", "@interface Foo : NSObject\n@end"],
+    ["svelte", "<script>let x = 1;</script>\n<p>{x}</p>"],
+  ];
+
+  it.each(REGISTERED)("`%s` 펜스가 토큰화된다", (lang, sample) => {
+    const { html } = parseNote(`\`\`\`${lang}\n${sample}\n\`\`\`\n`);
+    expect(html).toContain(`class="language-${lang}"`);
+    // 토큰 span이 하나도 없으면 등록만 되고 실제로는 안 칠해진 것이다.
+    expect(html).toMatch(/<span class="hljs-/);
+  });
+
+  it("등록되지 않은 언어는 escape 폴백 — 이 테스트가 위 단언의 변별력을 보증한다", () => {
+    const { html } = parseNote("```brainfuck\n+++[->+++<]\n```\n");
+    expect(html).not.toMatch(/<span class="hljs-/);
+  });
+
+  it("이미 alias로 커버되던 표기는 그대로 동작한다 (회귀 감시)", () => {
+    for (const lang of ["jsonc", "zsh", "ts", "objc"]) {
+      const { html } = parseNote(`\`\`\`${lang}\n{"a": 1}\n\`\`\`\n`);
+      expect(html, lang).toContain(`class="language-${lang}"`);
+    }
+  });
+});
