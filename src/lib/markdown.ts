@@ -21,6 +21,9 @@ import markdownLang from "highlight.js/lib/languages/markdown";
 import sql from "highlight.js/lib/languages/sql";
 import diff from "highlight.js/lib/languages/diff";
 import toml from "highlight.js/lib/languages/ini";
+import dart from "highlight.js/lib/languages/dart";
+import ruby from "highlight.js/lib/languages/ruby";
+import http from "highlight.js/lib/languages/http";
 import { FRONTMATTER_YAML_SCHEMA } from "$lib/frontmatter";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
@@ -52,9 +55,32 @@ const HLJS_LANGUAGES: Record<string, (hljs: typeof import("highlight.js").defaul
   sql,
   diff,
   toml,
+  // 아래 3종은 vault 실측으로 추가(2026-08-24) — 등록 전엔 무색으로 그려졌다.
+  dart,
+  ruby,
+  http,
 };
 for (const [name, lang] of Object.entries(HLJS_LANGUAGES)) {
   hljs.registerLanguage(name, lang as never);
+}
+
+/**
+ * hljs가 언어를 갖고 있지만 **그 이름으로는 못 찾는** 경우를 잇는다.
+ *
+ * `highlight()`가 info string을 소문자화만 하고 그대로 `getLanguage`에 넘기므로,
+ * alias 목록에 없는 표기는 등록된 언어를 두고도 무색으로 떨어진다.
+ *
+ * - `objective-c` — `objectivec`의 alias는 `objc`/`mm`/`obj-c`뿐이라 이 표기가 샌다.
+ * - `svelte` — hljs에 전용 언어가 없다. `xml`이 `<script>`/`<style>` 안을 하위 언어로
+ *   넘기므로 마크업+스크립트는 제대로 칠해진다. 룬(`$state` 등)은 못 알아보지만
+ *   **무색보다는 낫다**는 판단.
+ */
+const HLJS_ALIASES: Record<string, string> = {
+  "objective-c": "objectivec",
+  svelte: "xml",
+};
+for (const [alias, languageName] of Object.entries(HLJS_ALIASES)) {
+  hljs.registerAliases(alias, { languageName });
 }
 
 const md = new MarkdownIt({
