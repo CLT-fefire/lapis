@@ -16,6 +16,7 @@ import {
   resetLayout,
 } from "$lib/stores/layout";
 import { openPalette } from "$lib/stores/palette";
+import { openTableView } from "$lib/stores/tableView";
 import { newWindow } from "$lib/tauri/window";
 
 export interface Command {
@@ -57,6 +58,17 @@ export const BUILTIN_COMMANDS: Command[] = [
         ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
         : m.cmd_vault_root();
       openNewNote(parentDir, parentLabel);
+    },
+  },
+  {
+    id: "table-view",
+    get label() {
+      return m.cmd_table_view();
+    },
+    shortcut: "⌘⇧B",
+    disabled: () => !get(vaultPath),
+    run() {
+      openTableView();
     },
   },
   {

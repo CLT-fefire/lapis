@@ -13,6 +13,8 @@
   import { m } from "$lib/paraglide/messages.js";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
+  import TableView from "$lib/TableView.svelte";
+  import { openTableView } from "$lib/stores/tableView";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
@@ -1027,6 +1029,10 @@
         e.preventDefault();
         toggleSidebar();
         return;
+      case "table-view":
+        e.preventDefault();
+        openTableView();
+        return;
       case "focus-tree-filter": {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>(".tree-filter-input");
@@ -1121,6 +1127,7 @@
 <ContextMenu />
 <NewNoteModal />
 <SettingsModal />
+<TableView />
 <LinkRewritePreviewModal />
 
 {#if $externalConflict}

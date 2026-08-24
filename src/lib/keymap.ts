@@ -35,6 +35,7 @@ export type ShortcutId =
   | "copy-path"
   | "toggle-context"
   | "toggle-sidebar"
+  | "table-view"
   | "focus-tree-filter"
   | "show-outline"
   | "nav-back"
@@ -100,6 +101,7 @@ export function resolveShortcut(e: KeyChord, ctx: KeymapContext): ShortcutMatch 
   if (key === "n" && !e.shiftKey) return { id: "new-note" };
   if (key === "c" && e.shiftKey) return { id: "copy-path" };
   if (key === "b" && !e.shiftKey && !e.altKey) return { id: "toggle-sidebar" };
+  if (key === "b" && e.shiftKey && !e.altKey) return { id: "table-view" };
   if (key === "o" && e.shiftKey) return { id: "show-outline" };
   if ((key === "," || key === ".") && !e.shiftKey && !e.altKey) {
     return { id: key === "," ? "nav-back" : "nav-forward" };
