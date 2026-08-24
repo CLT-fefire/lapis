@@ -14,6 +14,37 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [1.13.0] — 2026-08-24
+
+### Changed
+- **Changing one note no longer re-reads the whole vault on startup** ([#192]). The cache key was a
+  single hash over every file's `(path, mtime, size)`, so one edited note invalidated all of it. On the
+  author's vault that meant re-reading **52.6 MB** of note bodies and re-indexing for **~5.3 s** —
+  triggered, in practice, by 38 changed files out of 19,364 (0.2%). Because the vault is written by
+  other tools rather than by Lapis, most launches took that path: something changed on 19 of the last
+  30 days. Startup now compares a per-file stat snapshot against the previous one and, when few files
+  moved, repairs only those — the same incremental machinery the file watcher already used. A full
+  rebuild still happens when the change set is large, when the shard count would change, or when the
+  snapshot is missing or does not match. The snapshot lives in its own file (231 KB gzipped, +1.6% of
+  the cache) rather than in the metadata read on every launch, so an unchanged vault costs nothing extra.
+
+### Fixed
+- **Search result snippets could show a note's YAML header instead of the matching text** ([#191]).
+  Ranking finds Korean text by character bigrams, but the snippet extractor only looked for the query
+  typed verbatim. When a word carried a different particle — searching `인덱스로` against a note
+  reading `인덱스를` — nothing matched and the fallback printed the first 120 characters, which by
+  convention is the frontmatter block. The result was a search hit that could not show why it matched.
+  Snippets now try the raw words first and then the same bigrams ranking uses, and never start inside
+  frontmatter.
+- **Switching vaults could leak the previous vault's notes into search results** ([#191]). Opening a
+  vault cleared the link index but left the full-text worker loaded. Shards are only reset for the ones
+  the new vault writes, and the shard count follows note count — so going from a large vault (8 shards)
+  to a small one (1 shard) left shards 1–7 in memory, and every ready shard answers queries.
+- **Five code fence languages rendered without any highlighting** ([#193]). Measured across the whole
+  vault: `svelte` (18 fences), `dart` (15), `ruby` (7), `http` (4), and `objective-c` (2). The first
+  three had no language registered; the last two were spelling variants no registered alias covered.
+  `svelte` maps to the XML grammar, which still colors markup and the contents of `<script>`/`<style>`.
+
 ## [1.12.2] — 2026-08-24
 
 ### Fixed
@@ -476,6 +507,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/eren0315/lapis/compare/v1.11.0...v1.12.0
@@ -508,6 +540,9 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#193]: https://github.com/eren0315/lapis/pull/193
+[#192]: https://github.com/eren0315/lapis/pull/192
+[#191]: https://github.com/eren0315/lapis/pull/191
 [#189]: https://github.com/eren0315/lapis/pull/189
 [#187]: https://github.com/eren0315/lapis/pull/187
 [#185]: https://github.com/eren0315/lapis/pull/185
