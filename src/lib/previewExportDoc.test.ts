@@ -188,3 +188,33 @@ describe("본문 폭(--reading-measure) 내보내기 경로", () => {
     expect(off).toContain("--reading-measure: none;");
   });
 });
+
+/* 표가 가로로 터지던 증상의 한 줄 고침(2026-08-24)을 못박는다. 인라인 코드에 줄바꿈
+   허용이 없으면 공백 없는 긴 경로가 그 열의 min-content를 키우고, 자동 레이아웃인 표는
+   폭을 잃은 다른 열을 한 글자씩 접는다. 규칙은 `rendered.css` 한 곳에만 두고 내보내기가
+   그 원문을 그대로 싣는 구조라, **규칙의 존재**와 **내보내기 도달**을 함께 고정한다. */
+describe("인라인 코드 줄바꿈 (표 폭 회귀 방지)", () => {
+  const RULE =
+    /\.rendered\s+:not\(pre\)\s*>\s*code\s*\{[^}]*overflow-wrap:\s*anywhere/;
+
+  it("인라인 코드에 overflow-wrap: anywhere 가 걸려 있다", () => {
+    expect(renderedCss).toMatch(RULE);
+  });
+
+  it("코드블록(pre 안)에는 줄바꿈을 주지 않는다", () => {
+    // `.rendered pre code` 가 줄바꿈을 얻으면 `.rendered pre` 의 가로 스크롤이 무의미해진다.
+    const preCode = renderedCss.match(/\.rendered pre code \{[^}]*\}/)?.[0] ?? "";
+    expect(preCode).not.toBe("");
+    expect(preCode).not.toMatch(/overflow-wrap|word-break|white-space/);
+  });
+
+  it("내보낸 HTML에도 같은 규칙이 실린다", () => {
+    const html = buildHtmlDocument({
+      title: "노트",
+      tokenBlock: "",
+      renderedCss,
+      bodyHtml: "",
+    });
+    expect(html).toMatch(RULE);
+  });
+});
