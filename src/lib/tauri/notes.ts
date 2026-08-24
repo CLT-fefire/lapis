@@ -162,6 +162,30 @@ export function notesMtimes(
   return invoke<[string, number][]>("notes_mtimes", { vaultPath, paths });
 }
 
+/** 파일 1건의 stat — 기동 델타 재조정의 원자료. `path`는 `LinkInfo.source_path`와 같은 절대 경로. */
+export interface FileStat {
+  path: string;
+  mtime_ms: number;
+  size: number;
+}
+
+export interface VaultFileStatsResult {
+  /** 이 목록과 **같은 walk**에서 계산한 fingerprint. */
+  fingerprint: string;
+  files: FileStat[];
+  walk_ms: number;
+}
+
+/**
+ * vault 전량의 파일 stat + 같은 walk의 fingerprint.
+ *
+ * ⚠️ **fingerprint가 어긋났을 때만 부른다.** 19,000건 목록을 매 기동 IPC로 넘기면
+ * "안 바뀐 vault"까지 그 비용을 낸다 — hit 경로는 `vaultFingerprint`로 끝난다.
+ */
+export function vaultFileStats(vaultPath: string): Promise<VaultFileStatsResult> {
+  return invoke<VaultFileStatsResult>("vault_file_stats", { vaultPath });
+}
+
 /** cold-start cacheLookup — 가벼운 메타만 (minisearch_json 제외). v4부터 shard_count 포함. */
 export interface SearchCacheMeta {
   version: number;
@@ -188,6 +212,29 @@ export function writeSearchCacheMeta(
     linkInfos: link_infos,
     shardCount: shard_count,
   });
+}
+
+/**
+ * 이전 스냅샷의 파일 stat 목록. `expect_fingerprint`(= meta의 것)와 어긋나면 `null`.
+ * 없으면(= 이 기능 이전에 저장된 캐시) `null` — 호출자는 예전처럼 풀 빌드로 떨어진다.
+ */
+export function readSearchCacheStats(
+  vaultPath: string,
+  expect_fingerprint: string,
+): Promise<FileStat[] | null> {
+  return invoke<FileStat[] | null>("read_search_cache_stats", {
+    vaultPath,
+    expectFingerprint: expect_fingerprint,
+  });
+}
+
+/** stats 저장 — **meta보다 먼저**. meta가 커밋 지점이다. */
+export function writeSearchCacheStats(
+  vaultPath: string,
+  fingerprint: string,
+  files: FileStat[],
+): Promise<void> {
+  return invoke<void>("write_search_cache_stats", { vaultPath, fingerprint, files });
 }
 
 /** lazy load — 특정 shard의 MiniSearch JSON 문자열. 1.8s 단위로 progressive load 가능. */

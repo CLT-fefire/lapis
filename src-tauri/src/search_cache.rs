@@ -47,7 +47,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-use crate::vault::LinkInfo;
+use crate::vault::{FileStat, LinkInfo};
 
 pub const CACHE_VERSION: u32 = 7;
 
@@ -58,6 +58,27 @@ pub struct SearchCacheMeta {
     pub fingerprint: String,
     pub link_infos: Vec<LinkInfo>,
     pub shard_count: u32,
+}
+
+/// 파일 stat 스냅샷 schema — `*.stats.json.gz`에 직렬화.
+///
+/// **기동 델타 재조정의 근거**다. meta의 fingerprint는 "vault가 바뀌었다"만 말하고
+/// 무엇이 바뀌었는지는 말하지 않아, 노트 1개 변경에도 전량 재빌드였다.
+///
+/// ⚠️ **meta와 별도 파일인 이유는 hit 경로의 바이트다.** meta는 매 기동 읽히는데
+/// 19,000건 stat 목록(gz ~300 KB)을 거기 얹으면 vault가 안 바뀐 기동까지 그 비용을
+/// 낸다. 이 파일은 **fingerprint가 어긋났을 때만** 읽는다.
+///
+/// ⚠️ 없어도 정상이다 — 이 필드가 생기기 전에 저장된 캐시는 stats가 없고, 그때는
+/// 예전과 똑같이 풀 빌드로 떨어진 뒤 저장 단계에서 파일이 생긴다. 그래서
+/// `CACHE_VERSION`을 올리지 않는다(올리면 기존 캐시가 전부 한 번 죽는다).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SearchCacheStats {
+    pub version: u32,
+    /// 이 스냅샷의 vault fingerprint. meta의 것과 불일치하면 쓰지 않는다 — shard와 같은
+    /// 규율이다. 어긋난 stats로 델타를 내면 **바뀐 파일을 안 바뀐 것으로 판정**한다.
+    pub fingerprint: String,
+    pub files: Vec<FileStat>,
 }
 
 /// shard 파일 schema — `*.shard{i}.json.gz`에 직렬화.
@@ -87,6 +108,10 @@ fn vault_key(vault_path: &str) -> String {
 
 fn meta_file(app: &AppHandle, vault_path: &str) -> Result<PathBuf, String> {
     Ok(cache_root(app)?.join(format!("{}.meta.json.gz", vault_key(vault_path))))
+}
+
+fn stats_file(app: &AppHandle, vault_path: &str) -> Result<PathBuf, String> {
+    Ok(cache_root(app)?.join(format!("{}.stats.json.gz", vault_key(vault_path))))
 }
 
 fn shard_file(app: &AppHandle, vault_path: &str, shard_id: u32) -> Result<PathBuf, String> {
@@ -250,6 +275,103 @@ fn sweep_stale(app: &AppHandle, vault_path: &str, shard_count: u32) {
 /// 프론트의 `MAX_SHARDS`(`fullTextOptions.ts`)와 일치. 고아 스윕 상한으로만 쓴다.
 const MAX_SHARDS: u32 = 16;
 
+// ─── stats read/write (기동 델타) ────────────────────────────────────────────
+
+/// fingerprint가 어긋났을 때만 호출 — 이전 스냅샷의 파일 stat 목록.
+///
+/// `expect_fingerprint`(= meta의 것)와 다르면 `None`. shard와 같은 규율이다: 어긋난
+/// 스냅샷으로 델타를 계산하면 **바뀐 파일을 안 바뀐 것으로 판정**해서, 검색이 낡은
+/// 본문을 조용히 계속 낸다. 그건 캐시 미스보다 나쁘다.
+#[tauri::command]
+pub async fn read_search_cache_stats(
+    app: AppHandle,
+    vault_path: String,
+    expect_fingerprint: String,
+) -> Result<Option<Vec<FileStat>>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        read_search_cache_stats_inner(&app, &vault_path, &expect_fingerprint)
+    })
+    .await
+    .map_err(|e| format!("read_search_cache_stats join: {e}"))?
+}
+
+fn read_search_cache_stats_inner(
+    app: &AppHandle,
+    vault_path: &str,
+    expect_fingerprint: &str,
+) -> Result<Option<Vec<FileStat>>, String> {
+    let path = stats_file(app, vault_path)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = match fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[search-cache] stats read 실패: {e}");
+            return Ok(None);
+        }
+    };
+    let json = match gunzip_to_string(&bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[search-cache] stats gunzip 실패: {e}");
+            return Ok(None);
+        }
+    };
+    let stats: SearchCacheStats = match serde_json::from_str(&json) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[search-cache] stats parse 실패: {e}");
+            return Ok(None);
+        }
+    };
+    match stats_reject_reason(&stats, expect_fingerprint) {
+        Some(reason) => {
+            eprintln!("[search-cache] stats 거부 — {}", reason);
+            Ok(None)
+        }
+        None => Ok(Some(stats.files)),
+    }
+}
+
+/// stats를 거부할 이유. `None`이면 사용 가능. `shard_reject_reason`과 같은 이유로
+/// `AppHandle` 없이 떼어냈다 — 판정에 테스트가 붙는 지점이다.
+fn stats_reject_reason(stats: &SearchCacheStats, want_fingerprint: &str) -> Option<String> {
+    if stats.version != CACHE_VERSION {
+        return Some(format!("version {} ≠ {}", stats.version, CACHE_VERSION));
+    }
+    if stats.fingerprint != want_fingerprint {
+        return Some(format!(
+            "fingerprint {} ≠ meta {}",
+            stats.fingerprint, want_fingerprint
+        ));
+    }
+    None
+}
+
+/// stats 저장 — **meta보다 먼저** 쓴다. meta가 커밋 지점이라 중간에 죽으면 옛 meta가
+/// 남고, 옛 meta의 fingerprint는 새로 쓴 stats와 어긋나 위 판정이 거부한다(= 풀 빌드).
+#[tauri::command]
+pub async fn write_search_cache_stats(
+    app: AppHandle,
+    vault_path: String,
+    fingerprint: String,
+    files: Vec<FileStat>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let stats = SearchCacheStats {
+            version: CACHE_VERSION,
+            fingerprint,
+            files,
+        };
+        let json = serde_json::to_string(&stats).map_err(|e| format!("stats serialize: {e}"))?;
+        let bytes = gzip_string(&json)?;
+        atomic_write(&stats_file(&app, &vault_path)?, &bytes)
+    })
+    .await
+    .map_err(|e| format!("write_search_cache_stats join: {e}"))?
+}
+
 // ─── shard read/write ───────────────────────────────────────────────────────
 
 /// lazy load 시점 — 특정 shard의 MiniSearch JSON 문자열만. 1.8s 단위로 progressive load 가능.
@@ -359,6 +481,38 @@ pub async fn write_search_cache_shard(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stats(version: u32, fingerprint: &str) -> SearchCacheStats {
+        SearchCacheStats {
+            version,
+            fingerprint: fingerprint.to_string(),
+            files: vec![],
+        }
+    }
+
+    #[test]
+    fn accepts_matching_stats() {
+        assert_eq!(
+            stats_reject_reason(&stats(CACHE_VERSION, "abc"), "abc"),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_stats_with_stale_fingerprint() {
+        // 어긋난 스냅샷으로 델타를 내면 **바뀐 파일을 안 바뀐 것으로 판정**한다.
+        // shard skew보다 나쁘다 — 검색이 낡은 본문을 조용히 계속 낸다.
+        let reason =
+            stats_reject_reason(&stats(CACHE_VERSION, "old"), "new").expect("거부해야 한다");
+        assert!(reason.contains("fingerprint"), "reason={reason}");
+    }
+
+    #[test]
+    fn rejects_stats_with_old_version() {
+        let reason =
+            stats_reject_reason(&stats(CACHE_VERSION - 1, "abc"), "abc").expect("거부해야 한다");
+        assert!(reason.contains("version"), "reason={reason}");
+    }
 
     fn shard(version: u32, shard_id: u32, fingerprint: &str) -> SearchCacheShard {
         SearchCacheShard {

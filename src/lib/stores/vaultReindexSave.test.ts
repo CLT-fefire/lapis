@@ -23,16 +23,24 @@ import { get } from "svelte/store";
 // 인자 타입이 빈 튜플로 추론돼 `mock.calls[0][3]` 접근이 타입 오류가 된다.
 const writeMeta = vi.fn(async (..._args: unknown[]) => {});
 const writeShard = vi.fn(async (..._args: unknown[]) => {});
+const writeStats = vi.fn(async (..._args: unknown[]) => {});
 
 vi.mock("$lib/tauri/notes", () => ({
   listNotes: vi.fn(async () => []),
   readNote: vi.fn(async () => "본문"),
   readVaultBundle: vi.fn(async () => ({ links: [], contents: [] })),
   vaultFingerprint: vi.fn(async () => ({ fingerprint: "fp-new", file_count: 1 })),
+  vaultFileStats: vi.fn(async () => ({
+    fingerprint: "fp-new",
+    files: [{ path: "/vault/a.md", mtime_ms: 2, size: 2 }],
+    walk_ms: 0,
+  })),
   readSearchCacheMeta: vi.fn(async () => null),
   readSearchCacheShard: vi.fn(async () => null),
+  readSearchCacheStats: vi.fn(async () => null),
   writeSearchCacheMeta: (...a: unknown[]) => writeMeta(...a),
   writeSearchCacheShard: (...a: unknown[]) => writeShard(...a),
+  writeSearchCacheStats: (...a: unknown[]) => writeStats(...a),
   createNote: vi.fn(),
   createFolder: vi.fn(),
   deleteNote: vi.fn(),
@@ -85,6 +93,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 beforeEach(() => {
   writeMeta.mockClear();
   writeShard.mockClear();
+  writeStats.mockClear();
   seedIndex();
 });
 
@@ -121,15 +130,28 @@ describe("증분 재인덱싱 → 캐시 재저장", () => {
     expect(writeMeta.mock.calls[0]?.[3]).toBe(1);
   });
 
-  it("저장은 shard 다음에 meta — meta가 커밋 지점이다", async () => {
+  it("저장은 shard → stats → meta 순 — meta가 커밋 지점이다", async () => {
+    // stats가 meta **뒤로** 가면 "새 meta + 옛 stats"가 남아, 다음 기동의 델타가
+    // 바뀐 파일을 안 바뀐 것으로 판정한다(= 낡은 인덱스를 최신으로 고정).
     fullTextIndexReady.set(true);
     const order: string[] = [];
     writeShard.mockImplementation(async () => void order.push("shard"));
+    writeStats.mockImplementation(async () => void order.push("stats"));
     writeMeta.mockImplementation(async () => void order.push("meta"));
 
     await reindexIncremental(["/vault/a.md"], []);
     await flush();
-    expect(order).toEqual(["shard", "meta"]);
+    expect(order).toEqual(["shard", "stats", "meta"]);
+  });
+
+  it("stats 저장이 실패해도 meta는 커밋한다 — 델타는 최적화지 정확성이 아니다", async () => {
+    fullTextIndexReady.set(false);
+    writeStats.mockImplementationOnce(async () => {
+      throw new Error("disk full");
+    });
+    await reindexIncremental(["/vault/a.md"], []);
+    await flush();
+    expect(writeMeta).toHaveBeenCalledTimes(1);
   });
 
   it("파생 인덱스도 갱신된다(회귀 감시용 최소 확인)", async () => {

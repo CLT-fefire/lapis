@@ -730,15 +730,74 @@ pub async fn vault_fingerprint(vault_path: String) -> Result<VaultFingerprint, S
         .map_err(|e| format!("vault_fingerprint join: {e}"))?
 }
 
-fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String> {
+/// vault 파일 1건의 stat — **기동 델타 재조정**(`stores/vault.ts`)의 원자료.
+///
+/// `vault_fingerprint`는 "바뀌었다"만 알려주고 **무엇이** 바뀌었는지는 못 알려준다.
+/// 그래서 노트 1개가 바뀌어도 vault 전량 재빌드였다. 같은 walk의 원자료를 그대로
+/// 내보내면 프론트가 이전 스냅샷과 대조해 바뀐 파일만 고칠 수 있다.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FileStat {
+    /// **절대 경로.** `LinkInfo.source_path`와 같은 문자열이어야 델타를 그 키로 적용할 수
+    /// 있다 — fingerprint 쪽이 쓰는 상대 경로를 그대로 내보내면 프론트가 다시 join 해야
+    /// 하고, 그 join이 어긋나면 "전부 바뀐 것"으로 보여 델타가 매번 풀 빌드로 떨어진다.
+    pub path: String,
+    pub mtime_ms: u64,
+    pub size: u64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct VaultFileStats {
+    /// **이 목록과 같은 walk에서** 계산한 fingerprint. `vault_fingerprint`를 따로 부르면
+    /// 두 walk 사이에 vault가 바뀌어 목록과 해시가 어긋난 스냅샷을 커밋하게 된다.
+    pub fingerprint: String,
+    pub files: Vec<FileStat>,
+    pub walk_ms: u128,
+}
+
+/// 델타 계산용 — 정렬된 파일 stat 전량 + 같은 walk에서 계산한 fingerprint.
+///
+/// fingerprint가 어긋났을 때만 호출된다(hit 경로는 `vault_fingerprint`로 끝난다) —
+/// 19,000 파일 목록을 매 기동 IPC로 넘길 이유가 없다.
+#[tauri::command]
+pub async fn vault_file_stats(vault_path: String) -> Result<VaultFileStats, String> {
+    tauri::async_runtime::spawn_blocking(move || vault_file_stats_inner(&vault_path))
+        .await
+        .map_err(|e| format!("vault_file_stats join: {e}"))?
+}
+
+fn vault_file_stats_inner(vault_path: &str) -> Result<VaultFileStats, String> {
     let root = PathBuf::from(vault_path);
     if !root.is_dir() {
         return Err(format!("Not a directory: {}", vault_path));
     }
     let t0 = Instant::now();
-    // (rel_path, mtime_ms_or_0, size) — 정렬해 결정론적
-    let mut entries: Vec<(String, u128, u64)> = Vec::new();
-    walk_md_stats(&root, &root, &mut entries).map_err(|e| e.to_string())?;
+    let (entries, fingerprint) = walk_and_fingerprint(&root)?;
+    let files = entries
+        .into_iter()
+        .map(|(rel, mtime_ms, size)| FileStat {
+            // `rel`은 `strip_prefix(root)`의 결과라 join이 walk가 본 경로를 그대로 복원한다.
+            path: root.join(&rel).to_string_lossy().to_string(),
+            mtime_ms: mtime_ms as u64,
+            size,
+        })
+        .collect();
+    Ok(VaultFileStats {
+        fingerprint,
+        files,
+        walk_ms: t0.elapsed().as_millis(),
+    })
+}
+
+/// walk가 파일 1건에서 뽑는 것 — `(vault 상대 경로, mtime_ms, size)`.
+type WalkEntry = (String, u128, u64);
+
+/// 정렬된 `WalkEntry` 목록 + 그 위에서 계산한 fingerprint.
+///
+/// `vault_fingerprint`와 `vault_file_stats`의 **단일 진실원**. 두 곳에 따로 두면 정렬
+/// 기준이나 skip 규칙이 갈리는 순간 델타가 조용히 전량 변경으로 보인다.
+fn walk_and_fingerprint(root: &Path) -> Result<(Vec<WalkEntry>, String), String> {
+    let mut entries: Vec<WalkEntry> = Vec::new();
+    walk_md_stats(root, root, &mut entries).map_err(|e| e.to_string())?;
     entries.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut hasher = DefaultHasher::new();
@@ -747,7 +806,16 @@ fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String>
         m.hash(&mut hasher);
         s.hash(&mut hasher);
     }
-    let fingerprint = format!("{:016x}", hasher.finish());
+    Ok((entries, format!("{:016x}", hasher.finish())))
+}
+
+fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String> {
+    let root = PathBuf::from(vault_path);
+    if !root.is_dir() {
+        return Err(format!("Not a directory: {}", vault_path));
+    }
+    let t0 = Instant::now();
+    let (entries, fingerprint) = walk_and_fingerprint(&root)?;
     let walk_ms = t0.elapsed().as_millis();
 
     if perf_enabled() {
@@ -767,11 +835,7 @@ fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String>
 }
 
 /// vault root 기준 상대 경로 + mtime_ms(unix, 결정론) + file size를 수집.
-fn walk_md_stats(
-    root: &Path,
-    current: &Path,
-    out: &mut Vec<(String, u128, u64)>,
-) -> std::io::Result<()> {
+fn walk_md_stats(root: &Path, current: &Path, out: &mut Vec<WalkEntry>) -> std::io::Result<()> {
     for entry in fs::read_dir(current)? {
         let entry = entry?;
         let path = entry.path();
@@ -1534,6 +1598,61 @@ mod tests {
             ".mmd 추가 시 fingerprint 변경되어야 함"
         );
         assert_eq!(fp_after.file_count, 4);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn file_stats_paths_match_bundle_and_fingerprint() {
+        // 델타 재조정의 두 전제를 고정한다.
+        //
+        // ① **경로 문자열이 `LinkInfo.source_path`와 같아야 한다.** fingerprint 쪽은
+        //    상대 경로를 쓰는데 프론트는 절대 경로를 키로 델타를 적용한다. join이
+        //    어긋나면 전부 "새 파일"로 보여 델타가 매번 풀 빌드로 떨어진다 — 조용히,
+        //    느려지기만 하면서.
+        // ② **fingerprint가 `vault_fingerprint`의 것과 같아야 한다.** 두 값이 갈리면
+        //    stats 거부 판정(`stats_reject_reason`)이 항상 걸려 델타가 영영 안 돈다.
+        let dir = unique_tmp_dir("filestats");
+        fs::write(dir.join("a.md"), "# A").unwrap();
+        fs::write(dir.join("b.mmd"), "graph TD;").unwrap();
+        fs::create_dir_all(dir.join("sub")).unwrap();
+        fs::write(dir.join("sub/c.md"), "# C").unwrap();
+        let dir_str = dir.to_string_lossy().to_string();
+
+        let stats = vault_file_stats_inner(&dir_str).unwrap();
+        let bundle = read_vault_bundle_inner(&dir_str).unwrap();
+
+        let mut stat_paths: Vec<String> = stats.files.iter().map(|f| f.path.clone()).collect();
+        let mut link_paths: Vec<String> =
+            bundle.links.iter().map(|l| l.source_path.clone()).collect();
+        stat_paths.sort();
+        link_paths.sort();
+        assert_eq!(stat_paths, link_paths, "① stat 경로 = LinkInfo.source_path");
+
+        let fp = vault_fingerprint_inner(&dir_str).unwrap();
+        assert_eq!(stats.fingerprint, fp.fingerprint, "② 같은 walk = 같은 해시");
+        assert_eq!(stats.files.len(), fp.file_count);
+
+        // 내용을 바꾸면 그 파일의 stat만 달라져야 한다(= 델타가 1건).
+        fs::write(dir.join("a.md"), "# A longer body").unwrap();
+        let after = vault_file_stats_inner(&dir_str).unwrap();
+        let before_by_path: std::collections::HashMap<_, _> =
+            stats.files.iter().map(|f| (&f.path, f)).collect();
+        let changed: Vec<&str> = after
+            .files
+            .iter()
+            .filter(|f| match before_by_path.get(&f.path) {
+                Some(b) => b.mtime_ms != f.mtime_ms || b.size != f.size,
+                None => true,
+            })
+            .map(|f| f.path.as_str())
+            .collect();
+        assert_eq!(
+            changed.len(),
+            1,
+            "바뀐 파일만 델타에 잡혀야 한다: {changed:?}"
+        );
+        assert!(changed[0].ends_with("a.md"), "changed={changed:?}");
 
         fs::remove_dir_all(&dir).ok();
     }
