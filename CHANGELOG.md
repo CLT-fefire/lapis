@@ -14,7 +14,7 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
-## [Unreleased]
+## [1.14.0] — 2026-08-26
 
 ### Added
 - **Windows (x64) support** ([#196]). The app builds and runs on Windows 10+ next to macOS, and CI now
@@ -526,7 +526,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.13.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.14.0...main
+[1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
