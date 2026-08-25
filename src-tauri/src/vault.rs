@@ -1,3 +1,4 @@
+use crate::uipath::to_ui;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -90,7 +91,7 @@ pub fn create_note(
     }
 
     atomic_write(&target, &content)?;
-    Ok(target.to_string_lossy().to_string())
+    Ok(to_ui(&target))
 }
 
 /// 새 폴더 생성. 이미 있으면 에러.
@@ -111,7 +112,7 @@ pub fn create_folder(
         return Err("parent outside vault".to_string());
     }
     fs::create_dir(&target).map_err(|e| format!("create_dir failed: {e}"))?;
-    Ok(target.to_string_lossy().to_string())
+    Ok(to_ui(&target))
 }
 
 /// 노트(또는 폴더) 휴지통 이동. .md 강제 + vault confine.
@@ -167,7 +168,7 @@ pub fn rename_note(
     let new_path = parent.join(&name);
 
     if new_path == old_canon {
-        return Ok(new_path.to_string_lossy().to_string());
+        return Ok(to_ui(&new_path));
     }
     if new_path.exists() {
         return Err(format!("target already exists: {}", new_path.display()));
@@ -177,7 +178,7 @@ pub fn rename_note(
     }
 
     fs::rename(&old_canon, &new_path).map_err(|e| format!("rename failed: {e}"))?;
-    Ok(new_path.to_string_lossy().to_string())
+    Ok(to_ui(&new_path))
 }
 
 /// 노트(또는 폴더) 이동 — 같은 vault 내 다른 폴더로.
@@ -200,14 +201,14 @@ pub fn move_note(
     let new_path = new_parent.join(file_name);
 
     if new_path == source {
-        return Ok(new_path.to_string_lossy().to_string());
+        return Ok(to_ui(&new_path));
     }
     if new_path.exists() {
         return Err(format!("target already exists: {}", new_path.display()));
     }
 
     fs::rename(&source, &new_path).map_err(|e| format!("move failed: {e}"))?;
-    Ok(new_path.to_string_lossy().to_string())
+    Ok(to_ui(&new_path))
 }
 
 /// 노트와 같은 폴더에서 같은 stem으로 시작하는 이미지 파일들을 찾는다.
@@ -273,7 +274,7 @@ pub fn find_assets_for_note(
         };
         out.push(AssetInfo {
             name: fname.to_string(),
-            abs_path: path.to_string_lossy().to_string(),
+            abs_path: to_ui(&path),
             kind: ext_lower,
         });
     }
@@ -343,7 +344,7 @@ pub fn backup_notes(
         fs::copy(&src_canon, &dst).map_err(|e| format!("backup copy failed ({src}): {e}"))?;
     }
 
-    Ok(backup_root_canon.to_string_lossy().to_string())
+    Ok(to_ui(&backup_root_canon))
 }
 
 /// 링크 자동 갱신 백업 디렉토리(`.lapis/link-rewrite-backup/`) 안에서
@@ -629,7 +630,7 @@ fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
             let content = NoteContent {
-                path: path.to_string_lossy().to_string(),
+                path: to_ui(path),
                 name: stem,
                 body,
             };
@@ -776,7 +777,7 @@ fn vault_file_stats_inner(vault_path: &str) -> Result<VaultFileStats, String> {
         .into_iter()
         .map(|(rel, mtime_ms, size)| FileStat {
             // `rel`은 `strip_prefix(root)`의 결과라 join이 walk가 본 경로를 그대로 복원한다.
-            path: root.join(&rel).to_string_lossy().to_string(),
+            path: to_ui(root.join(&rel)),
             mtime_ms: mtime_ms as u64,
             size,
         })
@@ -933,7 +934,7 @@ fn extract_link_info(path: &Path, content: &str) -> LinkInfo {
     // extract_inline_tags / is_heading_line 함수는 향후 복원 여지를 위해 dead code로 유지.
 
     LinkInfo {
-        source_path: path.to_string_lossy().to_string(),
+        source_path: to_ui(path),
         source_name,
         title,
         aliases,
@@ -1409,7 +1410,7 @@ fn walk_dir(root: &Path, current: &Path) -> std::io::Result<Vec<NoteEntry>> {
                 continue;
             }
             entries.push(NoteEntry {
-                path: path.to_string_lossy().to_string(),
+                path: to_ui(&path),
                 rel_path,
                 name,
                 is_dir: true,
@@ -1421,7 +1422,7 @@ fn walk_dir(root: &Path, current: &Path) -> std::io::Result<Vec<NoteEntry>> {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| name.clone());
             entries.push(NoteEntry {
-                path: path.to_string_lossy().to_string(),
+                path: to_ui(&path),
                 rel_path,
                 name: stem,
                 is_dir: false,

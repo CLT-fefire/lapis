@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::uipath::to_ui;
 
 const DEBOUNCE_MS: u64 = 200;
 const SKIP_DIRS: &[&str] = &[
@@ -101,6 +103,22 @@ pub fn watch_vault(
         return Err(format!("not a directory: {vault_path}"));
     }
     let canon_root = root.canonicalize().map_err(|e| e.to_string())?;
+
+    // 열린 vault를 asset 프로토콜 스코프에 등록한다 — 노트 안의 이미지가 로드되는 근거다.
+    //
+    // `tauri.conf.json`의 정적 scope는 `$HOME/**`·`/Volumes/**`처럼 macOS 배치를
+    // 전제한다. Windows에서 vault가 `D:\notes`처럼 사용자 폴더 밖에 있으면 정적
+    // scope가 닿지 않아 이미지가 통째로 깨진다. 드라이브 문자를 설정에 하드코딩하는
+    // 대신 **지금 열린 vault만** 런타임에 허용한다 — 정적 scope보다 오히려 좁다.
+    //
+    // ⚠️ 두 형태를 모두 등록한다. Windows `canonicalize()`는 `\\?\C:\...`(확장 길이)를
+    // 내는데, 프런트가 `convertFileSrc`에 넘기는 것은 `to_ui()`를 거친 `C:/...`다.
+    // 한쪽만 등록하면 패턴이 어긋나 조용히 막힌다(에러 없이 이미지만 안 뜬다).
+    for candidate in [canon_root.clone(), PathBuf::from(to_ui(&canon_root))] {
+        app.asset_protocol_scope()
+            .allow_directory(&candidate, true)
+            .map_err(|e| format!("asset scope 등록 실패: {e}"))?;
+    }
 
     {
         let mut map = state.0.lock().map_err(|e| e.to_string())?;
@@ -286,7 +304,7 @@ fn flush_bucket(bucket: &mut DebounceBucket, app: &AppHandle, root: &Path) {
 
     let pending = std::mem::take(&mut bucket.pending);
     for (path, change) in pending {
-        let path_str = path.to_string_lossy().to_string();
+        let path_str = to_ui(&path);
         let payload = match change {
             PendingChange::CreatedOrModified => {
                 if path.exists() {
@@ -309,7 +327,7 @@ fn flush_bucket(bucket: &mut DebounceBucket, app: &AppHandle, root: &Path) {
             }
             PendingChange::Removed => VaultChange::Removed { path: path_str },
             PendingChange::RenamedFrom(from) => VaultChange::Renamed {
-                from: from.to_string_lossy().to_string(),
+                from: to_ui(&from),
                 to: path_str,
             },
         };

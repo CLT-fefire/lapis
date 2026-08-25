@@ -59,10 +59,18 @@ jobs:
         run: npm run build
 
   rust:
-    name: Rust — fmt · clippy · check · test (macOS)
-    # Tauri 앱은 macOS 전용이다. Linux에서 cargo check를 돌리면 webkit2gtk 계열
-    # 의존을 요구해 실제 타깃과 다른 것을 검증하게 된다.
-    runs-on: macos-latest
+    name: Rust — fmt · clippy · check · test (${{ matrix.os }})
+    # macOS와 Windows **양쪽**에서 돌린다. 경로 처리가 두 OS에서 갈리기 때문이다 —
+    # Windows는 구분자가 `\`이고 `canonicalize()`가 `\\?\` 확장 길이 경로를 낸다.
+    # 한쪽만 검증하면 `uipath::to_ui` 같은 경계 정규화가 조용히 썩는다.
+    #
+    # Linux는 뺀다. 배포 타깃이 아닌데 cargo check를 돌리면 webkit2gtk 계열 의존을
+    # 요구해 실제 타깃과 다른 것을 검증하게 된다.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -85,7 +93,9 @@ jobs:
         run: npm run build
 
       # 포맷·린트를 먼저 — 컴파일보다 싸고, 실패 원인이 한눈에 보인다.
+      # fmt는 플랫폼과 무관하므로 한 곳에서만 본다(양쪽에서 돌리면 같은 실패가 두 번 뜬다).
       - name: cargo fmt --check
+        if: matrix.os == 'macos-latest'
         working-directory: src-tauri
         run: cargo fmt --check
 

@@ -16,6 +16,24 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Windows (x64) 지원** ([#196]). macOS와 나란히 Windows 10+에서 빌드·실행된다. CI의 Rust 검사·테스트도
+  이제 **양쪽**에서 돈다. 세 가지를 고쳐야 했다. **경로** — Rust는 프런트에 `\` 구분자 문자열을 넘기는데
+  프런트는 20여 곳에서 `/`로 쪼갠다. 게다가 Windows `canonicalize()`는 확장 길이 경로(`\\?\C:\...`)를
+  낸다. 경계 헬퍼 하나(`uipath::to_ui`)가 둘 다 정규화하고, MCP 서버도 같은 계약(`normPath`)을 갖는다.
+  **이미지** — 정적 asset 프로토콜 scope가 macOS 배치를 전제해서, vault가 사용자 폴더 밖(`D:\notes`)이면
+  이미지가 **하나도** 안 떴다. 이제 열린 vault를 런타임에 등록한다 — 정적 scope보다 오히려 *좁다*.
+  **단축키** — 존재하지도 않는 `⌘K`를 팔레트가 그대로 보여주고 있었다. 라벨과 샘플 노트를 표시 시점에
+  `Ctrl+K`로 바꾼다.
+
+### Fixed
+- **지식 질의 MCP 서버가 Windows에서 캐시를 영영 찾지 못하던 것** ([#196]). 앱 데이터 경로가
+  `~/Library/Application Support`로 박혀 있어, 인덱스가 멀쩡해도 모든 질의가 `cache_absent`로 답했다.
+
+---
+
 ## [1.13.0] — 2026-08-24
 
 ### Changed
@@ -492,7 +510,7 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.13.0...main
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
@@ -526,6 +544,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#196]: https://github.com/eren0315/lapis/pull/196
 [#193]: https://github.com/eren0315/lapis/pull/193
 [#192]: https://github.com/eren0315/lapis/pull/192
 [#191]: https://github.com/eren0315/lapis/pull/191

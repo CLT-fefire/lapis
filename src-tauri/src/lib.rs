@@ -2,6 +2,7 @@ mod git;
 mod paths;
 mod search_cache;
 mod settings;
+mod uipath;
 mod vault;
 mod watcher;
 

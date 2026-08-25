@@ -3,6 +3,7 @@
   import { tick } from "svelte";
   import { fade, scale } from "svelte/transition";
   import { backdropFade, cardPop } from "$lib/motion";
+  import { formatShortcut } from "$lib/shortcutLabel";
   import { paletteOpen, paletteHintMode, paletteIntent, closePalette } from "$lib/stores/palette";
   import {
     fullTextIndexReady,
@@ -437,7 +438,7 @@
               >
                 <div class="title">{e.command.label}</div>
                 {#if e.command.shortcut}
-                  <div class="shortcut">{e.command.shortcut}</div>
+                  <div class="shortcut">{formatShortcut(e.command.shortcut)}</div>
                 {/if}
               </button>
             {/if}

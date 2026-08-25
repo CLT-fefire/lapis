@@ -14,6 +14,26 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Windows (x64) support** ([#196]). The app builds and runs on Windows 10+ next to macOS, and CI now
+  runs the Rust checks and tests on **both**. Three things had to change. **Paths** — Rust handed the
+  frontend `\`-separated strings while the frontend splits on `/` in about twenty places, and Windows
+  `canonicalize()` returns extended-length paths (`\\?\C:\...`); one boundary helper (`uipath::to_ui`)
+  now normalizes both, with the same contract mirrored in the MCP server (`normPath`). **Images** — the
+  static asset-protocol scope assumed a macOS layout, so a vault outside the user profile (`D:\notes`)
+  rendered no images at all; the opened vault is now registered at runtime instead, which is also
+  *narrower* than the static scope. **Shortcuts** — the palette showed `⌘K` on a machine where that key
+  does not exist, so labels and the sample notes are rewritten to `Ctrl+K` at display time.
+
+### Fixed
+- **The knowledge-query MCP server could never find its cache on Windows** ([#196]). The app-data
+  directory was hardcoded to `~/Library/Application Support`, so every query answered `cache_absent`
+  no matter how healthy the index was.
+
+---
+
 ## [1.13.0] — 2026-08-24
 
 ### Changed
@@ -506,7 +526,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.12.1...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.13.0...main
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
@@ -540,6 +560,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#196]: https://github.com/eren0315/lapis/pull/196
 [#193]: https://github.com/eren0315/lapis/pull/193
 [#192]: https://github.com/eren0315/lapis/pull/192
 [#191]: https://github.com/eren0315/lapis/pull/191

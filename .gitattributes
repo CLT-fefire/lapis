@@ -1,0 +1,21 @@
+# 개행 정책 — macOS와 Windows 양쪽에서 개발한다.
+#
+# `core.autocrlf` 값은 사람·머신마다 다르고, 그 차이가 저장소로 새면 diff가
+# 통째로 뒤집힌다. 여기서 못박아 개인 설정보다 우선하게 한다.
+#
+# ⚠️ `eol=lf`는 **작업 트리까지** LF로 고정한다. Windows에서 CRLF로 체크아웃되면
+# `mcp/lapis-mcp` 같은 `#!/bin/sh` 래퍼가 CRLF째로 커밋될 수 있고, 그러면 macOS에서
+# `bad interpreter` 로 죽는다. 요즘 편집기는 전부 LF를 다루므로 손해가 없다.
+* text=auto eol=lf
+
+# 셸 래퍼 — 확장자가 없어 자동 판별에 기대지 않고 명시한다. LF가 깨지면 실행 자체가 안 된다.
+mcp/lapis-mcp   text eol=lf
+mcp/lapis-bench text eol=lf
+mcp/lapis-eval  text eol=lf
+
+# 바이너리 — 개행 변환 대상이 아니다.
+*.png   binary
+*.ico   binary
+*.icns  binary
+*.svg   text eol=lf
+*.gz    binary

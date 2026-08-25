@@ -14,6 +14,7 @@
  */
 
 import { getLocale } from "$lib/paraglide/runtime.js";
+import { localizeShortcutsInMarkdown } from "$lib/shortcutLabel";
 
 const WELCOME_DOC_EN = `---
 title: Getting started with Lapis
@@ -201,7 +202,7 @@ graph LR
 
 /** vault 미선택 시 프리뷰에 띄우는 안내 문서. 호출 시점 로케일로 고른다. */
 export function welcomeDoc(): string {
-  return getLocale() === "ko" ? WELCOME_DOC_KO : WELCOME_DOC_EN;
+  return localizeShortcutsInMarkdown(getLocale() === "ko" ? WELCOME_DOC_KO : WELCOME_DOC_EN);
 }
 
 /**
@@ -211,5 +212,5 @@ export function welcomeDoc(): string {
  * 그대로다. 만들 때의 언어로 남는 게 맞다(사용자 문서를 앱이 나중에 바꾸면 안 된다).
  */
 export function welcomeNote(): string {
-  return getLocale() === "ko" ? WELCOME_NOTE_KO : WELCOME_NOTE_EN;
+  return localizeShortcutsInMarkdown(getLocale() === "ko" ? WELCOME_NOTE_KO : WELCOME_NOTE_EN);
 }

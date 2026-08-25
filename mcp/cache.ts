@@ -32,13 +32,32 @@ export const CACHE_VERSION = 7;
  * 앱에서도 같은 함정을 겪었다 — 창 라벨을 모듈 로드 시점에 굳혀 보조 창이 남의 vault를
  * 열었다(`stores/vault.ts`의 `vaultStorageKey` 주석). **호출 시점에 계산한다.**
  */
+/**
+ * Tauri `app_data_dir`의 **부모** — 앱이 `paths.rs`에서 쓰는 것과 같은 자리를 짚어야 한다.
+ * 어긋나면 MCP가 캐시를 영영 못 찾고 `cache_absent`만 낸다.
+ *
+ * | OS      | Tauri app_data_dir 부모                  |
+ * |---------|------------------------------------------|
+ * | macOS   | `~/Library/Application Support`          |
+ * | Windows | `%APPDATA%` (Roaming)                    |
+ * | Linux   | `$XDG_DATA_HOME` 또는 `~/.local/share`   |
+ */
+function appDataBase(): string {
+  if (process.platform === "win32") {
+    return process.env.APPDATA ?? path.join(homedir(), "AppData", "Roaming");
+  }
+  if (process.platform === "darwin") {
+    return path.join(homedir(), "Library", "Application Support");
+  }
+  return process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share");
+}
+
 function cacheDirs(): string[] {
   const override = process.env.LAPIS_CACHE_DIR;
   if (override) return [override];
-  const base = path.join(homedir(), "Library/Application Support");
   return [
-    path.join(base, "com.lapis.dev", "search-cache"), // 릴리즈
-    path.join(base, "com.lapis.dev-dev", "search-cache"), // dev 빌드
+    path.join(appDataBase(), "com.lapis.dev", "search-cache"), // 릴리즈
+    path.join(appDataBase(), "com.lapis.dev-dev", "search-cache"), // dev 빌드
   ];
 }
 
@@ -104,11 +123,23 @@ export function mcpDisabledError(state: Extract<GateState, { enabled: false }>):
 export const norm = (s: string): string => s.normalize("NFC");
 
 /**
+ * **경로 전용** 정규형 — NFC에 더해 구분자를 `/`로 통일한다.
+ *
+ * `norm()`을 그대로 쓰지 않는 이유 — `norm()`은 태그에도 쓰인다(`tech/svelte5`).
+ * 거기서 `\`를 `/`로 바꾸면 데이터를 변조하게 된다. 경로만 이 함수를 쓴다.
+ *
+ * ⚠️ Windows에서 `path.resolve`·`path.join`·`readdir` 결과는 `\` 구분자다.
+ * 캐시 meta의 root와 vault 인자를 한쪽만 정규화하면 **같은 vault가 서로 다른 것으로
+ * 보여** `vault_not_found`가 난다. 경로가 드나드는 모든 경계에서 이 함수를 통과시킨다.
+ */
+export const normPath = (s: string): string => norm(s).replace(/\\/g, "/");
+
+/**
  * `vault` 인자의 정규형. **`resolveVault`와 캐시 재사용 판정이 같은 함수를 써야 한다** —
  * 한쪽만 `norm()`을 하면 후행 슬래시 하나로 매 호출 전체 재로드가 일어난다(실측).
  */
 export const normalizeVaultArg = (v: string): string =>
-  norm(path.resolve(v)).replace(/\/+$/, "");
+  normPath(path.resolve(v)).replace(/\/+$/, "");
 
 export type ErrorKind =
   | "cache_absent"
@@ -218,7 +249,7 @@ function listCandidates(): Candidate[] {
         try {
           const infos = parsed.link_infos ?? [];
           hintSize = infos.length;
-          hintRoot = deriveRoot(infos.map((i) => norm(i.source_path)));
+          hintRoot = deriveRoot(infos.map((i) => normPath(i.source_path)));
         } catch {
           /* 힌트 없음 — size -1로 남긴다 */
         }
@@ -235,7 +266,7 @@ function listCandidates(): Candidate[] {
         });
         continue;
       }
-      for (const i of parsed.link_infos) i.source_path = norm(i.source_path);
+      for (const i of parsed.link_infos) i.source_path = normPath(i.source_path);
       out.push({
         key,
         dir,
@@ -501,7 +532,7 @@ export function checkStale(vc: VaultCache): Staleness {
       else if (e.name.endsWith(".md")) {
         total++;
         const m = statSync(p).mtimeMs;
-        if (m > metaMs) newer.push({ ms: m, rel: norm(p).slice(cut) });
+        if (m > metaMs) newer.push({ ms: m, rel: normPath(p).slice(cut) });
       }
     }
   };
