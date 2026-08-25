@@ -14,6 +14,7 @@
 //! non-`_memories` 문서뿐이라 가볍다. 커밋은 user.name/email을 인라인(`-c`)으로 지정해
 //! 전역 git config에 의존하지 않는다.
 
+use crate::uipath::to_ui;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -34,7 +35,7 @@ fn rel_in_vault(vault: &Path, path: &str) -> Result<String, String> {
     let rel = target
         .strip_prefix(vault)
         .map_err(|_| "path가 vault 밖입니다".to_string())?;
-    Ok(rel.to_string_lossy().replace('\\', "/"))
+    Ok(to_ui(rel))
 }
 
 /// 변경 노트 절대경로 → vault 기준 상대경로(POSIX). **삭제되어 존재하지 않아도 동작**한다
@@ -59,7 +60,7 @@ fn rel_for_add(vault: &Path, path: &str) -> Option<String> {
     {
         return None;
     }
-    Some(rel.to_string_lossy().replace('\\', "/"))
+    Some(to_ui(&rel))
 }
 
 /// git 실행 — 인자 배열(shell 미경유). 성공 시 stdout, 실패 시 stderr(trim).

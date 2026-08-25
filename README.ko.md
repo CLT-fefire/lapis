@@ -1,12 +1,12 @@
 # Lapis
 
-> 로컬 마크다운을 **백링크 · 태그 · 풀텍스트 검색**으로 항해하는 개인용 지식 워크벤치 — macOS 네이티브
+> 로컬 마크다운을 **백링크 · 태그 · 풀텍스트 검색**으로 항해하는 개인용 지식 워크벤치 — macOS · Windows
 
 [English](README.md) · **한국어**
 
 [![CI](https://github.com/eren0315/lapis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/eren0315/lapis/actions/workflows/ci.yml)
 ![version](https://img.shields.io/github/v/tag/eren0315/lapis?label=version&color=1f6feb)
-![platform](https://img.shields.io/badge/platform-macOS_11%2B_(Apple_Silicon)-black)
+![platform](https://img.shields.io/badge/platform-macOS_11%2B_%7C_Windows_10%2B-black)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)
@@ -87,9 +87,14 @@ npm install
 npm run tauri build
 ```
 
-산출물은 `src-tauri/target/release/bundle/`에 생깁니다. `Lapis.app`을 `/Applications`로 옮기면 됩니다.
+산출물은 `src-tauri/target/release/bundle/`에 생깁니다.
 
-> 개인용 도구라 배포·지원을 전제로 만들지 않았습니다. macOS 11+ / Apple Silicon에서 개발·검증합니다.
+- **macOS** — `Lapis.app`을 `/Applications`로 옮기면 됩니다.
+- **Windows** — `bundle/nsis/`(또는 `bundle/msi/`)의 인스톨러를 실행하세요.
+
+> 개인용 도구라 배포·지원을 전제로 만들지 않았습니다. 일상 개발은 macOS 11+ / Apple Silicon에서 하고,
+> Windows 10+ (x64)는 CI가 Rust 검사·테스트를 양쪽에서 돌려 동작을 유지합니다. 다만 Windows는 손으로
+> 쓰는 시간이 훨씬 적으니 거친 부분이 있을 수 있습니다.
 
 버전별 변경 내역은 [`CHANGELOG.ko.md`](CHANGELOG.ko.md)에 있습니다 — GitHub Releases를 쓰지 않으므로 여기가 릴리즈 노트를 대신합니다. 원본은 영어판 [`CHANGELOG.md`](CHANGELOG.md)입니다.
 
@@ -178,7 +183,7 @@ Lapis가 만든 검색 인덱스를 MCP 서버로 노출합니다. 도구는 **�
 
 | 구분 | 스택 |
 |---|---|
-| 앱 | Tauri 2 (macOS 데스크톱, Apple Silicon) |
+| 앱 | Tauri 2 (macOS Apple Silicon · Windows x64) |
 | Frontend | SvelteKit 2 + Svelte 5 (룬) + TypeScript 5 + Vite 6 |
 | Backend | Rust (`std::fs`/`std::path` 중심, 외부 crate 최소) |
 | 에디터 | CodeMirror 6 |
@@ -215,7 +220,15 @@ lapis/
 
 ## 개발
 
-**요구사항** — Node LTS, Rust stable(Tauri 2 요구 버전), Xcode Command Line Tools.
+**요구사항** — Node LTS와 Rust stable(Tauri 2 요구 버전), 그리고 플랫폼별 툴체인:
+
+- **macOS** — Xcode Command Line Tools.
+- **Windows** — Visual Studio Build Tools의 **C++를 사용한 데스크톱 개발** 워크로드(MSVC 링커. Rust의
+  `x86_64-pc-windows-msvc` 타깃은 이게 없으면 링크 자체가 안 됩니다)와 WebView2 런타임(Windows 11 기본 탑재).
+
+> ⚠️ **Windows에서 `cargo`는 Git Bash가 아니라 PowerShell에서 돌리세요.** Git이 자체 `link.exe`(coreutils
+> `link`)를 `PATH`에 올려 MSVC 링커를 가립니다. 증상은 `error: linking with `link.exe` failed`에
+> `Try 'link --help'` 힌트가 붙어 나오는데, 실제 원인과 전혀 다른 곳을 가리킵니다.
 
 ```bash
 npm install
@@ -234,16 +247,21 @@ cd src-tauri && cargo check    # Rust 타입 체크
 빌드:
 
 ```bash
-npm run tauri build                                    # dmg (호스트 아키텍처)
-npm run tauri build -- --target universal-apple-darwin # universal binary
+npm run tauri build                                    # 호스트 플랫폼 (macOS dmg / Windows nsis + msi)
+npm run tauri build -- --target universal-apple-darwin # macOS universal binary
+npm run tauri build -- --bundles nsis                  # Windows 인스톨러만
 ```
 
 > ⚠️ **dev 빌드와 설치본은 앱 데이터 디렉터리가 분리돼 있습니다**(`com.lapis.dev-dev` vs `com.lapis.dev`). 예전엔 공유해서 두 빌드가 서로의 검색 캐시를 덮어쓰며 재인덱싱을 반복했습니다. → `src-tauri/src/paths.rs`
 
 ## 트러블슈팅
 
-**앱이 열리지 않습니다 / "확인할 수 없는 개발자"**
+**앱이 열리지 않습니다 / "확인할 수 없는 개발자" (macOS)**
 직접 빌드한 앱은 서명이 없어 Gatekeeper가 막습니다. `xattr -dr com.apple.quarantine /Applications/Lapis.app` 후 다시 여세요.
+
+**"Windows의 PC 보호" 경고 (Windows)**
+빌드에 서명이 없어 SmartScreen이 먼저 경고합니다. **추가 정보 → 실행**을 누르면 됩니다.
+이 빌드들 뒤에는 코드 서명 인증서가 없으며, 빌드·실행에 서명이 필요하지도 않습니다.
 
 **검색 결과가 안 나옵니다**
 첫 인덱싱이 아직 도는 중일 수 있습니다. 태그·백링크가 비어 보이는 것도 같은 이유입니다. 큰 vault는 잠시 기다리세요.
@@ -261,7 +279,7 @@ vault가 캐시보다 새롭다는 뜻입니다. 앱이 떠 있으면 watcher가
 
 개인 편의를 위해 만든 도구라 로드맵은 제 사용 패턴을 따라갑니다. 제가 쓰지 않는 기능은 우선순위가 낮고, 요청을 받아도 못 넣을 수 있습니다.
 
-그래도 버그 리포트는 **환영합니다** — 제가 안 밟아본 경로에서 깨지는 걸 알 방법이 그것뿐입니다. [Issues](https://github.com/eren0315/lapis/issues)에 재현 절차와 macOS 버전을 남겨 주세요. PR을 보내실 거면 먼저 이슈로 방향을 맞춰 주세요.
+그래도 버그 리포트는 **환영합니다** — 제가 안 밟아본 경로에서 깨지는 걸 알 방법이 그것뿐입니다. [Issues](https://github.com/eren0315/lapis/issues)에 재현 절차와 OS·버전(macOS / Windows)을 남겨 주세요. PR을 보내실 거면 먼저 이슈로 방향을 맞춰 주세요.
 
 ## 라이선스
 

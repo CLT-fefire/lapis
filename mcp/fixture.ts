@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import MiniSearch from "minisearch";
 import { FULLTEXT_OPTIONS, type FullTextDoc, type LinkInfo } from "./entry.ts";
-import { CACHE_VERSION } from "./cache.ts";
+import { CACHE_VERSION, normPath, normalizeVaultArg } from "./cache.ts";
 
 export interface FixtureNote {
   rel: string;
@@ -69,7 +69,10 @@ export function makeFixture(
 ): Fixture {
   const cacheDir = mkdtempSync(path.join(tmpdir(), "lapis-mcp-fixture-"));
   created.push(cacheDir);
-  const vaultRoot = opts.vaultRoot ?? path.join(cacheDir, "vault");
+  // ⚠️ `/` 정규화한 뒤 쓴다. Windows에서 `path.join`은 `\` 구분자를 내는데,
+  // 캐시가 담는 경로와 MCP가 내보내는 경로는 항상 `/`다(`normPath`). 픽스처만
+  // 원본 구분자를 쓰면 테스트가 프로덕션과 다른 계약을 검증하게 된다.
+  const vaultRoot = normPath(opts.vaultRoot ?? path.join(cacheDir, "vault"));
   const key = "fixturekey000001";
   const fingerprint = opts.fingerprint ?? "f1f1f1f1f1f1f1f1";
 
@@ -147,7 +150,7 @@ export function addSiblingMeta(
   },
 ): void {
   const infos = Array.from({ length: opts.noteCount }, (_, i) => ({
-    source_path: `${opts.vaultRoot}/n${i}.md`,
+    source_path: `${normalizeVaultArg(opts.vaultRoot)}/n${i}.md`,
     source_name: `n${i}`,
     title: null,
     aliases: [],

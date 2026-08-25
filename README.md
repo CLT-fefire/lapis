@@ -1,12 +1,12 @@
 # Lapis
 
-> A personal knowledge workbench for navigating local Markdown through **backlinks, tags, and full-text search** — native macOS
+> A personal knowledge workbench for navigating local Markdown through **backlinks, tags, and full-text search** — macOS and Windows
 
 **English** · [한국어](README.ko.md)
 
 [![CI](https://github.com/eren0315/lapis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/eren0315/lapis/actions/workflows/ci.yml)
 ![version](https://img.shields.io/github/v/tag/eren0315/lapis?label=version&color=1f6feb)
-![platform](https://img.shields.io/badge/platform-macOS_11%2B_(Apple_Silicon)-black)
+![platform](https://img.shields.io/badge/platform-macOS_11%2B_%7C_Windows_10%2B-black)
 ![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
 ![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)
@@ -87,9 +87,14 @@ npm install
 npm run tauri build
 ```
 
-The output lands in `src-tauri/target/release/bundle/`. Move `Lapis.app` into `/Applications`.
+The output lands in `src-tauri/target/release/bundle/`.
 
-> This is a personal tool, not built with distribution or support in mind. Development and testing happen on macOS 11+ / Apple Silicon.
+- **macOS** — move `Lapis.app` into `/Applications`.
+- **Windows** — run the installer under `bundle/nsis/` (or `bundle/msi/`).
+
+> This is a personal tool, not built with distribution or support in mind. Day-to-day development happens on
+> macOS 11+ / Apple Silicon; Windows 10+ (x64) is kept working by CI, which runs the Rust checks and tests on
+> both. Windows sees far less hands-on use, so expect rougher edges there.
 
 Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository does not use GitHub Releases, so that file stands in for release notes. A Korean translation is at [`CHANGELOG.ko.md`](CHANGELOG.ko.md).
 
@@ -179,7 +184,7 @@ The contract, error kinds, and measurements are in [`mcp/README.md`](mcp/README.
 
 | Area | Stack |
 |---|---|
-| App | Tauri 2 (macOS desktop, Apple Silicon) |
+| App | Tauri 2 (macOS on Apple Silicon · Windows x64) |
 | Frontend | SvelteKit 2 + Svelte 5 (runes) + TypeScript 5 + Vite 6 |
 | Backend | Rust (`std::fs`/`std::path`-centric, minimal external crates) |
 | Editor | CodeMirror 6 |
@@ -216,7 +221,16 @@ lapis/
 
 ## Development
 
-**Requirements** — Node LTS, Rust stable (the version Tauri 2 requires), Xcode Command Line Tools.
+**Requirements** — Node LTS and Rust stable (the version Tauri 2 requires), plus the platform toolchain:
+
+- **macOS** — Xcode Command Line Tools.
+- **Windows** — Visual Studio Build Tools with the **Desktop development with C++** workload (the MSVC linker;
+  Rust's `x86_64-pc-windows-msvc` target cannot link without it), and the WebView2 runtime (preinstalled on
+  Windows 11).
+
+> ⚠️ **On Windows, run `cargo` from PowerShell, not Git Bash.** Git ships its own `link.exe` (the coreutils
+> `link`) on `PATH`, which shadows the MSVC linker. The failure surfaces as `error: linking with `link.exe`
+> failed` with a `Try 'link --help'` hint, which points nowhere near the real cause.
 
 ```bash
 npm install
@@ -235,16 +249,21 @@ cd src-tauri && cargo check    # Rust type check
 Builds:
 
 ```bash
-npm run tauri build                                    # dmg (host architecture)
-npm run tauri build -- --target universal-apple-darwin # universal binary
+npm run tauri build                                    # host platform (macOS dmg / Windows nsis + msi)
+npm run tauri build -- --target universal-apple-darwin # macOS universal binary
+npm run tauri build -- --bundles nsis                  # Windows installer only
 ```
 
 > ⚠️ **Dev builds and the installed app use separate app data directories** (`com.lapis.dev-dev` vs `com.lapis.dev`). They used to share one, so the two builds kept overwriting each other's search cache and re-indexing. → `src-tauri/src/paths.rs`
 
 ## Troubleshooting
 
-**The app won't open / "unidentified developer"**
+**The app won't open / "unidentified developer" (macOS)**
 A self-built app is unsigned, so Gatekeeper blocks it. Run `xattr -dr com.apple.quarantine /Applications/Lapis.app` and open it again.
+
+**"Windows protected your PC" (Windows)**
+The build is unsigned, so SmartScreen warns before running it. Choose **More info → Run anyway**. There is no
+code-signing certificate behind these builds, and signing is not required to build or run the app.
 
 **No search results**
 The first index build may still be running — the same reason tags and backlinks can look empty. Give a large vault a moment.
@@ -262,7 +281,7 @@ The vault is newer than the cache. A running app's watcher refreshes it, but **c
 
 This is a tool built for my own convenience, so the roadmap follows how I use it. Features I don't use are low priority, and I may not be able to take a request even after hearing it.
 
-Bug reports are genuinely **welcome**, though — they're the only way I learn where things break on paths I never walk. Please include reproduction steps and your macOS version in [Issues](https://github.com/eren0315/lapis/issues). If you plan to send a PR, open an issue first so we can agree on direction.
+Bug reports are genuinely **welcome**, though — they're the only way I learn where things break on paths I never walk. Please include reproduction steps and your OS and version (macOS / Windows) in [Issues](https://github.com/eren0315/lapis/issues). If you plan to send a PR, open an issue first so we can agree on direction.
 
 ## License
 
