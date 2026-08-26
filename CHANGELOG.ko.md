@@ -16,7 +16,7 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
-## [Unreleased]
+## [1.16.0] — 2026-08-26
 
 ### Added
 - **커맨드라인 도구** ([#210]). MCP가 에이전트에게 열어주는 그 인덱스를 이제 터미널에서도 쓴다.
@@ -625,7 +625,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.15.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.16.0]: https://github.com/eren0315/lapis/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
