@@ -14,7 +14,7 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
-## [Unreleased]
+## [1.15.0] — 2026-08-26
 
 ### Added
 - **Rename or merge a tag across the vault** ([#202]). Tags form a `/`-separated hierarchy that the
@@ -594,7 +594,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.14.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.15.0...main
+[1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
