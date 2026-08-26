@@ -19,6 +19,14 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Fixed
+- **v1.15.0으로 올리면 MCP 질의가 전부 실패했을 것** ([#209]). 앱은 캐시 v8로 갔는데([#201])
+  MCP 서버가 기대하는 버전은 7에 머물러, **멀쩡한 캐시를 `version_skew`로 거부**한다 — 인덱스는
+  정상인데 도구가 통째로 죽는다.
+
+  테스트는 **구조적으로** 이걸 못 잡는다. `mcp/fixture.ts`가 TypeScript 상수로 캐시를 쓰고 서버도
+  같은 상수로 읽으니, 그 값이 앱에서 얼마나 멀어지든 **둘은 늘 일치한다.** 이제 가드가 Rust 소스를
+  직접 읽어 대조한다 — 두 진실이 만나는 유일한 자리다. `version: 7`을 리터럴로 박아둔 테스트 4곳도
+  (그 값이 마침 상수와 같았을 뿐이다) 상수를 쓰게 바꿔, 원래 검증하려던 것을 계속 검증한다.
 - **프런트엔드 래퍼가 더 이상 없는 Tauri 커맨드를 부르고 있던 것** ([#208]). `writeSearchCache`는
   샤딩 이전(캐시 v3)의 저장 함수였다. Rust 커맨드는 v4에서 사라졌는데 TypeScript 래퍼만 남아,
   **부르면 "command not found"로 죽는 함수가 API처럼** 놓여 있었다. 커맨드 이름은 **문자열**이라
@@ -638,6 +646,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#209]: https://github.com/eren0315/lapis/pull/209
 [#208]: https://github.com/eren0315/lapis/pull/208
 [#207]: https://github.com/eren0315/lapis/pull/207
 [#206]: https://github.com/eren0315/lapis/pull/206

@@ -23,7 +23,7 @@ import {
   type QueryArgs,
   type SearchResponse,
 } from "./query.ts";
-import { LapisError } from "./cache.ts";
+import { CACHE_VERSION, LapisError } from "./cache.ts";
 
 let fx: Fixture;
 /** 테스트가 makeFixture를 안 거치고 직접 만든 임시 디렉터리. */
@@ -460,7 +460,9 @@ describe("vault 동률", () => {
     const fixture = setup();
     addSiblingMeta(fixture, {
       key: "twinkey000000001",
-      version: 7,
+      // 의도는 **현재 버전의 정상 캐시**다. 리터럴로 박으면 앱이 bump할 때
+      // 조용히 skew로 분류돼 이 테스트가 다른 것을 검증하게 된다.
+      version: CACHE_VERSION,
       noteCount: SAMPLE_NOTES.length,
       vaultRoot: "/other/twin",
     });
@@ -474,7 +476,9 @@ describe("vault 동률", () => {
     const fixture = setup();
     addSiblingMeta(fixture, {
       key: "twinkey000000001",
-      version: 7,
+      // 의도는 **현재 버전의 정상 캐시**다. 리터럴로 박으면 앱이 bump할 때
+      // 조용히 skew로 분류돼 이 테스트가 다른 것을 검증하게 된다.
+      version: CACHE_VERSION,
       noteCount: SAMPLE_NOTES.length,
       vaultRoot: "/other/twin",
     });
@@ -491,7 +495,9 @@ describe("dev·릴리즈 캐시 분리 (2026-08-13)", () => {
     const fixture = setup();
     addSiblingMeta(fixture, {
       key: "devsidecache001",
-      version: 7,
+      // 의도는 **현재 버전의 정상 캐시**다. 리터럴로 박으면 앱이 bump할 때
+      // 조용히 skew로 분류돼 이 테스트가 다른 것을 검증하게 된다.
+      version: CACHE_VERSION,
       noteCount: SAMPLE_NOTES.length,
       vaultRoot: fixture.vaultRoot, // ← 같은 vault
       ageOffsetMs: 60_000, // 1분 더 최신
@@ -508,7 +514,9 @@ describe("dev·릴리즈 캐시 분리 (2026-08-13)", () => {
     const fixture = setup();
     addSiblingMeta(fixture, {
       key: "othervault00001",
-      version: 7,
+      // 의도는 **현재 버전의 정상 캐시**다. 리터럴로 박으면 앱이 bump할 때
+      // 조용히 skew로 분류돼 이 테스트가 다른 것을 검증하게 된다.
+      version: CACHE_VERSION,
       noteCount: SAMPLE_NOTES.length,
       vaultRoot: "/other/place", // ← 다른 vault
     });
