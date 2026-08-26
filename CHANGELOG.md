@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-08-26
+
 ### Added
 - **`lapis open <note>`** ([#216]). Opens a note in the running app, or starts the app if it is
   not running. No listening port is involved — the app binary is re-executed and its argv is
@@ -718,6 +720,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.17.0]: https://github.com/eren0315/lapis/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/eren0315/lapis/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0

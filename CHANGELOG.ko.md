@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-08-26
+
 ### Added
 - **`lapis open <노트>`** ([#216]). 실행 중인 앱에서 노트를 연다. 앱이 꺼져 있으면 켠다.
   리스닝 포트는 쓰지 않는다 — 앱 실행파일을 다시 실행하면 argv가 실행 중인 인스턴스로
@@ -685,6 +687,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.17.0]: https://github.com/eren0315/lapis/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/eren0315/lapis/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0
