@@ -46,7 +46,6 @@
     vaultPath,
     currentNotePath,
     linkIndex,
-    restoreLastVault,
     selectNote,
     jumpToWikilink,
     deletePath,
@@ -54,6 +53,7 @@
     goForwardNote,
     closeTab,
   } from "$lib/stores/vault";
+  import { startupCliOpen, listenCliOpen } from "$lib/stores/cliOpen";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
   import { openTabs, tabPathForShortcut } from "$lib/stores/tabs";
   import { noteDisplayName } from "$lib/notePath";
@@ -1104,13 +1104,21 @@
   // 디버그 빌드 표식 — 릴리즈 앱과 나란히 띄울 때 어느 창인지 구분한다.
   // 창 제목은 Rust setup()이 붙이고, 여기선 같은 판정값으로 topbar 배지를 켠다.
   let isDebug = $state(false);
+  let unlistenCliOpen: (() => void) | null = null;
 
   onMount(() => {
     restoreTheme();
     restoreDensity();
     void restoreSettings();
     restorePaneState();
-    restoreLastVault();
+    // ⚠️ vault 복원이 여기 안으로 들어갔다. `lapis open`으로 뜬 창은 마지막 vault를
+    // 복원하면 안 되고(방금 연 vault를 덮어쓴다), 그 판정을 Rust가 쥐고 있어서 순서가
+    // 얽힌다. 둘을 한 함수에 모아 뒀다 — 자세한 것은 `stores/cliOpen.ts`.
+    void startupCliOpen();
+    // 앱이 이미 떠 있을 때 온 `lapis open`. 해제는 아래 cleanup에서.
+    void listenCliOpen().then((un) => {
+      unlistenCliOpen = un;
+    });
     void (async () => {
       try {
         appVersion = await getVersion();
@@ -1126,6 +1134,13 @@
         console.warn("[app] isDebugBuild failed", e);
       }
     })();
+
+    // ⚠️ 창이 닫힐 때 구독을 뗀다. 안 떼면 죽은 창의 핸들러가 남아 `cli:open`을 받고
+    // 이미 사라진 창의 vault로 판정한다 — 그러면 살아 있는 창이 못 받는다.
+    return () => {
+      unlistenCliOpen?.();
+      unlistenCliOpen = null;
+    };
   });
 </script>
 

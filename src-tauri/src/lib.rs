@@ -1,3 +1,4 @@
+mod cliopen;
 mod git;
 mod grep;
 mod hash;
@@ -10,6 +11,12 @@ mod vault;
 mod watcher;
 
 use tauri::Manager;
+
+/// 알림을 보낸 뒤 "아무 창도 안 가져갔다"고 판정하기까지 기다리는 시간.
+///
+/// ⚠️ 0에 가까우면 vault를 이미 연 창이 있는데도 프론트가 답하기 전에 판정해 **창을
+/// 하나 더 띄운다.** 반대로 너무 길면 새 창이 늦게 뜬다. 왕복 한 번이면 충분한 값이다.
+const UNCLAIMED_WAIT_MS: u64 = 500;
 
 /// 디버그 빌드 여부.
 ///
@@ -49,9 +56,16 @@ fn next_window_label(app: &tauri::AppHandle) -> String {
 /// 새 창 — vault는 프론트가 각자 고른다(창별 `last-vault-path`).
 #[tauri::command]
 fn new_window(app: tauri::AppHandle) -> Result<String, String> {
-    let label = next_window_label(&app);
+    spawn_window(&app)
+}
+
+/// 창을 만든다. 명령(`new_window`)과 CLI 경로(`cliopen`)가 **같은 한 벌**을 쓴다.
+///
+/// 반환값은 만든 창의 라벨 — `cliopen`이 "이 창은 내가 만들었다"를 기억하는 데 쓴다.
+fn spawn_window(app: &tauri::AppHandle) -> Result<String, String> {
+    let label = next_window_label(app);
     let window =
-        tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
             .title("Lapis")
             .inner_size(1200.0, 800.0)
             // 탭 DnD가 WKWebView 기본 drag&drop과 충돌한다 — tauri.conf.json의 main 창과 동일 설정.
@@ -137,7 +151,28 @@ pub fn run() {
         context.config_mut().app.windows.clear();
     }
 
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // ⚠️ **조건이 둘 다 필요하다.** 자세한 근거는 `cliopen.rs` 모듈 주석.
+    //
+    // - 헤드리스가 아닐 때만: 두 번째 인스턴스는 argv를 넘긴 뒤 `std::process::exit(0)`
+    //   한다. 앱이 떠 있는 동안 `--headless`를 부르면 **결과 파일을 쓰지도 않고 성공으로
+    //   끝난다.** 조용히 틀리는 부류다.
+    // - 릴리즈일 때만: 잠금 키가 `identifier` 하나에서 나오는데 dev와 릴리즈가 그걸
+    //   공유한다(`paths.rs`). 양쪽에 켜면 **릴리즈가 떠 있을 때 dev 앱이 안 뜬다.**
+    //
+    // 플러그인 문서가 요구하는 대로 **가장 먼저** 등록한다.
+    if job.is_none() && !cfg!(debug_assertions) {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // argv[0]은 실행파일 경로다.
+            if let Some(open) = cliopen::parse_open(argv.into_iter().skip(1)) {
+                cliopen::stage(app, open);
+                cliopen::open_window_if_unclaimed(app, UNCLAIMED_WAIT_MS);
+            }
+        }));
+    }
+
+    let app = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         // 창 위치·크기를 재시작 너머로 잇는다. `on_window_ready`에 걸리므로 `main`뿐 아니라
@@ -167,7 +202,15 @@ pub fn run() {
                 .build(),
         )
         .manage(watcher::WatcherState::default())
+        .manage(cliopen::PendingOpenState::default())
         .setup(|app| {
+            // 차가운 기동 — 앱이 꺼져 있을 때 `lapis open`이 부른 경우다. 담아만 두면
+            // 첫 창이 뜨면서 스스로 가져간다(경합 없음 — 창이 준비됐을 때 묻는다).
+            if let Some(open) = cliopen::parse_open(std::env::args().skip(1)) {
+                cliopen::stage(app.handle(), open);
+                // 앱이 이 요청 때문에 떴다 — `main`이 자기 vault를 안 따지고 받아간다.
+                cliopen::mark_cli_window(app.handle(), "main");
+            }
             // 디버그 빌드는 창 제목에 표식을 단다 — 창 제목 막대뿐 아니라
             // ⌘Tab 전환기·Dock 우클릭 창 목록·Mission Control에서도 릴리즈 앱과 구분된다
             // (앱 이름 자체는 번들에서 오므로 여기서 못 바꾼다).
@@ -226,6 +269,7 @@ pub fn run() {
             search_cache::write_search_cache_stats,
             search_cache::read_search_cache_shard,
             search_cache::write_search_cache_shard,
+            cliopen::take_pending_open,
             watcher::watch_vault,
             watcher::unwatch_vault,
             settings::settings_read,

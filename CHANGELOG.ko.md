@@ -19,6 +19,13 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Added
+- **`lapis open <노트>`** ([#216]). 실행 중인 앱에서 노트를 연다. 앱이 꺼져 있으면 켠다.
+  리스닝 포트는 쓰지 않는다 — 앱 실행파일을 다시 실행하면 argv가 실행 중인 인스턴스로
+  전달된다.
+
+  **어느 창이 여는지는 창들이 정한다.** Rust는 어느 창이 어느 vault를 열었는지 모르므로,
+  열 것을 담아두기만 하고 각 창이 "내 것이냐"를 묻는다. 그 vault를 연 창이 하나도 없으면
+  그때 새 창을 띄운다.
 - **`lapis index` — 앱 없이 인덱스를 다시 만든다** ([#215]). 검색 인덱스를 다시 만들려면
   앱을 띄워야 했다. 이제 터미널에서 되고, 앱은 다음 기동에 그 결과를 **재색인 없이** 그대로
   읽는다.
@@ -706,6 +713,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#216]: https://github.com/eren0315/lapis/pull/216
 [#215]: https://github.com/eren0315/lapis/pull/215
 [#214]: https://github.com/eren0315/lapis/pull/214
 [#213]: https://github.com/eren0315/lapis/pull/213

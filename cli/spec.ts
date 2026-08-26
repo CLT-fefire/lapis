@@ -107,6 +107,12 @@ export const COMMANDS: CommandSpec[] = [
     options: [],
   },
   {
+    name: "open",
+    desc: "실행 중인 앱에서 이 노트를 연다. 앱이 꺼져 있으면 켠다",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
+    options: [],
+  },
+  {
     name: "index",
     desc: "앱 없이 인덱스를 다시 만든다. 앱을 켜면 그대로 읽는다",
     positional: [],

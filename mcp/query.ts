@@ -300,6 +300,20 @@ function listFacet(
   };
 }
 
+/**
+ * 노트 지시자 → **절대 경로 + 그 vault 루트**.
+ *
+ * `lapis open`이 쓴다. 앱에 넘길 때 vault 루트가 함께 필요하다 — **어느 창이 받을지**를
+ * 그걸로 가르기 때문이다(`src-tauri/src/cliopen.rs`).
+ *
+ * ⚠️ 해소 규칙을 CLI가 따로 두지 않으려고 여기 둔다. `backlinks`가 쓰는 것과 **같은
+ * 함수**라, `lapis backlinks X`가 찾는 노트와 `lapis open X`가 여는 노트가 항상 같다.
+ */
+export function resolveNotePath(input: string, vault?: string): { path: string; vault: string } {
+  const st = loadStructural(vault);
+  return { path: resolveNote(st, input), vault: st.vc.root };
+}
+
 export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const {
     vault,

@@ -17,6 +17,13 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **`lapis open <note>`** ([#216]). Opens a note in the running app, or starts the app if it is
+  not running. No listening port is involved — the app binary is re-executed and its argv is
+  handed to the running instance.
+
+  Which window opens it is decided by the windows, not by Rust: Rust does not know which vault
+  each window has, so it stages the request and every window asks whether it is theirs. If no
+  window has that vault, a new one is opened for it.
 - **`lapis index` — 앱 없이 인덱스를 다시 만든다** ([#215]). Rebuilding the search index used
   to require launching the app. Now the CLI can do it from a terminal, and the app reads the
   result on next launch with no reindexing.
@@ -738,6 +745,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#216]: https://github.com/eren0315/lapis/pull/216
 [#215]: https://github.com/eren0315/lapis/pull/215
 [#214]: https://github.com/eren0315/lapis/pull/214
 [#213]: https://github.com/eren0315/lapis/pull/213

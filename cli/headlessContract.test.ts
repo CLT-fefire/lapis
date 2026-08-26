@@ -79,3 +79,42 @@ describe("헤드리스 인자 계약", () => {
     expect(rustVerbs().sort()).toEqual(["cache-info", "export-index", "import-index"]);
   });
 });
+
+/**
+ * `lapis open`이 넘기는 인자도 같은 프로세스 경계를 건넌다 — 같은 이유로 가드가 필요하다.
+ *
+ * 여기가 어긋나면 앱은 **평범하게 기동만 하고 노트를 안 연다.** 모르는 인자는 일부러
+ * 넘기게 돼 있어서(`cliopen.rs` — OS가 붙이는 `-psn_…` 때문이다) 오류조차 안 난다.
+ */
+describe("cli open 인자 계약", () => {
+  const OPEN_RUST = "src-tauri/src/cliopen.rs";
+  const OPEN_CLI = "cli/appLaunch.ts";
+
+  const rustOpenOptions = () =>
+    [...readFileSync(OPEN_RUST, "utf8").matchAll(/^\s*"(--[a-z-]+)" => \w+ = args/gm)].map(
+      (m) => m[1],
+    );
+  const cliOpenOptions = () =>
+    [...readFileSync(OPEN_CLI, "utf8").matchAll(/"(--[a-z-]+)"/g)].map((m) => m[1]);
+
+  it("스캐너가 실제로 뭔가를 뽑는다 — 정규식 회귀 방지", () => {
+    expect(rustOpenOptions()).toHaveLength(2);
+    expect(cliOpenOptions()).toHaveLength(2);
+  });
+
+  it("CLI가 넘기는 옵션을 Rust가 전부 안다", () => {
+    const known = new Set(rustOpenOptions());
+    for (const o of cliOpenOptions()) {
+      expect(known, `Rust가 모르는 옵션: ${o}`).toContain(o);
+    }
+  });
+
+  it("Rust가 기다리는 옵션을 CLI가 전부 보낸다", () => {
+    // 한쪽만 보내면 `parse_open`이 `None`을 내고 앱은 그냥 기동만 한다.
+    const sent = new Set(cliOpenOptions());
+    for (const o of rustOpenOptions()) {
+      expect(sent, `CLI가 안 보내는 옵션: ${o}`).toContain(o);
+    }
+  });
+
+});
