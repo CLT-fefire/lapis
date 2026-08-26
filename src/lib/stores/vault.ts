@@ -48,6 +48,12 @@ import {
   type LinkRewritePreviewItem,
 } from "$lib/linkRewrite";
 import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
+import {
+  backupAndWrite as safeBackupAndWrite,
+  describeFailure,
+  type SafeWriteItem,
+  type SafeWriteOutcome,
+} from "$lib/safeWrite";
 import { markOpened, syncFromDisk } from "./unread";
 import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
@@ -1111,92 +1117,43 @@ async function rewriteAllLinksWithPreview(
   if (!apply) return;
 
   // 4) 백업 + write
-  await backupAndWrite(vault, preview);
+  //
+  // ⚠️ 결과를 본다. 예전엔 그냥 await 하고 끝냈는데, 백업이 실패해도 호출부가 알 수
+  // 없어 "이름은 바뀌었는데 인용은 안 바뀐" 상태가 조용히 남았다.
+  const outcome = await backupAndWrite(vault, preview);
+  if (!outcome.ok) {
+    // ⚠️ 이 경로에는 아직 **화면 오류 표면이 없다.** 아무도 안 읽는 store를 새로
+    // 만드는 대신 사람이 읽을 요약을 남긴다. UI 노출은 별도 작업이다.
+    console.error(`[lapis] 인용 갱신 실패 — ${describeFailure(outcome)}`);
+  }
 }
 
 /**
- * 백업 → 순차 write → 실패 시 롤백 → 오래된 백업 prune.
+ * Tauri IO를 물린 `safeWrite` 어댑터.
  *
- * ⚠️ `export`인 이유 — **태그 이름 바꾸기가 같은 트랜잭션을 쓴다**(`stores/tagRewrite.ts`).
- * 프론트매터를 건드리는 경로가 둘로 갈리면 백업·롤백 규칙도 둘이 되고, #184(YAML 파싱
- * 실패로 frontmatter 전소)처럼 한쪽에서만 재발한다. `preview.items`의 모양만 맞추면 된다.
+ * ⚠️ 트랜잭션 자체는 **`$lib/safeWrite`에 있다.** 여기 두면 Svelte store에 묶여 다른
+ * 소비자(CLI 등)가 못 쓴다. 프론트매터를 건드리는 경로가 갈리면 백업·롤백 규칙도
+ * 갈리고, 그러면 한쪽에서만 사고가 재발한다(#184).
  *
- * 백업 디렉터리도 `.lapis/link-rewrite-backup/`을 **그대로 쓴다.** prune(`paths` 고정)이
- * 그 한 곳만 보므로, 새 디렉터리를 만들면 영원히 정리되지 않는 백업이 쌓인다.
+ * ⚠️ **결과를 그대로 돌려준다.** 예전 구현은 실패 시 조용히 `return` 했고, 그래서
+ * 태그 이름 바꾸기 모달이 아무것도 안 쓰고도 성공한 듯 닫혔다. 호출부가 반드시
+ * `outcome.ok`를 봐야 한다.
  */
-export async function backupAndWrite(
+export function backupAndWrite(
   vault: string,
-  preview: { items: LinkRewritePreviewItem[] },
-): Promise<void> {
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupDirRel = `.lapis/link-rewrite-backup/${ts}`;
-  const sources = preview.items.map((i: LinkRewritePreviewItem) => i.path);
-  let backupAbs: string;
-  try {
-    backupAbs = await backupNotes(vault, sources, backupDirRel);
-    console.info(`[lapis] link rewrite backup → ${backupAbs}`);
-  } catch (e) {
-    console.error("link rewrite backup failed — write aborted:", e);
-    return;
-  }
-
-  // 순차 write. 실패 시 이미 성공한 path들을 backup에서 원본 복원.
-  const written: string[] = [];
-  for (const item of preview.items) {
-    try {
-      await writeNote(vault, item.path, item.newContent);
-      written.push(item.path);
-    } catch (e) {
-      console.error(`link rewrite write failed for ${item.path}:`, e);
-      await rollbackFromBackup(vault, backupAbs, written);
-      console.info(
-        `[lapis] 추가 수동 복구 필요 시 ${backupAbs} 에서 회수 가능`,
-      );
-      return;
-    }
-  }
-
-  // 모든 write 성공 → 오래된 백업 prune (실패해도 메인 흐름엔 영향 X)
-  void pruneOldBackups(vault);
-}
-
-/**
- * write fail 시 이미 갱신된 파일을 backup의 원본으로 되돌림.
- * 복원 자체도 실패하면 stderr 로깅 + 다음으로 — 부분 복원이라도 시도.
- */
-async function rollbackFromBackup(
-  vault: string,
-  backupAbs: string,
-  writtenPaths: string[],
-): Promise<void> {
-  if (writtenPaths.length === 0) return;
-  console.info(`[lapis] 자동 롤백 시작: ${writtenPaths.length}건 복원`);
-  // vault path는 canonicalize 결과(trailing slash X). vault relative 추출 후 backup path 조립.
-  // item.path는 Rust canonicalize 결과(절대 경로) → vault.startsWith 보장.
-  let restored = 0;
-  for (const target of writtenPaths) {
-    try {
-      const rel = relativeToVault(vault, target);
-      if (rel === null) {
-        console.error(`rollback: ${target}이 vault(${vault}) 밖 — skip`);
-        continue;
-      }
-      const backupFile = `${backupAbs}/${rel}`;
-      const original = await readNote(backupFile);
-      await writeNote(vault, target, original);
-      restored++;
-    } catch (re) {
-      console.error(`rollback failed for ${target}:`, re);
-    }
-  }
-  console.info(`[lapis] 자동 롤백 완료: ${restored}/${writtenPaths.length}건 복원`);
-}
-
-/** vault 기준 상대 경로. abs가 vault 안이 아니면 null. */
-function relativeToVault(vault: string, abs: string): string | null {
-  const prefix = vault.endsWith("/") ? vault : vault + "/";
-  if (!abs.startsWith(prefix)) return null;
-  return abs.slice(prefix.length);
+  preview: { items: SafeWriteItem[] },
+): Promise<SafeWriteOutcome> {
+  return safeBackupAndWrite(vault, preview.items, {
+    backupNotes,
+    readNote,
+    writeNote,
+    pruneBackups: pruneOldBackups,
+    log: (level, message) => {
+      if (level === "error") console.error(`[lapis] ${message}`);
+      else console.info(`[lapis] ${message}`);
+    },
+    timestamp: () => new Date().toISOString().replace(/[:.]/g, "-"),
+  });
 }
 
 async function pruneOldBackups(vault: string): Promise<void> {
