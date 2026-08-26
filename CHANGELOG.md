@@ -17,6 +17,18 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Fixed
+- **A note name shared by two documents resolved to whichever one the walk reached first**
+  ([#220]). The resolver was a flat vault-wide map from lowercase name to a single path, and the
+  first writer won. Because the walk is alphabetical, a link written in one project silently
+  pointed at a same-named note in another. Links were not broken — they went somewhere else.
+
+  Resolution now keeps every candidate and picks the one nearest the linking note; frontmatter
+  cross-references go through the same rule, which is where most of the leakage was. Names given
+  by a person (`lapis open`, `backlinks`) have no such context, so an ambiguous one is now
+  rejected with the candidate paths instead of guessed.
+
+  Measured on a two-project vault: orphan notes went from 8 to 4, and the four that disappeared
+  were all false — their inbound links had been captured by same-named notes in the other project.
 - **Structural results came back in an unspecified order** ([#219]). Rows from `doc_kind`,
   `topic`, `tag`, and `backlinks_of` carry no score, and their order was whatever order the cache
   happened to store `link_infos` in — vault walk order for a full build, patched order after the
@@ -769,6 +781,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#220]: https://github.com/eren0315/lapis/pull/220
 [#219]: https://github.com/eren0315/lapis/pull/219
 [#217]: https://github.com/eren0315/lapis/pull/217
 [#216]: https://github.com/eren0315/lapis/pull/216

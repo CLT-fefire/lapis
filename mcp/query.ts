@@ -212,8 +212,26 @@ function resolveNote(st: Loaded, input: string): string {
   // resolver는 alias > title > stem 우선순위. grep이 접두 충돌(`ADR-001` → `ADR-0010`)로
   // 오탐을 내던 자리를 정확 해소로 대체한다.
   const stem = raw.replace(/\.md$/, "").split("/").pop() ?? raw;
-  const viaResolver = st.link.resolver.get(stem.toLowerCase());
-  if (viaResolver) return viaResolver;
+  const candidates = st.link.resolver.get(stem.toLowerCase());
+
+  // ## ⚠️ 모호하면 추측하지 않는다
+  //
+  // 문서 안의 링크와 달리 **사람이 준 이름에는 맥락이 없다.** 어느 프로젝트를 뜻하는지
+  // 알 방법이 없으므로 하나를 고르면 조용히 틀린다.
+  //
+  // 예전엔 `resolver`가 경로 하나만 들고 있었고 그게 vault walk 순서로 정해졌다. 그래서
+  // `lapis open STATE`가 늘 먼저 걸린 프로젝트의 것을 열었고, **그게 이 결함이 안 보였던
+  // 이유다.** 이제 후보를 보여주고 사람이 좁히게 한다.
+  if (candidates && candidates.length > 1) {
+    const shown = candidates.map((c) => st.rel(c));
+    throw new LapisError(
+      "name_ambiguous",
+      `이름이 여럿에 걸린다: ${input} (${candidates.length}건)`,
+      `경로로 좁혀라 — ${shown.join(" · ")}`,
+    );
+  }
+  if (candidates && candidates.length === 1) return candidates[0];
+
   throw new LapisError(
     "path_not_indexed",
     `인덱스에 없는 경로: ${input}`,

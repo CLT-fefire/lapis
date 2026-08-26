@@ -19,6 +19,17 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Fixed
+- **같은 이름의 노트 둘 중 walk가 먼저 닿은 쪽으로 해소되던 것** ([#220]). 해소기가 소문자
+  이름 → 경로 **하나**인 평평한 전역 Map이었고 먼저 넣은 것이 이겼다. walk가 알파벳순이라,
+  한 프로젝트에서 쓴 링크가 다른 프로젝트의 동명 노트를 **조용히** 가리켰다. 링크가 깨진 게
+  아니라 엉뚱한 곳으로 갔다.
+
+  이제 후보를 전부 들고 **링크한 노트와 가장 가까운 것**을 고른다. 프론트매터 교차참조도
+  같은 규칙을 타는데, 새는 곳의 대부분이 거기였다. 사람이 준 이름(`lapis open` · `backlinks`)
+  에는 그런 맥락이 없으므로, 모호하면 추측하지 않고 **후보 경로와 함께 거부**한다.
+
+  두 프로젝트가 든 vault에서 실측: 고아 노트가 **8건 → 4건**. 사라진 넷은 전부 오탐이었다 —
+  들어오는 링크를 다른 프로젝트의 동명 노트가 가로채고 있었다.
 - **구조 질의 결과의 순서가 정해져 있지 않던 것** ([#219]). `doc_kind` · `topic` · `tag` ·
   `backlinks_of`로 나온 행에는 점수가 없고, 순서는 캐시가 `link_infos`를 담은 순서였다 —
   전체 빌드면 vault walk 순서, 앱의 증분 재색인 뒤면 패치된 순서다. 그래서 같은 질의가
@@ -736,6 +747,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#220]: https://github.com/eren0315/lapis/pull/220
 [#219]: https://github.com/eren0315/lapis/pull/219
 [#217]: https://github.com/eren0315/lapis/pull/217
 [#216]: https://github.com/eren0315/lapis/pull/216

@@ -739,3 +739,68 @@ describe("정렬은 로케일에 의존하지 않는다", () => {
     expect(got).toEqual(["가.md", "나.md", "다.md"]);
   });
 });
+
+/**
+ * 사람이 준 이름이 여럿에 걸릴 때.
+ *
+ * 문서 안의 링크와 달리 **맥락이 없다** — 어느 프로젝트를 뜻하는지 알 방법이 없다.
+ * 예전엔 `resolver`가 경로 하나만 들고 있었고 그게 vault walk 순서로 정해져서,
+ * `backlinks_of: "STATE"`가 늘 먼저 걸린 프로젝트의 것을 답했다. **그게 이 결함이
+ * 안 보였던 이유다.**
+ */
+describe("이름이 모호하면 거부한다", () => {
+  // ⚠️ vault 루트는 공통 조상으로 유도된다(`deriveRoot`). `k/lapis`와 `k/slate`만 있으면
+  // 루트가 `…/k`가 되어 상대경로에서 `k/`가 빠진다. 그래서 기대값도 그 형태다.
+  const twoProjects = [
+    { rel: "k/lapis/STATE.md", doc_kind: "state", topic: "t", body: "lapis 상태" },
+    { rel: "k/slate/STATE.md", doc_kind: "state", topic: "t", body: "slate 상태" },
+    { rel: "k/lapis/only-here.md", doc_kind: "note", topic: "t", body: "여기만 있다" },
+  ];
+
+  it("후보가 여럿이면 name_ambiguous", () => {
+    setup({}, twoProjects);
+    try {
+      lapisQuery({ backlinks_of: "STATE" });
+      expect.unreachable("거부해야 한다");
+    } catch (e) {
+      expect(e).toBeInstanceOf(LapisError);
+      expect((e as LapisError).kind).toBe("name_ambiguous");
+    }
+  });
+
+  /** 어디로 좁혀야 하는지 모르면 오류가 절반만 쓸모 있다. */
+  it("후보 경로를 처방에 담는다", () => {
+    setup({}, twoProjects);
+    try {
+      lapisQuery({ backlinks_of: "STATE" });
+      expect.unreachable("거부해야 한다");
+    } catch (e) {
+      const remedy = (e as LapisError).remedy;
+      expect(remedy).toContain("lapis/STATE.md");
+      expect(remedy).toContain("slate/STATE.md");
+    }
+  });
+
+  it("경로로 좁히면 통과한다", () => {
+    setup({}, twoProjects);
+    const res = search({ backlinks_of: "slate/STATE.md" });
+    expect(res.resolved_target).toBe("slate/STATE.md");
+  });
+
+  it("겹치지 않는 이름은 그대로 동작한다", () => {
+    setup({}, twoProjects);
+    const res = search({ backlinks_of: "only-here" });
+    expect(res.resolved_target).toBe("lapis/only-here.md");
+  });
+
+  /** 없는 이름은 모호한 것과 다른 상태다 — 섞으면 처방이 틀린다. */
+  it("없는 이름은 여전히 path_not_indexed", () => {
+    setup({}, twoProjects);
+    try {
+      lapisQuery({ backlinks_of: "nope" });
+      expect.unreachable("거부해야 한다");
+    } catch (e) {
+      expect((e as LapisError).kind).toBe("path_not_indexed");
+    }
+  });
+});

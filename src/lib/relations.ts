@@ -1,4 +1,5 @@
 import type { LinkInfo } from "$lib/tauri/notes";
+import { resolveTarget, type ResolveSource } from "$lib/linkIndex";
 
 /**
  * Phase A-2 — frontmatter 기반 "타입 있는 관계" 인덱스.
@@ -118,7 +119,7 @@ function addRelation(map: Map<string, Relation[]>, key: string, rel: Relation) {
 /** 한 노트의 props → outgoing/incoming 관계 적재. sync/chunked 빌더가 공유. */
 function collectRelationsForInfo(
   info: LinkInfo,
-  resolver: Map<string, string>,
+  index: ResolveSource,
   outgoing: Map<string, Relation[]>,
   incoming: Map<string, Relation[]>,
 ): void {
@@ -127,7 +128,9 @@ function collectRelationsForInfo(
     if (NON_RELATION_FIELDS.has(field.toLowerCase())) continue;
     for (const value of values) {
       for (const stem of normalizeRef(value)) {
-        const targetPath = resolver.get(stem.toLowerCase());
+        // ⚠️ **이 노트를 맥락으로 넘긴다.** 여기가 빠져서 slate 문서들의 `related`가
+        // 전부 lapis의 동명 문서로 흘러갔다(실측: 고아 8건 중 6건이 그 결과).
+        const targetPath = resolveTarget(stem, index, src);
         if (!targetPath || targetPath === src) continue;
         addRelation(outgoing, src, { type: field, path: targetPath });
         addRelation(incoming, targetPath, { type: field, path: src });
@@ -136,14 +139,11 @@ function collectRelationsForInfo(
   }
 }
 
-export function buildRelationIndex(
-  infos: LinkInfo[],
-  resolver: Map<string, string>,
-): RelationIndex {
+export function buildRelationIndex(infos: LinkInfo[], index: ResolveSource): RelationIndex {
   const outgoing = new Map<string, Relation[]>();
   const incoming = new Map<string, Relation[]>();
   for (const info of infos) {
-    collectRelationsForInfo(info, resolver, outgoing, incoming);
+    collectRelationsForInfo(info, index, outgoing, incoming);
   }
   return { outgoing, incoming };
 }
@@ -155,13 +155,13 @@ export function buildRelationIndex(
  */
 export async function buildRelationIndexChunked(
   infos: LinkInfo[],
-  resolver: Map<string, string>,
+  index: ResolveSource,
   yieldEvery = 1500,
 ): Promise<RelationIndex> {
   const outgoing = new Map<string, Relation[]>();
   const incoming = new Map<string, Relation[]>();
   for (let i = 0; i < infos.length; i++) {
-    collectRelationsForInfo(infos[i], resolver, outgoing, incoming);
+    collectRelationsForInfo(infos[i], index, outgoing, incoming);
     if (i > 0 && i % yieldEvery === 0) {
       // requestAnimationFrame 우선 — 청크 사이 paint 보장(스피너 갱신). 없으면 setTimeout.
       await new Promise<void>((resolve) => {

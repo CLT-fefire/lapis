@@ -1177,7 +1177,9 @@ async function pruneOldBackups(vault: string): Promise<void> {
 export async function jumpToWikilink(target: string): Promise<boolean> {
   const idx = get(linkIndex);
   if (!idx) return false;
-  const path = resolveTarget(target, idx);
+  // ⚠️ 지금 보고 있는 노트를 맥락으로 넘긴다 — 같은 이름의 노트가 둘일 때 어느 쪽으로
+  // 갈지가 여기서 갈린다. 열린 노트가 없으면 vault 루트 기준이 된다(후보 중 경로순).
+  const path = resolveTarget(target, idx, get(currentNotePath) ?? "");
   if (!path) return false;
   await selectNote(path);
   return true;
