@@ -16,7 +16,7 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
-## [Unreleased]
+## [1.14.0] — 2026-08-26
 
 ### Added
 - **Windows (x64) 지원** ([#196]). macOS와 나란히 Windows 10+에서 빌드·실행된다. CI의 Rust 검사·테스트도
@@ -510,7 +510,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.13.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.14.0...main
+[1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/eren0315/lapis/compare/v1.12.0...v1.12.1
