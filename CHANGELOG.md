@@ -17,6 +17,17 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Fixed
+- **A frontend wrapper called a Tauri command that no longer exists** ([#208]). `writeSearchCache`
+  was the pre-sharding (cache v3) writer; the Rust command was removed in v4 but the TypeScript
+  wrapper stayed, so a function that dies with "command not found" sat there looking like API. Command
+  names are **strings** — no type checker reaches them, so `tsc`, `svelte-check` and `cargo` all
+  passed and the breakage would only surface when someone called it. A test now fails if any
+  `invoke("x")` has no matching entry in `generate_handler!`, naming the file. The unused
+  `gitHasChanges` wrapper is removed too.
+
+  A second guard checks that `ko.json` and `en.json` carry the same key set. A key present in only one
+  locale is not an error either — paraglide falls back to the base locale, so one English sentence
+  appears in a Korean screen and nothing complains.
 - **Hover and selection styling in the table view did nothing** ([#206]). `TableView.svelte` referred to
   `--surface-hover` (4 places), `--accent-soft` (1) and `--text-tertiary` (6), none of which exist in
   `app.css`. An undefined custom property is **not an error** — the declaration is simply dropped, so
@@ -655,6 +666,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#208]: https://github.com/eren0315/lapis/pull/208
 [#207]: https://github.com/eren0315/lapis/pull/207
 [#206]: https://github.com/eren0315/lapis/pull/206
 [#202]: https://github.com/eren0315/lapis/pull/202

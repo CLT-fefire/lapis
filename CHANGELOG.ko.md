@@ -19,6 +19,15 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Fixed
+- **프런트엔드 래퍼가 더 이상 없는 Tauri 커맨드를 부르고 있던 것** ([#208]). `writeSearchCache`는
+  샤딩 이전(캐시 v3)의 저장 함수였다. Rust 커맨드는 v4에서 사라졌는데 TypeScript 래퍼만 남아,
+  **부르면 "command not found"로 죽는 함수가 API처럼** 놓여 있었다. 커맨드 이름은 **문자열**이라
+  타입 검사가 닿지 않는다 — `tsc`도 `svelte-check`도 `cargo`도 통과했고, 누가 실제로 부르는
+  순간에만 터진다. 이제 `invoke("x")`가 `generate_handler!`에 없으면 테스트가 실패하고 해당
+  파일이 찍힌다. 쓰이지 않던 `gitHasChanges` 래퍼도 함께 지웠다.
+
+  두 번째 가드로 `ko.json`과 `en.json`의 키 집합이 같은지 본다. 한쪽에만 있는 키도 에러가 아니다 —
+  paraglide가 baseLocale로 폴백하므로 한국어 화면에 영어 문장 하나가 섞일 뿐 아무도 항의하지 않는다.
 - **테이블 뷰의 hover·선택 스타일이 아무 일도 안 하던 것** ([#206]). `TableView.svelte`가
   `--surface-hover`(4곳) · `--accent-soft`(1곳) · `--text-tertiary`(6곳)를 참조하는데 셋 다
   `app.css`에 없었다. 정의되지 않은 커스텀 프로퍼티는 **에러가 아니라** 선언이 통째로 무시되는
@@ -629,6 +638,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#208]: https://github.com/eren0315/lapis/pull/208
 [#207]: https://github.com/eren0315/lapis/pull/207
 [#206]: https://github.com/eren0315/lapis/pull/206
 [#202]: https://github.com/eren0315/lapis/pull/202
