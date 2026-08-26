@@ -41,6 +41,22 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ---
 
 ### Added
+- **Time axis — `--since`, `--sort`, `--by`** ([#223]). The vault records when every note was
+  modified and nothing could ask about it. `checkStale` was already walking the whole vault on
+  every query and throwing those timestamps away; frontmatter `date` was already indexed. Both are
+  now query dimensions, on `search`, `backlinks`, and `links --orphans`, and in the MCP tool.
+
+  There are two axes because they answer different questions and one of them lies. `mtime` is what
+  you actually touched — but `git pull` and `checkout` rewrite it, and a fresh clone gives every
+  file the same value, so after a pull "recently changed" means "whatever the pull touched".
+  Frontmatter `date` is unaffected by git but only exists where someone wrote it.
+
+  Notes with no value on the chosen axis are dropped from a `--since` filter and sorted last
+  otherwise — and the dropped count is always reported.
+
+  In the app the Command Palette's empty state gained a **Recently changed** group, kept separate
+  from *recently opened*: a change made by an editor, by git, or by any other tool never appears in
+  reading history.
 - **New app icon.** Replaces the Tauri placeholder the project had been shipping with — indigo
   bracket mark with a gold gem, from a supplied vector source. `src-tauri/icons/lapis-light.svg`
   and `lapis-dark.svg` are kept so the set can be regenerated.
@@ -803,6 +819,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#223]: https://github.com/eren0315/lapis/pull/223
 [#221]: https://github.com/eren0315/lapis/pull/221
 [#220]: https://github.com/eren0315/lapis/pull/220
 [#219]: https://github.com/eren0315/lapis/pull/219

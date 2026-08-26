@@ -298,6 +298,7 @@
   "cmd_vault_root": "(vault root)",
   "palette_aria": "Command palette",
   "palette_group_recent": "RECENT",
+  "palette_group_changed": "Recently changed",
   "palette_group_notes": "NOTES",
   "palette_group_content": "CONTENT",
   "palette_group_tags": "TAGS",

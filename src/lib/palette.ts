@@ -11,6 +11,7 @@ import { tagIndex, type TagIndex } from "$lib/stores/tags";
 import { docKindCounts, topicCounts } from "$lib/stores/filters";
 import { matchCommands, BUILTIN_COMMANDS, type Command } from "$lib/commands";
 import { recentNotePaths, RECENT_DISPLAY } from "$lib/stores/recent";
+import { noteMtimes } from "$lib/stores/mtimes";
 
 /**
  * 팔레트 모드.
@@ -29,7 +30,14 @@ export type PaletteEntry =
   | { kind: "tag"; key: string; display: string; mode: "leaf" | "prefix"; count: number }
   | { kind: "facet"; field: "doc_kind" | "topic"; value: string; count: number }
   | { kind: "command"; command: Command }
-  | { kind: "recent"; path: string; label: string; subtitle?: string };
+  | { kind: "recent"; path: string; label: string; subtitle?: string }
+  /**
+   * **최근 바뀐** 노트 — `recent`(최근 **연** 노트)와 다른 축이다.
+   *
+   * ⚠️ 둘을 한 그룹에 섞으면 안 된다. "내가 연 것"과 "바깥에서 바뀐 것"은 서로 다른
+   * 질문에 답한다. 편집기·git·다른 도구가 쓴 변경은 `recent`에 절대 안 들어온다.
+   */
+  | { kind: "changed"; path: string; label: string; subtitle?: string; mtimeMs: number };
 
 export interface PaletteResult {
   entry: PaletteEntry;
@@ -75,6 +83,9 @@ export function normalizedScore(kind: PaletteEntry["kind"], raw: number): number
       return raw * 60;
     case "recent":
       // Recent는 항상 빈 입력 흐름에서만 등장 — 그룹 안에서의 정렬만 유지하면 됨
+      return raw;
+    case "changed":
+      // 같은 이유. 그룹 안 순서는 mtime 내림차순으로 이미 정해져 들어온다.
       return raw;
   }
 }
@@ -250,6 +261,41 @@ function recentAsResults(limit: number = RECENT_DISPLAY): PaletteResult[] {
   return out;
 }
 
+/**
+ * 최근 **바뀐** 노트 — mtime 내림차순.
+ *
+ * ⚠️ `recentAsResults`(최근 **연** 노트)와 다른 축이다. 밖에서 쓴 변경(편집기 · git ·
+ * 다른 도구)은 열람 이력에 절대 안 남으므로, 그 목록만으로는 "무엇이 바뀌었나"를 알
+ * 방법이 없다. README가 전제하듯 **vault를 쓰는 건 Lapis가 아니라 바깥 도구들**이다.
+ *
+ * ⚠️ 동률 타이브레이크는 경로 오름차순이다. 큰 vault에서 같은 초에 여러 파일이 쓰이는
+ * 일은 흔하고(git checkout이면 **전부** 같다), 그때 순서가 흔들리면 목록이 매번 다르게
+ * 보인다. 그 규율은 `$lib/recency`와 같다.
+ */
+function changedAsResults(limit: number = RECENT_DISPLAY): PaletteResult[] {
+  const times = get(noteMtimes);
+  if (times.size === 0) return [];
+  const entries = get(quickEntries);
+
+  const rows: { qe: QuickEntry; mtimeMs: number }[] = [];
+  for (const qe of entries) {
+    const t = times.get(qe.path);
+    if (t !== undefined) rows.push({ qe, mtimeMs: t });
+  }
+  rows.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.qe.path < b.qe.path ? -1 : 1));
+
+  return rows.slice(0, limit).map((r, i) => ({
+    entry: {
+      kind: "changed" as const,
+      path: r.qe.path,
+      label: r.qe.primaryLabel,
+      subtitle: r.qe.parentPath || undefined,
+      mtimeMs: r.mtimeMs,
+    },
+    score: normalizedScore("changed", limit - i),
+  }));
+}
+
 /** 빌트인 명령 전체 (빈 입력 시 QUICK ACTIONS 그룹용) — 비활성 명령은 제외. */
 function quickActionsAsResults(): PaletteResult[] {
   return BUILTIN_COMMANDS.filter((c) => !c.disabled?.()).map((command, i) => ({
@@ -299,8 +345,13 @@ export async function unifiedSearch(
     return [...content, ...tags, ...facets];
   }
 
-  // all 모드 — 빈 query면 Recent + Quick Actions
-  if (!query) return [...recentAsResults(), ...quickActionsAsResults()];
+  // all 모드 — 빈 query면 Recent + 최근 변경 + Quick Actions
+  //
+  // ⚠️ '최근 연 것'과 '최근 바뀐 것'을 **따로** 낸다. 섞으면 어느 축인지 알 수 없고,
+  // 밖에서 바뀐 노트는 열람 이력에 없어서 앞의 목록엔 절대 안 나온다.
+  if (!query) {
+    return [...recentAsResults(), ...changedAsResults(), ...quickActionsAsResults()];
+  }
 
   // content는 IPC(readNote × N) 동반이라 다른 sync 빌더와 병렬로 진행
   const files = matchFiles(query, get(quickEntries));
@@ -334,6 +385,7 @@ export async function unifiedSearch(
 /** 그룹별로 결과 분할 — UI 렌더링용. 빈 그룹은 제외하지 않음(헤더 결정은 UI에서). */
 export interface ResultGroups {
   recents: PaletteResult[];
+  changed: PaletteResult[];
   notes: PaletteResult[];
   content: PaletteResult[];
   tags: PaletteResult[];
@@ -344,6 +396,7 @@ export interface ResultGroups {
 export function groupResults(results: PaletteResult[]): ResultGroups {
   const groups: ResultGroups = {
     recents: [],
+    changed: [],
     notes: [],
     content: [],
     tags: [],
@@ -352,6 +405,9 @@ export function groupResults(results: PaletteResult[]): ResultGroups {
   };
   for (const r of results) {
     switch (r.entry.kind) {
+      case "changed":
+        groups.changed.push(r);
+        break;
       case "recent":
         groups.recents.push(r);
         break;
@@ -376,7 +432,15 @@ export function groupResults(results: PaletteResult[]): ResultGroups {
 }
 
 /** `ResultGroups`의 그룹 이름. 화면에 그리는 순서이기도 하다. */
-export const GROUP_ORDER = ["recents", "notes", "content", "tags", "facets", "commands"] as const;
+export const GROUP_ORDER = [
+  "recents",
+  "changed",
+  "notes",
+  "content",
+  "tags",
+  "facets",
+  "commands",
+] as const;
 export type GroupName = (typeof GROUP_ORDER)[number];
 
 /**
@@ -394,6 +458,9 @@ export type GroupName = (typeof GROUP_ORDER)[number];
 export function isGroupVisible(mode: PaletteMode, group: GroupName): boolean {
   switch (group) {
     case "recents":
+      return true;
+    case "changed":
+      // 빈 입력 흐름에서만 채워진다 — 모드로 가릴 이유가 없다.
       return true;
     case "notes":
       return mode !== "fulltext";

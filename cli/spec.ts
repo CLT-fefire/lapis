@@ -43,6 +43,30 @@ const LIMIT: OptionSpec = {
   desc: "결과 수. 기본 10, 상한 50",
 };
 
+/**
+ * 시간축 옵션 — `search` · `backlinks` · `links`가 공유한다.
+ *
+ * ⚠️ `GLOBAL_OPTIONS`에 올리지 않는다. `status` · `index` · `open`의 도움말에 무의미한
+ * 옵션이 뜨고, 도움말이 길어지면 읽히지 않는다. `LIMIT`이 이미 같은 패턴이다.
+ */
+const TIME_OPTS: OptionSpec[] = [
+  {
+    name: "since",
+    kind: "string",
+    desc: "이 시점 이후만. 7d · 24h · 2w · 2026-08-01 (links는 --orphans에만)",
+  },
+  {
+    name: "sort",
+    kind: "string",
+    desc: "recent | path | score. score는 질의가 있을 때만 (links는 --orphans에만)",
+  },
+  {
+    name: "by",
+    kind: "string",
+    desc: "시간축. mtime(기본) | date(frontmatter). git이 mtime을 덮어쓴다",
+  },
+];
+
 export const COMMANDS: CommandSpec[] = [
   {
     name: "search",
@@ -56,13 +80,18 @@ export const COMMANDS: CommandSpec[] = [
       { name: "min-rel", kind: "number", desc: "상대 점수 하한 0~1. 결과가 넓을 때 꼬리를 자른다" },
       { name: "exclude", kind: "string[]", desc: "vault 상대 문자열 prefix. 여러 번 줄 수 있다" },
       { name: "include-archive", kind: "boolean", desc: "_memories 기본 제외를 해제" },
+      ...TIME_OPTS,
     ],
   },
   {
     name: "backlinks",
     desc: "이 문서를 참조하는 문서들. 본문 링크 ∪ frontmatter cross-ref",
     positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
-    options: [LIMIT, { name: "include-archive", kind: "boolean", desc: "_memories 제외 해제" }],
+    options: [
+      LIMIT,
+      { name: "include-archive", kind: "boolean", desc: "_memories 제외 해제" },
+      ...TIME_OPTS,
+    ],
   },
   {
     name: "list",
@@ -85,6 +114,7 @@ export const COMMANDS: CommandSpec[] = [
         kind: "boolean",
         desc: "들어오는 링크가 없는 노트. 끊긴 링크의 거울상이다",
       },
+      ...TIME_OPTS,
     ],
   },
   {

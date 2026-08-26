@@ -55,6 +55,7 @@ import {
   type SafeWriteOutcome,
 } from "$lib/safeWrite";
 import { markOpened, syncFromDisk } from "./unread";
+import { primeMtimes, resetMtimes } from "./mtimes";
 import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { diffFileStats, deltaGate, touchedPaths, type CacheDelta } from "$lib/cacheDelta";
@@ -164,6 +165,9 @@ export async function openVault(path: string): Promise<void> {
   // → 작은 vault(1 shard) 전환이면 shard 1–7이 남는다. `unionRank`는 ready된 **모든**
   // shard에 질의하니 이전 vault 문서가 검색 결과로 새어 나온다.
   clearIndexes();
+  // ⚠️ 이전 vault의 mtime 지도도 비운다. `primeMtimes`가 아래에서 다시 채우지만 그건
+  // 인덱스 빌드 뒤다 — 그 사이에 팔레트를 열면 **없는 노트가 '최근 변경'에 뜬다**.
+  resetMtimes();
   fullTextRecoveryTried = false;
   clearNavHistory();
   clearTabs();
@@ -186,6 +190,10 @@ export async function openVault(path: string): Promise<void> {
   // 열람 이력이 있는 경로만 stat하므로 12000노트여도 대상은 보통 수백 건이고,
   // 실패해도 표시만 빠질 뿐이라 await로 막지 않는다.
   void syncFromDisk(path);
+
+  // 시간축 정렬(팔레트의 '최근 변경')이 쓰는 mtime 지도. 한 번 전량 읽고 그 뒤는
+  // watcher가 증분으로 고친다 — 자세한 근거는 `stores/mtimes.ts`.
+  void primeMtimes(path);
 
   // 인덱스 준비 후 실제 존재하지 않는 탭 정리 (외부에서 삭제·이동된 노트).
   const idx = get(linkIndex);

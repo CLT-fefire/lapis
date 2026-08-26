@@ -804,3 +804,131 @@ describe("이름이 모호하면 거부한다", () => {
     }
   });
 });
+
+/**
+ * 시간축 — `--since` · `--sort` · `--by`.
+ *
+ * ⚠️ **절대 날짜로만 단언한다.** 상대 기간(`7d`)은 본질적으로 "지금"에 의존하므로,
+ * 그걸로 단언하면 시계에 따라 결과가 흔들린다. 파싱 자체는 `src/lib/recency.test.ts`가
+ * 주입된 시각으로 고정한다.
+ */
+describe("시간축", () => {
+  const dated = [
+    {
+      rel: "old.md",
+      doc_kind: "note",
+      topic: "t",
+      body: "오래된 것",
+      props: { date: ["2020-01-01"] },
+    },
+    {
+      rel: "mid.md",
+      doc_kind: "note",
+      topic: "t",
+      body: "중간",
+      props: { date: ["2023-06-15"] },
+    },
+    {
+      rel: "new.md",
+      doc_kind: "note",
+      topic: "t",
+      body: "새것",
+      props: { date: ["2026-08-01"] },
+    },
+    // ⚠️ 날짜를 안 적은 노트 — 실측에서 47개 중 4개가 이랬다.
+    { rel: "undated.md", doc_kind: "note", topic: "t", body: "날짜 없음" },
+  ];
+
+  const paths = (r: SearchResponse) => r.results.map((x) => x.path);
+
+  it("date 축으로 기간을 자른다", () => {
+    setup({}, dated);
+    const r = search({ doc_kind: "note", since: "2023-01-01", by: "date", limit: 50 });
+    expect(paths(r).sort()).toEqual(["mid.md", "new.md"]);
+  });
+
+  /** 조용히 빼면 `--by date`로 물었을 때 날짜 없는 노트가 사라진 이유를 모른다. */
+  it("날짜 없는 노트를 빼고 건수를 남긴다", () => {
+    setup({}, dated);
+    const r = search({ doc_kind: "note", since: "2023-01-01", by: "date", limit: 50 });
+    const u = r.used.find((x) => x.name === "since");
+    expect(u).toBeDefined();
+    expect(u?.dropped_no_time).toBe(1);
+    expect(u?.dropped_older).toBe(1);
+    expect(u?.axis).toBe("date");
+  });
+
+  it("date 축 최근 순 — 날짜 없는 노트는 맨 뒤", () => {
+    setup({}, dated);
+    const r = search({ doc_kind: "note", sort: "recent", by: "date", limit: 50 });
+    expect(paths(r)).toEqual(["new.md", "mid.md", "old.md", "undated.md"]);
+  });
+
+  /**
+   * ⚠️ 잘라내기가 **정렬 뒤에** 와야 한다. 순서를 뒤집으면 임의의 N건을 골라서 정렬하는
+   * 셈이 되어 `sort: recent`가 "가장 최근 N건"을 뜻하지 않게 된다.
+   */
+  it("limit이 정렬 뒤에 걸린다", () => {
+    setup({}, dated);
+    const r = search({ doc_kind: "note", sort: "recent", by: "date", limit: 2 });
+    expect(paths(r)).toEqual(["new.md", "mid.md"]);
+  });
+
+  it("mtime 축이 기본이다", () => {
+    setup({}, dated);
+    // 픽스처는 방금 만들어졌으므로 mtime은 전부 최근이다 — 넓은 기간이면 전부 남는다.
+    const r = search({ doc_kind: "note", since: "2020-01-01", limit: 50 });
+    expect(paths(r)).toHaveLength(4);
+    expect(r.used.find((x) => x.name === "since")?.axis).toBe("mtime");
+  });
+
+  it("path 정렬은 입력 순서와 무관하다", () => {
+    setup({}, dated);
+    const fwd = paths(search({ doc_kind: "note", sort: "path", limit: 50 }));
+    setup({}, [...dated].reverse());
+    const rev = paths(search({ doc_kind: "note", sort: "path", limit: 50 }));
+    expect(fwd).toEqual(["mid.md", "new.md", "old.md", "undated.md"]);
+    expect(rev).toEqual(fwd);
+  });
+
+  /** 사용법 오류는 질의 전에 잡는다 — 뒤에서 무시하면 인자가 먹은 줄 안다. */
+  it("구조 질의에 sort: score 는 거부", () => {
+    setup({}, dated);
+    try {
+      lapisQuery({ doc_kind: "note", sort: "score" });
+      expect.unreachable("거부해야 한다");
+    } catch (e) {
+      expect(e).toBeInstanceOf(LapisError);
+      expect((e as LapisError).kind).toBe("no_criteria");
+    }
+  });
+
+  it("모르는 축·정렬은 거부", () => {
+    setup({}, dated);
+    for (const bad of [
+      { by: "created" as unknown as "mtime" },
+      { sort: "alpha" as unknown as "path" },
+    ]) {
+      expect(() => lapisQuery({ doc_kind: "note", ...bad })).toThrow(LapisError);
+    }
+  });
+
+  it("읽을 수 없는 since 는 사용법 오류", () => {
+    setup({}, dated);
+    try {
+      lapisQuery({ doc_kind: "note", since: "어제" });
+      expect.unreachable("거부해야 한다");
+    } catch (e) {
+      expect((e as LapisError).kind).toBe("no_criteria");
+      expect((e as LapisError).message).toMatch(/since/);
+    }
+  });
+
+  it("시간 인자가 없으면 walk를 더 하지 않는다 — 기존 동작 그대로", () => {
+    setup({}, dated);
+    const r = search({ doc_kind: "note", limit: 50 });
+    expect(r.used.some((x) => x.name === "since")).toBe(false);
+    // 정렬을 안 주면 지금까지의 동작(경로순)이다.
+    expect(paths(r)).toEqual(["mid.md", "new.md", "old.md", "undated.md"]);
+  });
+});
