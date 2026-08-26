@@ -31,6 +31,32 @@ export interface FullTextHit {
   name: string;
 }
 
+/**
+ * `unionRank` 결과 1건 — `FullTextHit`에 **질의 내 상대 점수**를 더한 것.
+ *
+ * ## 왜 필요한가 — raw BM25 점수는 질의 간 비교가 안 된다
+ *
+ * 실측(`mcp/README.md`): `"멀티 윈도우"` 63점 vs 영문 혼합 1,494점. 같은 코퍼스인데
+ * 스케일이 20배 넘게 벌어진다(다른 표본에선 848 vs 73). IDF가 질의 term 구성에 따라
+ * 통째로 달라지고, shard-local IDF라 shard 간에도 엄밀하지 않기 때문이다.
+ *
+ * 그 결과 **"이 점수 아래는 버린다"는 절대 임계값을 세울 수 없었다.** 특히 `OR` 폴백은
+ * 코퍼스를 넓게 긁는데, 잘라낼 기준이 없어 그대로 소비자에게 넘어갔다 — MCP 경로에서는
+ * 그게 곧 LLM 컨텍스트 낭비다.
+ *
+ * `rel`은 **그 질의 안에서** top-1을 1.0으로 두고 잰 비율이라 질의를 가로질러 비교된다.
+ *
+ * ⚠️ **랭킹 순서에는 아무 영향이 없다.** `score` 내림차순 정렬 뒤에 단조 변환을 얹은
+ * 값이라 순서가 보존된다. 계측 하네스(`mcp/searchEval.ts`)의 R@1·R@10·MRR은 그대로다.
+ *
+ * ⚠️ **단계 간 비교에는 쓰지 말 것.** `AND`에서 나온 rel 0.5와 `OR`에서 나온 rel 0.5는
+ * 다른 뜻이다(모집단이 다르다). 단계는 `combine`으로 따로 본다.
+ */
+export interface RankedHit extends FullTextHit {
+  /** 질의 내 상대 점수 `[0,1]`. top-1이 1.0. 결과가 비면 정의되지 않는다(빈 배열). */
+  rel: number;
+}
+
 export const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
   fields: ["name", "body"],
   storeFields: ["name"],
@@ -91,7 +117,7 @@ export function unionRank(
   indexes: readonly (MiniSearch<FullTextDoc> | null)[],
   query: string,
   limit: number,
-): FullTextHit[] {
+): RankedHit[] {
   return unionRankDetailed(indexes, query, limit).hits;
 }
 
@@ -202,7 +228,7 @@ export function unionRankDetailed(
   indexes: readonly (MiniSearch<FullTextDoc> | null)[],
   query: string,
   limit: number,
-): { hits: FullTextHit[]; combine: Combine } {
+): { hits: RankedHit[]; combine: Combine } {
   /** 매칭 term 수(`nMatched`)를 함께 보존한다 — `OR-min` 단계가 그걸로 걸러낸다. */
   const run = (q: Query, opts?: SearchOptions): (FullTextHit & { nMatched: number })[] => {
     const combined: (FullTextHit & { nMatched: number })[] = [];
@@ -221,10 +247,21 @@ export function unionRankDetailed(
     return combined;
   };
 
-  const cut = (hits: FullTextHit[], combine: Combine) => ({
-    hits: limit > 0 ? hits.slice(0, limit) : hits,
-    combine,
-  });
+  /**
+   * 자르고 나서 `rel`을 얹는다.
+   *
+   * 자르기 **전에** 계산해도 결과는 같다(정렬돼 있어 top은 어느 쪽이든 `[0]`이다).
+   * 뒤에 두는 건 비용 때문이다 — `OR` 단계는 10,000건 규모라 전량 map이 아깝다.
+   */
+  const cut = (hits: FullTextHit[], combine: Combine): { hits: RankedHit[]; combine: Combine } => {
+    const sliced = limit > 0 ? hits.slice(0, limit) : hits;
+    const top = sliced[0]?.score ?? 0;
+    return {
+      // top이 0이면 전부 0으로 둔다 — 0으로 나누지 않는다.
+      hits: sliced.map((h) => ({ ...h, rel: top > 0 ? h.score / top : 0 })),
+      combine,
+    };
+  };
 
   const strict = run(query, AND_OPTIONS);
   if (strict.length > 0) return cut(strict, "AND");

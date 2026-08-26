@@ -14,6 +14,21 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [Unreleased]
+
+### Added
+- **A relative score (`rel`) that can be compared across queries** ([#198]). Raw BM25 scores could not
+  be compared between queries — the same corpus answered `"멀티 윈도우"` with 63 and an English-mixed
+  query with 1,494 (another sample: 848 vs 73), because IDF shifts with the query's term composition
+  and is shard-local besides. That meant **no absolute cutoff was possible**, which hurt most in the
+  `OR` fallback, where the ranker deliberately casts wide and nothing could trim the tail. Every ranked
+  hit now carries `rel`, the score relative to that query's top hit (`1.0`). The MCP tool takes
+  `min_rel` to drop the tail, and reports `used[].dropped_by_min_rel` so a filtered-out result is never
+  silently missing. Ordering is untouched — `rel` is a monotone transform applied after the existing
+  sort, so the eval harness's R@1/R@10/MRR are unchanged.
+
+---
+
 ## [1.14.0] — 2026-08-26
 
 ### Added
@@ -561,6 +576,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#198]: https://github.com/eren0315/lapis/pull/198
 [#196]: https://github.com/eren0315/lapis/pull/196
 [#193]: https://github.com/eren0315/lapis/pull/193
 [#192]: https://github.com/eren0315/lapis/pull/192

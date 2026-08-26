@@ -147,3 +147,70 @@ describe("limit", () => {
     expect(unionRankDetailed(index(DOCS), "멀티", 1).hits.length).toBe(1);
   });
 });
+
+/**
+ * `rel` — 질의 내 상대 점수.
+ *
+ * raw `score`는 질의마다 스케일이 달라(실측 63 vs 1,494) 임계값으로 못 쓴다.
+ * 이 테스트가 고정하는 것은 두 가지다: **top-1은 항상 1.0**이고, **순서를 바꾸지 않는다**.
+ */
+/**
+ * rel 검증 전용 픽스처. 위 `DOCS`는 계측으로 고정된 단계 판정용이라 건드리지 않는다.
+ * 여기서는 **같은 term을 문서들이 다른 빈도로 나눠 갖게** 해 점수가 벌어지도록 만든다.
+ */
+const REL_DOCS: [string, string][] = [
+  ["r1", "멀티 멀티 멀티 윈도우"],
+  ["r2", "멀티 멀티 창"],
+  ["r3", "멀티 문서"],
+];
+
+describe("rel — 질의 간 비교 가능한 점수축", () => {
+  it("top-1의 rel은 1.0이다", () => {
+    const { hits } = unionRankDetailed(index(DOCS), "멀티", 0);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].rel).toBe(1);
+  });
+
+  it("서로 다른 질의여도 top-1은 똑같이 1.0 — 그래서 임계값을 쓸 수 있다", () => {
+    // raw score는 두 질의가 다른 스케일이지만 rel은 같은 축이다.
+    const a = unionRankDetailed(index(DOCS), "멀티", 0).hits;
+    const b = unionRankDetailed(index(DOCS), "윈도우", 0).hits;
+    expect(a[0].rel).toBe(1);
+    expect(b[0].rel).toBe(1);
+  });
+
+  it("rel은 [0,1] 안에 있고 score와 같은 순서다", () => {
+    const { hits } = unionRankDetailed(index(REL_DOCS), "멀티", 0);
+    expect(hits.length).toBeGreaterThan(1);
+    for (const h of hits) {
+      expect(h.rel).toBeGreaterThanOrEqual(0);
+      expect(h.rel).toBeLessThanOrEqual(1);
+    }
+    // 단조 변환이라 순서가 보존된다 — 랭킹 회귀 방지.
+    for (let i = 1; i < hits.length; i++) {
+      expect(hits[i].rel).toBeLessThanOrEqual(hits[i - 1].rel);
+      expect(hits[i].score).toBeLessThanOrEqual(hits[i - 1].score);
+    }
+  });
+
+  it("rel = score / top-score", () => {
+    const { hits } = unionRankDetailed(index(REL_DOCS), "멀티", 0);
+    const top = hits[0].score;
+    for (const h of hits) expect(h.rel).toBeCloseTo(h.score / top, 10);
+  });
+
+  it("limit으로 잘라도 top-1 기준은 그대로다", () => {
+    const full = unionRankDetailed(index(REL_DOCS), "멀티", 0).hits;
+    const cut = unionRankDetailed(index(REL_DOCS), "멀티", 2).hits;
+    expect(full.length).toBe(3);
+    expect(cut.length).toBe(2);
+    expect(cut[0].rel).toBe(1);
+    // 자르기 전후로 같은 문서의 rel이 달라지면 임계값이 limit에 따라 흔들린다.
+    expect(cut[1].rel).toBeCloseTo(full[1].rel, 10);
+  });
+
+  it("결과가 비면 아무것도 내지 않는다 — 0으로 나누지 않는다", () => {
+    const { hits } = unionRankDetailed(index(DOCS), "존재하지않는단어xyz", 0);
+    expect(hits.every((h) => Number.isFinite(h.rel))).toBe(true);
+  });
+});
