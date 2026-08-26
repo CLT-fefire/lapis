@@ -343,5 +343,14 @@
   "brokenlinks_no_vault": "Open a vault first.",
   "brokenlinks_summary": "{targets} targets · {links} links",
   "brokenlinks_referenced_by": "referenced by {count}",
-  "brokenlinks_hint": "Body wikilinks and markdown links only. Frontmatter cross-refs are excluded: by design a value counts as a relation only when it resolves, so auditing them would flag every ordinary scalar."
+  "brokenlinks_hint": "Body wikilinks and markdown links only. Frontmatter cross-refs are excluded: by design a value counts as a relation only when it resolves, so auditing them would flag every ordinary scalar.",
+  "cmd_grep": "Search whole vault (regex)",
+  "grep_title": "Search whole vault",
+  "grep_placeholder": "Literal text or regex — press Enter to run",
+  "grep_whole_word": "Whole word",
+  "grep_run": "Search",
+  "grep_running": "Searching…",
+  "grep_summary": "{hits} hits in {files} files · {scanned} scanned",
+  "grep_truncated": "truncated at the cap",
+  "grep_hint": "BM25 search (⌘⇧F) matches tokens; this matches the string itself. Use it when the wording differs from what you remember. Clicking a result opens in-document search with the same pattern."
 }

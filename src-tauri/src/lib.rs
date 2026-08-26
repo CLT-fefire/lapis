@@ -1,4 +1,5 @@
 mod git;
+mod grep;
 mod paths;
 mod search_cache;
 mod settings;
@@ -172,6 +173,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             is_debug_build,
             new_window,
+            grep::grep_vault,
             vault::list_notes,
             vault::read_note,
             vault::write_note,

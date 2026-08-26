@@ -17,6 +17,18 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **Whole-vault literal and regex search** (`⌘⇧G`) ([#200]). In-document search (`⌘F`) had regex,
+  case and whole-word for years; whole-vault search (`⌘⇧F`) had only BM25 token matching. That gap
+  mattered because **BM25 and grep fail in opposite directions** — measured on this vault, grep
+  returned nothing for 4 of 4 questions in `_memories` (the notes say "창", the query said "윈도우")
+  while BM25 drowned the good hits in that same tree. `mcp/README.md` concluded "use both", but the
+  app only had one arm. Matching runs in Rust over the same rayon-parallel walk the bundle read
+  already uses. Clicking a result opens in-document search with the same pattern, so you land on the
+  match instead of at the top of the note.
+
+  ⚠️ Match offsets come **from Rust**, in UTF-16 code units. Recomputing them in the frontend would be
+  wrong twice over: Rust's `regex` has no backreferences or lookaround, so JS `RegExp` can match
+  somewhere else, and byte offsets would misplace every highlight on a line containing Korean.
 - **A broken-link audit** ([#199]). The preview marks unresolved wikilinks with a class, but only in
   the note you happen to have open — across 19,000 notes that is not something you find by looking.
   It matters because, as the README says, the vault is written by other tools rather than by Lapis:
@@ -589,6 +601,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#200]: https://github.com/eren0315/lapis/pull/200
 [#199]: https://github.com/eren0315/lapis/pull/199
 [#198]: https://github.com/eren0315/lapis/pull/198
 [#196]: https://github.com/eren0315/lapis/pull/196

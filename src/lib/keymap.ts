@@ -28,6 +28,7 @@ export type ShortcutId =
   | "new-tab"
   | "new-window"
   | "fulltext-search"
+  | "vault-grep"
   | "save"
   | "find-in-doc"
   | "toggle-main-pane"
@@ -94,6 +95,8 @@ export function resolveShortcut(e: KeyChord, ctx: KeymapContext): ShortcutMatch 
   if (key === "t" && !e.shiftKey) return { id: "new-tab" };
   if (key === "t" && e.shiftKey) return { id: "new-window" };
   if ((key === "f" || key === "p") && e.shiftKey) return { id: "fulltext-search" };
+  // ⌘⇧G — vault 전체 정규식/리터럴 검색. `g`는 그래프 뷰(⌘G) 제거로 비어 있던 자리다.
+  if (key === "g" && e.shiftKey) return { id: "vault-grep" };
   if (key === "s" && !e.shiftKey) return { id: "save" };
   if (key === "f" && !e.shiftKey) return { id: "find-in-doc" };
   if (key === "e" && !e.shiftKey && !e.altKey) return { id: "toggle-main-pane" };

@@ -396,7 +396,7 @@ pub fn prune_link_rewrite_backups(vault_path: String, max_keep: usize) -> Result
 
 // === 공통 헬퍼 ===
 
-fn canonicalize_vault(vault_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn canonicalize_vault(vault_path: &str) -> Result<PathBuf, String> {
     PathBuf::from(vault_path)
         .canonicalize()
         .map_err(|e| format!("vault canonicalize failed: {e}"))
@@ -869,7 +869,7 @@ fn walk_md_stats(root: &Path, current: &Path, out: &mut Vec<WalkEntry>) -> std::
 }
 
 /// recursive walk만 — read 없음. `walk_for_content`/`walk_for_links`의 push만 분리.
-fn walk_md_files(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+pub(crate) fn walk_md_files(current: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     for entry in fs::read_dir(current)? {
         let entry = entry?;
         let path = entry.path();

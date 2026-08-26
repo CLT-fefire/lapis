@@ -15,6 +15,8 @@
   import SettingsModal from "$lib/SettingsModal.svelte";
   import TableView from "$lib/TableView.svelte";
   import BrokenLinksModal from "$lib/BrokenLinksModal.svelte";
+  import GrepModal from "$lib/GrepModal.svelte";
+  import { openGrep } from "$lib/stores/grep";
   import { openTableView } from "$lib/stores/tableView";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
@@ -1034,6 +1036,10 @@
         e.preventDefault();
         openTableView();
         return;
+      case "vault-grep":
+        e.preventDefault();
+        openGrep();
+        return;
       case "focus-tree-filter": {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>(".tree-filter-input");
@@ -1130,6 +1136,7 @@
 <SettingsModal />
 <TableView />
 <BrokenLinksModal />
+<GrepModal />
 <LinkRewritePreviewModal />
 
 {#if $externalConflict}
