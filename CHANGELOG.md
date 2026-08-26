@@ -45,6 +45,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   and the extension whitelist. A CLI that were looser would fork the safety rules it shares.
 
 ### Fixed
+- **Legacy cache files could be left as orphans** ([#217]). The one-time rename introduced in
+  [#214] only ran when the new-key file was missing, so if `lapis index` wrote the cache before the
+  app was ever opened, the old file stayed on disk forever — the exact state [#214] set out to
+  remove. Observed on a real cache while verifying the CLI.
+
+  The sweep now also runs when the new-key file exists, and in that case removes the superseded
+  file instead of renaming over it — renaming would replace a freshly built index with an older
+  snapshot. Which side wins is decided from the meta file's mtime, once per key, so a snapshot is
+  never split across generations.
 - **The same vault could end up with two caches** ([#214]). The cache filename hash was computed from
   whatever path string the caller happened to pass, so `C:\Projects\x` and `C:/Projects/x`, a
   trailing slash, or a path reached through a symlink each produced a different name. The symptom is
@@ -745,6 +754,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#217]: https://github.com/eren0315/lapis/pull/217
 [#216]: https://github.com/eren0315/lapis/pull/216
 [#215]: https://github.com/eren0315/lapis/pull/215
 [#214]: https://github.com/eren0315/lapis/pull/214

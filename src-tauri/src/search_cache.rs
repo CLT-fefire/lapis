@@ -49,7 +49,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
 use crate::hash::{fnv1a32, FNV32_OFFSET};
@@ -181,12 +181,28 @@ fn legacy_default_hasher_key(vault_path: &str) -> String {
     format!("{:016x}", h.finish())
 }
 
-/// 옛 이름으로 남아 있는 캐시 파일들을 새 이름으로 **옮긴다**(복사가 아니라 rename).
+/// 옛 이름으로 남아 있는 캐시 파일을 정리한다 — **옮기거나(rename) 지운다.**
 ///
-/// 복사가 아닌 이유 — 남겨두면 정리 경로가 없는 고아가 된다. 이름만 바꾸면 디스크에
-/// 파일이 하나뿐이고, 실패해도 옛 파일이 그대로라 다음 기동에 다시 시도한다.
+/// ## 왜 지우는 갈래가 있나
 ///
-/// 반환값은 **옮긴 파일 수**. 0이면 이주할 게 없었다는 뜻이다.
+/// 이주는 원래 "새 이름이 없을 때만" 돌았다. 그런데 새 이름 파일이 **이미 있는** 경우가
+/// 실제로 생긴다 — `lapis index`(CLI)가 앱보다 먼저 캐시를 쓰면 그렇다. 그때 예전 코드는
+/// 아무것도 하지 않았고, 옛 파일은 **아무도 안 읽는 고아로 영영 남았다.** 그게 바로
+/// [#214]가 없애려던 상태라, 실측에서 그대로 재현되는 걸 보고 고쳤다.
+///
+/// ⚠️ **덮어쓰지 않고 새 쪽이 낡았을 때만 옮긴다.** 무조건 rename 하면 CLI가 방금 만든
+/// 최신 인덱스를 옛 스냅샷으로 덮어쓴다. 그건 "왜 또 전체 재인덱싱이지"로 이어진다
+/// (fingerprint가 어긋나 읽는 쪽이 거부한다 — 안전한 실패지만 낭비다).
+///
+/// ⚠️ 판정은 **meta 파일 하나로** 하고 그 결정을 같은 키의 모든 파일에 적용한다. 파일별로
+/// 따로 재면 meta는 새 것, shard는 옛 것처럼 **스냅샷이 찢어진다.**
+///
+/// 지우는 게 위험하지 않은 이유 — 이건 캐시다. 잘못 지워도 다음 기동에 다시 만든다.
+///
+/// 반환값은 **옮긴** 파일 수(지운 것은 세지 않는다). 0이면 새 이름이 안 생겼다는 뜻이라
+/// 호출부가 "이주로 뭔가 생겼나"를 그대로 판정할 수 있다.
+///
+/// [#214]: https://github.com/eren0315/lapis/pull/214
 fn migrate_legacy_cache_files(dir: &PathBuf, vault_path: &str) -> usize {
     let new = vault_key(vault_path);
     let olds: Vec<String> = legacy_vault_keys(vault_path)
@@ -199,18 +215,38 @@ fn migrate_legacy_cache_files(dir: &PathBuf, vault_path: &str) -> usize {
     let Ok(entries) = fs::read_dir(dir) else {
         return 0;
     };
+
+    // ⚠️ 판정을 **루프 전에** 끝낸다. 안에서 재면 첫 파일(meta)을 옮긴 직후 새 이름 meta가
+    // 생기고, 그러면 남은 파일들이 "새 세대가 이미 있다"로 판정돼 **지워진다.** 테스트가
+    // 잡았다 — 4개를 옮겨야 하는데 1개만 옮기고 3개를 날렸다.
+    let discard: Vec<bool> = olds
+        .iter()
+        .map(|old| new_generation_wins(dir, old, &new))
+        .collect();
+
     let mut moved = 0;
+    let mut removed = 0;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(rest) = olds.iter().find_map(|o| name.strip_prefix(o.as_str())) else {
+        let Some((idx, rest)) = olds
+            .iter()
+            .enumerate()
+            .find_map(|(i, o)| name.strip_prefix(o.as_str()).map(|r| (i, r)))
+        else {
             continue;
         };
         // `{key}.meta.json.gz` · `{key}.stats.json.gz` · `{key}.shard{n}.json.gz`
         if !rest.starts_with('.') {
             continue;
         }
-        let target = dir.join(format!("{new}{rest}"));
-        match fs::rename(entry.path(), &target) {
+        if discard[idx] {
+            match fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(e) => eprintln!("[search-cache] 옛 캐시 제거 실패 {name}: {e}"),
+            }
+            continue;
+        }
+        match fs::rename(entry.path(), dir.join(format!("{new}{rest}"))) {
             Ok(()) => moved += 1,
             Err(e) => eprintln!("[search-cache] 이주 실패 {name}: {e}"),
         }
@@ -218,7 +254,32 @@ fn migrate_legacy_cache_files(dir: &PathBuf, vault_path: &str) -> usize {
     if moved > 0 {
         eprintln!("[search-cache] 옛 이름 캐시 {moved}개를 새 키로 옮겼다");
     }
+    if removed > 0 {
+        eprintln!("[search-cache] 새 이름 캐시가 이미 최신 — 옛 파일 {removed}개 제거");
+    }
     moved
+}
+
+/// 새 이름 쪽을 남길지 판정한다 — **meta 파일의 mtime 하나로** 정한다.
+///
+/// 새 이름 meta가 없으면 `false`(= 옮긴다). 있으면 옛 것보다 오래됐을 때만 옮기고,
+/// 그렇지 않으면 새 것을 남기고 옛 것을 지운다.
+///
+/// mtime을 못 읽는 경우는 **보수적으로 옮기지 않는다** — 지우는 쪽이 되돌릴 수 없으니,
+/// 모를 때는 아무것도 잃지 않는 선택을 한다.
+fn new_generation_wins(dir: &Path, old_key: &str, new_key: &str) -> bool {
+    let meta_of = |key: &str| {
+        fs::metadata(dir.join(format!("{key}.meta.json.gz")))
+            .and_then(|m| m.modified())
+            .ok()
+    };
+    match (meta_of(new_key), meta_of(old_key)) {
+        (Some(new_t), Some(old_t)) => new_t >= old_t,
+        // 새 meta가 없다 → 옛 것이 유일한 스냅샷이다. 옮긴다.
+        (None, _) => false,
+        // 옛 meta가 없는데 옛 shard만 남아 있다 — 찢어진 잔재다. 새 것을 남긴다.
+        (Some(_), None) => true,
+    }
 }
 
 fn meta_file(app: &AppHandle, vault_path: &str) -> Result<PathBuf, String> {
@@ -295,14 +356,15 @@ fn read_search_cache_meta_inner(
     vault_path: &str,
 ) -> Result<Option<SearchCacheMeta>, String> {
     let path = meta_file(app, vault_path)?;
+    // 옛 이름 파일은 **새 이름이 있든 없든** 정리한다. 여기가 그 지점인 이유: meta는
+    // 캐시를 읽는 첫 관문이라, 여기서 손대면 stats·shard도 같은 호출 안에서 함께 정리된다.
+    //
+    // ⚠️ 예전엔 `!path.exists()` 안에서만 불렀다. 그러면 새 이름이 이미 있을 때(CLI가 앱보다
+    // 먼저 인덱싱한 경우) 옛 파일이 **아무도 안 읽는 고아로 영영 남는다.** 실측으로 봤다.
+    let dir = cache_root(app)?;
+    migrate_legacy_cache_files(&dir, vault_path);
     if !path.exists() {
-        // 새 키로 없다 — 옛 이름(`DefaultHasher` 시절)으로 남아 있는지 보고 옮긴다.
-        // 여기가 이주 지점인 이유: meta는 **캐시를 읽는 첫 관문**이라, 여기서 옮기면
-        // stats·shard도 같은 호출 안에서 함께 새 이름을 갖게 된다.
-        let dir = cache_root(app)?;
-        if migrate_legacy_cache_files(&dir, vault_path) == 0 || !path.exists() {
-            return Ok(None);
-        }
+        return Ok(None);
     }
     let bytes = match fs::read(&path) {
         Ok(b) => b,
@@ -903,5 +965,125 @@ mod tests {
         let dir = tmp_dir("gen0");
         assert_eq!(migrate_legacy_cache_files(&dir, &dir.to_string_lossy()), 0);
         fs::remove_dir_all(&dir).ok();
+    }
+
+    // ─── 고아 정리 ────────────────────────────────────────────────────────
+
+    /// 새 이름 캐시가 이미 최신이면 옛 파일은 **지운다.** 남겨두면 아무도 안 읽는
+    /// 고아가 되는데, 그게 바로 #214가 없애려던 상태다.
+    ///
+    /// 실제로 생기는 경로: `lapis index`(CLI)가 앱보다 먼저 캐시를 쓴 뒤 앱을 켜는 것.
+    #[test]
+    fn 새_이름이_최신이면_옛_파일을_지운다() {
+        let dir = tmp_dir("orphan");
+        let vault = "/Users/x/vault";
+        let old = legacy_default_hasher_key(vault);
+        let new = vault_key(vault);
+        assert_ne!(old, new, "두 키가 같으면 이 테스트가 무의미하다");
+
+        // 옛 파일을 먼저 만들고, 새 파일을 나중에 만든다 → 새 쪽이 최신이다.
+        for k in [&old, &new] {
+            for suffix in [".meta.json.gz", ".stats.json.gz", ".shard0.json.gz"] {
+                fs::write(dir.join(format!("{k}{suffix}")), b"x").unwrap();
+            }
+            // mtime 해상도가 거친 파일시스템에서도 순서가 서게 한다.
+            touch_newer(&dir.join(format!("{k}.meta.json.gz")), k == &new);
+        }
+
+        // 옮긴 게 없다(0) — 새 이름이 이미 있으니 이주할 것은 없다.
+        assert_eq!(migrate_legacy_cache_files(&dir, vault), 0);
+
+        for suffix in [".meta.json.gz", ".stats.json.gz", ".shard0.json.gz"] {
+            assert!(
+                !dir.join(format!("{old}{suffix}")).exists(),
+                "옛 파일이 남았다: {suffix}"
+            );
+            assert!(
+                dir.join(format!("{new}{suffix}")).exists(),
+                "새 파일이 사라졌다: {suffix}"
+            );
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// ⚠️ 판정을 파일마다 따로 하면 **meta를 옮긴 직후** 남은 파일들이 "새 세대가 이미
+    /// 있다"로 판정돼 지워진다. 실제로 그렇게 짰다가 이 테스트가 잡았다(4개 중 3개를
+    /// 날렸다). 그래서 판정은 키별로 루프 밖에서 한 번만 한다.
+    #[test]
+    fn 옮기는_중_판정이_뒤집히지_않는다() {
+        let dir = tmp_dir("flip");
+        let vault = "/Users/x/vault";
+        let old = legacy_default_hasher_key(vault);
+        let new = vault_key(vault);
+
+        // 새 이름 파일은 **하나도 없다.** 전부 옮겨져야 한다.
+        let suffixes = [
+            ".meta.json.gz",
+            ".stats.json.gz",
+            ".shard0.json.gz",
+            ".shard1.json.gz",
+        ];
+        for suffix in suffixes {
+            fs::write(dir.join(format!("{old}{suffix}")), b"x").unwrap();
+        }
+
+        assert_eq!(migrate_legacy_cache_files(&dir, vault), suffixes.len());
+        for suffix in suffixes {
+            assert!(
+                dir.join(format!("{new}{suffix}")).exists(),
+                "안 옮겨졌다: {suffix}"
+            );
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 새 이름 meta가 **더 낡았으면** 옛 것을 살린다 — 최신 스냅샷을 잃지 않는다.
+    #[test]
+    fn 새_이름이_낡았으면_옛_것으로_덮는다() {
+        let dir = tmp_dir("newer-old");
+        let vault = "/Users/x/vault";
+        let old = legacy_default_hasher_key(vault);
+        let new = vault_key(vault);
+
+        fs::write(dir.join(format!("{new}.meta.json.gz")), b"stale").unwrap();
+        fs::write(dir.join(format!("{old}.meta.json.gz")), b"fresh").unwrap();
+        // ⚠️ **둘 다** 고정한다. 한쪽만 옛 시각으로 밀면 다른 쪽은 "지금"이라 늘 그쪽이
+        // 최신이 된다 — 처음 그렇게 짜서 이 테스트가 반대 결론을 냈다.
+        touch_newer(&dir.join(format!("{new}.meta.json.gz")), false);
+        touch_newer(&dir.join(format!("{old}.meta.json.gz")), true);
+
+        assert_eq!(migrate_legacy_cache_files(&dir, vault), 1);
+        let body = fs::read(dir.join(format!("{new}.meta.json.gz"))).unwrap();
+        assert_eq!(body, b"fresh");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 옛 meta 없이 shard만 남은 잔재는 지운다 — 혼자서는 아무 쓸모가 없다.
+    #[test]
+    fn 찢어진_옛_잔재는_지운다() {
+        let dir = tmp_dir("torn");
+        let vault = "/Users/x/vault";
+        let old = legacy_default_hasher_key(vault);
+        let new = vault_key(vault);
+
+        fs::write(dir.join(format!("{new}.meta.json.gz")), b"ok").unwrap();
+        fs::write(dir.join(format!("{old}.shard0.json.gz")), b"junk").unwrap();
+
+        assert_eq!(migrate_legacy_cache_files(&dir, vault), 0);
+        assert!(!dir.join(format!("{old}.shard0.json.gz")).exists());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// mtime을 벌린다. 거친 해상도의 파일시스템에서도 순서가 서야 판정이 흔들리지 않는다.
+    fn touch_newer(path: &std::path::Path, newer: bool) {
+        let base =
+            std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let t = if newer {
+            base + std::time::Duration::from_secs(60)
+        } else {
+            base
+        };
+        let f = fs::File::options().write(true).open(path).unwrap();
+        f.set_modified(t).unwrap();
     }
 }
