@@ -192,6 +192,17 @@ function loadBm25(st: Loaded): MiniSearch<FullTextDoc>[] {
   return BM;
 }
 
+/**
+ * 문자열 오름차순 — **UTF-16 코드 단위** 비교다.
+ *
+ * ⚠️ `localeCompare()`를 쓰지 않는다. 인자 없이 부르면 **실행 환경의 로케일**을 따르고
+ * (Node는 full-icu가 기본이다), 그러면 같은 캐시를 `ko_KR` 머신과 `en_US` 머신에서
+ * 질의했을 때 **순서가 갈린다.** 한글이 든 경로·태그에서 특히 그렇다.
+ *
+ * 이 도구의 존재 이유가 "같은 인자면 같은 결과"이므로, 정렬은 로케일에 의존하면 안 된다.
+ */
+const asc = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /** 경로 해소 — 절대 / vault 상대 / 노트 이름(alias·title·stem) 전부 받는다. */
 function resolveNote(st: Loaded, input: string): string {
   const raw = norm(input);
@@ -290,7 +301,7 @@ function listFacet(
     else if (kind === "doc_kinds" && i.doc_kind) bump(i.doc_kind);
     else if (kind === "tags") for (const t of i.tags ?? []) bump(norm(t));
   }
-  const all = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const all = [...counts].sort((a, b) => b[1] - a[1] || asc(a[0], b[0]));
   return {
     list: kind,
     total_distinct: all.length,
@@ -504,7 +515,27 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const seen = new Set<string>();
 
   // 상한과 무관한 구조 집합의 전체 크기. 잘림 판정과 통보에 쓴다.
-  const poolLive = pool === null ? [] : [...pool].filter((abs) => !excluded(st.rel(abs), ex));
+  //
+  // ## ⚠️ 정렬한다 — 관련도가 아니라 **결정성** 때문이다
+  //
+  // `pool`은 `Set`이고 순회 순서는 삽입 순서다. 그 삽입 순서는 캐시의 `link_infos` 순서에서
+  // 오고, 그건 **캐시를 어떻게 만들었느냐**에 달렸다 — 전체 빌드면 vault walk 순서,
+  // 앱의 증분 패치면 바뀐 노트가 옮겨진 순서다.
+  //
+  // 그래서 **같은 질의가 재색인 전후로 다른 순서**를 냈다(실측: `backlinks_of` 9건이 같은
+  // 집합인데 순서만 뒤바뀌었다). 순서만 바뀌는 게 아니다 — 아래에서 `cap`으로 자르므로
+  // **어느 것이 남는지가 달라진다.** `{doc_kind:"solution", limit:10}`처럼 넓은 facet에서는
+  // 매번 다른 10건을 받는다는 뜻이다.
+  //
+  // 구조 질의에는 점수가 없어(`rel`이 `null`) 순서를 줄 다른 신호가 없다. 경로 오름차순은
+  // 재현되고, 디렉터리로 묶이고, 설명할 수 있다 — facet 목록이 (건수, 이름)으로 정렬하는
+  // 것과 같은 이유다.
+  const poolLive =
+    pool === null
+      ? []
+      : [...pool]
+          .filter((abs) => !excluded(st.rel(abs), ex))
+          .sort((a, b) => asc(st.rel(a), st.rel(b)));
   const structuralTotal = poolLive.length;
   let structuralCount = 0;
 

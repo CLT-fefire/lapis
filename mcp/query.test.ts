@@ -661,3 +661,81 @@ describe("stale 정확 판정 (v8)", () => {
     expect(stale?.fingerprint).not.toBe(fx.fingerprint);
   });
 });
+
+/**
+ * 구조 질의 결과의 **순서가 캐시 생산 방식에 흔들리던 것.**
+ *
+ * `pool`이 `Set`이라 순회 순서 = 삽입 순서 = 캐시의 `link_infos` 순서였고, 그건 캐시를
+ * 어떻게 만들었느냐에 달렸다(전체 빌드 = walk 순서, 앱의 증분 패치 = 바뀐 노트가 옮겨진
+ * 순서). 실측으로 같은 `backlinks_of` 9건이 재색인 전후로 순서만 뒤바뀌는 것을 봤다.
+ *
+ * 순서만 바뀌는 게 아니라 **`limit`으로 자를 때 어느 것이 남는지가 달라진다.**
+ */
+describe("구조 결과는 순서가 정해져 있다", () => {
+  /** 같은 노트 집합을 **캐시에 담기는 순서만** 달리 해서 픽스처를 만든다. */
+  const notes = [
+    { rel: "z/last.md", doc_kind: "note", topic: "t", body: "본문" },
+    { rel: "a/first.md", doc_kind: "note", topic: "t", body: "본문" },
+    { rel: "m/middle.md", doc_kind: "note", topic: "t", body: "본문" },
+  ];
+
+  const pathsFor = (order: typeof notes) => {
+    setup({}, order);
+    return search({ doc_kind: "note" }).results.map((r) => r.path);
+  };
+
+  it("경로 오름차순으로 낸다", () => {
+    expect(pathsFor(notes)).toEqual(["a/first.md", "m/middle.md", "z/last.md"]);
+  });
+
+  it("캐시에 담긴 순서가 달라도 같은 순서를 낸다", () => {
+    const forward = pathsFor(notes);
+    const reversed = pathsFor([...notes].reverse());
+    expect(reversed).toEqual(forward);
+  });
+
+  /**
+   * ⚠️ 이게 진짜 피해다. 상한이 집합보다 작으면 **어느 것이 남는지**가 순서에 달렸다.
+   * 정렬이 없으면 두 픽스처가 서로 다른 1건을 낸다.
+   */
+  it("limit으로 자를 때 남는 것도 같다", () => {
+    setup({}, notes);
+    const a = search({ doc_kind: "note", limit: 1 }).results.map((r) => r.path);
+    setup({}, [...notes].reverse());
+    const b = search({ doc_kind: "note", limit: 1 }).results.map((r) => r.path);
+    expect(a).toEqual(["a/first.md"]);
+    expect(b).toEqual(a);
+  });
+
+  it("backlinks도 같다", () => {
+    const linked = [
+      { rel: "hub.md", doc_kind: "note", topic: "t", body: "허브" },
+      { rel: "z/z-src.md", doc_kind: "note", topic: "t", targets: ["hub"], body: "가리킨다" },
+      { rel: "a/a-src.md", doc_kind: "note", topic: "t", targets: ["hub"], body: "가리킨다" },
+    ];
+    setup({}, linked);
+    const forward = search({ backlinks_of: "hub" }).results.map((r) => r.path);
+    setup({}, [...linked].reverse());
+    const reversed = search({ backlinks_of: "hub" }).results.map((r) => r.path);
+    expect(forward).toEqual(["a/a-src.md", "z/z-src.md"]);
+    expect(reversed).toEqual(forward);
+  });
+});
+
+/**
+ * 정렬이 **로케일에 의존하면** 같은 캐시를 다른 머신에서 질의했을 때 순서가 갈린다.
+ * `localeCompare()`는 인자 없이 부르면 실행 환경 로케일을 따른다(Node는 full-icu 기본).
+ */
+describe("정렬은 로케일에 의존하지 않는다", () => {
+  it("한글 경로도 코드 단위 순서로 낸다", () => {
+    const ko = [
+      { rel: "나.md", doc_kind: "note", topic: "t", body: "본문" },
+      { rel: "가.md", doc_kind: "note", topic: "t", body: "본문" },
+      { rel: "다.md", doc_kind: "note", topic: "t", body: "본문" },
+    ];
+    setup({}, ko);
+    const got = search({ doc_kind: "note" }).results.map((r) => r.path);
+    // 가(U+AC00) < 나(U+B098) < 다(U+B2E4) — 어느 로케일에서도 같다.
+    expect(got).toEqual(["가.md", "나.md", "다.md"]);
+  });
+});
