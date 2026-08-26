@@ -54,6 +54,8 @@
     goForwardNote,
     closeTab,
   } from "$lib/stores/vault";
+  import { claimCliOpen, listenCliOpen } from "$lib/stores/cliOpen";
+  import { isCliOpenWindow } from "$lib/cliOpenFlow";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
   import { openTabs, tabPathForShortcut } from "$lib/stores/tabs";
   import { noteDisplayName } from "$lib/notePath";
@@ -1104,13 +1106,25 @@
   // 디버그 빌드 표식 — 릴리즈 앱과 나란히 띄울 때 어느 창인지 구분한다.
   // 창 제목은 Rust setup()이 붙이고, 여기선 같은 판정값으로 topbar 배지를 켠다.
   let isDebug = $state(false);
+  let unlistenCliOpen: (() => void) | null = null;
 
   onMount(() => {
     restoreTheme();
     restoreDensity();
     void restoreSettings();
     restorePaneState();
-    restoreLastVault();
+    // ⚠️ CLI가 만든 창은 마지막 vault를 복원하지 않는다 — 그러라고 만들어진 창이 아니고,
+    // 복원하면 `claimCliOpen`이 여는 vault를 곧바로 덮어쓴다.
+    const forCli = isCliOpenWindow(typeof location === "undefined" ? "" : location.search);
+    void (async () => {
+      if (!forCli) await restoreLastVault();
+      // 차가운 기동에서는 알림이 창보다 먼저 지나갔다. 담아둔 것을 직접 가져온다.
+      await claimCliOpen();
+    })();
+    // 앱이 이미 떠 있을 때 온 `lapis open`. 해제는 아래 cleanup에서.
+    void listenCliOpen().then((un) => {
+      unlistenCliOpen = un;
+    });
     void (async () => {
       try {
         appVersion = await getVersion();
@@ -1126,6 +1140,13 @@
         console.warn("[app] isDebugBuild failed", e);
       }
     })();
+
+    // ⚠️ 창이 닫힐 때 구독을 뗀다. 안 떼면 죽은 창의 핸들러가 남아 `cli:open`을 받고
+    // 이미 사라진 창의 vault로 판정한다 — 그러면 살아 있는 창이 못 받는다.
+    return () => {
+      unlistenCliOpen?.();
+      unlistenCliOpen = null;
+    };
   });
 </script>
 

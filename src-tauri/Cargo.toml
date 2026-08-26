@@ -41,6 +41,7 @@ tauri-plugin-window-state = "2.4.1"
 # ⚠️ JS `RegExp`와 문법이 완전히 같지 않다(역참조·lookaround 없음). 그래서
 # 매치 위치를 프런트가 다시 계산하지 않고 **Rust가 오프셋까지 돌려준다**.
 regex = "1"
+tauri-plugin-single-instance = "2"
 
 # release dmg 최적화 — 빌드 시간 증가 vs 런타임/바이너리 크기 트레이드오프.
 # - lto = "thin": 모듈 간 inline + dead code 제거. "fat"보다 빌드 시간 절약.

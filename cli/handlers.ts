@@ -1,4 +1,4 @@
-import { lapisQuery, type QueryArgs } from "../mcp/query.ts";
+import { lapisQuery, resolveNotePath, type QueryArgs } from "../mcp/query.ts";
 import { resolveVault, checkStale } from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
 import { runIndex, IndexError } from "./indexRun.ts";
+import { launchOpen, LaunchError } from "./appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
 import { FACETS, TAG_ACTIONS } from "./spec.ts";
@@ -262,6 +263,31 @@ function cmdIndex(p: ParsedCommand, out: Out): void {
 }
 
 /**
+ * 실행 중인 앱에서 노트를 연다. 앱이 꺼져 있으면 켠다.
+ *
+ * ⚠️ 노트 해소는 `resolveNotePath` — `backlinks`가 쓰는 **같은 함수**다. CLI가 자기
+ * 규칙을 따로 두면 `lapis backlinks X`가 찾는 노트와 `lapis open X`가 여는 노트가
+ * 달라진다. 그건 오류 없이 틀리는 부류다.
+ *
+ * ⚠️ **결과를 확인할 방법이 없다.** 떼어내 보내고 즉시 돌아오므로(`appLaunch.ts`), 앱이
+ * 실제로 열었는지는 여기서 모른다. 그래서 "열었다"가 아니라 "보냈다"라고 말한다.
+ */
+function cmdOpen(p: ParsedCommand, out: Out): void {
+  const target = p.positional[0];
+  const resolved = resolveNotePath(target, vaultOf(p));
+  try {
+    const { exe } = launchOpen({ path: resolved.path, vault: resolved.vault });
+    if (out.json) return out.json_({ ...resolved, sent: true, app: exe });
+    out.line(`${resolved.path} 을(를) 앱에 보냈다`);
+  } catch (e) {
+    if (e instanceof LaunchError) {
+      out.fail("app_not_found", e.message, e.remedy, 1);
+    }
+    throw e;
+  }
+}
+
+/**
  * 명령 이름 → 핸들러.
  *
  * ⚠️ `spec.ts`의 `COMMANDS`와 **키가 정확히 같아야 한다.** 한쪽에만 있으면 도움말에는
@@ -275,4 +301,5 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   tag: cmdTag,
   status: cmdStatus,
   index: cmdIndex,
+  open: cmdOpen,
 };
