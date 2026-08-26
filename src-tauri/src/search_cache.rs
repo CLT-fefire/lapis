@@ -52,6 +52,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use tauri::AppHandle;
 
+use crate::hash::{fnv1a32, FNV32_OFFSET};
 use crate::vault::{FileStat, LinkInfo};
 
 pub const CACHE_VERSION: u32 = 8;
@@ -105,10 +106,75 @@ fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// 캐시 파일 이름의 접두 — vault 경로의 해시.
+///
+/// ## ⚠️ 이 값이 바뀌면 캐시를 통째로 못 찾는다
+///
+/// 파일 **이름**이라, 값이 달라지는 순간 앱은 "캐시가 없다"고 판단해 전체 재빌드로
+/// 가고 옛 파일은 아무도 안 읽는 고아가 된다. 실패가 요란하지 않아 알아채기도 어렵다.
+///
+/// 예전엔 `DefaultHasher`였는데 std가 **값 안정성을 보장하지 않는다.** 컴파일러 판이
+/// 바뀌면 그대로 위 상황이다. `crate::hash`의 명세된 FNV-1a로 옮겼다.
+///
+/// 두 줄기를 쓰는 이유는 폭이다. 32비트 하나면 서로 다른 두 vault가 **같은 캐시 파일을
+/// 공유**할 확률이 남는데, 그건 성능이 아니라 **정확성** 문제다(한쪽이 남의 인덱스를
+/// 읽는다). 두 번째 줄기는 바이트를 **뒤에서부터** 먹여 첫 줄기와 독립적으로 만든다.
 fn vault_key(vault_path: &str) -> String {
+    let bytes = vault_path.as_bytes();
+    let a = fnv1a32(FNV32_OFFSET, bytes);
+    let reversed: Vec<u8> = bytes.iter().rev().copied().collect();
+    let b = fnv1a32(FNV32_OFFSET, &reversed);
+    format!("{a:08x}{b:08x}")
+}
+
+/// **옛** 키 — `DefaultHasher` 시절 이름. 일회성 이주에만 쓴다.
+///
+/// ⚠️ 이 함수가 옛 파일을 쓴 바이너리와 **같은 값을 낸다는 보장은 없다**(그게 바로
+/// `vault_key`를 바꾼 이유다). 다만 실제로 std가 이 해시를 바꾼 적은 없어 대부분
+/// 맞아떨어지고, **안 맞아도 손해가 없다** — 못 찾으면 예전과 똑같이 전체 재빌드다.
+///
+/// 이주가 충분히 퍼졌다고 판단되면 이 함수와 호출부를 지운다.
+fn legacy_vault_key(vault_path: &str) -> String {
     let mut h = DefaultHasher::new();
     vault_path.hash(&mut h);
     format!("{:016x}", h.finish())
+}
+
+/// 옛 이름으로 남아 있는 캐시 파일들을 새 이름으로 **옮긴다**(복사가 아니라 rename).
+///
+/// 복사가 아닌 이유 — 남겨두면 정리 경로가 없는 고아가 된다. 이름만 바꾸면 디스크에
+/// 파일이 하나뿐이고, 실패해도 옛 파일이 그대로라 다음 기동에 다시 시도한다.
+///
+/// 반환값은 **옮긴 파일 수**. 0이면 이주할 게 없었다는 뜻이다.
+fn migrate_legacy_cache_files(dir: &PathBuf, vault_path: &str) -> usize {
+    let old = legacy_vault_key(vault_path);
+    let new = vault_key(vault_path);
+    if old == new {
+        return 0;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut moved = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(rest) = name.strip_prefix(&old) else {
+            continue;
+        };
+        // `{key}.meta.json.gz` · `{key}.stats.json.gz` · `{key}.shard{n}.json.gz`
+        if !rest.starts_with('.') {
+            continue;
+        }
+        let target = dir.join(format!("{new}{rest}"));
+        match fs::rename(entry.path(), &target) {
+            Ok(()) => moved += 1,
+            Err(e) => eprintln!("[search-cache] 이주 실패 {name}: {e}"),
+        }
+    }
+    if moved > 0 {
+        eprintln!("[search-cache] 옛 이름 캐시 {moved}개를 새 키로 옮겼다");
+    }
+    moved
 }
 
 fn meta_file(app: &AppHandle, vault_path: &str) -> Result<PathBuf, String> {
@@ -186,7 +252,13 @@ fn read_search_cache_meta_inner(
 ) -> Result<Option<SearchCacheMeta>, String> {
     let path = meta_file(app, vault_path)?;
     if !path.exists() {
-        return Ok(None);
+        // 새 키로 없다 — 옛 이름(`DefaultHasher` 시절)으로 남아 있는지 보고 옮긴다.
+        // 여기가 이주 지점인 이유: meta는 **캐시를 읽는 첫 관문**이라, 여기서 옮기면
+        // stats·shard도 같은 호출 안에서 함께 새 이름을 갖게 된다.
+        let dir = cache_root(app)?;
+        if migrate_legacy_cache_files(&dir, vault_path) == 0 || !path.exists() {
+            return Ok(None);
+        }
     }
     let bytes = match fs::read(&path) {
         Ok(b) => b,
@@ -565,5 +637,134 @@ mod tests {
         let s = shard(CACHE_VERSION - 1, 9, "");
         let reason = shard_reject_reason(&s, 0, "abc123").expect("거부해야 한다");
         assert!(reason.starts_with("version"), "reason={reason}");
+    }
+
+    // ─── vault_key · 이주 ─────────────────────────────────────────────────
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "lapis-cachekey-{tag}-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn vault_key는_결정론적이고_16자리다() {
+        let k = vault_key("/Users/x/vault");
+        assert_eq!(k.len(), 16);
+        assert!(k.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(k, vault_key("/Users/x/vault"));
+    }
+
+    #[test]
+    fn 서로_다른_vault는_다른_키다() {
+        assert_ne!(vault_key("/a/vault"), vault_key("/b/vault"));
+        // 뒤집은 줄기가 있어 회문형 차이도 갈린다.
+        assert_ne!(vault_key("/ab"), vault_key("/ba"));
+    }
+
+    /// 이주가 의미를 가지려면 두 키가 달라야 한다. 같아지면 이주 코드가 죽은 코드다.
+    #[test]
+    fn 새_키는_옛_키와_다르다() {
+        assert_ne!(
+            vault_key("/Users/x/vault"),
+            legacy_vault_key("/Users/x/vault")
+        );
+    }
+
+    #[test]
+    fn 이주는_meta_stats_shard를_모두_옮긴다() {
+        let dir = tmp_dir("migrate");
+        let vault = "/Users/x/vault";
+        let old = legacy_vault_key(vault);
+        let new = vault_key(vault);
+
+        for suffix in [
+            ".meta.json.gz",
+            ".stats.json.gz",
+            ".shard0.json.gz",
+            ".shard3.json.gz",
+        ] {
+            fs::write(dir.join(format!("{old}{suffix}")), b"x").unwrap();
+        }
+
+        let moved = migrate_legacy_cache_files(&dir, vault);
+        assert_eq!(moved, 4);
+
+        for suffix in [
+            ".meta.json.gz",
+            ".stats.json.gz",
+            ".shard0.json.gz",
+            ".shard3.json.gz",
+        ] {
+            assert!(
+                dir.join(format!("{new}{suffix}")).exists(),
+                "새 이름 없음: {suffix}"
+            );
+            assert!(
+                !dir.join(format!("{old}{suffix}")).exists(),
+                "옛 이름 남음: {suffix}"
+            );
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 복사가 아니라 rename이어야 한다 — 남겨두면 정리 경로 없는 고아가 된다.
+    #[test]
+    fn 이주는_복사가_아니라_이동이다() {
+        let dir = tmp_dir("move-not-copy");
+        let vault = "/Users/x/vault";
+        fs::write(
+            dir.join(format!("{}.meta.json.gz", legacy_vault_key(vault))),
+            b"x",
+        )
+        .unwrap();
+
+        migrate_legacy_cache_files(&dir, vault);
+        let left = fs::read_dir(&dir).unwrap().count();
+        assert_eq!(left, 1, "파일이 늘었다면 복사된 것이다");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn 다른_vault의_캐시는_건드리지_않는다() {
+        let dir = tmp_dir("other-vault");
+        let mine = "/Users/x/vault";
+        let other_legacy = legacy_vault_key("/Users/x/다른vault");
+        fs::write(dir.join(format!("{other_legacy}.meta.json.gz")), b"x").unwrap();
+        fs::write(dir.join("lapis-settings.json"), b"{}").unwrap();
+
+        assert_eq!(migrate_legacy_cache_files(&dir, mine), 0);
+        assert!(dir.join(format!("{other_legacy}.meta.json.gz")).exists());
+        assert!(dir.join("lapis-settings.json").exists());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn 옮길_게_없으면_0이다() {
+        let dir = tmp_dir("nothing");
+        assert_eq!(migrate_legacy_cache_files(&dir, "/Users/x/vault"), 0);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 접두가 우연히 겹치는 이름을 잡아채면 안 된다 — 구분자 `.`을 요구한다.
+    #[test]
+    fn 접두만_같은_이름은_옮기지_않는다() {
+        let dir = tmp_dir("prefix");
+        let vault = "/Users/x/vault";
+        let old = legacy_vault_key(vault);
+        fs::write(dir.join(format!("{old}extra.meta.json.gz")), b"x").unwrap();
+
+        assert_eq!(migrate_legacy_cache_files(&dir, vault), 0);
+        assert!(dir.join(format!("{old}extra.meta.json.gz")).exists());
+        fs::remove_dir_all(&dir).ok();
     }
 }
