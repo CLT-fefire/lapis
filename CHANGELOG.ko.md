@@ -47,6 +47,14 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   갈린다.
 
 ### Fixed
+- **옛 이름 캐시가 고아로 남을 수 있던 것** ([#217]). [#214]가 넣은 일회성 rename이 **새 이름
+  파일이 없을 때만** 돌았다. 그래서 `lapis index`(CLI)가 앱보다 먼저 캐시를 쓰면 옛 파일이
+  디스크에 영영 남는다 — [#214]가 없애려던 바로 그 상태다. CLI를 검증하다 실제 캐시에서 봤다.
+
+  이제 새 이름 파일이 있어도 정리하고, 그 경우엔 덮어쓰지 않고 **밀려난 쪽을 지운다** —
+  덮어쓰면 방금 만든 인덱스를 옛 스냅샷으로 되돌린다. 어느 쪽을 남길지는 meta 파일의 mtime
+  하나로 **키별 한 번** 정한다. 파일마다 따로 재면 meta는 새 것, shard는 옛 것으로
+  **스냅샷이 찢어진다**(그렇게 짰다가 테스트가 잡았다).
 - **같은 vault가 캐시를 둘 가질 수 있던 것** ([#214]). 캐시 파일 이름의 해시를 **호출부가 준 문자열
   그대로** 계산했다. 그래서 `C:\Projects\x` 와 `C:/Projects/x`, 후행 슬래시 유무, 심링크를 거친
   경로가 각각 다른 이름을 만들었다. 증상은 "왜 또 전체 재인덱싱이지"이고, 이전 캐시는 아무도 안 읽는
@@ -713,6 +721,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#217]: https://github.com/eren0315/lapis/pull/217
 [#216]: https://github.com/eren0315/lapis/pull/216
 [#215]: https://github.com/eren0315/lapis/pull/215
 [#214]: https://github.com/eren0315/lapis/pull/214
