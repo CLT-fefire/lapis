@@ -265,21 +265,6 @@ export function writeSearchCacheShard(
   });
 }
 
-/** atomic 저장. 빌드 직후 1회만 호출. */
-export function writeSearchCache(
-  vaultPath: string,
-  fingerprint: string,
-  minisearch_json: string,
-  link_infos: LinkInfo[],
-): Promise<void> {
-  return invoke<void>("write_search_cache", {
-    vaultPath,
-    fingerprint,
-    minisearchJson: minisearch_json,
-    linkInfos: link_infos,
-  });
-}
-
 /** 노트와 같은 폴더에서 같은 stem으로 시작하는 이미지(svg/png/jpg/jpeg/gif/webp) — Phase 4.4.b */
 export interface AssetInfo {
   name: string;

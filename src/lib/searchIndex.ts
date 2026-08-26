@@ -321,6 +321,16 @@ export async function workerAddToShard(
  * doc.path → shardId 결정론 함수. fnv32 hash 후 modulo N.
  * worker와 main이 같은 함수 써야 — sharded query/build 일관.
  * `shardCount`는 vault별로 다름 (`decideShardCount` 참조).
+ *
+ * ## ⚠️ Rust의 `crate::hash::fnv1a32`와 **같은 함수가 아니다**
+ *
+ * 알고리즘 이름은 같지만 **먹이는 바이트가 다르다.** 여기는 `charCodeAt`, 즉
+ * **UTF-16 코드 단위**를 먹인다. Rust 쪽은 UTF-8 바이트를 먹는다. ASCII 경로에서는
+ * 두 값이 우연히 같고, **한글이 든 경로에서 갈린다.**
+ *
+ * 그래서 "같은 FNV니까 공용 함수로 합치자"가 성립하지 않는다. 합치면 shard 배정이
+ * 통째로 바뀌고, 그건 `CACHE_VERSION` bump 없이는 **기존 캐시를 조용히 어긋나게**
+ * 만든다(문서가 다른 shard로 가서 검색에서 사라진다). 굳이 통일하려면 그때 bump한다.
  */
 export function computeShardId(path: string, shardCount: number): number {
   // FNV-1a 32-bit

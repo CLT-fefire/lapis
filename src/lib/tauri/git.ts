@@ -28,11 +28,6 @@ export function gitInit(vaultPath: string): Promise<boolean> {
   return invoke<boolean>("git_init", { vaultPath });
 }
 
-/** 커밋할 변경(gitignore 반영)이 있는가. */
-export function gitHasChanges(vaultPath: string): Promise<boolean> {
-  return invoke<boolean>("git_has_changes", { vaultPath });
-}
-
 /** 전체 변경 add -A 후 커밋. 변경 없으면 false. */
 export function gitCommitAll(vaultPath: string, message: string): Promise<boolean> {
   return invoke<boolean>("git_commit_all", { vaultPath, message });
