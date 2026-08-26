@@ -16,6 +16,22 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Added
+- **A command-line interface** ([#210]). The same index the MCP server exposes to an agent is now
+  reachable from a terminal, without the app running: `search`, `backlinks`, `list`, `links --broken`,
+  `status`. Every command takes `--json` and prints the shape `lapis_query` returns, so a script or
+  an agent does not have to learn a second format.
+
+  It calls `lapisQuery()` directly rather than reimplementing anything — one ranking, two consumers.
+  The command surface (names, options, help text) lives in a single array that `--help`, argument
+  validation and a parity test all read, so the help can not drift from what the parser accepts.
+  Unknown options exit `2` instead of being ignored: silently dropping `--limt 5` returns a
+  default-limit result that looks like the requested one.
+
+  The contract, exit codes, and a layered plan for what is deliberately **not** built yet — headless
+  indexing, writes, driving the running app — are in [`cli/README.md`](cli/README.md), in the
+  repository rather than in a symlinked notes tree, so they travel with a clone.
+
 ### Fixed
 - **Every MCP query would have failed after upgrading to v1.15.0** ([#209]). The app moved to cache
   version 8 ([#201]) but the MCP server's expected version stayed at 7, so it would reject a perfectly
@@ -675,6 +691,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#210]: https://github.com/eren0315/lapis/pull/210
 [#209]: https://github.com/eren0315/lapis/pull/209
 [#208]: https://github.com/eren0315/lapis/pull/208
 [#207]: https://github.com/eren0315/lapis/pull/207

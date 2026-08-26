@@ -1,0 +1,7 @@
+#!/bin/sh
+# lapis — 터미널에서 vault를 다루는 CLI. 명세는 `cli/README.md`.
+#
+# 공용 러너(`scripts/bundle-run.sh`)가 번들·node 탐색·임시 파일을 맡는다.
+set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
+exec "$(dirname "$HERE")/scripts/bundle-run.sh" cli "$HERE/main.ts" "$@"

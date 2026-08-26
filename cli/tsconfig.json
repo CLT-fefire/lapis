@@ -1,0 +1,24 @@
+{
+  // `mcp/tsconfig.json`과 같은 이유로 따로 있다 — 루트 tsconfig는 SvelteKit이 생성한
+  // include를 상속해 `src/`만 보므로 `cli/`가 `npm run check`에 안 잡힌다.
+  // `npm run check:cli`가 이 설정으로 검사한다.
+  //
+  // ⚠️ `include`에 `../mcp`를 넣는다. CLI가 질의 핵(`mcp/query.ts`)을 직접 import 하므로,
+  // 안 넣으면 그쪽 타입이 해소되지 않는다. 중복 검사가 되지만 그 비용은 무시할 만하고,
+  // **CLI가 실제로 컴파일되는 그래프를 그대로 검사**하는 게 요점이다.
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ES2023",
+    "module": "esnext",
+    // ⚠️ **`bundler`여야 한다.** 실행 경로가 esbuild 번들이고 앱 코드는 확장자 없는
+    // bundler 스타일 import를 쓴다(`$lib/brokenLinks`). `nodenext`면 조용히 타입이 소실된다.
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "paths": { "$lib/*": ["../src/lib/*"] }
+  },
+  "include": ["**/*.ts", "../mcp/**/*.ts"]
+}

@@ -152,6 +152,20 @@ The interface is available in **English and Korean**. By default it **follows yo
 
 The Welcome sample note created in an empty vault is written in whatever language is active at the time. Files that already exist are left alone when you switch languages.
 
+## Command line — `lapis`
+
+The same index is reachable from a terminal without the app running.
+
+```bash
+cli/lapis search "multi window" --min-rel 0.3
+cli/lapis links --broken
+cli/lapis status
+```
+
+`--json` on any command prints the same shape the MCP tool returns, so scripts and agents do not
+have to learn a second format. The contract, exit codes and the layered plan for what is **not**
+built yet live in [`cli/README.md`](cli/README.md).
+
 ## Claude Code integration — knowledge query MCP
 
 The search index Lapis builds is exposed through an MCP server. There is exactly **one** tool (`lapis_query`).
