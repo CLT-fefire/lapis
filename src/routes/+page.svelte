@@ -346,10 +346,13 @@
   $effect(() => {
     trackPreviewHtml();
     const idx = $linkIndex;
+    // ⚠️ 지금 그리고 있는 노트를 맥락으로 넘긴다. 이게 빠지면 같은 이름의 노트가 둘일 때
+    // "해소됨" 표시가 실제로 점프할 곳과 어긋난다.
+    const from = $currentNotePath ?? "";
     afterPreviewRender((body) => {
       for (const a of body.querySelectorAll<HTMLElement>(".wikilink")) {
         const target = a.getAttribute("data-target");
-        const resolved = idx && target ? !!resolveTarget(target, idx) : false;
+        const resolved = idx && target ? !!resolveTarget(target, idx, from) : false;
         a.classList.toggle("resolved", resolved);
         a.classList.toggle("unresolved", !resolved);
       }

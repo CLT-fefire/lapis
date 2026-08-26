@@ -157,6 +157,7 @@ export type ErrorKind =
   | "vault_ambiguous"
   | "vault_not_found"
   | "path_not_indexed"
+  | "name_ambiguous"
   | "shard_incomplete"
   | "no_criteria"
   | "mcp_disabled";

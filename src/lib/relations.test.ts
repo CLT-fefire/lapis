@@ -63,10 +63,13 @@ describe("buildRelationIndex", () => {
     source_path: "/v/plans/phase-4.3a.md",
     props: { parent_plan: ["phase-4.3.md"] },
   });
-  const resolver = new Map<string, string>([
-    ["phase-4.3", "/v/plans/phase-4.3.md"],
-    ["phase-4.3a", "/v/plans/phase-4.3a.md"],
-  ]);
+  // `resolver`는 이름 → **후보 목록**이다(같은 이름의 노트가 둘 이상일 수 있다).
+  const resolver = {
+    resolver: new Map<string, string[]>([
+      ["phase-4.3", ["/v/plans/phase-4.3.md"]],
+      ["phase-4.3a", ["/v/plans/phase-4.3a.md"]],
+    ]),
+  };
 
   it("관계 타입(필드명) 보존 + 양방향 인덱싱", () => {
     const idx = buildRelationIndex([plan, sub], resolver);
@@ -81,7 +84,7 @@ describe("buildRelationIndex", () => {
   it("경로형 값 resolve (현재 stem-only resolver의 빈틈 메움)", () => {
     const a = mkInfo({ source_path: "/v/a.md", props: { related: ["sub/b.md"] } });
     const b = mkInfo({ source_path: "/v/sub/b.md" });
-    const r = new Map([["b", "/v/sub/b.md"]]);
+    const r = { resolver: new Map([["b", ["/v/sub/b.md"]]]) };
     const idx = buildRelationIndex([a, b], r);
     expect(idx.outgoing.get("/v/a.md")).toEqual([{ type: "related", path: "/v/sub/b.md" }]);
   });
@@ -95,14 +98,14 @@ describe("buildRelationIndex", () => {
 
   it("self-link 제외", () => {
     const selfish = mkInfo({ source_path: "/v/self.md", props: { related: ["self.md"] } });
-    const r = new Map([["self", "/v/self.md"]]);
+    const r = { resolver: new Map([["self", ["/v/self.md"]]]) };
     const idx = buildRelationIndex([selfish], r);
     expect(idx.outgoing.get("/v/self.md")).toBeUndefined();
   });
 
   it("resolve 안 되는 값(#PR번호 등)은 자동 드롭", () => {
     const note = mkInfo({ source_path: "/v/x.md", props: { related_pr: ["#88", "#90"] } });
-    const idx = buildRelationIndex([note], new Map());
+    const idx = buildRelationIndex([note], { resolver: new Map() });
     expect(idx.outgoing.get("/v/x.md")).toBeUndefined();
   });
 
@@ -111,7 +114,7 @@ describe("buildRelationIndex", () => {
       source_path: "/v/x.md",
       props: { related: ["target.md", "sub/target.md"] },
     });
-    const r = new Map([["target", "/v/target.md"]]);
+    const r = { resolver: new Map([["target", ["/v/target.md"]]]) };
     const idx = buildRelationIndex([note, mkInfo({ source_path: "/v/target.md" })], r);
     expect(idx.outgoing.get("/v/x.md")).toEqual([{ type: "related", path: "/v/target.md" }]);
   });
