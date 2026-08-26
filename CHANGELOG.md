@@ -17,6 +17,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Fixed
+- **Every MCP query would have failed after upgrading to v1.15.0** ([#209]). The app moved to cache
+  version 8 ([#201]) but the MCP server's expected version stayed at 7, so it would reject a perfectly
+  healthy cache with `version_skew` — the tool dies completely while the index is fine.
+
+  The test suite could not catch this **by construction**: `mcp/fixture.ts` writes caches with the
+  TypeScript constant and the server reads with the same constant, so the two always agree no matter
+  how far either drifts from the app. A guard now reads the Rust source directly and compares, which
+  is the only place the two truths meet. Four tests that hardcoded `version: 7` — a literal that
+  happened to equal the constant — now use the constant, so they keep testing what they meant to.
 - **A frontend wrapper called a Tauri command that no longer exists** ([#208]). `writeSearchCache`
   was the pre-sharding (cache v3) writer; the Rust command was removed in v4 but the TypeScript
   wrapper stayed, so a function that dies with "command not found" sat there looking like API. Command
@@ -666,6 +675,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#209]: https://github.com/eren0315/lapis/pull/209
 [#208]: https://github.com/eren0315/lapis/pull/208
 [#207]: https://github.com/eren0315/lapis/pull/207
 [#206]: https://github.com/eren0315/lapis/pull/206

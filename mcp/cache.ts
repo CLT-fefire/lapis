@@ -14,8 +14,16 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { LinkInfo } from "./entry.ts";
 
-/** 앱의 `search_cache.rs` `CACHE_VERSION`과 일치해야 한다. 어긋나면 `version_skew`. */
-export const CACHE_VERSION = 7;
+/**
+ * 앱의 `search_cache.rs` `CACHE_VERSION`과 **일치해야 한다.** 어긋나면 모든 질의가
+ * `version_skew`로 실패한다 — 캐시가 멀쩡해도 도구가 통째로 죽는다.
+ *
+ * ⚠️ **앱에서 bump할 때 여기도 같이 올린다.** 실제로 v8(fingerprint 해시 명세화)에서
+ * 한쪽만 올라간 채 릴리스됐다. 테스트는 못 잡는다 — 픽스처가 *이 상수*로 캐시를 쓰고
+ * MCP도 *이 상수*로 읽으니 양쪽이 늘 일치한다. 그래서 Rust 파일을 직접 읽어 대조하는
+ * 가드를 따로 뒀다(`mcp/cacheVersion.test.ts`).
+ */
+export const CACHE_VERSION = 8;
 
 /**
  * 캐시 위치 — **두 곳을 본다.**
