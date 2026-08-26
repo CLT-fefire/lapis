@@ -99,7 +99,7 @@ pub struct SearchCacheShard {
     pub minisearch_json: String,
 }
 
-fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     // dev/릴리즈 분기는 `paths`가 단일 진실. 예전엔 여기서 `app_data_dir()`을 직접 불러
     // 두 빌드가 같은 캐시를 번갈아 덮어썼다(19,000노트 재인덱싱 반복).
     let dir = crate::paths::app_data_root(app)?.join("search-cache");
@@ -107,19 +107,6 @@ fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// 캐시 파일 이름의 접두 — vault 경로의 해시.
-///
-/// ## ⚠️ 이 값이 바뀌면 캐시를 통째로 못 찾는다
-///
-/// 파일 **이름**이라, 값이 달라지는 순간 앱은 "캐시가 없다"고 판단해 전체 재빌드로
-/// 가고 옛 파일은 아무도 안 읽는 고아가 된다. 실패가 요란하지 않아 알아채기도 어렵다.
-///
-/// 예전엔 `DefaultHasher`였는데 std가 **값 안정성을 보장하지 않는다.** 컴파일러 판이
-/// 바뀌면 그대로 위 상황이다. `crate::hash`의 명세된 FNV-1a로 옮겼다.
-///
-/// 두 줄기를 쓰는 이유는 폭이다. 32비트 하나면 서로 다른 두 vault가 **같은 캐시 파일을
-/// 공유**할 확률이 남는데, 그건 성능이 아니라 **정확성** 문제다(한쪽이 남의 인덱스를
-/// 읽는다). 두 번째 줄기는 바이트를 **뒤에서부터** 먹여 첫 줄기와 독립적으로 만든다.
 /// 해시에 먹일 **정규형 경로**.
 ///
 /// ## ⚠️ 정규화하지 않으면 같은 vault가 캐시를 둘 갖는다
@@ -157,7 +144,7 @@ fn normalized_vault_path(vault_path: &str) -> String {
 /// 두 줄기를 쓰는 이유는 폭이다. 32비트 하나면 서로 다른 두 vault가 **같은 캐시 파일을
 /// 공유**할 확률이 남는데, 그건 성능이 아니라 **정확성** 문제다(한쪽이 남의 인덱스를
 /// 읽는다). 두 번째 줄기는 바이트를 **뒤에서부터** 먹여 첫 줄기와 독립적으로 만든다.
-fn vault_key(vault_path: &str) -> String {
+pub(crate) fn vault_key(vault_path: &str) -> String {
     hash_key(&normalized_vault_path(vault_path))
 }
 
@@ -353,22 +340,35 @@ pub async fn write_search_cache_meta(
     shard_count: u32,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let meta = SearchCacheMeta {
-            version: CACHE_VERSION,
-            fingerprint,
-            link_infos,
-            shard_count,
-        };
-        let shard_count = meta.shard_count;
-        let json = serde_json::to_string(&meta).map_err(|e| format!("meta serialize: {e}"))?;
-        let bytes = gzip_string(&json)?;
-        atomic_write(&meta_file(&app, &vault_path)?, &bytes)?;
-        // meta가 커밋 지점이니 청소도 여기서. 생산자와 청소부를 떼어놓으면 또 어긋난다.
-        sweep_stale(&app, &vault_path, shard_count);
-        Ok(())
+        write_meta_inner(&app, &vault_path, fingerprint, link_infos, shard_count)
     })
     .await
     .map_err(|e| format!("write_search_cache_meta join: {e}"))?
+}
+
+/// meta 저장의 **실제 구현**. 커맨드와 헤드리스 인덱싱(`headless.rs`)이 함께 쓴다.
+///
+/// ⚠️ 두 경로가 각자 쓰기를 구현하면 한쪽만 고쳐지는 날이 온다 — `CACHE_VERSION`이
+/// 앱과 MCP에서 갈렸던 고장과 같은 부류다(#209). 구현은 여기 하나뿐이다.
+pub(crate) fn write_meta_inner(
+    app: &AppHandle,
+    vault_path: &str,
+    fingerprint: String,
+    link_infos: Vec<LinkInfo>,
+    shard_count: u32,
+) -> Result<(), String> {
+    let meta = SearchCacheMeta {
+        version: CACHE_VERSION,
+        fingerprint,
+        link_infos,
+        shard_count,
+    };
+    let json = serde_json::to_string(&meta).map_err(|e| format!("meta serialize: {e}"))?;
+    let bytes = gzip_string(&json)?;
+    atomic_write(&meta_file(app, vault_path)?, &bytes)?;
+    // meta가 커밋 지점이니 청소도 여기서. 생산자와 청소부를 떼어놓으면 또 어긋난다.
+    sweep_stale(app, vault_path, shard_count);
+    Ok(())
 }
 
 /// 이 vault의 잔재 파일 정리 — meta 커밋 직후 호출. 실패는 무시한다(캐시일 뿐이다).
@@ -407,7 +407,7 @@ fn sweep_stale(app: &AppHandle, vault_path: &str, shard_count: u32) {
 }
 
 /// 프론트의 `MAX_SHARDS`(`fullTextOptions.ts`)와 일치. 고아 스윕 상한으로만 쓴다.
-const MAX_SHARDS: u32 = 16;
+pub(crate) const MAX_SHARDS: u32 = 16;
 
 // ─── stats read/write (기동 델타) ────────────────────────────────────────────
 
@@ -493,17 +493,27 @@ pub async fn write_search_cache_stats(
     files: Vec<FileStat>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let stats = SearchCacheStats {
-            version: CACHE_VERSION,
-            fingerprint,
-            files,
-        };
-        let json = serde_json::to_string(&stats).map_err(|e| format!("stats serialize: {e}"))?;
-        let bytes = gzip_string(&json)?;
-        atomic_write(&stats_file(&app, &vault_path)?, &bytes)
+        write_stats_inner(&app, &vault_path, fingerprint, files)
     })
     .await
     .map_err(|e| format!("write_search_cache_stats join: {e}"))?
+}
+
+/// stats 저장의 실제 구현. `write_meta_inner`와 같은 이유로 하나뿐이다.
+pub(crate) fn write_stats_inner(
+    app: &AppHandle,
+    vault_path: &str,
+    fingerprint: String,
+    files: Vec<FileStat>,
+) -> Result<(), String> {
+    let stats = SearchCacheStats {
+        version: CACHE_VERSION,
+        fingerprint,
+        files,
+    };
+    let json = serde_json::to_string(&stats).map_err(|e| format!("stats serialize: {e}"))?;
+    let bytes = gzip_string(&json)?;
+    atomic_write(&stats_file(app, vault_path)?, &bytes)
 }
 
 // ─── shard read/write ───────────────────────────────────────────────────────
@@ -598,18 +608,29 @@ pub async fn write_search_cache_shard(
     minisearch_json: String,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let shard = SearchCacheShard {
-            version: CACHE_VERSION,
-            shard_id,
-            fingerprint,
-            minisearch_json,
-        };
-        let json = serde_json::to_string(&shard).map_err(|e| format!("shard serialize: {e}"))?;
-        let bytes = gzip_string(&json)?;
-        atomic_write(&shard_file(&app, &vault_path, shard_id)?, &bytes)
+        write_shard_inner(&app, &vault_path, shard_id, fingerprint, minisearch_json)
     })
     .await
     .map_err(|e| format!("write_search_cache_shard join: {e}"))?
+}
+
+/// shard 저장의 실제 구현. `write_meta_inner`와 같은 이유로 하나뿐이다.
+pub(crate) fn write_shard_inner(
+    app: &AppHandle,
+    vault_path: &str,
+    shard_id: u32,
+    fingerprint: String,
+    minisearch_json: String,
+) -> Result<(), String> {
+    let shard = SearchCacheShard {
+        version: CACHE_VERSION,
+        shard_id,
+        fingerprint,
+        minisearch_json,
+    };
+    let json = serde_json::to_string(&shard).map_err(|e| format!("shard serialize: {e}"))?;
+    let bytes = gzip_string(&json)?;
+    atomic_write(&shard_file(app, vault_path, shard_id)?, &bytes)
 }
 
 #[cfg(test)]

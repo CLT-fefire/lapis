@@ -605,7 +605,7 @@ pub async fn read_vault_bundle(vault_path: String) -> Result<VaultBundle, String
         .map_err(|e| format!("read_vault_bundle join: {e}"))?
 }
 
-fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
+pub(crate) fn read_vault_bundle_inner(vault_path: &str) -> Result<VaultBundle, String> {
     let root = PathBuf::from(vault_path);
     if !root.is_dir() {
         return Err(format!("Not a directory: {}", vault_path));
@@ -765,7 +765,7 @@ pub async fn vault_file_stats(vault_path: String) -> Result<VaultFileStats, Stri
         .map_err(|e| format!("vault_file_stats join: {e}"))?
 }
 
-fn vault_file_stats_inner(vault_path: &str) -> Result<VaultFileStats, String> {
+pub(crate) fn vault_file_stats_inner(vault_path: &str) -> Result<VaultFileStats, String> {
     let root = PathBuf::from(vault_path);
     if !root.is_dir() {
         return Err(format!("Not a directory: {}", vault_path));

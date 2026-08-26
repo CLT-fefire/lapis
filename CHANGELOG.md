@@ -17,6 +17,16 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **`lapis index` — 앱 없이 인덱스를 다시 만든다** ([#215]). Rebuilding the search index used
+  to require launching the app. Now the CLI can do it from a terminal, and the app reads the
+  result on next launch with no reindexing.
+
+  The work is split across a process boundary the same way the app splits it across IPC: Rust
+  walks the vault (it is the only index producer), Node builds the MiniSearch shards (the options
+  live in one place), Rust commits them in the order the cache contract requires.
+
+  Against an older app that does not know the flag, the CLI says so instead of hanging — an
+  outdated build silently opens a window and never returns, which is how it was found.
 - **`lapis tag rename` — CLI layer 3** ([#213]). Renaming or merging a tag across the vault now works
   from a terminal. Child tags follow the parent, the boundary is only at `/`, and renaming onto an
   existing tag is called out as a merge before anything is written.
@@ -728,6 +738,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#215]: https://github.com/eren0315/lapis/pull/215
 [#214]: https://github.com/eren0315/lapis/pull/214
 [#213]: https://github.com/eren0315/lapis/pull/213
 [#212]: https://github.com/eren0315/lapis/pull/212

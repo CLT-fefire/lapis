@@ -1,6 +1,7 @@
 mod git;
 mod grep;
 mod hash;
+mod headless;
 mod paths;
 mod search_cache;
 mod settings;
@@ -116,7 +117,27 @@ pub fn run() {
         eprintln!("[lapis panic] {info}");
     }));
 
-    tauri::Builder::default()
+    // 헤드리스 작업인지 먼저 본다. 인자를 못 읽으면 **창도 안 띄우고** 끝낸다 —
+    // 오타 하나로 GUI가 뜨면 CLI 쪽에서는 "멈춘 것"처럼 보인다.
+    let job = match headless::parse(std::env::args().skip(1)) {
+        Ok(job) => job,
+        Err(e) => {
+            eprintln!("[lapis] {e}");
+            std::process::exit(2);
+        }
+    };
+
+    let mut context = tauri::generate_context!();
+    if job.is_some() {
+        // ⚠️ 창 목록을 비우는 게 헤드리스의 전부다. `build()`는 설정에 적힌 창을 만들기
+        // 때문에, 이걸 안 지우면 인덱싱할 때마다 창이 번쩍인다.
+        //
+        // `build()` 자체는 그대로 둔다 — `AppHandle`이 있어야 `app_data_dir()`이 나오고,
+        // 그게 GUI와 같은 캐시 위치를 보장하는 유일한 방법이다(`headless.rs` 참고).
+        context.config_mut().app.windows.clear();
+    }
+
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         // 창 위치·크기를 재시작 너머로 잇는다. `on_window_ready`에 걸리므로 `main`뿐 아니라
@@ -210,6 +231,13 @@ pub fn run() {
             settings::settings_read,
             settings::settings_write,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application");
+
+    // 헤드리스는 여기서 끝난다 — 이벤트 루프를 돌리지 않는다.
+    if let Some(job) = job {
+        std::process::exit(headless::execute(app.handle(), job));
+    }
+
+    app.run(|_app, _event| {});
 }
