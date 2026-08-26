@@ -39,6 +39,7 @@ import {
   type Staleness,
   loadShards,
   norm,
+  normPath,
   normalizeVaultArg,
   resolveVault,
   type VaultCache,
@@ -58,10 +59,17 @@ const SNIPPET_MAX = 180;
  */
 const ARCHIVE_PREFIXES = ["_memories"];
 
-/** 결과 1건. `score`는 구조 전용 결과에서 null. */
+/** 결과 1건. `score`·`rel`은 구조 전용 결과에서 null. */
 export interface ResultRow {
   path: string;
   score: number | null;
+  /**
+   * 질의 내 상대 점수 `[0,1]`. top-1이 1.0.
+   *
+   * `score`(raw BM25)는 질의마다 스케일이 달라 행 간 비교밖에 안 된다. 이 값은
+   * 질의를 가로질러 비교되므로 "0.3 아래는 안 본다" 같은 판단에 쓸 수 있다.
+   */
+  rel: number | null;
   sources: string[];
   doc_kind: string | null;
   topic: string | null;
@@ -121,6 +129,16 @@ export interface QueryArgs {
   exclude?: string[];
   include_archive?: boolean;
   limit?: number;
+  /**
+   * BM25 결과의 **상대 점수 하한** `[0,1]`. 생략하면 거르지 않는다.
+   *
+   * raw `score`는 질의 간 비교가 안 돼(63점 vs 1,494점) 임계값을 못 세웠다.
+   * `rel`은 그 질의 안에서 top-1을 1.0으로 둔 값이라 질의를 가로질러 쓸 수 있다.
+   *
+   * `OR`/`OR-min` 단계로 떨어져 결과가 넓게 나올 때 꼬리를 자르는 용도다.
+   * ⚠️ 단계마다 모집단이 달라 같은 값이 같은 뜻은 아니다 — `used[].combine`을 함께 본다.
+   */
+  min_rel?: number;
 }
 
 interface Loaded {
@@ -295,6 +313,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     exclude = [],
     include_archive = false,
     limit = DEFAULT_LIMIT,
+    min_rel: minRelArg = 0,
   } = args;
 
   const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of);
@@ -311,6 +330,9 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   // (falsy-zero). 아래 `Math.max(1, …)`가 이미 하한을 보장하므로 폴백은 NaN만 잡는다.
   const wanted = Math.trunc(limit);
   const cap = Math.min(Math.max(1, Number.isFinite(wanted) ? wanted : DEFAULT_LIMIT), MAX_LIMIT);
+  // `min_rel`은 `[0,1]` 밖 값을 조용히 받지 않는다 — 1.5를 주면 전부 걸러져
+  // "인덱스가 비었다"로 오해하게 된다. NaN도 0으로 떨어뜨려 필터를 끈다.
+  const minRel = Number.isFinite(minRelArg) ? Math.min(Math.max(minRelArg, 0), 1) : 0;
   const ex = [...exclude.map(norm), ...(include_archive ? [] : ARCHIVE_PREFIXES)];
   const allow = new Set<string>(sources ?? ["bm25", "structural"]);
 
@@ -402,7 +424,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     }
   }
 
-  let ranked: { path: string; score: number }[] = [];
+  let ranked: { path: string; score: number; rel: number }[] = [];
   if (text && allow.has("bm25")) {
     // ⚠️ `loadBm25` **전에** 잡아야 한다. 뒤에서 `BM !== null`을 읽으면 항상 true다
     // (실측: 이미 로드된 2·3회차도 true였다 — 지연 로드를 확인했다고 착각하게 만든다).
@@ -410,8 +432,14 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     const idxs = loadBm25(st);
     const { hits, combine } = unionRankDetailed(idxs, text, 0);
     ranked = hits
-      .map((h) => ({ path: norm(h.path), score: h.score }))
+      .map((h) => ({ path: normPath(h.path), score: h.score, rel: h.rel }))
       .filter((h) => !excluded(st.rel(h.path), ex));
+
+    // `min_rel` 적용 — **자른 건수를 남긴다.** 조용히 줄이면 "왜 안 나오지"의
+    // 원인이 인자였다는 걸 알 방법이 없다.
+    const beforeMinRel = ranked.length;
+    if (minRel > 0) ranked = ranked.filter((h) => h.rel >= minRel);
+    const droppedByMinRel = beforeMinRel - ranked.length;
     used.push({
       name: "bm25",
       corpus_size: idxs.reduce((n, i) => n + i.documentCount, 0),
@@ -422,14 +450,16 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
       // 결과가 넓으면 이 값을 먼저 본다. 값 목록은 `mcp/README.md` 동작 5번.
       combine,
       lazy_loaded_now: !wasLoaded,
+      ...(minRel > 0 ? { min_rel: minRel, dropped_by_min_rel: droppedByMinRel } : {}),
     });
   }
 
-  const row = (abs: string, score: number | null, srcs: string[]): ResultRow => {
+  const row = (abs: string, score: number | null, rel: number | null, srcs: string[]): ResultRow => {
     const i = st.link.byPath.get(abs);
     return {
       path: st.rel(abs),
       score,
+      rel,
       sources: srcs,
       doc_kind: i?.doc_kind ?? null,
       topic: i?.topic ?? null,
@@ -467,14 +497,14 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
       if (results.length >= cap) break;
       if (!pool.has(r.path) || seen.has(r.path)) continue;
       seen.add(r.path);
-      results.push(row(r.path, Number(r.score.toFixed(4)), ["structural", "bm25"]));
+      results.push(row(r.path, Number(r.score.toFixed(4)), Number(r.rel.toFixed(4)), ["structural", "bm25"]));
     }
     // 구조엔 있는데 BM25가 못 본 건을 점수 없이 뒤에 붙인다(집합 정보 보존).
     for (const abs of poolLive) {
       if (results.length >= cap) break;
       if (seen.has(abs)) continue;
       seen.add(abs);
-      results.push(row(abs, null, ["structural"]));
+      results.push(row(abs, null, null, ["structural"]));
     }
     structuralCount = results.length;
   } else {
@@ -482,14 +512,14 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     for (const abs of poolLive) {
       if (results.length >= cap) break;
       seen.add(abs);
-      results.push(row(abs, null, bmSet.has(abs) ? ["structural", "bm25"] : ["structural"]));
+      results.push(row(abs, null, null, bmSet.has(abs) ? ["structural", "bm25"] : ["structural"]));
     }
     structuralCount = results.length;
     for (const r of ranked) {
       if (results.length >= cap) break;
       if (seen.has(r.path)) continue;
       seen.add(r.path);
-      results.push(row(r.path, Number(r.score.toFixed(4)), ["bm25"]));
+      results.push(row(r.path, Number(r.score.toFixed(4)), Number(r.rel.toFixed(4)), ["bm25"]));
     }
   }
 

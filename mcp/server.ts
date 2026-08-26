@@ -51,6 +51,11 @@ const TOOL = {
       },
       include_archive: { type: "boolean", description: "true면 `_memories` 기본 제외를 해제" },
       limit: { type: "number", description: "기본 10, 상한 50" },
+      min_rel: {
+        type: "number",
+        description:
+          "BM25 상대 점수 하한 [0,1]. 결과 행의 `rel`(그 질의 안에서 top-1=1.0)과 비교한다. raw `score`는 질의마다 스케일이 달라(63 vs 1,494) 임계값으로 못 쓴다. `used[].combine`이 OR·OR-min이라 결과가 넓을 때 꼬리를 자르는 용도. 자른 건수는 `used[].dropped_by_min_rel`",
+      },
       vault: { type: "string", description: "vault 루트 절대 경로. 여러 vault를 캐시한 경우 지정" },
     },
   },

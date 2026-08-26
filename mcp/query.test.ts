@@ -531,3 +531,66 @@ describe("vault 인자 정규화", () => {
     expect(bm.lazy_loaded_now).toBe(false); // 재로드했다면 true가 된다
   });
 });
+
+/**
+ * `rel` · `min_rel` — 질의를 가로지르는 점수축.
+ *
+ * raw `score`는 질의마다 스케일이 달라(실측 63 vs 1,494) 임계값으로 못 쓴다.
+ * 여기서 고정하는 계약은 셋이다: **top-1은 1.0**, **자른 건수를 보고한다**,
+ * **생략하면 아무것도 거르지 않는다**.
+ */
+describe("rel · min_rel", () => {
+  beforeEach(() => setup());
+
+  it("BM25 행에 rel이 실리고 top-1은 1.0이다", () => {
+    const r = search({ text: "태그", include_archive: true });
+    const bm = r.results.filter((x) => x.sources.includes("bm25"));
+    expect(bm.length).toBeGreaterThan(0);
+    expect(bm[0].rel).toBe(1);
+  });
+
+  it("구조 전용 행의 rel은 null이다 — BM25가 안 본 문서다", () => {
+    const r = search({ doc_kind: "adr" });
+    const structuralOnly = r.results.filter((x) => !x.sources.includes("bm25"));
+    expect(structuralOnly.length).toBeGreaterThan(0);
+    for (const row of structuralOnly) expect(row.rel).toBeNull();
+  });
+
+  it("min_rel을 생략하면 아무것도 거르지 않는다", () => {
+    const base = search({ text: "태그", include_archive: true });
+    const bm = base.used.find((u) => u.name === "bm25");
+    // 필터를 안 걸었으면 관련 필드 자체가 없어야 한다(계약 유지).
+    expect(bm).toBeDefined();
+    expect((bm as Record<string, unknown>).min_rel).toBeUndefined();
+    expect((bm as Record<string, unknown>).dropped_by_min_rel).toBeUndefined();
+  });
+
+  it("min_rel이 꼬리를 자르고 자른 건수를 보고한다", () => {
+    const base = search({ text: "태그", include_archive: true });
+    const baseBm = base.results.filter((x) => x.sources.includes("bm25")).length;
+    expect(baseBm).toBeGreaterThan(1); // 자를 게 있어야 의미 있는 테스트다
+
+    const cut = search({ text: "태그", include_archive: true, min_rel: 1 });
+    const cutBm = cut.results.filter((x) => x.sources.includes("bm25")).length;
+    expect(cutBm).toBeLessThan(baseBm);
+
+    const used = cut.used.find((u) => u.name === "bm25") as Record<string, unknown>;
+    expect(used.min_rel).toBe(1);
+    expect(used.dropped_by_min_rel).toBe(baseBm - cutBm);
+  });
+
+  it("[0,1] 밖 값은 클램프한다 — 음수는 필터를 끈다", () => {
+    const base = search({ text: "태그", include_archive: true });
+    const neg = search({ text: "태그", include_archive: true, min_rel: -3 });
+    expect(neg.results.length).toBe(base.results.length);
+    // 0으로 떨어지면 필터를 안 건 것과 같아 관련 필드가 없다.
+    const used = neg.used.find((u) => u.name === "bm25") as Record<string, unknown>;
+    expect(used.min_rel).toBeUndefined();
+  });
+
+  it("NaN은 필터를 끈다 — 전부 걸러 '인덱스가 비었다'로 오해시키지 않는다", () => {
+    const base = search({ text: "태그", include_archive: true });
+    const nan = search({ text: "태그", include_archive: true, min_rel: Number.NaN });
+    expect(nan.results.length).toBe(base.results.length);
+  });
+});

@@ -16,6 +16,20 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [Unreleased]
+
+### Added
+- **질의를 가로질러 비교되는 상대 점수 `rel`** ([#198]). raw BM25 점수는 질의 간 비교가 안 됐다 —
+  같은 코퍼스가 `"멀티 윈도우"`에 63점, 영문 혼합에 1,494점을 냈다(다른 표본은 848 vs 73).
+  IDF가 질의 term 구성에 따라 통째로 달라지고 shard-local이기까지 해서다. 그래서 **절대 임계값을
+  세울 수 없었고**, 특히 `OR` 폴백에서 아팠다 — 일부러 넓게 긁는 단계인데 꼬리를 자를 기준이
+  없었다. 이제 랭킹 결과마다 그 질의의 top-1을 `1.0`으로 둔 `rel`이 실린다. MCP 도구는 `min_rel`로
+  꼬리를 자르고, 자른 건수를 `used[].dropped_by_min_rel`로 보고한다 — 걸러진 결과가 조용히
+  사라지지 않는다. **랭킹 순서는 그대로다.** 기존 정렬 뒤에 얹는 단조 변환이라 계측 하네스의
+  R@1·R@10·MRR이 변하지 않는다.
+
+---
+
 ## [1.14.0] — 2026-08-26
 
 ### Added
@@ -545,6 +559,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#198]: https://github.com/eren0315/lapis/pull/198
 [#196]: https://github.com/eren0315/lapis/pull/196
 [#193]: https://github.com/eren0315/lapis/pull/193
 [#192]: https://github.com/eren0315/lapis/pull/192
