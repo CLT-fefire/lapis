@@ -16,6 +16,18 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Fixed
+- **Structural results came back in an unspecified order** ([#219]). Rows from `doc_kind`,
+  `topic`, `tag`, and `backlinks_of` carry no score, and their order was whatever order the cache
+  happened to store `link_infos` in — vault walk order for a full build, patched order after the
+  app's incremental reindex. The same query returned a different order before and after a reindex.
+
+  Order was not the only casualty: results are truncated to `limit` afterwards, so **which rows
+  survived changed too**. Structural results are now sorted by vault-relative path, compared by
+  UTF-16 code unit rather than `localeCompare` so the order does not depend on the machine's locale.
+
+---
+
 ## [1.17.0] — 2026-08-26
 
 ### Added
@@ -757,6 +769,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#219]: https://github.com/eren0315/lapis/pull/219
 [#217]: https://github.com/eren0315/lapis/pull/217
 [#216]: https://github.com/eren0315/lapis/pull/216
 [#215]: https://github.com/eren0315/lapis/pull/215

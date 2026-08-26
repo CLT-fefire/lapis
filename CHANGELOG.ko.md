@@ -18,6 +18,18 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Fixed
+- **구조 질의 결과의 순서가 정해져 있지 않던 것** ([#219]). `doc_kind` · `topic` · `tag` ·
+  `backlinks_of`로 나온 행에는 점수가 없고, 순서는 캐시가 `link_infos`를 담은 순서였다 —
+  전체 빌드면 vault walk 순서, 앱의 증분 재색인 뒤면 패치된 순서다. 그래서 같은 질의가
+  재색인 전후로 다른 순서를 냈다.
+
+  순서만 문제가 아니었다. 그 뒤에 `limit`으로 자르므로 **어느 행이 남는지도 달라졌다.**
+  이제 vault 상대 경로 오름차순으로 정렬하고, 비교는 `localeCompare`가 아니라 **UTF-16
+  코드 단위**로 한다 — 로케일에 따라 순서가 갈리지 않게.
+
+---
+
 ## [1.17.0] — 2026-08-26
 
 ### Added
@@ -724,6 +736,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#219]: https://github.com/eren0315/lapis/pull/219
 [#217]: https://github.com/eren0315/lapis/pull/217
 [#216]: https://github.com/eren0315/lapis/pull/216
 [#215]: https://github.com/eren0315/lapis/pull/215
