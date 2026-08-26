@@ -30,6 +30,14 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   갈린다.
 
 ### Fixed
+- **같은 vault가 캐시를 둘 가질 수 있던 것** ([#214]). 캐시 파일 이름의 해시를 **호출부가 준 문자열
+  그대로** 계산했다. 그래서 `C:\Projects\x` 와 `C:/Projects/x`, 후행 슬래시 유무, 심링크를 거친
+  경로가 각각 다른 이름을 만들었다. 증상은 "왜 또 전체 재인덱싱이지"이고, 이전 캐시는 아무도 안 읽는
+  고아로 남는다. 이 머신에서 실측했다 — 앱이 만든 캐시 파일이 역슬래시 철자의 해시였고, 같은 vault를
+  `/` 형태로 적으면 다른 이름이 나왔다. 이제 해싱 전에 경로를 canonicalize 한다.
+
+  기존 캐시는 다시 만들지 않고 **이름만 옮긴다.** [#207]이 이전 해시 변경을 다룬 방식 그대로이고,
+  이주가 이제 옛 세대 **둘**을 모두 시도한다.
 - **실패한 쓰기가 성공처럼 보이던 것** ([#212]). 백업 → 순차 쓰기 → 롤백 트랜잭션이 아무것도
   반환하지 않았다. 백업이 실패하면 그냥 `return` 해서, 호출부는 중단된 쓰기와 끝난 쓰기를 구분할
   수 없었다. **태그 이름 바꾸기 모달이 아무것도 안 쓰고도 성공한 듯 닫혔다** — 되돌릴 수 없는
@@ -688,6 +696,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#214]: https://github.com/eren0315/lapis/pull/214
 [#213]: https://github.com/eren0315/lapis/pull/213
 [#212]: https://github.com/eren0315/lapis/pull/212
 [#210]: https://github.com/eren0315/lapis/pull/210

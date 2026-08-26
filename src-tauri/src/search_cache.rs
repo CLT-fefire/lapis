@@ -53,6 +53,7 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 
 use crate::hash::{fnv1a32, FNV32_OFFSET};
+use crate::uipath::to_ui;
 use crate::vault::{FileStat, LinkInfo};
 
 pub const CACHE_VERSION: u32 = 8;
@@ -119,22 +120,75 @@ fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
 /// 두 줄기를 쓰는 이유는 폭이다. 32비트 하나면 서로 다른 두 vault가 **같은 캐시 파일을
 /// 공유**할 확률이 남는데, 그건 성능이 아니라 **정확성** 문제다(한쪽이 남의 인덱스를
 /// 읽는다). 두 번째 줄기는 바이트를 **뒤에서부터** 먹여 첫 줄기와 독립적으로 만든다.
+/// 해시에 먹일 **정규형 경로**.
+///
+/// ## ⚠️ 정규화하지 않으면 같은 vault가 캐시를 둘 갖는다
+///
+/// 예전엔 호출부가 준 문자열을 그대로 해싱했다. 그러면 같은 vault도 **어떻게 적었느냐에
+/// 따라** 키가 달라진다 — `C:\Projects\x` 와 `C:/Projects/x`, 후행 슬래시 유무,
+/// 심링크를 거친 경로가 전부 다른 캐시를 만든다. 증상은 "왜 또 전체 재인덱싱이지"이고,
+/// 옛 파일은 아무도 안 읽는 고아로 남는다.
+///
+/// 실측으로 확인했다: Windows에서 앱이 만든 캐시 이름이 역슬래시 형태의 해시였고,
+/// 같은 vault를 `/` 형태로 적으면 다른 이름이 나왔다.
+///
+/// canonicalize가 실패하면(vault가 지워졌거나 권한) 있는 그대로 정규화만 한다 — 그 경우
+/// 캐시를 못 찾는 건 어차피 정상이다.
+fn normalized_vault_path(vault_path: &str) -> String {
+    let p = std::path::Path::new(vault_path);
+    let canon = p
+        .canonicalize()
+        .map(|c| to_ui(&c))
+        .unwrap_or_else(|_| to_ui(p));
+    // 후행 슬래시 하나로 키가 갈리지 않게 한다.
+    canon.trim_end_matches('/').to_string()
+}
+
+/// 캐시 파일 이름의 접두 — vault 경로의 해시.
+///
+/// ## ⚠️ 이 값이 바뀌면 캐시를 통째로 못 찾는다
+///
+/// 파일 **이름**이라, 값이 달라지는 순간 앱은 "캐시가 없다"고 판단해 전체 재빌드로
+/// 가고 옛 파일은 아무도 안 읽는 고아가 된다. 실패가 요란하지 않아 알아채기도 어렵다.
+///
+/// 예전엔 `DefaultHasher`였는데 std가 **값 안정성을 보장하지 않는다.** 컴파일러 판이
+/// 바뀌면 그대로 위 상황이다. `crate::hash`의 명세된 FNV-1a로 옮겼다.
+///
+/// 두 줄기를 쓰는 이유는 폭이다. 32비트 하나면 서로 다른 두 vault가 **같은 캐시 파일을
+/// 공유**할 확률이 남는데, 그건 성능이 아니라 **정확성** 문제다(한쪽이 남의 인덱스를
+/// 읽는다). 두 번째 줄기는 바이트를 **뒤에서부터** 먹여 첫 줄기와 독립적으로 만든다.
 fn vault_key(vault_path: &str) -> String {
-    let bytes = vault_path.as_bytes();
+    hash_key(&normalized_vault_path(vault_path))
+}
+
+fn hash_key(s: &str) -> String {
+    let bytes = s.as_bytes();
     let a = fnv1a32(FNV32_OFFSET, bytes);
     let reversed: Vec<u8> = bytes.iter().rev().copied().collect();
     let b = fnv1a32(FNV32_OFFSET, &reversed);
     format!("{a:08x}{b:08x}")
 }
 
-/// **옛** 키 — `DefaultHasher` 시절 이름. 일회성 이주에만 쓴다.
+/// **옛** 키들 — 이주에만 쓴다. 새 이름으로 못 찾았을 때 순서대로 시도한다.
+///
+/// 두 세대가 있다:
+/// 1. `DefaultHasher` 시절(v1.15.0 이전)
+/// 2. FNV지만 **정규화하지 않은 원문**을 해싱하던 시절(v1.16.0)
+///
+/// 2번이 필요한 이유 — 같은 vault라도 앱이 받은 문자열(Windows 다이얼로그의 역슬래시
+/// 경로)로 이름이 지어져 있다. 정규화로 바꾸면 그 파일들이 그대로 고아가 된다.
+fn legacy_vault_keys(vault_path: &str) -> Vec<String> {
+    vec![legacy_default_hasher_key(vault_path), hash_key(vault_path)]
+}
+
+/// 세대 1 — `DefaultHasher`.
 ///
 /// ⚠️ 이 함수가 옛 파일을 쓴 바이너리와 **같은 값을 낸다는 보장은 없다**(그게 바로
 /// `vault_key`를 바꾼 이유다). 다만 실제로 std가 이 해시를 바꾼 적은 없어 대부분
 /// 맞아떨어지고, **안 맞아도 손해가 없다** — 못 찾으면 예전과 똑같이 전체 재빌드다.
 ///
 /// 이주가 충분히 퍼졌다고 판단되면 이 함수와 호출부를 지운다.
-fn legacy_vault_key(vault_path: &str) -> String {
+fn legacy_default_hasher_key(vault_path: &str) -> String {
     let mut h = DefaultHasher::new();
     vault_path.hash(&mut h);
     format!("{:016x}", h.finish())
@@ -147,9 +201,12 @@ fn legacy_vault_key(vault_path: &str) -> String {
 ///
 /// 반환값은 **옮긴 파일 수**. 0이면 이주할 게 없었다는 뜻이다.
 fn migrate_legacy_cache_files(dir: &PathBuf, vault_path: &str) -> usize {
-    let old = legacy_vault_key(vault_path);
     let new = vault_key(vault_path);
-    if old == new {
+    let olds: Vec<String> = legacy_vault_keys(vault_path)
+        .into_iter()
+        .filter(|k| *k != new)
+        .collect();
+    if olds.is_empty() {
         return 0;
     }
     let Ok(entries) = fs::read_dir(dir) else {
@@ -158,7 +215,7 @@ fn migrate_legacy_cache_files(dir: &PathBuf, vault_path: &str) -> usize {
     let mut moved = 0;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Some(rest) = name.strip_prefix(&old) else {
+        let Some(rest) = olds.iter().find_map(|o| name.strip_prefix(o.as_str())) else {
             continue;
         };
         // `{key}.meta.json.gz` · `{key}.stats.json.gz` · `{key}.shard{n}.json.gz`
@@ -676,7 +733,7 @@ mod tests {
     fn 새_키는_옛_키와_다르다() {
         assert_ne!(
             vault_key("/Users/x/vault"),
-            legacy_vault_key("/Users/x/vault")
+            legacy_default_hasher_key("/Users/x/vault")
         );
     }
 
@@ -684,7 +741,7 @@ mod tests {
     fn 이주는_meta_stats_shard를_모두_옮긴다() {
         let dir = tmp_dir("migrate");
         let vault = "/Users/x/vault";
-        let old = legacy_vault_key(vault);
+        let old = legacy_default_hasher_key(vault);
         let new = vault_key(vault);
 
         for suffix in [
@@ -723,7 +780,7 @@ mod tests {
         let dir = tmp_dir("move-not-copy");
         let vault = "/Users/x/vault";
         fs::write(
-            dir.join(format!("{}.meta.json.gz", legacy_vault_key(vault))),
+            dir.join(format!("{}.meta.json.gz", legacy_default_hasher_key(vault))),
             b"x",
         )
         .unwrap();
@@ -738,7 +795,7 @@ mod tests {
     fn 다른_vault의_캐시는_건드리지_않는다() {
         let dir = tmp_dir("other-vault");
         let mine = "/Users/x/vault";
-        let other_legacy = legacy_vault_key("/Users/x/다른vault");
+        let other_legacy = legacy_default_hasher_key("/Users/x/다른vault");
         fs::write(dir.join(format!("{other_legacy}.meta.json.gz")), b"x").unwrap();
         fs::write(dir.join("lapis-settings.json"), b"{}").unwrap();
 
@@ -760,11 +817,63 @@ mod tests {
     fn 접두만_같은_이름은_옮기지_않는다() {
         let dir = tmp_dir("prefix");
         let vault = "/Users/x/vault";
-        let old = legacy_vault_key(vault);
+        let old = legacy_default_hasher_key(vault);
         fs::write(dir.join(format!("{old}extra.meta.json.gz")), b"x").unwrap();
 
         assert_eq!(migrate_legacy_cache_files(&dir, vault), 0);
         assert!(dir.join(format!("{old}extra.meta.json.gz")).exists());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // ─── 경로 정규화 ─────────────────────────────────────────────────────
+
+    /// 같은 vault를 다르게 적어도 같은 캐시를 봐야 한다. 아니면 철자마다 캐시가 생기고
+    /// 매번 전체 재빌드다.
+    #[test]
+    fn 구분자가_달라도_같은_키다() {
+        let dir = tmp_dir("sep");
+        let a = vault_key(&dir.to_string_lossy());
+        let b = vault_key(&to_ui(&dir));
+        assert_eq!(a, b);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn 후행_슬래시가_있어도_같은_키다() {
+        let dir = tmp_dir("slash");
+        let base = to_ui(&dir);
+        assert_eq!(vault_key(&base), vault_key(&format!("{base}/")));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 존재하지 않는 경로도 죽지 않는다 — canonicalize 실패 시 있는 그대로 정규화한다.
+    #[test]
+    fn 없는_경로도_키를_낸다() {
+        let k = vault_key("/definitely/not/here");
+        assert_eq!(k.len(), 16);
+    }
+
+    /// 정규화 이전 세대(원문 해싱)로 지어진 파일도 이주 대상이다.
+    #[test]
+    fn 정규화_이전_이름도_이주한다() {
+        let dir = tmp_dir("gen2");
+        // 앱이 Windows 다이얼로그에서 받던 형태를 흉내낸다 — 구분자가 다른 원문.
+        let raw = to_ui(&dir).replace('/', "\\");
+        let old = hash_key(&raw);
+        let new = vault_key(&dir.to_string_lossy());
+        assert_ne!(old, new, "두 세대가 같으면 이 테스트가 무의미하다");
+
+        fs::write(dir.join(format!("{old}.meta.json.gz")), b"x").unwrap();
+        assert_eq!(migrate_legacy_cache_files(&dir, &raw), 1);
+        assert!(dir.join(format!("{new}.meta.json.gz")).exists());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 두 세대 모두 없으면 아무 일도 없다.
+    #[test]
+    fn 이주할_세대가_없으면_0() {
+        let dir = tmp_dir("gen0");
+        assert_eq!(migrate_legacy_cache_files(&dir, &dir.to_string_lossy()), 0);
         fs::remove_dir_all(&dir).ok();
     }
 }
