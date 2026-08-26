@@ -112,3 +112,26 @@ describe("표면 정의와 구현의 짝", () => {
     expect(orphan).toEqual([]);
   });
 });
+
+describe("tag 명령", () => {
+  it("동작·이전·새이름 세 인자가 필요하다", () => {
+    expect(() => parseArgs(["tag"])).toThrow(/<동작>가 필요하다/);
+    expect(() => parseArgs(["tag", "rename"])).toThrow(/<이전>가 필요하다/);
+    expect(() => parseArgs(["tag", "rename", "a"])).toThrow(/<새이름>가 필요하다/);
+  });
+
+  it("세 인자를 받으면 통과", () => {
+    const p = parseArgs(["tag", "rename", "a", "b"]);
+    expect(p.positional).toEqual(["rename", "a", "b"]);
+  });
+
+  it("⭐ --apply 없이는 기본이 dry-run이다", () => {
+    // 되돌릴 수 없는 쓰기를 인자 하나 빠뜨렸다고 실행하면 안 된다.
+    expect(parseArgs(["tag", "rename", "a", "b"]).options.apply).toBeUndefined();
+    expect(parseArgs(["tag", "rename", "a", "b", "--apply"]).options.apply).toBe(true);
+  });
+
+  it("--apply는 값을 받지 않는다", () => {
+    expect(() => parseArgs(["tag", "rename", "a", "b", "--apply=yes"])).toThrow(/값을 받지 않는/);
+  });
+});

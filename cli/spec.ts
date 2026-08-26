@@ -83,6 +83,24 @@ export const COMMANDS: CommandSpec[] = [
     ],
   },
   {
+    name: "tag",
+    desc: "태그 이름 바꾸기·병합. 하위 태그도 따라 움직인다",
+    positional: [
+      { name: "동작", required: true, desc: "지금은 rename 하나뿐이다" },
+      { name: "이전", required: true, desc: "바꿀 태그" },
+      { name: "새이름", required: true, desc: "새 태그" },
+    ],
+    options: [
+      {
+        name: "apply",
+        kind: "boolean",
+        // ⚠️ 기본이 dry-run인 게 요점이다. 되돌릴 수 없는 쓰기를 인자 하나 빠뜨렸다고
+        // 실행하면 안 된다. 앱 쪽도 미리보기 → 확인 순서를 강제한다.
+        desc: "실제로 쓴다. 없으면 미리보기만 (기본)",
+      },
+    ],
+  },
+  {
     name: "status",
     desc: "어느 vault를 어느 캐시로 읽는지, 낡았는지",
     positional: [],
@@ -91,6 +109,9 @@ export const COMMANDS: CommandSpec[] = [
 ];
 
 export const FACETS = ["tags", "topics", "doc-kinds"] as const;
+
+/** `tag` 명령이 받는 동작. 지금은 하나지만 목록으로 둬야 오류 메시지가 유용하다. */
+export const TAG_ACTIONS = ["rename"] as const;
 
 export function findCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);

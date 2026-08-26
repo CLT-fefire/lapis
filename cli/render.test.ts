@@ -7,6 +7,7 @@ import {
   renderError,
   renderRootHelp,
   renderCommandHelp,
+  renderTagPreview,
 } from "./render.ts";
 import { COMMANDS, GLOBAL_OPTIONS, optionsFor } from "./spec.ts";
 
@@ -135,5 +136,32 @@ describe("도움말은 spec에서 생성된다", () => {
         expect(help, `${c.name} 도움말에 --${o.name}이 없다`).toContain("--" + o.name);
       }
     }
+  });
+});
+
+describe("태그 미리보기 렌더", () => {
+  const rows = [
+    { path: "/v/a.md", occurrences: 1 },
+    { path: "/v/b.md", occurrences: 2 },
+  ];
+
+  it("대상이 없으면 그렇게 말한다", () => {
+    expect(renderTagPreview("old", "new", [], 0, false)).toContain("쓰는 노트가 없다");
+  });
+
+  it("이전 → 새이름과 영향 범위를 낸다", () => {
+    const out = renderTagPreview("tech", "stack", rows, 3, false);
+    expect(out).toContain("tech  →  stack");
+    expect(out).toContain("노트 2개 · 태그 3건");
+  });
+
+  it("⭐ 병합이면 되돌릴 수 없다고 경고한다", () => {
+    const out = renderTagPreview("a", "b", rows, 3, true);
+    expect(out).toContain("합쳐진다");
+    expect(out).toContain("되돌릴 수 없다");
+  });
+
+  it("병합이 아니면 경고하지 않는다", () => {
+    expect(renderTagPreview("a", "b", rows, 3, false)).not.toContain("합쳐진다");
   });
 });

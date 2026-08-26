@@ -56,6 +56,7 @@ ln -s "$PWD/cli/lapis" /usr/local/bin/lapis
 | `list <facet>` | `tags` · `topics` · `doc-kinds` 값을 빈도순 열거 |
 | `links --broken` | 어느 노트로도 해소되지 않는 본문 링크. 대상별로 묶어 참조 수 순 |
 | `status` | 어느 vault를 어느 캐시로 읽고 있는지, 낡았는지 |
+| `tag rename <이전> <새이름>` | 태그 이름 바꾸기·병합. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
 
 ### 공통 옵션
 
@@ -65,6 +66,24 @@ ln -s "$PWD/cli/lapis" /usr/local/bin/lapis
 | `--json` | 기계가 읽을 형태로. **AI·스크립트는 이걸 쓴다** |
 | `--limit <n>` | 기본 10, 상한 50 |
 | `--help` | 그 명령의 사용법 |
+
+### `tag rename` 전용
+
+| 옵션 | 뜻 |
+|---|---|
+| `--apply` | 실제로 쓴다. 없으면 미리보기만 |
+
+**하위 태그가 부모를 따라간다** — `tech`를 `stack`으로 바꾸면 `tech/svelte5`는 `stack/svelte5`가
+된다. 경계는 `/`에서만 인정하므로 `technical`은 건드리지 않는다.
+
+이미 있는 태그로 바꾸면 **병합**이고, 미리보기가 그 사실을 경고한다.
+
+⚠️ 쓰기는 앱과 **같은 트랜잭션**(`$lib/safeWrite`)을 탄다 — 백업 → 순차 쓰기 → 실패 시 롤백.
+원자적 쓰기·vault 이탈 차단·확장자 화이트리스트도 앱과 같게 다시 보장한다(`cli/io.ts`).
+CLI가 더 느슨하면 같은 트랜잭션을 쓰면서 안전성만 갈린다.
+
+⚠️ **앱이 인덱스 생산자다.** CLI가 쓴 것은 앱이 다시 읽어야 검색에 반영된다. 앱이 떠 있으면
+watcher가 잡고, 아니면 다음에 vault를 열 때 재색인된다.
 
 ### `search` 전용
 
@@ -167,16 +186,19 @@ src-tauri의 bin(vault.rs 재사용) → LinkInfo + stats + fingerprint를 JSON�
 |---|---|---|---|
 | 1 | 읽기 — `search` · `backlinks` · `list` · `links` · `status` | **있음** | — |
 | 2 | 헤드리스 인덱싱 — `lapis index` | 없음 | `src-tauri` bin 타깃 + 2단계 파이프라인 |
-| 3 | 쓰기 — `lapis tag rename` 등 | 없음 | 백업·롤백 트랜잭션이 `stores/vault.ts`(Svelte store)에 묶여 있다 |
+| 3 | 쓰기 — `lapis tag rename` | **있음** | — |
 | 4 | 앱 조작 — `lapis open <노트>` | 없음 | `tauri-plugin-single-instance` 도입 |
 
-### 3층이 막혀 있는 이유는 CLI 문제가 아니다
+### 3층은 선행 작업이 먼저였다
 
-되돌릴 수 없는 쓰기의 안전장치(백업 → 순차 쓰기 → 실패 시 롤백)가 **UI 레이어에 갇혀
-있다.** `#202`에서 태그 이름 바꾸기가 `backupAndWrite`를 쓰려고 export하며 이미 한 발
-걸쳤다. 두 번째 소비자(CLI)가 생기면 규칙이 둘로 갈릴 위험이 실제가 된다.
+되돌릴 수 없는 쓰기의 안전장치가 UI 레이어(`stores/vault.ts`)에 갇혀 있었다. `#202`에서
+태그 이름 바꾸기가 `backupAndWrite`를 쓰려고 export하며 이미 한 발 걸쳤고, CLI가 세 번째가
+되려 했다.
 
-CLI를 안 만들더라도 **순수 모듈로 빼두는 게 맞다.** 그게 3층의 선행 작업이다.
+`#212`에서 `$lib/safeWrite`로 빼고 IO를 주입받게 했다. 옮기면서 **실패가 성공처럼 보이던
+결함**도 드러났다 — 트랜잭션이 아무것도 반환하지 않아 백업 실패 시 모달이 그냥 닫혔다.
+
+CLI를 안 만들더라도 해야 했던 일이다.
 
 ## 개발
 
