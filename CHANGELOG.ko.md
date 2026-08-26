@@ -16,7 +16,7 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
-## [Unreleased]
+## [1.15.0] — 2026-08-26
 
 ### Added
 - **vault 전체 태그 이름 바꾸기·병합** ([#202]). 태그는 `/`로 계층을 이루고 사이드바가 접두 트리로
@@ -571,7 +571,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.14.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v1.15.0...main
+[1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/eren0315/lapis/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/eren0315/lapis/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/eren0315/lapis/compare/v1.12.1...v1.12.2
