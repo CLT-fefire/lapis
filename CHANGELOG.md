@@ -41,6 +41,12 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ---
 
 ### Added
+- **New app icon.** Replaces the Tauri placeholder the project had been shipping with — indigo
+  bracket mark with a gold gem, from a supplied vector source. `src-tauri/icons/lapis-light.svg`
+  and `lapis-dark.svg` are kept so the set can be regenerated.
+
+  A desktop app icon is a single asset, so the light variant is the one that ships: the dark one is
+  nearly black and loses its silhouette against a dark taskbar or dock.
 - **`lapis links --orphans` and `lapis tag audit`** ([#221]). Two audits that read what the index
   already holds. Orphans are notes nothing links to — the mirror image of the broken-link audit,
   and, since backlinks are the primary way to navigate, notes that are effectively unreachable.

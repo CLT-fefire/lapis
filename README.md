@@ -279,6 +279,27 @@ npm run tauri build -- --target universal-apple-darwin # macOS universal binary
 npm run tauri build -- --bundles nsis                  # Windows installer only
 ```
 
+### Replacing the app icon
+
+`src-tauri/icons/` is generated. Regenerate the whole set from a square 1024px source:
+
+```bash
+npm run tauri icon path/to/icon-1024.png
+```
+
+That also writes `android/` and `ios/` sets — delete them; neither is a target here.
+
+> ⚠️ **Editing the icon files alone is not enough on Windows.** The `.ico` is compiled into the
+> executable by a build script, and Cargo does not rerun that script when only the icon changes.
+> The build succeeds, `icon.ico` on disk is correct, and the shipped `.exe` **keeps the old icon**.
+> Touch `src-tauri/tauri.conf.json` (or `cargo clean -p lapis`) to force it, then verify the binary
+> itself rather than the file you edited:
+>
+> ```powershell
+> Add-Type -AssemblyName System.Drawing
+> [System.Drawing.Icon]::ExtractAssociatedIcon("src-tauri/target/release/lapis.exe").ToBitmap().Save("check.png")
+> ```
+
 > ⚠️ **Dev builds and the installed app use separate app data directories** (`com.lapis.dev-dev` vs `com.lapis.dev`). They used to share one, so the two builds kept overwriting each other's search cache and re-indexing. → `src-tauri/src/paths.rs`
 
 ## Troubleshooting
