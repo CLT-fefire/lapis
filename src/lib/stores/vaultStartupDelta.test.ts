@@ -13,7 +13,7 @@
  * "`readVaultBundle`이 안 불렸다"이다 — 인덱스 내용만 보면 풀 빌드로도 통과한다.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { get } from "svelte/store";
 
 type Stat = { path: string; mtime_ms: number; size: number };
@@ -140,6 +140,27 @@ const flushLazy = () => new Promise((r) => setTimeout(r, 80));
 function stat(path: string, mtime: number): Stat {
   return { path, mtime_ms: mtime, size: 10 };
 }
+
+/**
+ * ⚠️ **매 테스트 끝에 lazy 타이머를 비운다.** 안 하면 앞 테스트의 타이머가 뒤 테스트
+ * 안에서 터진다.
+ *
+ * `scheduleLazyFullTextLoad`는 **모듈 수준** `lazyLoadScheduled` 플래그와 **취소 장치가
+ * 없는** `setTimeout(…, 50)`이다. 앱에서는 문제가 없다 — 수명이 하나고, 그 플래그가
+ * 중복 예약을 막는다. 하지만 테스트는 같은 모듈 인스턴스를 공유하므로, `flushLazy()`를
+ * 부르지 않고 끝난 테스트가 **살아 있는 타이머를 남긴다.**
+ *
+ * 그게 다음 테스트의 관측 창 안에서 실행되면 그 테스트의 mock 호출이 하나 더 늘어
+ * `expected 1 times, but got 2 times`가 된다. 창에 들어오느냐가 부하에 달려 있어
+ * **Linux CI에서만 간헐적으로** 터졌다(Windows·macOS 로컬은 빨라서 대개 그 전에 소진됐다).
+ *
+ * `vi.useFakeTimers()`로 바꾸지 않은 이유 — 이 스위트는 `await reloadNotes()`가 내부에서
+ * 도는 여러 겹의 실제 마이크로태스크에 기대고 있어, 타이머만 가짜로 만들면 그 순서가
+ * 통째로 달라진다. 여기서 필요한 건 **경계에서 비우는 것**뿐이다.
+ */
+afterEach(async () => {
+  await flushLazy();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
