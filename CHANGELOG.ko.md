@@ -19,6 +19,16 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Added
+- **`lapis index` — 앱 없이 인덱스를 다시 만든다** ([#215]). 검색 인덱스를 다시 만들려면
+  앱을 띄워야 했다. 이제 터미널에서 되고, 앱은 다음 기동에 그 결과를 **재색인 없이** 그대로
+  읽는다.
+
+  앱이 IPC 경계를 두고 하는 분업을 CLI는 **프로세스 경계**로 한다 — Rust가 vault를 훑고
+  (인덱스 생산자는 하나뿐이다), Node가 MiniSearch shard를 만들고(옵션은 한 곳에 있다),
+  Rust가 캐시 계약이 요구하는 **순서대로** 커밋한다.
+
+  플래그를 모르는 구버전 앱을 만나면 매달리지 않고 그 사실을 말한다. 옛 빌드는 모르는 인자를
+  무시하고 조용히 창을 띄운 뒤 돌아오지 않는데, 그러다 발견했다.
 - **`lapis tag rename` — CLI 3층** ([#213]). vault 전체 태그 이름 바꾸기·병합을 터미널에서 한다.
   하위 태그가 부모를 따라가고, 경계는 `/`에서만 인정하며, 이미 있는 태그로 바꾸면 **쓰기 전에**
   병합이라고 알린다.
@@ -696,6 +706,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#215]: https://github.com/eren0315/lapis/pull/215
 [#214]: https://github.com/eren0315/lapis/pull/214
 [#213]: https://github.com/eren0315/lapis/pull/213
 [#212]: https://github.com/eren0315/lapis/pull/212

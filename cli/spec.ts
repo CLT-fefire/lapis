@@ -106,6 +106,18 @@ export const COMMANDS: CommandSpec[] = [
     positional: [],
     options: [],
   },
+  {
+    name: "index",
+    desc: "앱 없이 인덱스를 다시 만든다. 앱을 켜면 그대로 읽는다",
+    positional: [],
+    options: [
+      {
+        name: "dry-run",
+        kind: "boolean",
+        desc: "만들어만 보고 캐시에 쓰지 않는다. 규모·시간 가늠용",
+      },
+    ],
+  },
 ];
 
 export const FACETS = ["tags", "topics", "doc-kinds"] as const;

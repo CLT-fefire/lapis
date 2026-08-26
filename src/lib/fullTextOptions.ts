@@ -277,3 +277,48 @@ export function unionRankDetailed(
   const filtered = loose.filter((h) => h.nMatched >= need);
   return filtered.length > 0 ? cut(filtered, "OR-min") : cut(loose, "OR");
 }
+
+/**
+ * vault 노트 수 기반 shard 수 결정. 각 shard 약 2000–3000 doc이 첫 shard ready 1–2초 sweet spot.
+ *
+ * - < 1000: 1 (작은 vault, overhead 제거)
+ * - 1000–5000: 2
+ * - 5000–15000: 4 (이전 고정값)
+ * - 15000–50000: 8
+ * - 50000+: 16
+ *
+ * cache meta(`SearchCacheMeta.shard_count`)에 박제 → 다음 cold-start에서 같은 값 사용.
+ * cache miss 빌드 시 결정. vault content_hash 변경 시(노트 추가/삭제 큰 폭) 재결정 가능.
+ */
+export function decideShardCount(noteCount: number): number {
+  if (noteCount < 1000) return 1;
+  if (noteCount < 5000) return 2;
+  if (noteCount < 15000) return 4;
+  if (noteCount < 50000) return 8;
+  return 16;
+}
+
+/**
+ * doc.path → shardId 결정론 함수. fnv32 hash 후 modulo N.
+ * worker와 main이 같은 함수 써야 — sharded query/build 일관.
+ * `shardCount`는 vault별로 다름 (`decideShardCount` 참조).
+ *
+ * ## ⚠️ Rust의 `crate::hash::fnv1a32`와 **같은 함수가 아니다**
+ *
+ * 알고리즘 이름은 같지만 **먹이는 바이트가 다르다.** 여기는 `charCodeAt`, 즉
+ * **UTF-16 코드 단위**를 먹인다. Rust 쪽은 UTF-8 바이트를 먹는다. ASCII 경로에서는
+ * 두 값이 우연히 같고, **한글이 든 경로에서 갈린다.**
+ *
+ * 그래서 "같은 FNV니까 공용 함수로 합치자"가 성립하지 않는다. 합치면 shard 배정이
+ * 통째로 바뀌고, 그건 `CACHE_VERSION` bump 없이는 **기존 캐시를 조용히 어긋나게**
+ * 만든다(문서가 다른 shard로 가서 검색에서 사라진다). 굳이 통일하려면 그때 bump한다.
+ */
+export function computeShardId(path: string, shardCount: number): number {
+  // FNV-1a 32-bit
+  let h = 0x811c9dc5;
+  for (let i = 0; i < path.length; i++) {
+    h ^= path.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ((h >>> 0) % shardCount);
+}

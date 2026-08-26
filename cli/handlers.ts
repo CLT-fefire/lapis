@@ -7,6 +7,7 @@ import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync } from "node:fs";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
+import { runIndex, IndexError } from "./indexRun.ts";
 
 import type { ParsedCommand } from "./args.ts";
 import { FACETS, TAG_ACTIONS } from "./spec.ts";
@@ -210,6 +211,57 @@ export async function cmdTag(p: ParsedCommand, out: Out): Promise<void> {
 }
 
 /**
+ * 앱 없이 인덱스를 다시 만든다.
+ *
+ * 다른 명령과 성격이 다르다 — 저 위의 것들은 **이미 있는 캐시를 읽고**, 이건 캐시를
+ * **만든다.** 그래서 유일하게 설치된 앱 실행파일을 부른다(`indexRun.ts`).
+ *
+ * ⚠️ 진행 상황을 stderr로 낸다. 큰 vault에서 1분 넘게 조용하면 멈춘 것처럼 보이는데,
+ * stdout에 섞으면 `--json` 출력이 오염된다.
+ */
+function cmdIndex(p: ParsedCommand, out: Out): void {
+  const vault = vaultOf(p) ?? resolveVault().root;
+  const dryRun = p.options["dry-run"] === true;
+
+  let result;
+  try {
+    result = runIndex({
+      vault,
+      dryRun,
+      onProgress: out.json ? undefined : (m) => process.stderr.write(`  ${m}\n`),
+    });
+  } catch (e) {
+    if (e instanceof IndexError) {
+      out.fail("index_failed", e.message, e.remedy, 1);
+    }
+    throw e;
+  }
+
+  if (out.json) return out.json_(result);
+
+  out.line(
+    table([
+      ["vault", result.vaultRoot],
+      ["노트", String(result.noteCount)],
+      ["shard", `${result.shardCount}개 [${result.perShard.join(", ")}]`],
+      ["fingerprint", result.fingerprint],
+      ["캐시", `${result.cacheDir}/${result.cacheKey}.* (v${result.cacheVersion})`],
+      [
+        "소요",
+        `스캔 ${result.exportMs}ms · 빌드 ${result.buildMs}ms` +
+          (result.committed ? ` · 커밋 ${result.commitMs}ms` : ""),
+      ],
+    ]),
+  );
+  out.line("");
+  out.line(
+    result.committed
+      ? "커밋했다. 앱을 켜면 이 인덱스를 그대로 읽는다(재색인 없음)."
+      : "만들기만 했다 — 캐시는 그대로다.",
+  );
+}
+
+/**
  * 명령 이름 → 핸들러.
  *
  * ⚠️ `spec.ts`의 `COMMANDS`와 **키가 정확히 같아야 한다.** 한쪽에만 있으면 도움말에는
@@ -222,4 +274,5 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   links: cmdLinks,
   tag: cmdTag,
   status: cmdStatus,
+  index: cmdIndex,
 };

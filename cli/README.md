@@ -57,6 +57,7 @@ ln -s "$PWD/cli/lapis" /usr/local/bin/lapis
 | `links --broken` | 어느 노트로도 해소되지 않는 본문 링크. 대상별로 묶어 참조 수 순 |
 | `status` | 어느 vault를 어느 캐시로 읽고 있는지, 낡았는지 |
 | `tag rename <이전> <새이름>` | 태그 이름 바꾸기·병합. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
+| `index` | 앱 없이 인덱스를 다시 만든다. `--dry-run`이면 만들어만 보고 쓰지 않는다 |
 
 ### 공통 옵션
 
@@ -144,22 +145,47 @@ vault가 캐시보다 새로우면 `status`가 알려주지만 **막지는 않�
 "staleness는 막지 않고 보고한다"와 같은 태도다. 하드 실패 자체가 판단이고, 이 도구는
 판단하지 않는다.
 
-### 왜 인덱싱은 아직 없나
+### 헤드리스 인덱싱은 어떻게 도나
 
 **인덱스 생산자는 Rust 하나뿐**이라는 원칙 때문이다(README 설계 원칙). 위키링크·마크다운
 링크·프론트매터 추출은 `src-tauri/src/vault.rs`에만 있고, Node에서 다시 짜면 **두 스캐너가
 반드시 어긋난다.**
 
-그런데 풀텍스트 shard는 JS MiniSearch로 만든다(`fullTextOptions.ts`). 그래서 헤드리스
-인덱싱은 **2단계 파이프라인**이 된다:
+그런데 풀텍스트 shard는 JS MiniSearch로 만든다(`fullTextOptions.ts`). 그래서 앱이 IPC 경계를
+두고 하는 분업을 CLI는 **프로세스 경계**로 한다:
 
 ```
-src-tauri의 bin(vault.rs 재사용) → LinkInfo + stats + fingerprint를 JSON으로
-                                 → Node가 fullTextOptions.ts로 shard 빌드 + gzip 저장
+① lapis.exe --headless export-index  →  Rust가 vault를 훑어 원자료 JSON
+② Node가 fullTextOptions.ts로 shard 빌드              (cli/indexBuild.ts)
+③ lapis.exe --headless import-index  →  Rust가 순서를 지켜 캐시에 커밋
 ```
 
-앱이 IPC 경계를 두고 하는 분업과 **똑같다.** 원칙 두 개(생산자 하나 · 옵션 단일 출처)를
-다 지킨다. 아직 만들지 않았을 뿐 방향은 이것이다.
+원칙 두 개(생산자 하나 · 옵션 단일 출처)를 다 지킨다.
+
+#### 왜 별도 바이너리가 아닌가
+
+후보는 `[[bin]] lapis-index`였다. Tauri 전체를 다시 링크한 **두 번째 큰 실행파일**을 설치본에
+얹게 되고, 사이드카 번들 설정이 늘고, 무엇보다 CLI가 찾아야 할 실행파일이 둘이 된다.
+이미 설치돼 있는 앱에 플래그 하나를 더하는 쪽이 배포·발견 양쪽에서 싸다.
+
+#### 왜 `AppHandle`이 꼭 필요한가
+
+캐시 **위치**를 아는 것이 그것뿐이다. `paths::app_data_root(app)`가 플랫폼별 디렉터리 +
+identifier + dev 접미사를 정하는데, Node가 그 규칙을 흉내내면 **앱이 읽지 않는 곳에** 인덱스를
+쓰게 된다. 그래서 헤드리스도 Tauri 앱을 짓기는 한다 — 다만 설정에서 창 목록을 비우고
+이벤트 루프를 돌리지 않는다.
+
+#### ③을 Node가 직접 쓰지 않는 이유
+
+쓰는 **순서가 계약**이기 때문이다: shard → stats → **meta 맨 마지막**. meta가 커밋 지점이라
+순서를 뒤집으면 fingerprint는 맞아떨어지는데 내용만 낡은 캐시가 생기고, 그건 오류 없이
+**조용히 틀린 검색 결과**가 된다. 규칙을 두 벌로 만들지 않는다.
+
+#### 구버전 앱을 만나면
+
+옛 빌드는 모르는 인자를 **무시하고 평범하게 창을 띄운다.** 그러면 CLI는 사용자가 창을 닫을
+때까지 돌아오지 않는다 — 실제로 겪었다. 그래서 vault를 훑지 않는 `cache-info`를 짧은 제한으로
+**먼저** 불러 능력을 확인하고, 안 끝나면 "앱을 업데이트하라"고 말한다.
 
 ### 왜 서버를 열지 않나
 
@@ -185,7 +211,7 @@ src-tauri의 bin(vault.rs 재사용) → LinkInfo + stats + fingerprint를 JSON�
 | 층 | 내용 | 상태 | 막고 있는 것 |
 |---|---|---|---|
 | 1 | 읽기 — `search` · `backlinks` · `list` · `links` · `status` | **있음** | — |
-| 2 | 헤드리스 인덱싱 — `lapis index` | 없음 | `src-tauri` bin 타깃 + 2단계 파이프라인 |
+| 2 | 헤드리스 인덱싱 — `lapis index` | **있음** | — |
 | 3 | 쓰기 — `lapis tag rename` | **있음** | — |
 | 4 | 앱 조작 — `lapis open <노트>` | 없음 | `tauri-plugin-single-instance` 도입 |
 
