@@ -1114,9 +1114,19 @@ async function rewriteAllLinksWithPreview(
   await backupAndWrite(vault, preview);
 }
 
-async function backupAndWrite(
+/**
+ * 백업 → 순차 write → 실패 시 롤백 → 오래된 백업 prune.
+ *
+ * ⚠️ `export`인 이유 — **태그 이름 바꾸기가 같은 트랜잭션을 쓴다**(`stores/tagRewrite.ts`).
+ * 프론트매터를 건드리는 경로가 둘로 갈리면 백업·롤백 규칙도 둘이 되고, #184(YAML 파싱
+ * 실패로 frontmatter 전소)처럼 한쪽에서만 재발한다. `preview.items`의 모양만 맞추면 된다.
+ *
+ * 백업 디렉터리도 `.lapis/link-rewrite-backup/`을 **그대로 쓴다.** prune(`paths` 고정)이
+ * 그 한 곳만 보므로, 새 디렉터리를 만들면 영원히 정리되지 않는 백업이 쌓인다.
+ */
+export async function backupAndWrite(
   vault: string,
-  preview: LinkRewritePreview,
+  preview: { items: LinkRewritePreviewItem[] },
 ): Promise<void> {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const backupDirRel = `.lapis/link-rewrite-backup/${ts}`;

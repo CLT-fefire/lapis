@@ -17,6 +17,17 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **Rename or merge a tag across the vault** ([#202]). Tags form a `/`-separated hierarchy that the
+  sidebar renders as a prefix tree, but fixing a single typo meant opening every note that carried it
+  by hand. Renaming a note has rewritten its inbound links for a long time; tags had no counterpart.
+  Child tags follow the parent — renaming `tech` to `stack` turns `tech/svelte5` into `stack/svelte5`
+  — and the boundary is only at `/`, so `technical` is left alone. Renaming onto an existing tag
+  merges the two and is called out as such before you commit to it.
+
+  It reuses the note-rename transaction exactly: dry-run preview, backup, sequential write, rollback
+  on failure. And like `related:` rewriting, it edits the YAML **line by line rather than parsing and
+  re-serializing** — that is the lesson from #184, where a parse failure wiped a note's frontmatter.
+  Body `#tag` text is deliberately untouched, because the indexer ignores it for a reason.
 - **Whole-vault literal and regex search** (`⌘⇧G`) ([#200]). In-document search (`⌘F`) had regex,
   case and whole-word for years; whole-vault search (`⌘⇧F`) had only BM25 token matching. That gap
   mattered because **BM25 and grep fail in opposite directions** — measured on this vault, grep
@@ -618,6 +629,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#202]: https://github.com/eren0315/lapis/pull/202
 [#201]: https://github.com/eren0315/lapis/pull/201
 [#200]: https://github.com/eren0315/lapis/pull/200
 [#199]: https://github.com/eren0315/lapis/pull/199

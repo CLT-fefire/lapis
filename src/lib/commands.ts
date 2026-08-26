@@ -19,6 +19,7 @@ import { openPalette } from "$lib/stores/palette";
 import { openTableView } from "$lib/stores/tableView";
 import { openBrokenLinks } from "$lib/stores/brokenLinks";
 import { openGrep } from "$lib/stores/grep";
+import { openTagRename } from "$lib/stores/tagRewrite";
 import { newWindow } from "$lib/tauri/window";
 
 export interface Command {
@@ -82,6 +83,17 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       openGrep();
+    },
+  },
+  {
+    id: "tag-rename",
+    get label() {
+      return m.cmd_tag_rename();
+    },
+    // 단축키 없음 — 되돌릴 수 없는 쓰기라 손이 미끄러져 열릴 자리를 주지 않는다.
+    disabled: () => !get(vaultPath),
+    run() {
+      openTagRename();
     },
   },
   {

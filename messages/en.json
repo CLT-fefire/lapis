@@ -352,5 +352,18 @@
   "grep_running": "Searching…",
   "grep_summary": "{hits} hits in {files} files · {scanned} scanned",
   "grep_truncated": "truncated at the cap",
-  "grep_hint": "BM25 search (⌘⇧F) matches tokens; this matches the string itself. Use it when the wording differs from what you remember. Clicking a result opens in-document search with the same pattern."
+  "grep_hint": "BM25 search (⌘⇧F) matches tokens; this matches the string itself. Use it when the wording differs from what you remember. Clicking a result opens in-document search with the same pattern.",
+  "cmd_tag_rename": "Rename / merge a tag",
+  "tagrename_title": "Rename tag",
+  "tagrename_old": "Tag to rename",
+  "tagrename_new": "New name",
+  "tagrename_preview": "Preview",
+  "tagrename_apply": "Apply",
+  "tagrename_cancel": "Cancel",
+  "tagrename_busy": "Working…",
+  "tagrename_none": "No note uses that tag.",
+  "tagrename_summary": "{notes} notes · {total} tags",
+  "tagrename_merge_warn": "That tag already exists — the two will be merged into one. This cannot be undone.",
+  "tagrename_children_note": "Child tags move too: renaming tech to stack turns tech/svelte5 into stack/svelte5.",
+  "tagrename_backup_note": "Affected notes are backed up to .lapis/link-rewrite-backup/ before writing. A failed write is rolled back automatically."
 }
