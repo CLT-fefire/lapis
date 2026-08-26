@@ -252,3 +252,44 @@ export function renderAmbiguous(rows: readonly AmbiguousRow[]): string {
   }
   return out.join("\n");
 }
+
+export interface ReplaceRow {
+  path: string;
+  occurrences: number;
+}
+
+/**
+ * 찾아 바꾸기 미리보기.
+ *
+ * ⚠️ 위험 신호를 **목록보다 먼저** 낸다. 목록이 길면 아래쪽 경고는 스크롤 밖으로
+ * 밀려나고, 되돌릴 수 없는 쓰기에서 그건 경고가 없는 것과 같다.
+ */
+export function renderReplacePreview(
+  pattern: string,
+  replacement: string,
+  rows: readonly ReplaceRow[],
+  total: number,
+  warn: { frontmatter: number; selfMatching: boolean },
+): string {
+  if (rows.length === 0) return `"${pattern}" 을(를) 쓰는 노트가 없다`;
+
+  const head: string[] = [`${pattern}  →  ${replacement}`, ""];
+  if (warn.selfMatching) {
+    head.push(
+      "⚠️ 치환문이 패턴에 다시 걸린다 — 두 번 실행하면 두 번 자란다.",
+    );
+  }
+  if (warn.frontmatter > 0) {
+    head.push(
+      `⚠️ 그중 ${warn.frontmatter}건이 프론트매터 안이다 — YAML이 깨질 수 있다.`,
+    );
+  }
+  if (head.length > 2) head.push("");
+
+  return [
+    ...head,
+    table(rows.map((r) => [String(r.occurrences), r.path])),
+    "",
+    `노트 ${rows.length}개 · ${total}건`,
+  ].join("\n");
+}

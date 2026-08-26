@@ -42,6 +42,17 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ---
 
 ### Added
+- **`lapis replace` · `⌘⇧G` 안에서 바꾸기** ([#224]). vault 전체 찾아 바꾸기. 찾는 것은 이미
+  됐는데 **손을 쓸 수가 없었다.** 기본은 **dry-run**이고 `--apply`가 있어야 쓴다. 쓰기는 태그
+  이름 바꾸기와 **같은** `$lib/safeWrite` 트랜잭션을 탄다(백업 → 순차 쓰기 → 실패 시 롤백).
+
+  ⚠️ 찾기와 바꾸기는 **정규식 엔진이 다르다.** `⌘⇧G`는 Rust `regex`, 치환은 JS `RegExp`이고
+  매치 지점이 다를 수 있다. 그래서 적용 전에 보여주는 건수는 **항상 치환 엔진이 낸 것**이며,
+  앱에서는 **검색이 안 찾은 노트를 절대 쓰지 않는다** — 놓침은 되돌릴 수 있고 잘못된 쓰기는
+  아니다. 둘이 갈리면 그 사실을 말해준다.
+
+  경고는 목록보다 **먼저** 낸다: 바꿀 내용이 찾을 내용에 다시 걸리는 경우(`a` → `aa`는 실행할
+  때마다 두 배가 된다), 그리고 frontmatter 안의 매치가 몇 건인지(YAML이 깨질 수 있다).
 - **시간축 — `--since` · `--sort` · `--by`** ([#223]). vault는 모든 노트가 언제 바뀌었는지
   알고 있는데 물어볼 방법이 없었다. `checkStale`이 이미 매 질의마다 vault 전체를 훑고 그
   타임스탬프를 **버리고** 있었고, 프론트매터 `date`도 이미 인덱싱돼 있었다. 둘 다 질의
@@ -783,6 +794,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#224]: https://github.com/eren0315/lapis/pull/224
 [#223]: https://github.com/eren0315/lapis/pull/223
 [#221]: https://github.com/eren0315/lapis/pull/221
 [#220]: https://github.com/eren0315/lapis/pull/220

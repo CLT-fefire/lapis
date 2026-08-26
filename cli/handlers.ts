@@ -5,6 +5,7 @@ import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
 import { findOrphans, findTagIssues, findAmbiguousNames } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
+import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync } from "node:fs";
 import nodePath from "node:path";
@@ -19,6 +20,7 @@ import {
   renderFacet,
   renderBroken,
   renderTagPreview,
+  renderReplacePreview,
   renderOrphans,
   renderTagIssues,
   renderAmbiguous,
@@ -430,6 +432,102 @@ function cmdOpen(p: ParsedCommand, out: Out): void {
 }
 
 /**
+ * vault 전체 찾아 바꾸기.
+ *
+ * ⚠️ **기본은 dry-run이다.** `tag rename`과 같은 규율이고, 쓰기는 같은
+ * `$lib/safeWrite` 트랜잭션을 탄다(백업 → 순차 쓰기 → 실패 시 롤백).
+ *
+ * ⚠️ `⌘⇧G`(Rust `regex`)와 **다른 엔진**(JS `RegExp`)이다. 그래서 grep 결과를 그대로
+ * 믿지 않고 여기서 다시 찾아 자기 건수를 낸다 — 자세한 근거는 `$lib/replacePlan`.
+ */
+export async function cmdReplace(p: ParsedCommand, out: Out): Promise<void> {
+  const [pattern, replacement] = p.positional;
+  const vc = resolveVault(vaultOf(p));
+  const prefix = typeof p.options.path === "string" ? p.options.path : null;
+
+  // 미리보기 계산은 대상 노트를 전부 읽는다. 앱과 같은 이유로 명시적 단계다.
+  const notes = new Map<string, string>();
+  const rel = relativizer(vc.root);
+  for (const info of vc.infos) {
+    if (prefix !== null && !rel(info.source_path).startsWith(prefix)) continue;
+    try {
+      notes.set(info.source_path, readFileSync(info.source_path, "utf8"));
+    } catch {
+      // 한 파일을 못 읽었다고 전체를 세우지 않는다. 그 노트만 대상에서 빠진다.
+    }
+  }
+
+  let preview;
+  try {
+    preview = computeReplacePreview(notes, pattern, replacement, {
+      regex: p.options.regex === true,
+      caseSensitive: p.options["ignore-case"] !== true,
+      wholeWord: p.options["whole-word"] === true,
+    });
+  } catch (e) {
+    if (e instanceof ReplacePatternError) {
+      out.fail("no_criteria", e.message, "--regex 없이 리터럴로 찾을 수도 있다", 2);
+    }
+    throw e;
+  }
+
+  const rows = preview.items.map((i) => ({ path: rel(i.path), occurrences: i.occurrences }));
+  const apply = p.options.apply === true;
+
+  if (!apply) {
+    if (out.json) {
+      return out.json_({
+        vault: vc.root,
+        dry_run: true,
+        pattern,
+        replacement,
+        total_occurrences: preview.totalOccurrences,
+        frontmatter_occurrences: preview.frontmatterOccurrences,
+        self_matching: preview.selfMatching,
+        items: rows,
+      });
+    }
+    out.line(
+      renderReplacePreview(pattern, replacement, rows, preview.totalOccurrences, {
+        frontmatter: preview.frontmatterOccurrences,
+        selfMatching: preview.selfMatching,
+      }),
+    );
+    if (rows.length > 0) out.line("\n미리보기다 — 실제로 쓰려면 --apply");
+    return;
+  }
+
+  if (preview.items.length === 0) {
+    // 쓸 게 없는데 성공이라고 하면 "바뀐 줄 알았다"가 된다.
+    out.fail(
+      "path_not_indexed",
+      `"${pattern}" 을(를) 쓰는 노트가 없다`,
+      "--regex 여부와 --path 범위를 확인하라",
+      1,
+    );
+  }
+
+  const io2 = makeCliIo({
+    settingsFile: nodePath.join(nodePath.dirname(vc.dir), "lapis-settings.json"),
+  });
+  const outcome = await backupAndWrite(vc.root, preview.items, io2);
+  if (!outcome.ok) {
+    out.fail("corrupt", describeFailure(outcome) ?? "쓰기 실패", "백업에서 회수할 수 있다", 1);
+  }
+
+  if (out.json) {
+    return out.json_({
+      vault: vc.root,
+      applied: true,
+      written: outcome.ok ? outcome.written : [],
+    });
+  }
+  out.line(`${pattern} → ${replacement}: 노트 ${preview.items.length}개 갱신`);
+  // ⚠️ 앱이 인덱스 생산자다. CLI가 쓴 것은 앱이 다시 읽어야 검색에 반영된다.
+  out.line("앱이 떠 있으면 watcher가 반영한다. 아니면 다음에 vault를 열 때 재색인된다.");
+}
+
+/**
  * 명령 이름 → 핸들러.
  *
  * ⚠️ `spec.ts`의 `COMMANDS`와 **키가 정확히 같아야 한다.** 한쪽에만 있으면 도움말에는
@@ -444,4 +542,5 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   status: cmdStatus,
   index: cmdIndex,
   open: cmdOpen,
+  replace: cmdReplace,
 };

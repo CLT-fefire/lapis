@@ -41,6 +41,19 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ---
 
 ### Added
+- **`lapis replace` and replace inside `⌘⇧G`** ([#224]). Vault-wide find and replace. Finding
+  worked already; there was no way to act on it. **Dry-run by default** — `--apply` is required —
+  and the write goes through the same `$lib/safeWrite` transaction as a tag rename: backup,
+  sequential write, rollback on failure.
+
+  ⚠️ Search and replace use **different regex engines**: `⌘⇧G` runs Rust `regex`, replacement runs
+  JS `RegExp`, and they can match different text. So the counts shown before applying come from the
+  replace engine, never from the search, and in the app a note the search did not surface is never
+  written — a miss is recoverable, a wrong write is not. When the two disagree the app says so.
+
+  Warnings come before the file list, not after it: a replacement that matches the pattern again
+  (`a` → `aa` doubles on every run), and how many matches sit inside frontmatter where they can
+  break the YAML.
 - **Time axis — `--since`, `--sort`, `--by`** ([#223]). The vault records when every note was
   modified and nothing could ask about it. `checkStale` was already walking the whole vault on
   every query and throwing those timestamps away; frontmatter `date` was already indexed. Both are
@@ -819,6 +832,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#224]: https://github.com/eren0315/lapis/pull/224
 [#223]: https://github.com/eren0315/lapis/pull/223
 [#221]: https://github.com/eren0315/lapis/pull/221
 [#220]: https://github.com/eren0315/lapis/pull/220
