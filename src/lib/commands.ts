@@ -18,6 +18,7 @@ import {
 import { openPalette } from "$lib/stores/palette";
 import { openTableView } from "$lib/stores/tableView";
 import { openBrokenLinks } from "$lib/stores/brokenLinks";
+import { openGrep } from "$lib/stores/grep";
 import { newWindow } from "$lib/tauri/window";
 
 export interface Command {
@@ -70,6 +71,17 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       openTableView();
+    },
+  },
+  {
+    id: "vault-grep",
+    get label() {
+      return m.cmd_grep();
+    },
+    shortcut: "⌘⇧G",
+    disabled: () => !get(vaultPath),
+    run() {
+      openGrep();
     },
   },
   {

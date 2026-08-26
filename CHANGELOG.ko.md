@@ -19,6 +19,17 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Added
+- **vault 전체 리터럴·정규식 검색** (`⌘⇧G`) ([#200]). 문서 **내** 검색(`⌘F`)에는 regex·대소문자·단어
+  단위가 오래전부터 있었는데, vault **전체**(`⌘⇧F`)는 BM25 토큰 매칭뿐이었다. 이 공백이 문제인 이유는
+  **BM25와 grep이 반대 방향으로 실패**하기 때문이다 — 이 vault 실측에서 `_memories`의 4문항에 grep은
+  전부 0건이었고(기록은 "창", 질의는 "윈도우") BM25는 같은 트리에서 상위를 익사당했다.
+  `mcp/README.md`가 "둘 다 쓰는 게 맞다"고 결론냈는데 앱에는 한 팔만 있었다. 매칭은 Rust에서,
+  `read_vault_bundle`이 이미 쓰는 rayon 병렬 walk 위에서 돈다. 결과를 클릭하면 같은 패턴으로 문서 내
+  검색이 켜져 노트 맨 위가 아니라 찾은 자리에서 시작한다.
+
+  ⚠️ 매치 오프셋은 **Rust가** UTF-16 코드 단위로 돌려준다. 프런트에서 다시 계산하면 두 번 틀린다 —
+  Rust `regex`에는 역참조·lookaround가 없어 JS `RegExp`가 다른 곳을 매치할 수 있고, 바이트 오프셋을
+  쓰면 한글이 든 줄에서 하이라이트가 통째로 어긋난다.
 - **끊긴 링크 감사** ([#199]). 프리뷰가 미해소 위키링크에 클래스를 붙이긴 하지만 **그 노트를
   열었을 때만** 보인다. 19,000 노트에서 눈으로 훑어 찾을 수 있는 게 아니다. README가 밝히듯
   **vault를 쓰는 게 Lapis가 아니라 바깥 도구들**이라 이게 문제가 된다 — 앱 안에서의 rename은
@@ -570,6 +581,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#200]: https://github.com/eren0315/lapis/pull/200
 [#199]: https://github.com/eren0315/lapis/pull/199
 [#198]: https://github.com/eren0315/lapis/pull/198
 [#196]: https://github.com/eren0315/lapis/pull/196

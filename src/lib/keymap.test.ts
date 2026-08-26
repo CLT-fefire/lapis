@@ -110,3 +110,19 @@ describe("입력 중 가드", () => {
     expect(idOf(chord({ key: "s" }), true)).toBe("save");
   });
 });
+
+describe("⌘⇧G — vault 전체 검색", () => {
+  it("⌘⇧G가 vault-grep으로 간다", () => {
+    expect(idOf(chord({ key: "g", shiftKey: true }))).toBe("vault-grep");
+  });
+
+  it("shift 없는 ⌘G는 아무것도 아니다 — 그래프 뷰 제거로 비어 있는 자리다", () => {
+    expect(idOf(chord({ key: "g" }))).toBeNull();
+  });
+
+  it("Ctrl+Shift+G도 같다 — Windows", () => {
+    expect(idOf(chord({ key: "g", metaKey: false, ctrlKey: true, shiftKey: true }))).toBe(
+      "vault-grep",
+    );
+  });
+});

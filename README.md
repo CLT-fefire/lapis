@@ -44,13 +44,20 @@ Your files live only on your local filesystem. No accounts, no cloud sync, no te
 - **Frontmatter cross-refs** — `related`, `amends`, and `superseded_by` are indexed separately, **preserving the relation type**. "The document that corrected this one" doesn't get mixed in with "merely related".
 - **Automatic link updates** — rename a file and references to it are followed and fixed, after a **dry-run preview** and a **backup**.
 
-### Search — three layers
+### Search — four layers
 
 | Layer | Shortcut | Engine | When to use |
 |---|---|---|---|
 | Filename fuzzy | `⌘P` | in-house fuzzy | you roughly know the filename |
 | Full-text | `⌘⇧F` | MiniSearch (BM25 + Korean bigram) | you're searching by content |
 | Within document | `⌘F` | regex · case · whole word | inside the note you have open |
+| Whole vault, literal/regex | `⌘⇧G` | Rust `regex`, walked in parallel | the wording differs from what you remember |
+
+The last one exists because BM25 and grep **fail in opposite directions**. Measured on this vault:
+in `_memories`, grep returned nothing for 4 of 4 questions (the notes say "창", the query said
+"윈도우"), while BM25 drowned the good hits in that same tree. One arm cannot reach what the other
+is buried under, so both are here. Clicking a result opens in-document search with the same pattern,
+so you land on the match rather than at the top of the note.
 
 The full-text index is built in a **Web Worker** and **cached to disk per shard**, so restarting the app doesn't re-read everything from scratch.
 
@@ -113,6 +120,7 @@ Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository d
 | `⌘K` | Command Palette — search every command |
 | `⌘P` | Quick File Open (filename fuzzy) — replaces the active tab |
 | `⌘⇧F` / `⌘⇧P` | Full-text search |
+| `⌘⇧G` | Search the whole vault by literal text or regex |
 | `⌘F` | Find within the current note |
 | `⌘E` | Toggle read ↔ edit |
 | `⌘⇧E` | Focus the file tree filter |

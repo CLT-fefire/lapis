@@ -71,6 +71,33 @@ export function openSearch(target: SearchTarget): void {
   inDocSearch.update((s) => ({ ...s, open: true, target }));
 }
 
+/**
+ * 질의와 옵션을 한 번에 지정하고 연다 — vault 전체 검색(`grep`) 결과에서 넘어올 때 쓴다.
+ *
+ * 결과를 클릭해 노트로 이동한 뒤 문서 맨 위에 떨구면 500줄짜리에서 찾은 걸 다시 찾아야
+ * 한다. 같은 패턴·같은 옵션으로 문서 내 검색을 켜주면 그 자리가 바로 하이라이트된다.
+ *
+ * ⚠️ **옵션을 영속화하지 않는다.** `toggleOption`과 달리 localStorage에 쓰지 않는다.
+ * 이건 한 번의 인계이지 사용자가 문서 내 검색에서 고른 취향이 아니다 — 덮어쓰면
+ * 다음에 ⌘F를 열었을 때 남의 설정이 들어와 있다.
+ */
+export function applySearch(
+  query: string,
+  options: InDocSearchOptions,
+  target: SearchTarget,
+): void {
+  inDocSearch.update((s) => ({
+    ...s,
+    open: true,
+    target,
+    query,
+    options: { ...options },
+    total: 0,
+    current: 0,
+    regexError: false,
+  }));
+}
+
 export function closeSearch(): void {
   inDocSearch.update((s) => ({
     ...s,

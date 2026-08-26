@@ -343,5 +343,14 @@
   "brokenlinks_no_vault": "vault를 먼저 여세요.",
   "brokenlinks_summary": "대상 {targets}개 · 링크 {links}개",
   "brokenlinks_referenced_by": "{count}곳에서 참조",
-  "brokenlinks_hint": "본문 위키링크·마크다운 링크만 봅니다. frontmatter 상호참조는 값이 노트로 해소될 때만 관계로 취급하는 설계라 감사 대상이 아닙니다."
+  "brokenlinks_hint": "본문 위키링크·마크다운 링크만 봅니다. frontmatter 상호참조는 값이 노트로 해소될 때만 관계로 취급하는 설계라 감사 대상이 아닙니다.",
+  "cmd_grep": "vault 전체 검색 (정규식)",
+  "grep_title": "vault 전체 검색",
+  "grep_placeholder": "찾을 문자열 또는 정규식 — Enter로 실행",
+  "grep_whole_word": "단어 단위",
+  "grep_run": "검색",
+  "grep_running": "검색 중…",
+  "grep_summary": "{files}개 파일에서 {hits}건 · {scanned}개 훑음",
+  "grep_truncated": "상한에 걸려 잘렸습니다",
+  "grep_hint": "BM25 검색(⌘⇧F)이 토큰을 찾는다면 이쪽은 문자열을 그대로 찾습니다. 어휘가 어긋나 BM25가 못 닿는 경우에 씁니다. 결과를 클릭하면 같은 패턴으로 문서 내 검색이 켜집니다."
 }
