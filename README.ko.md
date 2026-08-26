@@ -151,6 +151,20 @@ npm run tauri build
 
 빈 vault에서 만드는 Welcome 샘플 노트도 그때의 언어로 생성됩니다. 이미 만들어진 파일은 언어를 바꿔도 그대로 둡니다.
 
+## 커맨드라인 — `lapis`
+
+앱이 떠 있지 않아도 같은 인덱스를 터미널에서 쓸 수 있습니다.
+
+```bash
+cli/lapis search "멀티 윈도우" --min-rel 0.3
+cli/lapis links --broken
+cli/lapis status
+```
+
+아무 명령에나 `--json`을 붙이면 MCP 도구가 돌려주는 것과 **같은 모양**이 나옵니다 —
+스크립트와 에이전트가 형식을 두 번 배우지 않아도 됩니다. 계약·종료 코드, 그리고 아직
+만들지 **않은** 것들의 층별 계획은 [`cli/README.md`](cli/README.md)에 있습니다.
+
 ## Claude Code 연동 — 지식 질의 MCP
 
 Lapis가 만든 검색 인덱스를 MCP 서버로 노출합니다. 도구는 **하나**(`lapis_query`)입니다.

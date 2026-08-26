@@ -30,7 +30,9 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["src/**/*.test.ts", "mcp/**/*.test.ts"],
+          // `cli/`도 여기 있어야 한다. 빠뜨리면 테스트 파일이 있는데 **아무도 안 돌려서**
+          // 초록으로 보인다 — 없는 것보다 나쁘다.
+          include: ["src/**/*.test.ts", "mcp/**/*.test.ts", "cli/**/*.test.ts"],
           exclude: ["**/*.dom.test.ts"],
         },
       },

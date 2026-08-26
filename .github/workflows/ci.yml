@@ -52,6 +52,11 @@ jobs:
       - name: MCP 서버 타입 체크
         run: npm run check:mcp
 
+      # ⚠️ 이것도 여기 있어야 한다. 루트 `check`는 `src/`만 보므로 `cli/`는 어디서도
+      # 검사되지 않는다 — 설정 파일만 있고 아무도 안 돌리면 없는 것과 같다.
+      - name: CLI 타입 체크
+        run: npm run check:cli
+
       - name: 단위 테스트
         run: npm test
 

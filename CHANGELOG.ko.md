@@ -18,6 +18,21 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Added
+- **커맨드라인 도구** ([#210]). MCP가 에이전트에게 열어주는 그 인덱스를 이제 터미널에서도 쓴다.
+  앱이 떠 있지 않아도 된다 — `search` · `backlinks` · `list` · `links --broken` · `status`.
+  모든 명령이 `--json`을 받고 `lapis_query`가 돌려주는 것과 **같은 모양**을 낸다. 스크립트나
+  에이전트가 형식을 두 번 배우지 않아도 된다.
+
+  랭킹을 다시 짜지 않고 `lapisQuery()`를 그대로 부른다 — 랭킹 하나에 소비자 둘이다. 명령 표면
+  (이름·옵션·도움말)은 배열 하나에 있고 `--help`·인자 검증·짝 맞춤 테스트가 **모두 그걸 읽는다.**
+  도움말이 실제로 받는 옵션과 어긋날 수 없다. 모르는 옵션은 무시하지 않고 `2`로 죽는다 —
+  `--limt 5`를 조용히 버리면 기본 limit으로 돈 결과가 요청한 결과처럼 보인다.
+
+  계약·종료 코드, 그리고 **의도적으로 아직 안 만든 것**(헤드리스 인덱싱·쓰기·실행 중인 앱 조작)의
+  층별 계획은 [`cli/README.md`](cli/README.md)에 있다. 심링크된 노트 트리가 아니라 **저장소 안**에
+  두어 클론과 함께 따라오게 했다.
+
 ### Fixed
 - **v1.15.0으로 올리면 MCP 질의가 전부 실패했을 것** ([#209]). 앱은 캐시 v8로 갔는데([#201])
   MCP 서버가 기대하는 버전은 7에 머물러, **멀쩡한 캐시를 `version_skew`로 거부**한다 — 인덱스는
@@ -646,6 +661,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#210]: https://github.com/eren0315/lapis/pull/210
 [#209]: https://github.com/eren0315/lapis/pull/209
 [#208]: https://github.com/eren0315/lapis/pull/208
 [#207]: https://github.com/eren0315/lapis/pull/207
