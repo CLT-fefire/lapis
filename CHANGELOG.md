@@ -17,6 +17,19 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **A broken-link audit** ([#199]). The preview marks unresolved wikilinks with a class, but only in
+  the note you happen to have open — across 19,000 notes that is not something you find by looking.
+  It matters because, as the README says, the vault is written by other tools rather than by Lapis:
+  renaming inside the app rewrites the links that point at a note, but a file deleted or renamed
+  *outside* it breaks them silently, and nothing surfaced that. A new command lists every unresolved
+  body link, **grouped by target and ordered by how many notes point at it** — the unit of repair is
+  one missing note, not one link, so the top of the list is also the cheapest thing to fix. Computed
+  on demand rather than during index build, so startup is untouched.
+
+  ⚠️ Frontmatter cross-refs are deliberately out of scope. `relations.ts` treats "resolves to a note"
+  as the definition of a relation, so auditing those fields would flag every ordinary scalar
+  (`status: welcome`, `priority: high`) as a broken link. Body links carry their own syntax and have
+  no such ambiguity.
 - **A relative score (`rel`) that can be compared across queries** ([#198]). Raw BM25 scores could not
   be compared between queries — the same corpus answered `"멀티 윈도우"` with 63 and an English-mixed
   query with 1,494 (another sample: 848 vs 73), because IDF shifts with the query's term composition
@@ -576,6 +589,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#199]: https://github.com/eren0315/lapis/pull/199
 [#198]: https://github.com/eren0315/lapis/pull/198
 [#196]: https://github.com/eren0315/lapis/pull/196
 [#193]: https://github.com/eren0315/lapis/pull/193

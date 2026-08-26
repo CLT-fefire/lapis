@@ -336,5 +336,12 @@
   "table_view_name_placeholder": "View name",
   "table_view_delete": "Delete view",
   "table_view_none": "No saved views yet",
-  "cmd_table_view": "Table view"
+  "cmd_table_view": "Table view",
+  "cmd_broken_links": "Audit broken links",
+  "brokenlinks_title": "Broken links",
+  "brokenlinks_empty": "No broken links.",
+  "brokenlinks_no_vault": "Open a vault first.",
+  "brokenlinks_summary": "{targets} targets · {links} links",
+  "brokenlinks_referenced_by": "referenced by {count}",
+  "brokenlinks_hint": "Body wikilinks and markdown links only. Frontmatter cross-refs are excluded: by design a value counts as a relation only when it resolves, so auditing them would flag every ordinary scalar."
 }

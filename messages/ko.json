@@ -336,5 +336,12 @@
   "table_view_name_placeholder": "뷰 이름",
   "table_view_delete": "뷰 삭제",
   "table_view_none": "저장한 뷰가 없다",
-  "cmd_table_view": "테이블 뷰"
+  "cmd_table_view": "테이블 뷰",
+  "cmd_broken_links": "끊긴 링크 감사",
+  "brokenlinks_title": "끊긴 링크",
+  "brokenlinks_empty": "끊긴 링크가 없습니다.",
+  "brokenlinks_no_vault": "vault를 먼저 여세요.",
+  "brokenlinks_summary": "대상 {targets}개 · 링크 {links}개",
+  "brokenlinks_referenced_by": "{count}곳에서 참조",
+  "brokenlinks_hint": "본문 위키링크·마크다운 링크만 봅니다. frontmatter 상호참조는 값이 노트로 해소될 때만 관계로 취급하는 설계라 감사 대상이 아닙니다."
 }

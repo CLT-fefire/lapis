@@ -19,6 +19,17 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Added
+- **끊긴 링크 감사** ([#199]). 프리뷰가 미해소 위키링크에 클래스를 붙이긴 하지만 **그 노트를
+  열었을 때만** 보인다. 19,000 노트에서 눈으로 훑어 찾을 수 있는 게 아니다. README가 밝히듯
+  **vault를 쓰는 게 Lapis가 아니라 바깥 도구들**이라 이게 문제가 된다 — 앱 안에서의 rename은
+  가리키는 링크를 따라가 고치지만, 밖에서 파일이 지워지거나 이름이 바뀌면 조용히 끊기고 그
+  경로엔 아무 신호가 없었다. 새 명령이 미해소 본문 링크를 전부 열거하되 **대상별로 묶고 참조
+  수 내림차순으로** 낸다 — 고칠 단위가 "링크 하나"가 아니라 "없는 노트 하나"라, 목록 위쪽이
+  곧 가장 싸게 고치는 순서다. 인덱스 빌드가 아니라 **요청 시에만** 계산해 기동 경로는 그대로다.
+
+  ⚠️ frontmatter 상호참조는 의도적으로 제외한다. `relations.ts`는 "노트로 resolve되면 관계"를
+  정의로 삼기 때문에, 그 필드를 감사하면 `status: welcome` · `priority: high` 같은 평범한
+  스칼라가 전부 끊긴 링크로 잡힌다. 본문 링크는 문법 자체가 링크 선언이라 그 모호함이 없다.
 - **질의를 가로질러 비교되는 상대 점수 `rel`** ([#198]). raw BM25 점수는 질의 간 비교가 안 됐다 —
   같은 코퍼스가 `"멀티 윈도우"`에 63점, 영문 혼합에 1,494점을 냈다(다른 표본은 848 vs 73).
   IDF가 질의 term 구성에 따라 통째로 달라지고 shard-local이기까지 해서다. 그래서 **절대 임계값을
@@ -559,6 +570,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#199]: https://github.com/eren0315/lapis/pull/199
 [#198]: https://github.com/eren0315/lapis/pull/198
 [#196]: https://github.com/eren0315/lapis/pull/196
 [#193]: https://github.com/eren0315/lapis/pull/193
