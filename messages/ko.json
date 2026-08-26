@@ -352,5 +352,18 @@
   "grep_running": "검색 중…",
   "grep_summary": "{files}개 파일에서 {hits}건 · {scanned}개 훑음",
   "grep_truncated": "상한에 걸려 잘렸습니다",
-  "grep_hint": "BM25 검색(⌘⇧F)이 토큰을 찾는다면 이쪽은 문자열을 그대로 찾습니다. 어휘가 어긋나 BM25가 못 닿는 경우에 씁니다. 결과를 클릭하면 같은 패턴으로 문서 내 검색이 켜집니다."
+  "grep_hint": "BM25 검색(⌘⇧F)이 토큰을 찾는다면 이쪽은 문자열을 그대로 찾습니다. 어휘가 어긋나 BM25가 못 닿는 경우에 씁니다. 결과를 클릭하면 같은 패턴으로 문서 내 검색이 켜집니다.",
+  "cmd_tag_rename": "태그 이름 바꾸기 · 병합",
+  "tagrename_title": "태그 이름 바꾸기",
+  "tagrename_old": "바꿀 태그",
+  "tagrename_new": "새 이름",
+  "tagrename_preview": "미리보기",
+  "tagrename_apply": "적용",
+  "tagrename_cancel": "취소",
+  "tagrename_busy": "처리 중…",
+  "tagrename_none": "해당 태그를 쓰는 노트가 없습니다.",
+  "tagrename_summary": "노트 {notes}개 · 태그 {total}건",
+  "tagrename_merge_warn": "이미 있는 태그입니다 — 두 태그가 하나로 합쳐집니다. 되돌릴 수 없습니다.",
+  "tagrename_children_note": "하위 태그도 함께 옮겨집니다. 예를 들어 tech를 stack으로 바꾸면 tech/svelte5는 stack/svelte5가 됩니다.",
+  "tagrename_backup_note": "적용 전 대상 노트를 .lapis/link-rewrite-backup/ 에 백업합니다. 쓰기가 실패하면 자동으로 되돌립니다."
 }

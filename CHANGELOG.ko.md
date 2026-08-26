@@ -19,6 +19,16 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Added
+- **vault 전체 태그 이름 바꾸기·병합** ([#202]). 태그는 `/`로 계층을 이루고 사이드바가 접두 트리로
+  그리는데, 오타 하나를 고치려면 그 태그가 든 노트를 **전부 손으로 열어야 했다.** 노트 rename은
+  오래전부터 인용 링크를 자동으로 고쳐왔는데 태그에는 그 짝이 없었다. 하위 태그도 부모를 따라간다 —
+  `tech`를 `stack`으로 바꾸면 `tech/svelte5`는 `stack/svelte5`가 된다. 경계는 **`/`에서만** 인정해
+  `technical`은 건드리지 않는다. 이미 있는 태그로 바꾸면 둘이 합쳐지고, 적용 전에 그 사실을 알린다.
+
+  적용은 노트 rename의 트랜잭션을 **그대로** 탄다: dry-run 미리보기 → 백업 → 순차 쓰기 → 실패 시
+  롤백. 그리고 `related:` 갱신과 마찬가지로 YAML을 **파싱하지 않고 줄 단위로** 고친다 — #184에서
+  파싱 실패가 노트의 frontmatter를 통째로 날린 그 교훈이다. 본문의 `#tag`는 의도적으로 그대로 둔다.
+  인덱서가 그걸 무시하는 데는 이유가 있기 때문이다.
 - **vault 전체 리터럴·정규식 검색** (`⌘⇧G`) ([#200]). 문서 **내** 검색(`⌘F`)에는 regex·대소문자·단어
   단위가 오래전부터 있었는데, vault **전체**(`⌘⇧F`)는 BM25 토큰 매칭뿐이었다. 이 공백이 문제인 이유는
   **BM25와 grep이 반대 방향으로 실패**하기 때문이다 — 이 vault 실측에서 `_memories`의 4문항에 grep은
@@ -596,6 +606,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#202]: https://github.com/eren0315/lapis/pull/202
 [#201]: https://github.com/eren0315/lapis/pull/201
 [#200]: https://github.com/eren0315/lapis/pull/200
 [#199]: https://github.com/eren0315/lapis/pull/199

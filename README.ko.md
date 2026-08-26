@@ -65,6 +65,9 @@ Lapis는 이미 쌓인 마크다운 더미를 **읽고 찾는** 데 최적화된
 - **frontmatter `tags:`만** 인덱싱합니다. 본문 인라인 해시태그는 의도적으로 무시합니다 — 코드 안의 `#define`이나 URL fragment(`#section`)와 구분할 방법이 없기 때문입니다.
 - **nested kebab-case** — `tech/svelte5`, `issue/atomic-write`처럼 `/`로 계층을 만들면 사이드바가 prefix 트리로 렌더합니다.
 - 태그를 눌러 해당 문서만 좁혀 보기.
+- **vault 전체에서 태그 이름 바꾸기·병합**을 커맨드 팔레트에서. 하위 태그도 따라옵니다 —
+  `tech`를 `stack`으로 바꾸면 `tech/svelte5`는 `stack/svelte5`가 됩니다. 먼저 dry-run으로 범위를
+  보여주고, 대상 노트를 백업한 뒤 쓰며, 쓰기가 실패하면 되돌립니다 — 노트 rename과 같은 기계장치입니다.
 
 ### 탭과 창
 

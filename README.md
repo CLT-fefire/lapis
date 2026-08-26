@@ -66,6 +66,9 @@ The full-text index is built in a **Web Worker** and **cached to disk per shard*
 - **Only frontmatter `tags:`** is indexed. Inline hashtags in the body are deliberately ignored — there's no reliable way to tell them apart from `#define` in code or a URL fragment like `#section`.
 - **Nested kebab-case** — build a hierarchy with `/`, as in `tech/svelte5` or `issue/atomic-write`, and the sidebar renders it as a prefix tree.
 - Click a tag to narrow the view to its documents.
+- **Rename or merge a tag across the vault** from the Command Palette. Child tags follow: renaming
+  `tech` to `stack` turns `tech/svelte5` into `stack/svelte5`. It runs as a dry-run first, backs the
+  affected notes up, and rolls back if a write fails — the same machinery a note rename uses.
 
 ### Tabs and windows
 

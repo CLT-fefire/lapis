@@ -16,6 +16,7 @@
   import TableView from "$lib/TableView.svelte";
   import BrokenLinksModal from "$lib/BrokenLinksModal.svelte";
   import GrepModal from "$lib/GrepModal.svelte";
+  import TagRenameModal from "$lib/TagRenameModal.svelte";
   import { openGrep } from "$lib/stores/grep";
   import { openTableView } from "$lib/stores/tableView";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
@@ -1137,6 +1138,7 @@
 <TableView />
 <BrokenLinksModal />
 <GrepModal />
+<TagRenameModal />
 <LinkRewritePreviewModal />
 
 {#if $externalConflict}
