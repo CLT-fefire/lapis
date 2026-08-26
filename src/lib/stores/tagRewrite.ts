@@ -2,6 +2,7 @@ import { writable, get } from "svelte/store";
 import { computeTagRewritePreview, type TagRewritePreview } from "$lib/tagRewrite";
 import { readNote } from "$lib/tauri/notes";
 import { linkIndex, vaultPath, backupAndWrite, reloadNotes } from "$lib/stores/vault";
+import { describeFailure } from "$lib/safeWrite";
 import { tagIndex } from "$lib/stores/tags";
 
 /**
@@ -94,8 +95,16 @@ export async function applyTagRename(): Promise<void> {
   tagRenameBusy.set(true);
   tagRenameError.set(null);
   try {
-    await backupAndWrite(vault, preview);
+    const outcome = await backupAndWrite(vault, preview);
+    if (!outcome.ok) {
+      // ⚠️ **실패하면 모달을 닫지 않는다.** 예전엔 결과를 안 보고 닫아서, 백업이
+      // 실패해 아무것도 안 썼는데도 사용자에게는 성공으로 보였다. 되돌릴 수 없는
+      // 쓰기에서 그건 가장 나쁜 실패다 — 됐다고 믿게 만든다.
+      tagRenameError.set(describeFailure(outcome));
+      return;
+    }
     closeTagRename();
+    // 쓰기 뒤에 인덱스를 다시 만든다. 안 하면 사이드바 태그 트리가 옛 이름을 보여준다.
     await reloadNotes();
   } catch (e) {
     tagRenameError.set(e instanceof Error ? e.message : String(e));

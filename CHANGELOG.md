@@ -14,6 +14,22 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **A failed write could look like a success** ([#212]). The backup-then-write-then-rollback
+  transaction returned nothing: on a failed backup it just `return`ed, so callers could not tell an
+  aborted write from a completed one. The tag-rename dialog closed as if it had worked while nothing
+  had been written — the worst way for an irreversible operation to fail, because it makes you believe
+  it is done. It now returns an outcome, the dialog stays open with the reason, and the note-rename
+  path logs a readable summary.
+
+  The transaction also moved out of the Svelte store into `$lib/safeWrite` with its IO injected. It
+  had one consumer, then two (#202 exported it), and a third was coming. Rules for irreversible writes
+  must not fork — a fork is how a fix lands on one path and not the other.
+
+---
+
 ## [1.16.0] — 2026-08-26
 
 ### Added
@@ -692,6 +708,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#212]: https://github.com/eren0315/lapis/pull/212
 [#210]: https://github.com/eren0315/lapis/pull/210
 [#209]: https://github.com/eren0315/lapis/pull/209
 [#208]: https://github.com/eren0315/lapis/pull/208

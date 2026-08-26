@@ -16,6 +16,21 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **실패한 쓰기가 성공처럼 보이던 것** ([#212]). 백업 → 순차 쓰기 → 롤백 트랜잭션이 아무것도
+  반환하지 않았다. 백업이 실패하면 그냥 `return` 해서, 호출부는 중단된 쓰기와 끝난 쓰기를 구분할
+  수 없었다. **태그 이름 바꾸기 모달이 아무것도 안 쓰고도 성공한 듯 닫혔다** — 되돌릴 수 없는
+  작업이 실패하는 가장 나쁜 방식이다. 됐다고 믿게 만든다. 이제 결과를 반환하고, 실패하면 모달이
+  이유와 함께 열린 채로 남으며, 노트 rename 경로는 사람이 읽을 요약을 남긴다.
+
+  트랜잭션 자체도 Svelte store 밖 `$lib/safeWrite`로 옮기고 IO를 주입받게 했다. 소비자가 하나였다가
+  둘이 되었고(#202가 export 했다) 셋이 되려던 참이었다. **되돌릴 수 없는 쓰기의 규칙은 갈리면
+  안 된다** — 갈리면 고침이 한쪽에만 들어간다.
+
+---
+
 ## [1.16.0] — 2026-08-26
 
 ### Added
@@ -662,6 +677,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#212]: https://github.com/eren0315/lapis/pull/212
 [#210]: https://github.com/eren0315/lapis/pull/210
 [#209]: https://github.com/eren0315/lapis/pull/209
 [#208]: https://github.com/eren0315/lapis/pull/208
