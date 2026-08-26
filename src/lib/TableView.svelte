@@ -365,7 +365,7 @@
   .menu-head,
   .menu-empty {
     margin: var(--sp-2) var(--sp-3);
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     font-size: var(--fs-xs);
   }
 
@@ -385,7 +385,7 @@
   }
 
   .menu-item:hover {
-    background: var(--surface-hover);
+    background: var(--surface-raised);
   }
 
   .menu-item .k {
@@ -396,7 +396,7 @@
   }
 
   .n {
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     font-size: var(--fs-xs);
     font-variant-numeric: tabular-nums;
   }
@@ -426,12 +426,12 @@
   }
 
   .chip:hover {
-    background: var(--surface-hover);
+    background: var(--surface-raised);
   }
 
   .chip.on {
     border-color: var(--accent);
-    background: var(--accent-soft);
+    background: var(--accent-bg-subtle);
     color: var(--text-primary);
   }
 
@@ -502,12 +502,12 @@
     border: 0;
     border-radius: var(--r-xs);
     background: transparent;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     cursor: pointer;
   }
 
   .op:hover:not(:disabled) {
-    background: var(--surface-hover);
+    background: var(--surface-raised);
     color: var(--text-primary);
   }
 
@@ -522,7 +522,7 @@
   }
 
   tbody tr:hover {
-    background: var(--surface-hover);
+    background: var(--surface-raised);
   }
 
   td {
@@ -540,7 +540,7 @@
 
   .empty {
     padding: var(--sp-10) var(--sp-6);
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     text-align: center;
   }
 
@@ -563,7 +563,7 @@
 
   .views-label,
   .views-empty {
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     font-size: var(--fs-xs);
   }
 
@@ -579,7 +579,7 @@
     display: flex;
     align-items: center;
     gap: var(--sp-4);
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     font-size: var(--fs-xs);
     white-space: nowrap;
   }
