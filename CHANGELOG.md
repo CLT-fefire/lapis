@@ -24,6 +24,18 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   did nothing. They now use the tokens that were meant: `--surface-raised`, `--accent-bg-subtle`,
   `--text-muted`. A test now fails if any `var(--x)` in the source is missing from `app.css`, with the
   offending file named in the message.
+- **The search cache filename came from an unstable hash** ([#207]). `vault_key` derives the cache
+  file's name from the vault path with `DefaultHasher`, whose values std explicitly does not guarantee
+  across builds. If that value ever shifted, the app would look for a filename that does not exist —
+  a silent full rebuild, with the previous cache left behind as an orphan nothing would ever read or
+  clean up. Same root cause as the fingerprint fixed in v1.15.0, in a place where the symptom is
+  slowness rather than a wrong answer. It now uses the specified FNV-1a construction from
+  `crate::hash`, shared with the fingerprint so there is one written contract instead of two habits.
+
+  Existing caches are **renamed, not rebuilt**: on the first read that misses, the old name is looked
+  up and the files are moved. No version bump and no second reindex. If the old name cannot be
+  reproduced the result is exactly today's behaviour — a rebuild — so the migration is never worse
+  than doing nothing.
 
 ---
 
@@ -643,6 +655,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#207]: https://github.com/eren0315/lapis/pull/207
 [#206]: https://github.com/eren0315/lapis/pull/206
 [#202]: https://github.com/eren0315/lapis/pull/202
 [#201]: https://github.com/eren0315/lapis/pull/201

@@ -25,6 +25,16 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   것이라, 빌드도 `svelte-check`도 통과했고 행 hover·칩 선택·흐린 텍스트가 조용히 죽어 있었다.
   의도했던 토큰(`--surface-raised` · `--accent-bg-subtle` · `--text-muted`)으로 맞췄다. 이제
   소스의 `var(--x)`가 `app.css`에 없으면 테스트가 실패하고, 실패 메시지에 해당 파일이 찍힌다.
+- **검색 캐시 파일 이름이 불안정한 해시에서 나오던 것** ([#207]). `vault_key`는 캐시 파일 이름을
+  vault 경로에서 뽑는데 `DefaultHasher`를 썼다. std가 그 값의 안정성을 **명시적으로 보장하지 않는다.**
+  값이 한 번 달라지면 앱은 존재하지 않는 파일 이름을 찾게 되고 — 조용한 전체 재빌드에, 이전 캐시는
+  아무도 읽지도 지우지도 않는 고아로 남는다. v1.15.0에서 고친 fingerprint와 같은 뿌리인데, 증상이
+  오답이 아니라 느려짐인 자리다. 이제 `crate::hash`의 명세된 FNV-1a를 쓴다 — fingerprint와 공유해서
+  관습 두 개가 아니라 **문서화된 계약 하나**가 되게 했다.
+
+  기존 캐시는 **다시 만들지 않고 이름만 옮긴다.** 처음 읽기가 빗나가면 옛 이름을 찾아 파일을
+  rename한다. 버전 bump도, 두 번째 재인덱싱도 없다. 옛 이름을 재현하지 못하면 결과는 지금과 정확히
+  같다 — 재빌드다. 그래서 이 이주는 **아무것도 안 하는 것보다 나빠질 수 없다.**
 
 ---
 
@@ -619,6 +629,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#207]: https://github.com/eren0315/lapis/pull/207
 [#206]: https://github.com/eren0315/lapis/pull/206
 [#202]: https://github.com/eren0315/lapis/pull/202
 [#201]: https://github.com/eren0315/lapis/pull/201

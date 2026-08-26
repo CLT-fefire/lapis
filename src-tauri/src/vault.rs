@@ -1,3 +1,4 @@
+use crate::hash::{fnv1a32, FNV32_OFFSET};
 use crate::uipath::to_ui;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -794,18 +795,6 @@ type WalkEntry = (String, u128, u64);
 ///
 /// `vault_fingerprint`와 `vault_file_stats`의 **단일 진실원**. 두 곳에 따로 두면 정렬
 /// 기준이나 skip 규칙이 갈리는 순간 델타가 조용히 전량 변경으로 보인다.
-/// FNV-1a 32비트 한 줄기. `Math.imul` 하나로 JS에서 그대로 재현된다.
-fn fnv1a32(seed: u32, bytes: &[u8]) -> u32 {
-    let mut h = seed;
-    for b in bytes {
-        h ^= *b as u32;
-        h = h.wrapping_mul(0x0100_0193);
-    }
-    h
-}
-
-const FNV32_OFFSET: u32 = 0x811c_9dc5;
-
 /// vault 스냅샷 fingerprint — **`mcp/cache.ts`가 같은 값을 만들 수 있어야 한다.**
 ///
 /// ## 왜 `DefaultHasher`를 버렸나

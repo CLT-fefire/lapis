@@ -1,5 +1,6 @@
 mod git;
 mod grep;
+mod hash;
 mod paths;
 mod search_cache;
 mod settings;
