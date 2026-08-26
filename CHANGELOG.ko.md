@@ -18,6 +18,17 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Added
+- **`lapis tag rename` — CLI 3층** ([#213]). vault 전체 태그 이름 바꾸기·병합을 터미널에서 한다.
+  하위 태그가 부모를 따라가고, 경계는 `/`에서만 인정하며, 이미 있는 태그로 바꾸면 **쓰기 전에**
+  병합이라고 알린다.
+
+  **기본이 dry-run이다.** `--apply` 없이는 아무것도 쓰지 않는다 — 되돌릴 수 없는 작업이 인자 하나
+  빠뜨렸다고 실행되면 안 된다. 쓰기는 앱과 **같은** `$lib/safeWrite` 트랜잭션(백업 → 순차 쓰기 →
+  실패 시 롤백)을 타고, `cli/io.ts`가 Rust 커맨드가 주던 보장을 다시 세운다 — 원자적 쓰기,
+  심링크까지 풀어서 하는 vault 이탈 차단, 확장자 화이트리스트. CLI만 느슨하면 공유하는 안전 규칙이
+  갈린다.
+
 ### Fixed
 - **실패한 쓰기가 성공처럼 보이던 것** ([#212]). 백업 → 순차 쓰기 → 롤백 트랜잭션이 아무것도
   반환하지 않았다. 백업이 실패하면 그냥 `return` 해서, 호출부는 중단된 쓰기와 끝난 쓰기를 구분할
@@ -677,6 +688,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#213]: https://github.com/eren0315/lapis/pull/213
 [#212]: https://github.com/eren0315/lapis/pull/212
 [#210]: https://github.com/eren0315/lapis/pull/210
 [#209]: https://github.com/eren0315/lapis/pull/209

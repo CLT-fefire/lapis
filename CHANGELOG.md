@@ -16,6 +16,17 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Added
+- **`lapis tag rename` — CLI layer 3** ([#213]). Renaming or merging a tag across the vault now works
+  from a terminal. Child tags follow the parent, the boundary is only at `/`, and renaming onto an
+  existing tag is called out as a merge before anything is written.
+
+  **The dry run is the default.** Without `--apply` nothing is written — an irreversible operation
+  should not run because an argument was left off. Writes go through the same `$lib/safeWrite`
+  transaction the app uses (backup, sequential write, rollback on failure), and `cli/io.ts` re-asserts
+  the guarantees the Rust command gives: atomic write, vault confinement resolved through symlinks,
+  and the extension whitelist. A CLI that were looser would fork the safety rules it shares.
+
 ### Fixed
 - **A failed write could look like a success** ([#212]). The backup-then-write-then-rollback
   transaction returned nothing: on a failed backup it just `return`ed, so callers could not tell an
@@ -708,6 +719,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#213]: https://github.com/eren0315/lapis/pull/213
 [#212]: https://github.com/eren0315/lapis/pull/212
 [#210]: https://github.com/eren0315/lapis/pull/210
 [#209]: https://github.com/eren0315/lapis/pull/209

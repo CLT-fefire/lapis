@@ -55,7 +55,7 @@ function version(): string {
   }
 }
 
-function main(argv: readonly string[]): void {
+async function main(argv: readonly string[]): Promise<void> {
   if (argv[0] === "--version" || argv[0] === "-v") {
     process.stdout.write(version() + "\n");
     process.exit(EXIT_OK);
@@ -90,7 +90,8 @@ function main(argv: readonly string[]): void {
   }
 
   try {
-    handler(parsed, out);
+    // 핸들러는 동기일 수도 비동기일 수도 있다(쓰기 명령은 비동기다). await 하면 둘 다 된다.
+    await handler(parsed, out);
   } catch (e) {
     if (e instanceof LapisError) {
       out.fail(e.kind, e.message, e.remedy, EXIT_QUERY);
@@ -100,4 +101,9 @@ function main(argv: readonly string[]): void {
   process.exit(EXIT_OK);
 }
 
-main(process.argv.slice(2));
+// ⚠️ 최상위 await 대신 catch를 붙인다. 여기서 새는 예외는 버그다 — 조용히 0으로
+// 끝나면 스크립트가 성공으로 읽는다.
+main(process.argv.slice(2)).catch((e) => {
+  process.stderr.write(`lapis: 예상치 못한 오류 — ${String(e)}\n`);
+  process.exit(1);
+});

@@ -2,10 +2,15 @@ import { lapisQuery, type QueryArgs } from "../mcp/query.ts";
 import { resolveVault, checkStale } from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
+import { computeTagRewritePreview } from "$lib/tagRewrite";
+import { backupAndWrite, describeFailure } from "$lib/safeWrite";
+import { readFileSync } from "node:fs";
+import nodePath from "node:path";
+import { makeCliIo } from "./io.ts";
 
 import type { ParsedCommand } from "./args.ts";
-import { FACETS } from "./spec.ts";
-import { renderResults, renderFacet, renderBroken, table } from "./render.ts";
+import { FACETS, TAG_ACTIONS } from "./spec.ts";
+import { renderResults, renderFacet, renderBroken, renderTagPreview, table } from "./render.ts";
 
 /**
  * 명령 핸들러 — 질의 핵을 부르고 렌더 결과를 `Out`으로 넘긴다.
@@ -134,15 +139,87 @@ export function cmdStatus(p: ParsedCommand, out: Out): void {
 }
 
 /**
+ * 태그 이름 바꾸기.
+ *
+ * ⚠️ **기본은 dry-run이다.** `--apply` 없이는 아무것도 쓰지 않는다. 되돌릴 수 없는
+ * 쓰기를 인자 하나 빠뜨렸다고 실행하면 안 된다 — 앱도 미리보기 → 확인 순서를 강제한다.
+ *
+ * 쓰기는 `$lib/safeWrite`를 탄다. **앱과 같은 트랜잭션**이다(백업 → 순차 쓰기 → 실패 시
+ * 롤백). 규칙이 갈리면 고침이 한쪽에만 들어간다.
+ */
+export async function cmdTag(p: ParsedCommand, out: Out): Promise<void> {
+  const [action, oldTag, newTag] = p.positional;
+  if (!(TAG_ACTIONS as readonly string[]).includes(action)) {
+    out.fail("no_criteria", `모르는 동작: ${action}`, `쓸 수 있는 값: ${TAG_ACTIONS.join(" · ")}`, 2);
+  }
+  if (oldTag === newTag) {
+    out.fail("no_criteria", "이전 이름과 새 이름이 같다", "바꿀 이름을 다르게 주어라", 2);
+  }
+
+  const vc = resolveVault(vaultOf(p));
+
+  // 미리보기 계산은 모든 노트를 읽는다. 앱과 같은 이유로 명시적 단계다.
+  const notes = new Map<string, string>();
+  for (const info of vc.infos) {
+    try {
+      notes.set(info.source_path, readFileSync(info.source_path, "utf8"));
+    } catch {
+      // 한 파일을 못 읽었다고 전체를 세우지 않는다. 그 노트만 대상에서 빠진다.
+    }
+  }
+  const known = new Set<string>();
+  for (const i of vc.infos) for (const t of i.tags ?? []) known.add(t);
+
+  const preview = computeTagRewritePreview(notes, oldTag, newTag, known);
+  const apply = p.options.apply === true;
+
+  if (!apply) {
+    if (out.json) {
+      return out.json_({ vault: vc.root, dry_run: true, ...preview });
+    }
+    out.line(
+      renderTagPreview(
+        oldTag,
+        newTag,
+        preview.items.map((i) => ({ path: i.path, occurrences: i.occurrences })),
+        preview.totalOccurrences,
+        preview.merge,
+      ),
+    );
+    if (preview.items.length > 0) out.line("\n미리보기다 — 실제로 쓰려면 --apply");
+    return;
+  }
+
+  if (preview.items.length === 0) {
+    // 쓸 게 없는데 성공이라고 하면 "바뀐 줄 알았다"가 된다.
+    out.fail("path_not_indexed", `${oldTag} 을(를) 쓰는 노트가 없다`, "`lapis list tags`로 확인하라", 1);
+  }
+
+  const io = makeCliIo({ settingsFile: nodePath.join(nodePath.dirname(vc.dir), "lapis-settings.json") });
+  const outcome = await backupAndWrite(vc.root, preview.items, io);
+  if (!outcome.ok) {
+    out.fail("corrupt", describeFailure(outcome) ?? "쓰기 실패", `백업에서 회수할 수 있다`, 1);
+  }
+
+  if (out.json) {
+    return out.json_({ vault: vc.root, applied: true, written: outcome.ok ? outcome.written : [] });
+  }
+  out.line(`${oldTag} → ${newTag}: 노트 ${preview.items.length}개 갱신`);
+  // ⚠️ 앱이 인덱스 생산자다. CLI가 쓴 것은 앱이 다시 읽어야 검색에 반영된다.
+  out.line("앱이 떠 있으면 watcher가 반영한다. 아니면 다음에 vault를 열 때 재색인된다.");
+}
+
+/**
  * 명령 이름 → 핸들러.
  *
  * ⚠️ `spec.ts`의 `COMMANDS`와 **키가 정확히 같아야 한다.** 한쪽에만 있으면 도움말에는
  * 보이는데 부르면 아무 일도 안 일어나거나, 그 반대가 된다. 테스트가 이걸 고정한다.
  */
-export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void> = {
+export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Promise<void>> = {
   search: cmdSearch,
   backlinks: cmdBacklinks,
   list: cmdList,
   links: cmdLinks,
+  tag: cmdTag,
   status: cmdStatus,
 };

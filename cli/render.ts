@@ -151,3 +151,35 @@ export function renderError(kind: string, message: string, remedy?: string): str
   const head = `오류(${kind}): ${message}`;
   return remedy ? `${head}\n  → ${remedy}` : head;
 }
+
+export interface TagPreviewRow {
+  path: string;
+  occurrences: number;
+}
+
+/**
+ * 태그 이름 바꾸기 미리보기.
+ *
+ * 영향 범위를 **먼저 보여주고** 나서 쓰게 한다. 되돌릴 수 없는 작업에서 "몇 개가 바뀌나"를
+ * 모른 채 실행하는 것만큼 나쁜 게 없다.
+ */
+export function renderTagPreview(
+  oldTag: string,
+  newTag: string,
+  rows: readonly TagPreviewRow[],
+  total: number,
+  merge: boolean,
+): string {
+  if (rows.length === 0) return `${oldTag} 을(를) 쓰는 노트가 없다`;
+  const out = [
+    `${oldTag}  →  ${newTag}`,
+    "",
+    table(rows.map((r) => [String(r.occurrences), r.path])),
+    "",
+    `노트 ${rows.length}개 · 태그 ${total}건`,
+  ];
+  if (merge) {
+    out.push("", "⚠️ 이미 있는 태그다 — 두 태그가 하나로 합쳐진다. 되돌릴 수 없다.");
+  }
+  return out.join("\n");
+}
