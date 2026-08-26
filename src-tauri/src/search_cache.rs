@@ -835,6 +835,9 @@ mod tests {
         let a = vault_key(&dir.to_string_lossy());
         let b = vault_key(&to_ui(&dir));
         assert_eq!(a, b);
+        // ⚠️ 위 두 줄은 Windows에서만 실제로 다른 문자열이다. 다른 플랫폼에서도 뭔가를
+        // 고정하도록 점 세그먼트를 함께 본다 — 어디서나 같은 곳을 가리키는 다른 철자다.
+        assert_eq!(a, vault_key(&format!("{}/.", to_ui(&dir))));
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -854,11 +857,15 @@ mod tests {
     }
 
     /// 정규화 이전 세대(원문 해싱)로 지어진 파일도 이주 대상이다.
+    ///
+    /// ⚠️ 철자 변형으로 **후행 슬래시**를 쓴다. 구분자 뒤집기(`/` → `\`)는 Windows에서만
+    /// 철자 변형이다 — macOS·Linux에서 `\`는 그냥 평범한 파일명 문자라 `to_ui`가 건드리지
+    /// 않고, 그러면 두 세대 키가 같아져 테스트가 조용히 무의미해진다. 실제로 CI의 macOS에서
+    /// 아래 `assert_ne!`가 그걸 잡았다. 후행 슬래시는 어느 플랫폼에서나 철자 변형이다.
     #[test]
     fn 정규화_이전_이름도_이주한다() {
         let dir = tmp_dir("gen2");
-        // 앱이 Windows 다이얼로그에서 받던 형태를 흉내낸다 — 구분자가 다른 원문.
-        let raw = to_ui(&dir).replace('/', "\\");
+        let raw = format!("{}/", to_ui(&dir));
         let old = hash_key(&raw);
         let new = vault_key(&dir.to_string_lossy());
         assert_ne!(old, new, "두 세대가 같으면 이 테스트가 무의미하다");
