@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-08-26
+
 ### Fixed
 - **A note name shared by two documents resolved to whichever one the walk reached first**
   ([#220]). The resolver was a flat vault-wide map from lowercase name to a single path, and the
@@ -795,6 +797,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.18.0]: https://github.com/eren0315/lapis/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/eren0315/lapis/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/eren0315/lapis/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0

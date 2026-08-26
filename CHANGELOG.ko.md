@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-08-26
+
 ### Fixed
 - **같은 이름의 노트 둘 중 walk가 먼저 닿은 쪽으로 해소되던 것** ([#220]). 해소기가 소문자
   이름 → 경로 **하나**인 평평한 전역 Map이었고 먼저 넣은 것이 이겼다. walk가 알파벳순이라,
@@ -757,6 +759,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.18.0]: https://github.com/eren0315/lapis/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/eren0315/lapis/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/eren0315/lapis/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/eren0315/lapis/compare/v1.14.0...v1.15.0
