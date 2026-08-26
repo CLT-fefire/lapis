@@ -610,14 +610,23 @@ describe("stale 정확 판정 (v8)", () => {
 
   it("mtime을 보존한 채 내용만 바꿔도 잡는다 — 프록시가 놓치던 경로", () => {
     const target = nodePath.join(fx.vaultRoot, "proj/adr/001-abandoned.md");
+
+    // ⚠️ 기준 mtime을 **ms 정밀도 값으로 먼저 못박는다.**
+    //
+    // 파일시스템 mtime은 ns까지 있는데(ext4) `utimesSync`에 넘기는 JS `Date`는 ms
+    // 정밀도다. 원본을 읽어 그대로 되돌리면 소수부가 잘려 **1ms 어긋난다** — Linux
+    // CI에서만 터지고 Windows에선 우연히 맞아 통과했다. 같은 ms 값을 두 번 쓰면
+    // 파일시스템이 무엇이든 정확히 같다.
+    const pinned = new Date(Math.floor(statSync(target).mtimeMs));
+    utimesSync(target, pinned, pinned);
     const before = statSync(target);
 
     // 외부 도구가 mtime을 유지하며 in-place로 쓴 상황을 그대로 만든다.
     writeFileSync(target, "---\ndoc_kind: adr\n---\n내용이 통째로 달라졌다.\n");
-    utimesSync(target, before.atime, before.mtime);
+    utimesSync(target, pinned, pinned);
 
     const after = statSync(target);
-    expect(Math.floor(after.mtimeMs)).toBe(Math.floor(before.mtimeMs)); // mtime은 그대로
+    expect(after.mtimeMs).toBe(before.mtimeMs); // mtime은 그대로
     expect(after.size).not.toBe(before.size); // 크기만 달라졌다
 
     resetState();
