@@ -28,6 +28,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   and the extension whitelist. A CLI that were looser would fork the safety rules it shares.
 
 ### Fixed
+- **The same vault could end up with two caches** ([#214]). The cache filename hash was computed from
+  whatever path string the caller happened to pass, so `C:\Projects\x` and `C:/Projects/x`, a
+  trailing slash, or a path reached through a symlink each produced a different name. The symptom is
+  "why is it reindexing everything again", with the previous cache left behind as an orphan. Verified
+  on this machine: the app's cache file matched the backslash spelling, and the same vault written
+  with forward slashes hashed to a different name. The path is now canonicalised before hashing.
+
+  Existing caches are renamed rather than rebuilt, the same way [#207] handled the previous hash
+  change — the migration now tries both older generations.
 - **A failed write could look like a success** ([#212]). The backup-then-write-then-rollback
   transaction returned nothing: on a failed backup it just `return`ed, so callers could not tell an
   aborted write from a completed one. The tag-rename dialog closed as if it had worked while nothing
@@ -719,6 +728,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#214]: https://github.com/eren0315/lapis/pull/214
 [#213]: https://github.com/eren0315/lapis/pull/213
 [#212]: https://github.com/eren0315/lapis/pull/212
 [#210]: https://github.com/eren0315/lapis/pull/210
