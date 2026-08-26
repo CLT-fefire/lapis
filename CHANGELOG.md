@@ -14,6 +14,19 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Hover and selection styling in the table view did nothing** ([#206]). `TableView.svelte` referred to
+  `--surface-hover` (4 places), `--accent-soft` (1) and `--text-tertiary` (6), none of which exist in
+  `app.css`. An undefined custom property is **not an error** — the declaration is simply dropped, so
+  the build passed, `svelte-check` passed, and row hover, chip selection and de-emphasised text quietly
+  did nothing. They now use the tokens that were meant: `--surface-raised`, `--accent-bg-subtle`,
+  `--text-muted`. A test now fails if any `var(--x)` in the source is missing from `app.css`, with the
+  offending file named in the message.
+
+---
+
 ## [1.15.0] — 2026-08-26
 
 ### Added
@@ -630,6 +643,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#206]: https://github.com/eren0315/lapis/pull/206
 [#202]: https://github.com/eren0315/lapis/pull/202
 [#201]: https://github.com/eren0315/lapis/pull/201
 [#200]: https://github.com/eren0315/lapis/pull/200

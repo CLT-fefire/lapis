@@ -16,6 +16,18 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **테이블 뷰의 hover·선택 스타일이 아무 일도 안 하던 것** ([#206]). `TableView.svelte`가
+  `--surface-hover`(4곳) · `--accent-soft`(1곳) · `--text-tertiary`(6곳)를 참조하는데 셋 다
+  `app.css`에 없었다. 정의되지 않은 커스텀 프로퍼티는 **에러가 아니라** 선언이 통째로 무시되는
+  것이라, 빌드도 `svelte-check`도 통과했고 행 hover·칩 선택·흐린 텍스트가 조용히 죽어 있었다.
+  의도했던 토큰(`--surface-raised` · `--accent-bg-subtle` · `--text-muted`)으로 맞췄다. 이제
+  소스의 `var(--x)`가 `app.css`에 없으면 테스트가 실패하고, 실패 메시지에 해당 파일이 찍힌다.
+
+---
+
 ## [1.15.0] — 2026-08-26
 
 ### Added
@@ -607,6 +619,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#206]: https://github.com/eren0315/lapis/pull/206
 [#202]: https://github.com/eren0315/lapis/pull/202
 [#201]: https://github.com/eren0315/lapis/pull/201
 [#200]: https://github.com/eren0315/lapis/pull/200
