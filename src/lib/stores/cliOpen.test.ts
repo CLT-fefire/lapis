@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { claimCliOpen, type CliOpenDeps } from "./cliOpen";
+import { claimCliOpen, startupCliOpen, type CliOpenDeps } from "./cliOpen";
 import type { PendingOpen } from "$lib/tauri/cliOpen";
 
 function deps(over: Partial<CliOpenDeps> = {}) {
@@ -7,22 +7,29 @@ function deps(over: Partial<CliOpenDeps> = {}) {
     take: [] as (string | null)[],
     openVault: [] as string[],
     selectNote: [] as string[],
+    restored: 0,
     focus: 0,
     warned: [] as string[],
+    order: [] as string[],
   };
   const base: CliOpenDeps = {
     take: async () => null,
     openVault: async (p) => {
       calls.openVault.push(p);
+      calls.order.push(`vault:${p}`);
     },
     selectNote: async (p) => {
       calls.selectNote.push(p);
+      calls.order.push(`note:${p}`);
+    },
+    restoreVault: async () => {
+      calls.restored++;
+      calls.order.push("restore");
     },
     currentVault: () => "/v",
     focus: async () => {
       calls.focus++;
     },
-    search: () => "",
     warn: (m) => {
       calls.warned.push(m);
     },
@@ -41,12 +48,13 @@ function deps(over: Partial<CliOpenDeps> = {}) {
 
 const pending: PendingOpen = { path: "/v/a.md", vault: "/v" };
 
-describe("claimCliOpen", () => {
+describe("claimCliOpen — 앱이 떠 있을 때", () => {
   it("자기 vault로 물어 받으면 연다", async () => {
     const { deps: d, calls } = deps({ take: async () => pending });
     expect(await claimCliOpen(d)).toBe("opened");
+    expect(calls.take).toEqual(["/v"]);
     expect(calls.selectNote).toEqual(["/v/a.md"]);
-    // 평범한 창은 vault를 다시 열지 않는다 — 이미 그 vault다.
+    // 이미 그 vault다 — 다시 열 이유가 없다.
     expect(calls.openVault).toEqual([]);
     expect(calls.focus).toBe(1);
   });
@@ -54,48 +62,16 @@ describe("claimCliOpen", () => {
   it("자기 것이 아니면 아무것도 안 한다", async () => {
     const { deps: d, calls } = deps();
     expect(await claimCliOpen(d)).toBe("not-mine");
-    expect(calls.take).toEqual(["/v"]);
     expect(calls.selectNote).toEqual([]);
     expect(calls.focus).toBe(0);
   });
 
-  it("vault 없는 평범한 창은 묻지도 않는다", async () => {
+  it("vault가 없으면 묻지도 않는다", async () => {
     const { deps: d, calls } = deps({ currentVault: () => null });
     expect(await claimCliOpen(d)).toBe("skipped");
     expect(calls.take).toEqual([]);
   });
 
-  /**
-   * ⚠️ 순서가 중요하다. 노트를 먼저 열면 인덱스가 없는 상태에서 열게 되고, 뒤이은
-   * `openVault`가 탭을 자기 것으로 갈아치운다.
-   */
-  it("CLI가 만든 창은 vault부터 열고 노트를 연다", async () => {
-    const order: string[] = [];
-    const { deps: d } = deps({
-      search: () => "?cli-open=1",
-      currentVault: () => null,
-      take: async () => pending,
-      openVault: async (p) => {
-        order.push(`vault:${p}`);
-      },
-      selectNote: async (p) => {
-        order.push(`note:${p}`);
-      },
-    });
-    expect(await claimCliOpen(d)).toBe("opened");
-    expect(order).toEqual(["vault:/v", "note:/v/a.md"]);
-  });
-
-  it("CLI가 만든 창은 null로 묻는다", async () => {
-    const { deps: d, calls } = deps({ search: () => "?cli-open=1", take: async () => pending });
-    await claimCliOpen(d);
-    expect(calls.take).toEqual([null]);
-  });
-
-  /**
-   * ⚠️ 이건 기동 경로에서도 불린다. 여기서 예외가 새면 vault 복원 이후의 초기화가 통째로
-   * 멈춘다 — CLI로 노트 하나 여는 편의 기능 때문에 앱이 안 뜨면 안 된다.
-   */
   it("실패해도 던지지 않는다", async () => {
     const { deps: d, calls } = deps({
       take: async () => {
@@ -105,44 +81,75 @@ describe("claimCliOpen", () => {
     await expect(claimCliOpen(d)).resolves.toBe("not-mine");
     expect(calls.warned).toHaveLength(1);
   });
+});
 
-  it("노트 열기가 실패해도 던지지 않는다", async () => {
+describe("startupCliOpen — 창이 뜰 때", () => {
+  /**
+   * ⚠️ 순서가 계약이다. 복원을 먼저 하면 방금 열 vault를 덮어쓰고, 노트를 먼저 열면
+   * 인덱스 없는 상태에서 열게 된다.
+   */
+  it("이 요청 때문에 뜬 창이면 복원하지 않고 vault→노트 순으로 연다", async () => {
+    const { deps: d, calls } = deps({ take: async (v) => (v === null ? pending : null) });
+    expect(await startupCliOpen(d)).toBe("opened");
+    expect(calls.order).toEqual(["vault:/v", "note:/v/a.md"]);
+    expect(calls.restored).toBe(0);
+  });
+
+  it("평범한 창이면 복원한 뒤 자기 vault로 다시 묻는다", async () => {
+    const { deps: d, calls } = deps({ take: async (v) => (v === "/v" ? pending : null) });
+    expect(await startupCliOpen(d)).toBe("opened");
+    expect(calls.take).toEqual([null, "/v"]);
+    expect(calls.order).toEqual(["restore", "note:/v/a.md"]);
+  });
+
+  it("아무것도 없으면 복원만 하고 끝난다", async () => {
+    const { deps: d, calls } = deps();
+    expect(await startupCliOpen(d)).toBe("not-mine");
+    expect(calls.restored).toBe(1);
+    expect(calls.selectNote).toEqual([]);
+  });
+
+  /**
+   * ⚠️ 기동 경로다. 여기서 예외가 새면 초기화가 통째로 멈춘다 — CLI로 노트 하나 여는
+   * 편의 기능 때문에 앱이 안 뜨면 안 된다.
+   */
+  it("첫 질의가 실패해도 복원은 한다", async () => {
     const { deps: d, calls } = deps({
-      take: async () => pending,
-      selectNote: async () => {
-        throw new Error("없는 파일");
+      take: async (v) => {
+        if (v === null) throw new Error("IPC 끊김");
+        return null;
       },
     });
-    await expect(claimCliOpen(d)).resolves.toBe("not-mine");
+    await expect(startupCliOpen(d)).resolves.toBe("not-mine");
+    expect(calls.restored).toBe(1);
     expect(calls.warned).toHaveLength(1);
   });
 
-  it("포커스가 실패해도 노트는 이미 열려 있다", async () => {
+  it("열기가 실패해도 빈 창을 남기지 않는다 — 복원으로 되돌아간다", async () => {
     const { deps: d, calls } = deps({
-      take: async () => pending,
-      focus: async () => {
-        throw new Error("창 없음");
+      take: async (v) => (v === null ? pending : null),
+      openVault: async () => {
+        throw new Error("사라진 vault");
       },
     });
-    // 결과는 실패로 보고하되, 노트를 여는 단계까지는 끝났다.
-    await claimCliOpen(d);
-    expect(calls.selectNote).toEqual(["/v/a.md"]);
+    await expect(startupCliOpen(d)).resolves.toBe("not-mine");
+    expect(calls.restored).toBe(1);
+    expect(calls.warned).toHaveLength(1);
   });
 });
 
-describe("claimCliOpen — 두 창이 동시에 물을 때", () => {
+describe("두 창이 동시에 물을 때", () => {
   it("Rust가 원자적으로 하나에만 준다는 전제를 지킨다", async () => {
     // 꺼내기를 한 번만 성공시키는 가짜 — 실제 `take_pending_open`의 계약이다.
     let left: PendingOpen | null = pending;
     const take = vi.fn(async (v: string | null) => {
-      if (!left) return null;
-      if (v !== null && v !== left.vault) return null;
+      if (!left || v !== left.vault) return null;
       const got = left;
       left = null;
       return got;
     });
-    const a = deps({ take, currentVault: () => "/v" });
-    const b = deps({ take, currentVault: () => "/v" });
+    const a = deps({ take });
+    const b = deps({ take });
     const [ra, rb] = await Promise.all([claimCliOpen(a.deps), claimCliOpen(b.deps)]);
     expect([ra, rb].filter((r) => r === "opened")).toHaveLength(1);
   });

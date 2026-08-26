@@ -46,7 +46,6 @@
     vaultPath,
     currentNotePath,
     linkIndex,
-    restoreLastVault,
     selectNote,
     jumpToWikilink,
     deletePath,
@@ -54,8 +53,7 @@
     goForwardNote,
     closeTab,
   } from "$lib/stores/vault";
-  import { claimCliOpen, listenCliOpen } from "$lib/stores/cliOpen";
-  import { isCliOpenWindow } from "$lib/cliOpenFlow";
+  import { startupCliOpen, listenCliOpen } from "$lib/stores/cliOpen";
   import { canGoBack, canGoForward } from "$lib/stores/navHistory";
   import { openTabs, tabPathForShortcut } from "$lib/stores/tabs";
   import { noteDisplayName } from "$lib/notePath";
@@ -1113,14 +1111,10 @@
     restoreDensity();
     void restoreSettings();
     restorePaneState();
-    // ⚠️ CLI가 만든 창은 마지막 vault를 복원하지 않는다 — 그러라고 만들어진 창이 아니고,
-    // 복원하면 `claimCliOpen`이 여는 vault를 곧바로 덮어쓴다.
-    const forCli = isCliOpenWindow(typeof location === "undefined" ? "" : location.search);
-    void (async () => {
-      if (!forCli) await restoreLastVault();
-      // 차가운 기동에서는 알림이 창보다 먼저 지나갔다. 담아둔 것을 직접 가져온다.
-      await claimCliOpen();
-    })();
+    // ⚠️ vault 복원이 여기 안으로 들어갔다. `lapis open`으로 뜬 창은 마지막 vault를
+    // 복원하면 안 되고(방금 연 vault를 덮어쓴다), 그 판정을 Rust가 쥐고 있어서 순서가
+    // 얽힌다. 둘을 한 함수에 모아 뒀다 — 자세한 것은 `stores/cliOpen.ts`.
+    void startupCliOpen();
     // 앱이 이미 떠 있을 때 온 `lapis open`. 해제는 아래 cleanup에서.
     void listenCliOpen().then((un) => {
       unlistenCliOpen = un;

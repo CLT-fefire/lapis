@@ -62,13 +62,21 @@ pub struct PendingOpen {
 }
 
 #[derive(Default)]
-pub struct PendingOpenState(pub Mutex<Option<PendingOpen>>);
-
-/// CLI 때문에 만들어진 창에만 붙는 URL 질의.
-///
-/// ⚠️ 이 표식이 있는 창만 `vault: None`으로 물어도 된다. 평범한 창이 그렇게 굴면
-/// **남의 노트를 가로챈다.** 창 라벨은 재사용되므로(`next_window_label`) 표식이 못 된다.
-pub const CLI_OPEN_QUERY: &str = "cli-open=1";
+pub struct PendingOpenState {
+    slot: Mutex<Option<PendingOpen>>,
+    /// 이 요청을 위해 **방금 만든** 창의 라벨. 그 창만 vault를 안 따지고 받아간다.
+    ///
+    /// ## ⚠️ 표식을 URL로 넘기려다 실패했다
+    ///
+    /// 처음엔 새 창을 `index.html?cli-open=1`로 열고 프론트가 `location.search`를 보게
+    /// 했다. **동작하지 않는다** — `WebviewUrl::App`은 `PathBuf`를 받아서 `?`가 쿼리가
+    /// 아니라 **경로의 일부로 인코딩된다.** 창은 뜨는데 표식이 안 보여 아무도 안 받아갔다
+    /// (실측: 로그에 "새 창 w2"만 남고 "가져감"이 없었다).
+    ///
+    /// 애초에 넘길 이유가 없었다. **창을 만든 게 Rust이므로 라벨을 이미 안다.** 프로세스
+    /// 경계를 건너는 문자열이 하나 줄고, 그만큼 어긋날 자리도 줄었다.
+    cli_window: Mutex<Option<String>>,
+}
 
 /// argv에서 `--open <경로> --open-vault <루트>`를 읽는다.
 ///
@@ -100,11 +108,20 @@ pub fn parse_open<I: Iterator<Item = String>>(args: I) -> Option<PendingOpen> {
 ///
 /// 이미 담긴 게 있으면 **덮어쓴다** — 마지막에 친 명령이 사용자의 의도다.
 pub fn stage(app: &AppHandle, open: PendingOpen) {
+    let open_desc = format!("{} (vault {})", open.path, open.vault);
     if let Some(state) = app.try_state::<PendingOpenState>() {
-        if let Ok(mut slot) = state.0.lock() {
+        if let Ok(mut slot) = state.slot.lock() {
             *slot = Some(open);
         }
+        // 새 요청이 왔으니 지난 요청의 창 표식은 무효다.
+        if let Ok(mut w) = state.cli_window.lock() {
+            *w = None;
+        }
     }
+    // ⚠️ 이 계열 로그를 남기는 이유 — **성공해도 실패해도 흔적이 없는 기능이다.**
+    // 인자가 안 맞으면 앱은 그냥 평범하게 켜지고(모르는 인자는 일부러 넘긴다), 사용자
+    // 눈에는 "노트가 안 열렸다"만 보인다. 드물게 일어나는 일이라 로그가 시끄럽지도 않다.
+    eprintln!("[lapis/cli-open] 담음: {}", open_desc);
     // 실패해도 앱을 세우지 않는다 — 창이 없을 수도 있고(차가운 기동), 그때는 첫 창이
     // 뜨면서 스스로 물어본다.
     if let Err(e) = app.emit("cli:open", ()) {
@@ -112,24 +129,62 @@ pub fn stage(app: &AppHandle, open: PendingOpen) {
     }
 }
 
+/// 이 창을 "CLI가 열게 한 창"으로 표시한다 — vault를 안 따지고 받아가게 된다.
+///
+/// ⚠️ **차가운 기동에 필요하다.** 앱이 꺼져 있을 때 `lapis open`이 불렀다면 `main` 창은
+/// 바로 그 요청 때문에 뜬 것이다. 표시하지 않으면 main은 자기가 마지막에 열었던 vault로
+/// 묻고, 노트가 **다른 vault**에 있으면 아무도 안 받아간다. 그리고 그 경우엔 아무도
+/// 안 받아갔을 때 새 창을 띄우는 타이머도 안 돈다(그건 앱이 이미 떠 있을 때만 건다).
+pub fn mark_cli_window(app: &AppHandle, label: &str) {
+    if let Some(state) = app.try_state::<PendingOpenState>() {
+        if let Ok(mut w) = state.cli_window.lock() {
+            *w = Some(label.to_string());
+        }
+    }
+}
+
 /// 창이 "내 것이면 달라"고 묻는다.
 ///
-/// `vault`가 `Some`이면 **정확히 일치할 때만** 준다. `None`이면 무엇이든 준다 — 방금
-/// 이걸 위해 만들어진 새 창이 쓴다.
+/// 주는 조건은 둘 중 하나다:
+///
+/// - **이 요청을 위해 만든 창**이다(라벨로 판정). vault를 안 따진다 — 그러라고 만들었다.
+/// - `vault`가 담긴 것과 **정확히 일치**한다.
+///
+/// ⚠️ `vault: None`은 "무엇이든 달라"가 **아니다.** 그렇게 두면 vault를 아직 안 연 창이
+/// 남을 위한 노트를 가로챈다. 기동 직후 모든 창의 vault가 `None`이라 실제로 일어난다.
 ///
 /// ⚠️ 꺼내기는 **원자적**이다(`take`). 안 그러면 창 둘이 같은 노트를 각자 열고 둘 다
 /// 자기가 포커스를 가져간다.
 #[tauri::command]
 pub fn take_pending_open(
+    window: tauri::Window,
     state: tauri::State<'_, PendingOpenState>,
     vault: Option<String>,
 ) -> Option<PendingOpen> {
-    let mut slot = state.0.lock().ok()?;
+    let mine = state
+        .cli_window
+        .lock()
+        .ok()
+        .map(|w| w.as_deref() == Some(window.label()))
+        .unwrap_or(false);
+
+    let mut slot = state.slot.lock().ok()?;
     let pending = slot.as_ref()?;
-    match &vault {
-        Some(v) if to_ui(std::path::Path::new(v)) != pending.vault => None,
-        _ => slot.take(),
+    let matches = vault
+        .as_deref()
+        .is_some_and(|v| to_ui(std::path::Path::new(v)) == pending.vault);
+    if !mine && !matches {
+        return None;
     }
+    let taken = slot.take();
+    if let Some(t) = &taken {
+        eprintln!(
+            "[lapis/cli-open] {} 이(가) 가져감: {}",
+            window.label(),
+            t.path
+        );
+    }
+    taken
 }
 
 /// 아무 창도 안 가져갔으면 새 창을 띄운다.
@@ -141,16 +196,31 @@ pub fn open_window_if_unclaimed(app: &AppHandle, wait_ms: u64) {
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(wait_ms));
-        let unclaimed = app
-            .try_state::<PendingOpenState>()
-            .and_then(|s| s.0.lock().ok().map(|slot| slot.is_some()))
+        let Some(state) = app.try_state::<PendingOpenState>() else {
+            return;
+        };
+        let unclaimed = state
+            .slot
+            .lock()
+            .ok()
+            .map(|slot| slot.is_some())
             .unwrap_or(false);
         if !unclaimed {
             return;
         }
-        // 그 vault를 연 창이 없다. 새 창이 `vault: None`으로 물어 받아간다.
-        if let Err(e) = crate::spawn_window(&app, Some(CLI_OPEN_QUERY)) {
-            eprintln!("[lapis/cli-open] 새 창 실패: {e}");
+        // 그 vault를 연 창이 없다. 새 창을 띄우고 **그 라벨을 기억해** 두면, 그 창이
+        // 기동하면서 묻는 순간 vault를 안 따지고 받아간다.
+        //
+        // ⚠️ 라벨을 창을 만들기 **전에** 기억할 수는 없다(라벨을 그때 정한다). 하지만
+        // 창이 프론트를 띄우고 명령을 부르기까지는 늘 이 대입보다 늦으므로 경합이 없다.
+        match crate::spawn_window(&app) {
+            Ok(label) => {
+                if let Ok(mut w) = state.cli_window.lock() {
+                    *w = Some(label.clone());
+                }
+                eprintln!("[lapis/cli-open] 받아간 창이 없다 → 새 창 {label}");
+            }
+            Err(e) => eprintln!("[lapis/cli-open] 새 창 실패: {e}"),
         }
     });
 }

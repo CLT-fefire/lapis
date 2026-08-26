@@ -56,32 +56,22 @@ fn next_window_label(app: &tauri::AppHandle) -> String {
 /// 새 창 — vault는 프론트가 각자 고른다(창별 `last-vault-path`).
 #[tauri::command]
 fn new_window(app: tauri::AppHandle) -> Result<String, String> {
-    spawn_window(&app, None)
+    spawn_window(&app)
 }
 
-/// 창을 만든다. `query`는 URL 질의 문자열(`?` 없이).
+/// 창을 만든다. 명령(`new_window`)과 CLI 경로(`cliopen`)가 **같은 한 벌**을 쓴다.
 ///
-/// ## ⚠️ `query`가 필요한 이유 — "이 창은 CLI가 만든 창이다"를 알려야 한다
-///
-/// `lapis open`이 지목한 vault를 연 창이 하나도 없으면 새 창을 띄운다. 그 창은
-/// **자기 vault를 묻지 않고 무엇이든 받아가야** 하는데(그러라고 만든 창이니까),
-/// 평범한 창이 그렇게 굴면 **남의 노트를 가로챈다.**
-///
-/// 둘을 가르는 표식이 필요하고, 창 라벨은 재사용되므로(`next_window_label`) 표식이 될 수
-/// 없다. URL 질의는 그 창에만, 그 한 번만 붙는다.
-fn spawn_window(app: &tauri::AppHandle, query: Option<&str>) -> Result<String, String> {
+/// 반환값은 만든 창의 라벨 — `cliopen`이 "이 창은 내가 만들었다"를 기억하는 데 쓴다.
+fn spawn_window(app: &tauri::AppHandle) -> Result<String, String> {
     let label = next_window_label(app);
-    let url = match query {
-        Some(q) => format!("index.html?{q}"),
-        None => "index.html".to_string(),
-    };
-    let window = tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App(url.into()))
-        .title("Lapis")
-        .inner_size(1200.0, 800.0)
-        // 탭 DnD가 WKWebView 기본 drag&drop과 충돌한다 — tauri.conf.json의 main 창과 동일 설정.
-        .disable_drag_drop_handler()
-        .build()
-        .map_err(|e| format!("창 생성 실패: {e}"))?;
+    let window =
+        tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
+            .title("Lapis")
+            .inner_size(1200.0, 800.0)
+            // 탭 DnD가 WKWebView 기본 drag&drop과 충돌한다 — tauri.conf.json의 main 창과 동일 설정.
+            .disable_drag_drop_handler()
+            .build()
+            .map_err(|e| format!("창 생성 실패: {e}"))?;
 
     apply_debug_title(&window);
     if cfg!(debug_assertions) {
@@ -218,6 +208,8 @@ pub fn run() {
             // 첫 창이 뜨면서 스스로 가져간다(경합 없음 — 창이 준비됐을 때 묻는다).
             if let Some(open) = cliopen::parse_open(std::env::args().skip(1)) {
                 cliopen::stage(app.handle(), open);
+                // 앱이 이 요청 때문에 떴다 — `main`이 자기 vault를 안 따지고 받아간다.
+                cliopen::mark_cli_window(app.handle(), "main");
             }
             // 디버그 빌드는 창 제목에 표식을 단다 — 창 제목 막대뿐 아니라
             // ⌘Tab 전환기·Dock 우클릭 창 목록·Mission Control에서도 릴리즈 앱과 구분된다

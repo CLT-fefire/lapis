@@ -117,13 +117,4 @@ describe("cli open 인자 계약", () => {
     }
   });
 
-  it("창 표식이 Rust와 프론트에서 같다", () => {
-    const m = /pub const CLI_OPEN_QUERY: &str = "([a-z-]+)=(\d)";/.exec(
-      readFileSync(OPEN_RUST, "utf8"),
-    );
-    expect(m, "cliopen.rs에서 CLI_OPEN_QUERY를 찾지 못했다").not.toBeNull();
-    const flow = readFileSync("src/lib/cliOpenFlow.ts", "utf8");
-    // 표식이 갈리면 CLI가 만든 창이 자기를 평범한 창으로 여겨 **아무도 안 받아간다.**
-    expect(flow).toContain(`get("${m![1]}") === "${m![2]}"`);
-  });
 });
