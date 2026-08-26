@@ -358,7 +358,10 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const base = {
     vault: st.vc.root,
     loaded_fingerprint: st.vc.fingerprint,
-    ...(stale.newer_count > 0 ? { stale } : {}),
+    // ⚠️ 조건이 `newer_count`가 아니라 `changed`다. 프록시는 **수정만 있는 변경**을
+    // 놓쳤다 — 새 파일이 없으면 0이라 "최신"이라고 답했다. v8부터 fingerprint를
+    // 재현할 수 있어 정확히 판정한다.
+    ...(stale.changed ? { stale } : {}),
     excluded: ex,
   };
 

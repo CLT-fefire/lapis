@@ -503,21 +503,97 @@ export function loadShards(vc: VaultCache): string[] {
  * 부정)라 JS로 재현할 수 없다. **삭제만 있고 수정이 없는 변경은 놓친다.**
  */
 export interface Staleness {
-  /** 캐시 커밋보다 새로운 `.md` 수. 0이면 최신. */
+  /**
+   * **정확 판정** — 지금 vault의 fingerprint가 캐시의 것과 다른가.
+   *
+   * v8부터 앱의 fingerprint 해시가 명세돼(`vault.rs::fingerprint_of`) 여기서 그대로
+   * 재현할 수 있다. 그 전에는 `DefaultHasher`라 재현이 불가능했고, 그래서 아래
+   * `newer_count`(mtime 프록시)로 **추정**할 수밖에 없었다.
+   *
+   * ⚠️ 프록시가 놓치던 것: **수정만 있고 새 파일은 없는 변경**. 파일을 고쳐도 mtime이
+   * 캐시 커밋보다 앞서지 않으면(외부 도구가 mtime을 보존하며 in-place로 쓰는 경우)
+   * `newer_count`가 0이라 "최신"이라고 답했다. 이제 size 변화까지 fingerprint가 잡는다.
+   */
+  changed: boolean;
+  /** 캐시 커밋보다 새로운 노트 수. 0이어도 `changed`일 수 있다(위 주석). */
   newer_count: number;
-  /** 스캔한 전체 `.md` 수. */
+  /** 스캔한 전체 노트 수. */
   total: number;
-  /** 가장 새로운 노트가 캐시보다 몇 초 앞서는가. 0이면 최신. */
+  /** 가장 새로운 노트가 캐시보다 몇 초 앞서는가. 0이면 mtime 기준으로는 최신. */
   behind_s: number;
   /** 새로운 파일 몇 개(최대 5) — 무엇이 빠졌는지 바로 보이게. */
   sample: string[];
+  /** 지금 vault에서 계산한 fingerprint. 캐시의 것과 다르면 `changed`. */
+  fingerprint: string;
+}
+
+/**
+ * 앱과 **같은 디렉터리 건너뛰기 목록**. `vault.rs`의 `SKIP_DIRS`와 일치해야 한다.
+ *
+ * ⚠️ 어긋나면 fingerprint가 절대 맞지 않는다 — 한쪽은 `node_modules`를 세고
+ * 다른 쪽은 안 세니 매 질의가 `changed: true`가 된다.
+ */
+const SKIP_DIRS = new Set(["node_modules", "target", ".svelte-kit", "build", "dist", ".git"]);
+
+/**
+ * 앱이 인덱싱하는 확장자. `vault.rs`의 `is_supported_note_ext`와 일치해야 한다.
+ *
+ * ⚠️ 예전에 여기는 소문자 `.md`만 봤다. 앱은 `.mmd`도 세고 대소문자도 무시한다 —
+ * 그 차이가 그대로 fingerprint 불일치가 된다.
+ */
+function isNoteFile(name: string): boolean {
+  const i = name.lastIndexOf(".");
+  if (i < 0) return false;
+  const ext = name.slice(i + 1).toLowerCase();
+  return ext === "md" || ext === "mmd";
+}
+
+/** FNV-1a 32비트 한 줄기. `Math.imul`이라 32비트 산술로 끝난다. */
+function fnv1a32(seed: number, bytes: Uint8Array): number {
+  let h = seed;
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+const FNV32_OFFSET = 0x811c9dc5;
+const UTF8 = new TextEncoder();
+
+/**
+ * vault 스냅샷 fingerprint — **`vault.rs::fingerprint_of`와 같은 값을 내야 한다.**
+ *
+ * 입력 정규형(계약):
+ *
+ * ```text
+ * A: {rel}\0{mtime_ms}\0{size}\n
+ * B: {size}\0{mtime_ms}\0{rel}\n
+ * ```
+ *
+ * 항목은 `rel` 오름차순. 숫자는 십진 ASCII. `rel`은 항상 `/` 구분자.
+ *
+ * ⚠️ **두 구현을 따로 고치지 말 것.** `src-tauri/src/vault.rs`의 테스트와 여기 테스트가
+ * **같은 벡터**를 고정한다. 한쪽만 바뀌면 매 질의가 `changed`로 답하기 시작한다.
+ */
+export function fingerprintOf(
+  entries: readonly { rel: string; mtimeMs: number; size: number }[],
+): string {
+  let a = FNV32_OFFSET;
+  let b = FNV32_OFFSET;
+  for (const e of entries) {
+    a = fnv1a32(a, UTF8.encode(`${e.rel}\0${e.mtimeMs}\0${e.size}\n`));
+    b = fnv1a32(b, UTF8.encode(`${e.size}\0${e.mtimeMs}\0${e.rel}\n`));
+  }
+  return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
 }
 
 export function checkStale(vc: VaultCache): Staleness {
   const metaMs = statSync(vc.metaFile).mtimeMs;
+  const entries: { rel: string; mtimeMs: number; size: number }[] = [];
   const newer: { ms: number; rel: string }[] = [];
-  let total = 0;
   const cut = vc.root.endsWith("/") ? vc.root.length : vc.root.length + 1;
+
   const walk = (dir: string): void => {
     let ents;
     try {
@@ -526,22 +602,38 @@ export function checkStale(vc: VaultCache): Staleness {
       return;
     }
     for (const e of ents) {
+      // 앱의 `walk_md_stats`와 같은 순서로 거른다 — 점 파일, SKIP_DIRS, 확장자.
       if (e.name.startsWith(".")) continue;
+      if (SKIP_DIRS.has(e.name)) continue;
       const p = path.join(dir, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.name.endsWith(".md")) {
-        total++;
-        const m = statSync(p).mtimeMs;
-        if (m > metaMs) newer.push({ ms: m, rel: normPath(p).slice(cut) });
+      if (e.isDirectory()) {
+        walk(p);
+        continue;
       }
+      if (!isNoteFile(e.name)) continue;
+
+      const st = statSync(p);
+      // ⚠️ `Math.floor` — Rust는 `Duration::as_millis()`로 **버림**한다. Node의
+      // `mtimeMs`는 부동소수라 그대로 쓰면 소수부가 남아 절대 일치하지 않는다.
+      const mtimeMs = Math.floor(st.mtimeMs);
+      const rel = normPath(p).slice(cut);
+      entries.push({ rel, mtimeMs, size: st.size });
+      if (st.mtimeMs > metaMs) newer.push({ ms: st.mtimeMs, rel });
     }
   };
   walk(vc.root);
+
+  // 앱과 같은 정렬 기준(`rel` 문자열 오름차순). 다르면 fingerprint가 달라진다.
+  entries.sort((x, y) => (x.rel < y.rel ? -1 : x.rel > y.rel ? 1 : 0));
+  const fingerprint = fingerprintOf(entries);
+
   newer.sort((a, b) => b.ms - a.ms);
   return {
+    changed: fingerprint !== vc.fingerprint,
     newer_count: newer.length,
-    total,
+    total: entries.length,
     behind_s: newer.length === 0 ? 0 : Math.round((newer[0].ms - metaMs) / 1000),
     sample: newer.slice(0, 5).map((n) => n.rel),
+    fingerprint,
   };
 }

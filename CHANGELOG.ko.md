@@ -50,6 +50,21 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   사라지지 않는다. **랭킹 순서는 그대로다.** 기존 정렬 뒤에 얹는 단조 변환이라 계측 하네스의
   R@1·R@10·MRR이 변하지 않는다.
 
+### Fixed
+- **stale 판정이 추정에서 정확 판정으로** ([#201]). `mcp/README.md`가 남은 한계로 적어둔 항목이다 —
+  캐시 fingerprint가 Rust `DefaultHasher`에서 나왔는데 std가 그 값의 안정성을 **명시적으로 보장하지
+  않아** MCP 서버가 재현할 수 없었고, 그래서 mtime 비교로 물러섰다. 그 프록시는 **mtime이 움직이지
+  않은 채 내용만 바뀐 파일을 놓친다** — 색인이 낡았는데 "최신"이라고 답하는 셈이라 "모르겠다"고
+  답하는 것보다 나쁘다. 이제 해시가 명세된 FNV-1a 구성이고, 양쪽이 같은 문서화된 계약에서
+  구현하며, `vault.rs`와 `mcp/fingerprint.test.ts`가 **동일한 벡터**로 고정한다. 응답에는
+  `stale.changed`(정확한 판정)와 `stale.fingerprint`가 실린다.
+
+  fingerprint 입력의 경로도 `/`로 정규화한다. 두 번째 문제가 함께 닫힌다 — 같은 vault가
+  **macOS와 Windows에서 다른 fingerprint**를 내서, 양쪽에서 열면 매번 전체 재빌드였다.
+
+  ⚠️ **캐시 버전 7 → 8.** 올린 뒤 첫 기동에서 인덱스를 한 번 전부 다시 만든다(19,000 노트 기준
+  약 1분). 한 번뿐이다.
+
 ---
 
 ## [1.14.0] — 2026-08-26
@@ -581,6 +596,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#201]: https://github.com/eren0315/lapis/pull/201
 [#200]: https://github.com/eren0315/lapis/pull/200
 [#199]: https://github.com/eren0315/lapis/pull/199
 [#198]: https://github.com/eren0315/lapis/pull/198

@@ -17,6 +17,11 @@
 //! - v5: LinkInfo에 generic `props`(모든 frontmatter 키) 추가 — Phase A 지식 그래프
 //! - v6: 풀텍스트 토크나이저를 한글 bigram 하이브리드로 변경(koTokenize) — 인덱스 토큰 공간 변경
 //! - v7: shard에 `fingerprint` 추가 — meta와의 skew를 소비 측에서 검출 가능하게. 아래 참조.
+//! - v8: fingerprint 해시를 `DefaultHasher` → **명세된 FNV-1a 32비트 두 줄기**로 교체하고
+//!   입력의 상대 경로를 `/` 정규형으로 고정. std가 `DefaultHasher`의 값 안정성을 보장하지
+//!   않아 JS가 재현할 수 없었고, 그래서 MCP는 stale을 mtime 프록시로 **추정**해 수정만
+//!   있는 변경을 놓쳤다(`mcp/README.md` 남은 한계). 경로 정규화는 같은 vault가 macOS와
+//!   Windows에서 다른 fingerprint를 내던 것도 함께 닫는다. → `vault.rs::fingerprint_of`
 //!
 //! ## meta ↔ shard skew (v7에서 닫음)
 //!
@@ -49,7 +54,7 @@ use tauri::AppHandle;
 
 use crate::vault::{FileStat, LinkInfo};
 
-pub const CACHE_VERSION: u32 = 7;
+pub const CACHE_VERSION: u32 = 8;
 
 /// 메타 파일 schema — `*.meta.json.gz`에 직렬화.
 #[derive(Debug, Serialize, Deserialize, Clone)]

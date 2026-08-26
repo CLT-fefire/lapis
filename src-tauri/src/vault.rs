@@ -1,10 +1,8 @@
 use crate::uipath::to_ui;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -796,18 +794,66 @@ type WalkEntry = (String, u128, u64);
 ///
 /// `vault_fingerprint`와 `vault_file_stats`의 **단일 진실원**. 두 곳에 따로 두면 정렬
 /// 기준이나 skip 규칙이 갈리는 순간 델타가 조용히 전량 변경으로 보인다.
+/// FNV-1a 32비트 한 줄기. `Math.imul` 하나로 JS에서 그대로 재현된다.
+fn fnv1a32(seed: u32, bytes: &[u8]) -> u32 {
+    let mut h = seed;
+    for b in bytes {
+        h ^= *b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h
+}
+
+const FNV32_OFFSET: u32 = 0x811c_9dc5;
+
+/// vault 스냅샷 fingerprint — **`mcp/cache.ts`가 같은 값을 만들 수 있어야 한다.**
+///
+/// ## 왜 `DefaultHasher`를 버렸나
+///
+/// std가 `DefaultHasher`의 **값 안정성을 보장하지 않는다**(컴파일러 판마다 달라질 수
+/// 있다). 그래서 JS에서 재현할 수 없었고, MCP는 fingerprint를 대조하지 못해 mtime
+/// 프록시로 stale을 **추정**했다. 그 프록시는 `mcp/README.md`가 적어둔 대로
+/// **삭제만 있고 수정이 없는 변경을 놓친다** — 최신이라고 답하는데 실제로는 낡은
+/// 색인이라는 뜻이고, 기능 부족보다 나쁜 실패다.
+///
+/// ## 입력 정규형 (이 형식이 곧 계약이다)
+///
+/// 항목을 `rel` 오름차순으로 정렬한 뒤, 각 항목마다 **두 줄기**에 서로 다른 바이트를 먹인다:
+///
+/// ```text
+/// A: {rel}\0{mtime_ms}\0{size}\n
+/// B: {size}\0{mtime_ms}\0{rel}\n
+/// ```
+///
+/// 숫자는 **십진 ASCII**다 — 엔디언 논쟁을 없애고 JS에서 그대로 만들 수 있다.
+/// `rel`은 항상 `/` 구분자다(`to_ui`). 안 그러면 **같은 vault가 macOS와 Windows에서**
+/// **다른 fingerprint를 낸다.**
+///
+/// ## 왜 64비트 FNV가 아니라 32비트 두 줄기인가
+///
+/// JS에 64비트 정수가 없다. `BigInt`로 하면 19,000 파일 × 약 50바이트 = 950k 연산이라
+/// **실측 walk(53~66ms)를 세 배로** 만든다. 16비트 림브 산술로 64비트 곱을 손으로
+/// 짜는 건 영원히 믿고 가야 할 버그 표면이 된다. 32비트 두 줄기는 `Math.imul` 하나로
+/// 끝나고, 두 줄기가 **서로 다른 바이트열**을 보므로 합쳐 64비트 폭을 얻는다.
+///
+/// ⚠️ 위협 모델은 **우연한 변경 탐지**다. 적대적 충돌 저항이 아니다.
+fn fingerprint_of(entries: &[WalkEntry]) -> String {
+    let mut a = FNV32_OFFSET;
+    let mut b = FNV32_OFFSET;
+    for (rel, mtime, size) in entries {
+        a = fnv1a32(a, format!("{rel}\0{mtime}\0{size}\n").as_bytes());
+        b = fnv1a32(b, format!("{size}\0{mtime}\0{rel}\n").as_bytes());
+    }
+    format!("{a:08x}{b:08x}")
+}
+
 fn walk_and_fingerprint(root: &Path) -> Result<(Vec<WalkEntry>, String), String> {
     let mut entries: Vec<WalkEntry> = Vec::new();
     walk_md_stats(root, root, &mut entries).map_err(|e| e.to_string())?;
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let mut hasher = DefaultHasher::new();
-    for (p, m, s) in &entries {
-        p.hash(&mut hasher);
-        m.hash(&mut hasher);
-        s.hash(&mut hasher);
-    }
-    Ok((entries, format!("{:016x}", hasher.finish())))
+    // 정렬 기준은 `rel` 문자열 — 소비자(`mcp/cache.ts`)도 같은 기준으로 정렬한다.
+    entries.sort_by(|x, y| x.0.cmp(&y.0));
+    let fp = fingerprint_of(&entries);
+    Ok((entries, fp))
 }
 
 fn vault_fingerprint_inner(vault_path: &str) -> Result<VaultFingerprint, String> {
@@ -858,10 +904,12 @@ fn walk_md_stats(root: &Path, current: &Path, out: &mut Vec<WalkEntry>) -> std::
                 .map(|d| d.as_millis())
                 .unwrap_or(0);
             let size = meta.len();
+            // ⚠️ `to_ui`로 `/` 정규형을 만든다. 플랫폼 구분자를 그대로 쓰면 같은 vault가
+            // macOS와 Windows에서 다른 fingerprint를 내고, `mcp/cache.ts`도 재현할 수 없다.
             let rel = path
                 .strip_prefix(root)
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| path.to_string_lossy().to_string());
+                .map(to_ui)
+                .unwrap_or_else(|_| to_ui(&path));
             out.push((rel, mtime_ms, size));
         }
     }
@@ -1668,5 +1716,68 @@ mod tests {
         assert_eq!(strip_md_extension("note.md"), "note");
         assert_eq!(strip_md_extension("서"), "서"); // 확장자보다 짧음 — panic 없어야
         assert_eq!(strip_md_extension("noext"), "noext");
+    }
+
+    // ─── fingerprint (v8) ────────────────────────────────────────────────
+    //
+    // ⚠️ 아래 기대값은 **`mcp/cache.ts`의 테스트와 같은 벡터**다. 한쪽만 고치면
+    // 두 구현이 갈라지고, 그 순간 MCP의 stale 판정이 조용히 틀리기 시작한다.
+
+    #[test]
+    fn fingerprint_빈_vault() {
+        assert_eq!(fingerprint_of(&[]), "811c9dc5811c9dc5");
+    }
+
+    #[test]
+    fn fingerprint_알려진_벡터() {
+        let entries: Vec<WalkEntry> = vec![
+            ("a.md".to_string(), 1000, 10),
+            ("sub/b.md".to_string(), 2000, 20),
+        ];
+        // 값 자체보다 **JS와 같다**는 게 요점이다. mcp/cache.test.ts가 같은 문자열을 고정한다.
+        let fp = fingerprint_of(&entries);
+        assert_eq!(fp.len(), 16);
+        assert_eq!(fp, "2216189fc167911f");
+    }
+
+    #[test]
+    fn fingerprint_는_mtime_변경을_잡는다() {
+        let a: Vec<WalkEntry> = vec![("a.md".to_string(), 1000, 10)];
+        let b: Vec<WalkEntry> = vec![("a.md".to_string(), 1001, 10)];
+        assert_ne!(fingerprint_of(&a), fingerprint_of(&b));
+    }
+
+    #[test]
+    fn fingerprint_는_size_변경을_잡는다() {
+        // mtime을 건드리지 않고 in-place로 쓴 경우 — size만 바뀐다.
+        let a: Vec<WalkEntry> = vec![("a.md".to_string(), 1000, 10)];
+        let b: Vec<WalkEntry> = vec![("a.md".to_string(), 1000, 11)];
+        assert_ne!(fingerprint_of(&a), fingerprint_of(&b));
+    }
+
+    #[test]
+    fn fingerprint_는_삭제를_잡는다() {
+        let a: Vec<WalkEntry> = vec![
+            ("a.md".to_string(), 1000, 10),
+            ("b.md".to_string(), 1000, 10),
+        ];
+        let b: Vec<WalkEntry> = vec![("a.md".to_string(), 1000, 10)];
+        assert_ne!(fingerprint_of(&a), fingerprint_of(&b));
+    }
+
+    /// 필드가 자리를 바꿔 붙어 같은 바이트열이 되는 것을 두 줄기가 막는다.
+    #[test]
+    fn fingerprint_는_필드_자리바꿈에_속지_않는다() {
+        let a: Vec<WalkEntry> = vec![("10".to_string(), 1000, 5)];
+        let b: Vec<WalkEntry> = vec![("5".to_string(), 1000, 10)];
+        assert_ne!(fingerprint_of(&a), fingerprint_of(&b));
+    }
+
+    #[test]
+    fn fingerprint_는_한글_경로를_다룬다() {
+        let a: Vec<WalkEntry> = vec![("노트/가.md".to_string(), 1, 2)];
+        let b: Vec<WalkEntry> = vec![("노트/나.md".to_string(), 1, 2)];
+        assert_ne!(fingerprint_of(&a), fingerprint_of(&b));
+        assert_eq!(fingerprint_of(&a).len(), 16);
     }
 }

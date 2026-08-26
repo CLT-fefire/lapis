@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import {
@@ -592,5 +592,55 @@ describe("rel · min_rel", () => {
     const base = search({ text: "태그", include_archive: true });
     const nan = search({ text: "태그", include_archive: true, min_rel: Number.NaN });
     expect(nan.results.length).toBe(base.results.length);
+  });
+});
+
+/**
+ * v8 — fingerprint 재현으로 stale을 **정확히** 판정한다.
+ *
+ * 그 전에는 mtime 프록시라 `mcp/README.md`가 적어둔 대로 "삭제만 있고 수정이 없는
+ * 변경을 놓친다"였다. 최신이라고 답하는데 실제로는 낡은 색인 — 조용한 오답이다.
+ */
+describe("stale 정확 판정 (v8)", () => {
+  beforeEach(() => setup());
+
+  it("아무것도 안 바뀌면 stale 필드가 없다", () => {
+    expect(search({ doc_kind: "adr" }).stale).toBeUndefined();
+  });
+
+  it("mtime을 보존한 채 내용만 바꿔도 잡는다 — 프록시가 놓치던 경로", () => {
+    const target = nodePath.join(fx.vaultRoot, "proj/adr/001-abandoned.md");
+    const before = statSync(target);
+
+    // 외부 도구가 mtime을 유지하며 in-place로 쓴 상황을 그대로 만든다.
+    writeFileSync(target, "---\ndoc_kind: adr\n---\n내용이 통째로 달라졌다.\n");
+    utimesSync(target, before.atime, before.mtime);
+
+    const after = statSync(target);
+    expect(Math.floor(after.mtimeMs)).toBe(Math.floor(before.mtimeMs)); // mtime은 그대로
+    expect(after.size).not.toBe(before.size); // 크기만 달라졌다
+
+    resetState();
+    const stale = search({ doc_kind: "adr" }).stale;
+    expect(stale).toBeDefined();
+    expect(stale?.changed).toBe(true);
+    // mtime 프록시로는 0이다 — 그래서 예전엔 "최신"이라고 답했다.
+    expect(stale?.newer_count).toBe(0);
+  });
+
+  it("파일을 지워도 잡는다", () => {
+    rmSync(nodePath.join(fx.vaultRoot, "proj/adr/001-abandoned.md"));
+    resetState();
+    const stale = search({ doc_kind: "adr" }).stale;
+    expect(stale?.changed).toBe(true);
+    expect(stale?.newer_count).toBe(0);
+  });
+
+  it("stale에 지금 계산한 fingerprint가 실린다", () => {
+    rmSync(nodePath.join(fx.vaultRoot, "proj/adr/001-abandoned.md"));
+    resetState();
+    const stale = search({ doc_kind: "adr" }).stale;
+    expect(stale?.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+    expect(stale?.fingerprint).not.toBe(fx.fingerprint);
   });
 });

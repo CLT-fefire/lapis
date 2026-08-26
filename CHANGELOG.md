@@ -52,6 +52,23 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   silently missing. Ordering is untouched — `rel` is a monotone transform applied after the existing
   sort, so the eval harness's R@1/R@10/MRR are unchanged.
 
+### Fixed
+- **Staleness is now decided exactly, not estimated** ([#201]). `mcp/README.md` listed this under
+  remaining limitations: the cache fingerprint came from Rust's `DefaultHasher`, whose values std
+  explicitly does not guarantee across builds, so the MCP server could not reproduce it and fell back
+  to comparing mtimes. That proxy **misses a file that was edited without its mtime moving** — the
+  server answers "current" while the index is stale, which is worse than answering "I don't know".
+  The hash is now a specified FNV-1a construction that both sides implement from the same written
+  contract, pinned by identical test vectors in `vault.rs` and `mcp/fingerprint.test.ts`. Responses
+  carry `stale.changed` (the exact verdict) and `stale.fingerprint`.
+
+  The fingerprint input also normalizes paths to `/`, which closes a second issue: the same vault
+  produced **different fingerprints on macOS and Windows**, so opening it from both meant a full
+  rebuild every time.
+
+  ⚠️ **Cache version 7 → 8.** The first launch after upgrading rebuilds the whole index once
+  (about a minute at 19,000 notes). Once only.
+
 ---
 
 ## [1.14.0] — 2026-08-26
@@ -601,6 +618,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#201]: https://github.com/eren0315/lapis/pull/201
 [#200]: https://github.com/eren0315/lapis/pull/200
 [#199]: https://github.com/eren0315/lapis/pull/199
 [#198]: https://github.com/eren0315/lapis/pull/198
