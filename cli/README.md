@@ -59,6 +59,9 @@ ln -s "$PWD/cli/lapis" /usr/local/bin/lapis
 | `tag rename <이전> <새이름>` | 태그 이름 바꾸기·병합. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
 | `index` | 앱 없이 인덱스를 다시 만든다. `--dry-run`이면 만들어만 보고 쓰지 않는다 |
 | `open <노트>` | 실행 중인 앱에서 그 노트를 연다. 앱이 꺼져 있으면 켠다 |
+| `links --orphans` | 아무도 안 가리키는 노트 + 나가는 링크 수 |
+| `tag audit` | 태그 중복 후보 + 모호한 이름 |
+| `replace <패턴> <치환>` | vault 전체 찾아 바꾸기. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
 
 ### 공통 옵션
 
@@ -248,6 +251,26 @@ Rust는 **어느 창이 어느 vault를 열었는지 모른다**(창별 localSto
 | 2 | 헤드리스 인덱싱 — `lapis index` | **있음** | — |
 | 3 | 쓰기 — `lapis tag rename` | **있음** | — |
 | 4 | 앱 조작 — `lapis open <노트>` | **있음** | — |
+
+### 시간축 · 감사 · 치환 (v1.18.0)
+
+`search` · `backlinks` · `links --orphans`가 시간 옵션을 받는다:
+
+```
+--since 7d | 24h | 2w | 2026-08-01      이 시점 이후만
+--sort recent | path | score            결과 순서
+--by mtime | date                       시간축
+```
+
+⚠️ **`git pull`·`checkout`이 mtime을 덮어쓴다.** 새로 클론하면 전부 같은 값이라, pull 직후
+"최근 바뀐 것"은 "pull이 건드린 것"이 된다. git으로 동기화하는 vault에서는 `--by date`가
+사실에 가깝다.
+
+⚠️ 시간 값이 없는 노트는 `--since`에서 빠지고, **빠진 건수는 항상 보고한다.**
+
+⚠️ `lapis replace`의 정규식은 **JS `RegExp`** 다. `⌘⇧G`는 Rust `regex`라 매치 지점이 다를 수
+있다 — CLI는 grep을 거치지 않으므로 그 문제가 없지만, 앱에서 본 목록과 CLI 결과가 다를 수
+있다는 뜻이다.
 
 ### 3층은 선행 작업이 먼저였다
 

@@ -148,6 +148,27 @@ export const COMMANDS: CommandSpec[] = [
     options: [],
   },
   {
+    name: "replace",
+    desc: "vault 전체 찾아 바꾸기. **기본은 dry-run**, --apply가 있어야 쓴다",
+    positional: [
+      { name: "패턴", required: true, desc: "찾을 것. 기본은 리터럴, --regex로 정규식" },
+      { name: "치환", required: true, desc: "바꿀 것. --regex면 $1 캡처 참조가 듣는다" },
+    ],
+    options: [
+      {
+        name: "apply",
+        kind: "boolean",
+        // ⚠️ `tag rename`과 같은 규율이다. 되돌릴 수 없는 쓰기를 인자 하나 빠뜨렸다고
+        // 실행하면 안 된다.
+        desc: "실제로 쓴다. 없으면 미리보기만 (기본)",
+      },
+      { name: "regex", kind: "boolean", desc: "패턴을 정규식으로. . 은 줄바꿈을 안 넘는다" },
+      { name: "ignore-case", kind: "boolean", desc: "대소문자 무시" },
+      { name: "whole-word", kind: "boolean", desc: "단어 경계로 감싼다" },
+      { name: "path", kind: "string", desc: "vault 상대 경로 접두로 대상을 좁힌다" },
+    ],
+  },
+  {
     name: "index",
     desc: "앱 없이 인덱스를 다시 만든다. 앱을 켜면 그대로 읽는다",
     positional: [],

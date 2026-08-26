@@ -12,6 +12,14 @@
     grepError,
     closeGrep,
     runGrep,
+    grepReplacement,
+    replacePreview,
+    replaceBusy,
+    replaceError,
+    replaceEngineSkew,
+    computeReplace,
+    applyReplace,
+    resetReplace,
   } from "$lib/stores/grep";
   import { selectNote } from "$lib/stores/vault";
   import { applySearch } from "$lib/stores/inDocSearch";
@@ -98,6 +106,71 @@
           })}
           {#if $grepResult.truncated}<strong>{m.grep_truncated()}</strong>{/if}
         </p>
+      {/if}
+
+      <!--
+        찾아 바꾸기 — 검색 결과가 있을 때만 낸다.
+
+        ⚠️ 건수는 **치환 엔진이 낸 것**이다. 검색은 Rust `regex`, 치환은 JS `RegExp`라
+        매치 지점이 다를 수 있어서, grep 숫자를 그대로 쓰면 "보여준 것과 바꾼 것이
+        다른" 상태가 조용히 생긴다. 자세한 근거는 `stores/grep.ts`.
+      -->
+      {#if $grepResult && $grepResult.hits.length > 0}
+        <div class="replace-row">
+          <input
+            type="text"
+            bind:value={$grepReplacement}
+            placeholder={m.grep_replace_placeholder()}
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <button
+            class="run"
+            onclick={() => computeReplace()}
+            disabled={$replaceBusy || $grepRunning}
+          >
+            {m.grep_replace_preview()}
+          </button>
+        </div>
+
+        {#if $replaceError}
+          <p class="error">{$replaceError}</p>
+        {:else if $replacePreview}
+          {@const rp = $replacePreview}
+          <div class="replace-panel">
+            {#if rp.items.length === 0}
+              <p class="summary">{m.grep_replace_none()}</p>
+            {:else}
+              <!-- 위험 신호를 목록보다 **먼저** 낸다. 아래로 밀리면 없는 것과 같다. -->
+              {#if rp.selfMatching}
+                <p class="warn">{m.grep_replace_warn_self()}</p>
+              {/if}
+              {#if rp.frontmatterOccurrences > 0}
+                <p class="warn">
+                  {m.grep_replace_warn_fm({ count: rp.frontmatterOccurrences })}
+                </p>
+              {/if}
+              {#if $replaceEngineSkew > 0}
+                <p class="warn">{m.grep_replace_warn_skew({ count: $replaceEngineSkew })}</p>
+              {/if}
+              <p class="summary">
+                {m.grep_replace_summary({
+                  files: rp.items.length,
+                  occurrences: rp.totalOccurrences,
+                })}
+              </p>
+              <div class="replace-actions">
+                <button class="apply" onclick={() => applyReplace()} disabled={$replaceBusy}>
+                  {m.grep_replace_apply({ files: rp.items.length })}
+                </button>
+                <button class="cancel" onclick={() => resetReplace()} disabled={$replaceBusy}>
+                  {m.grep_replace_cancel()}
+                </button>
+              </div>
+              <p class="hint">{m.grep_replace_hint()}</p>
+            {/if}
+          </div>
+        {/if}
       {/if}
 
       <div class="results">
@@ -272,5 +345,65 @@
     background: var(--accent-bg-subtle);
     color: var(--accent-fg);
     border-radius: 2px;
+  }
+
+  /* 찾아 바꾸기 */
+  .replace-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 0 16px 8px;
+  }
+  .replace-row input {
+    flex: 1;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    padding: 5px 8px;
+  }
+  .replace-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 16px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--warning-border);
+    border-radius: var(--r-md);
+    background: var(--warning-bg-subtle);
+  }
+  .warn {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+  }
+  .replace-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 2px;
+  }
+  .apply,
+  .cancel {
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 5px 10px;
+  }
+  .apply {
+    background: var(--danger);
+    border: 1px solid var(--danger-border);
+    color: var(--n-0);
+  }
+  .cancel {
+    background: none;
+    border: 1px solid var(--border-default);
+    color: var(--text-secondary);
+  }
+  .apply:disabled,
+  .cancel:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 </style>

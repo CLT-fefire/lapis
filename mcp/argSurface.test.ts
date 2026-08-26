@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { COMMANDS } from "../cli/spec.ts";
 
 /**
  * `QueryArgs` · MCP 도구 스키마 · CLI 옵션이 **같은 인자 집합**을 알고 있는지 고정한다.
@@ -29,7 +30,6 @@ import { readFileSync } from "node:fs";
 
 const QUERY = "mcp/query.ts";
 const SERVER = "mcp/server.ts";
-const CLI_SPEC = "cli/spec.ts";
 
 /** `QueryArgs` 인터페이스 본문에서 키 이름을 뽑는다. */
 function queryArgsKeys(): string[] {
@@ -52,16 +52,29 @@ function schemaKeys(): string[] {
 }
 
 /**
- * CLI 옵션 이름 → `QueryArgs` 키. CLI는 하이픈, 질의 핵은 밑줄을 쓴다 — 표면이 갈리는
- * 것은 의도다(다른 옵션이 전부 하이픈인데 하나만 밑줄이면 손이 틀린다).
+ * `lapisQuery`를 부르는 명령들의 옵션 → `QueryArgs` 키.
+ *
+ * ⚠️ **질의를 거치는 명령만 본다.** `links --broken` · `replace --regex` 같은 것은 질의
+ * 인자가 아니라 명령 전용 플래그다. 그걸 섞으면 제외 목록이 계속 자라고, 자라는 제외
+ * 목록은 결국 가드를 무력화한다.
+ *
+ * spec은 실제 TS 모듈이므로 **정규식으로 읽지 않고 import 한다.** `QueryArgs`만 타입이라
+ * 소스를 읽어야 한다.
+ *
+ * CLI는 하이픈, 질의 핵은 밑줄을 쓴다 — 표면이 갈리는 것은 의도다(다른 옵션이 전부
+ * 하이픈인데 하나만 밑줄이면 손이 틀린다).
  */
-function cliOptionKeys(): string[] {
-  const src = readFileSync(CLI_SPEC, "utf8");
-  return [...src.matchAll(/name: "([a-z-]+)", kind:/g)]
-    .map((m) => m[1].replace(/-/g, "_"))
-    .filter((k) => k !== "help" && k !== "json" && k !== "apply" && k !== "dry_run");
-}
+const QUERY_BACKED = ["search", "backlinks", "list"] as const;
 
+function cliOptionKeys(): string[] {
+  const out: string[] = [];
+  for (const name of QUERY_BACKED) {
+    const cmd = COMMANDS.find((c) => c.name === name);
+    if (!cmd) throw new Error(`spec에 없는 명령: ${name}`);
+    for (const o of cmd.options) out.push(o.name.replace(/-/g, "_"));
+  }
+  return [...new Set(out)];
+}
 /**
  * 일부러 표면에 안 내는 `QueryArgs` 키.
  *
