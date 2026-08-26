@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import MiniSearch from "minisearch";
 import { FULLTEXT_OPTIONS, type FullTextDoc, type LinkInfo } from "./entry.ts";
-import { CACHE_VERSION, normPath, normalizeVaultArg } from "./cache.ts";
+import { CACHE_VERSION, fingerprintOf, normPath, normalizeVaultArg } from "./cache.ts";
 
 export interface FixtureNote {
   rel: string;
@@ -74,7 +74,6 @@ export function makeFixture(
   // 원본 구분자를 쓰면 테스트가 프로덕션과 다른 계약을 검증하게 된다.
   const vaultRoot = normPath(opts.vaultRoot ?? path.join(cacheDir, "vault"));
   const key = "fixturekey000001";
-  const fingerprint = opts.fingerprint ?? "f1f1f1f1f1f1f1f1";
 
   const infos: LinkInfo[] = notes.map((n) => ({
     source_path: `${vaultRoot}/${n.rel}`,
@@ -107,6 +106,11 @@ export function makeFixture(
     ].join("\n");
     writeFileSync(abs, fm + n.body + "\n");
   }
+
+  // ⚠️ fingerprint는 **방금 쓴 파일들에서 계산한다.** 임의의 상수를 박아두면 v8부터
+  // `checkStale`이 이걸 실제 vault와 대조하므로 모든 픽스처가 영구 `changed`가 된다 —
+  // 앱이 하는 일(같은 walk에서 계산해 meta에 커밋)과 같아야 테스트가 계약을 검증한다.
+  const fingerprint = opts.fingerprint ?? fingerprintOf(fixtureEntries(vaultRoot, notes));
 
   const shardCount = opts.shardCount ?? 1;
   const writeShards = opts.writeShards ?? shardCount;
@@ -181,6 +185,24 @@ function writeGz(file: string, obj: unknown): void {
 const basename = (rel: string): string => rel.split("/").pop()!.replace(/\.md$/, "");
 
 /** 판정 4문항을 축소 재현한 표준 픽스처. */
+/**
+ * 방금 쓴 vault 파일들의 `(rel, mtime, size)` — `fingerprintOf` 입력.
+ *
+ * 앱의 `walk_md_stats`와 같은 정규형이어야 한다: `rel`은 `/` 구분자, `mtime`은 **버림**한
+ * 정수 ms, 정렬은 `rel` 오름차순.
+ */
+function fixtureEntries(
+  vaultRoot: string,
+  notes: FixtureNote[],
+): { rel: string; mtimeMs: number; size: number }[] {
+  return notes
+    .map((n) => {
+      const st = statSync(path.join(vaultRoot, n.rel));
+      return { rel: normPath(n.rel), mtimeMs: Math.floor(st.mtimeMs), size: st.size };
+    })
+    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+}
+
 export const SAMPLE_NOTES: FixtureNote[] = [
   {
     rel: "proj/adr/001-abandoned.md",
