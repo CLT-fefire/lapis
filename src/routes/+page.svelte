@@ -14,7 +14,7 @@
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
   import TableView from "$lib/TableView.svelte";
-  import BrokenLinksModal from "$lib/BrokenLinksModal.svelte";
+  import VaultHygieneModal from "$lib/VaultHygieneModal.svelte";
   import GrepModal from "$lib/GrepModal.svelte";
   import TagRenameModal from "$lib/TagRenameModal.svelte";
   import { openGrep } from "$lib/stores/grep";
@@ -1154,7 +1154,7 @@
 <NewNoteModal />
 <SettingsModal />
 <TableView />
-<BrokenLinksModal />
+<VaultHygieneModal />
 <GrepModal />
 <TagRenameModal />
 <LinkRewritePreviewModal />

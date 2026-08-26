@@ -72,7 +72,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "links",
-    desc: "링크 감사. 지금은 --broken만 있다",
+    desc: "링크 감사. --broken(어디로도 안 가는 링크) · --orphans(아무도 안 가리키는 노트)",
     positional: [],
     options: [
       {
@@ -80,15 +80,20 @@ export const COMMANDS: CommandSpec[] = [
         kind: "boolean",
         desc: "어느 노트로도 해소되지 않는 본문 링크. 대상별로 묶어 참조 수 순",
       },
+      {
+        name: "orphans",
+        kind: "boolean",
+        desc: "들어오는 링크가 없는 노트. 끊긴 링크의 거울상이다",
+      },
     ],
   },
   {
     name: "tag",
     desc: "태그 이름 바꾸기·병합. 하위 태그도 따라 움직인다",
     positional: [
-      { name: "동작", required: true, desc: "지금은 rename 하나뿐이다" },
-      { name: "이전", required: true, desc: "바꿀 태그" },
-      { name: "새이름", required: true, desc: "새 태그" },
+      { name: "동작", required: true, desc: "rename | audit" },
+      { name: "이전", required: false, desc: "rename 전용 — 바꿀 태그" },
+      { name: "새이름", required: false, desc: "rename 전용 — 새 태그" },
     ],
     options: [
       {
@@ -128,8 +133,13 @@ export const COMMANDS: CommandSpec[] = [
 
 export const FACETS = ["tags", "topics", "doc-kinds"] as const;
 
-/** `tag` 명령이 받는 동작. 지금은 하나지만 목록으로 둬야 오류 메시지가 유용하다. */
-export const TAG_ACTIONS = ["rename"] as const;
+/**
+ * `tag` 명령이 받는 동작.
+ *
+ * ⚠️ `rename`만 `이전`·`새이름`을 요구한다. 그래서 위치 인자는 spec에서 **선택**으로 두고
+ * 동작별 검사는 핸들러가 한다 — 파서는 "동작이 무엇이냐"를 모른다.
+ */
+export const TAG_ACTIONS = ["rename", "audit"] as const;
 
 export function findCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);
