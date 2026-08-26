@@ -34,7 +34,7 @@ Your files live only on your local filesystem. No accounts, no cloud sync, no te
 - **Adjustable measure** — 40–88em via the Aa popover, narrowing long documents to a comfortable column width.
 - **Your reading position carries over** — move between editor and preview and you stay in the section you were reading.
 - **Outline** (`⌘⇧O`) — jump within a document through its heading list.
-- **Context panel** (`⌥B`) — keeps frontmatter properties and backlinks beside the body.
+- **Context panel** (`⌘⌥B`) — keeps frontmatter properties and backlinks beside the body.
 - **Themes** — light / dark / follow system.
 
 ### Connections between documents
@@ -73,7 +73,7 @@ The full-text index is built in a **Web Worker** and **cached to disk per shard*
 ### Tabs and windows
 
 - `⌘T` new tab · `⌘P` replaces the active tab · `⌘W` close · `⌘1`–`⌘9` select
-- `⌘,` / `⌘.` (or `⌘←` / `⌘→`) walk back and forward through visit history
+- `⌘,` / `⌘.` (or `⌘⌃←` / `⌘⌃→`) walk back and forward through visit history
 - **`⌘⇧T` opens a new window — each window can hold a different vault.** Useful for keeping personal notes and project docs side by side.
 
 ### Getting content out
@@ -136,9 +136,10 @@ Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository d
 | `⌘W` | Close tab |
 | `⌘1`–`⌘9` | Switch to that tab |
 | `⌘,` / `⌘.` | Visit history back / forward |
-| `⌘←` / `⌘→` | Visit history back / forward |
+| `⌘⌃←` / `⌘⌃→` | Visit history back / forward |
 | `⌘B` | Collapse/expand the sidebar |
-| `⌥B` | Collapse/expand the context panel |
+| `⌘⌥B` | Collapse/expand the context panel |
+| `⌘⇧B` | Table view |
 | `⌘⇧O` | Outline |
 | `⌘⇧C` | Copy the current note's path |
 
@@ -264,11 +265,22 @@ npm run tauri dev
 
 Checks:
 
+These match `.github/workflows/ci.yml` one for one. A state that passes only one side is not a passing state.
+
 ```bash
-npm run check                  # frontend type check (svelte-check)
-npm run check:mcp              # MCP type check (the root check only covers src/)
-npm run test                   # Vitest
-cd src-tauri && cargo check    # Rust type check
+npm run check       # frontend type check (svelte-check)
+npm run check:mcp   # MCP type check — the root check only covers src/
+npm run check:cli   # CLI type check — same reason
+npm test            # Vitest (src/ + mcp/ + cli/)
+npm run build       # Vite build
+```
+
+```bash
+cd src-tauri
+cargo fmt --check
+cargo clippy --all-targets --locked -- -D warnings   # warnings are errors
+cargo check --all-targets --locked
+cargo test --locked
 ```
 
 Builds:
