@@ -17,28 +17,38 @@ import path from "node:path";
  * 다르다**(`paths.rs`의 `-dev` 접미사). 엉뚱한 쪽을 인덱싱하면 앱에서는 아무 변화가 없다.
  */
 
-/** 이 플랫폼에서 볼 만한 설치 위치. 순서가 곧 우선순위다. */
+/**
+ * 이 플랫폼에서 볼 만한 설치 위치. 순서가 곧 우선순위다.
+ *
+ * ⚠️ `path.join`이 아니라 **`path.win32` / `path.posix`** 를 명시한다. `path.join`은
+ * 인자로 받은 `platform`이 아니라 **지금 도는 호스트**의 규칙을 쓴다 — 그러면 이 함수가
+ * 플랫폼을 인자로 받는 의미가 없어지고, Windows 후보가 `C:\u\Local/Lapis/Lapis.exe`
+ * 같은 섞인 경로로 나온다. 리눅스 CI에서 드러났다.
+ */
 export function candidatePaths(
   platform: NodeJS.Platform,
   env: Record<string, string | undefined>,
 ): string[] {
   if (platform === "win32") {
+    const j = path.win32.join;
     const local = env.LOCALAPPDATA;
     const programs = env.ProgramFiles;
     return [
       // NSIS 기본(per-user). 이 머신의 실제 설치 위치다.
-      ...(local ? [path.join(local, "Lapis", "Lapis.exe")] : []),
+      ...(local ? [j(local, "Lapis", "Lapis.exe")] : []),
       // 예전/변형 레이아웃.
-      ...(local ? [path.join(local, "Programs", "Lapis", "Lapis.exe")] : []),
+      ...(local ? [j(local, "Programs", "Lapis", "Lapis.exe")] : []),
       // per-machine 설치.
-      ...(programs ? [path.join(programs, "Lapis", "Lapis.exe")] : []),
+      ...(programs ? [j(programs, "Lapis", "Lapis.exe")] : []),
     ];
   }
   if (platform === "darwin") {
     const home = env.HOME;
     return [
       "/Applications/Lapis.app/Contents/MacOS/Lapis",
-      ...(home ? [path.join(home, "Applications", "Lapis.app", "Contents", "MacOS", "Lapis")] : []),
+      ...(home
+        ? [path.posix.join(home, "Applications", "Lapis.app", "Contents", "MacOS", "Lapis")]
+        : []),
     ];
   }
   return [];
