@@ -24,6 +24,13 @@ export interface FixtureNote {
   targets?: string[];
   /** frontmatter cross-ref — `{ 필드: [노트 stem] }`. */
   related?: Record<string, string[]>;
+  /**
+   * 그 밖의 frontmatter 필드 — `{ 필드: [값] }`.
+   *
+   * ⚠️ `related`와 나눠 둔 이유: `related`는 **관계**로 해소되지만 이쪽은 그냥 값이다.
+   * 시간축 테스트가 `date`를 넣는 데 쓴다.
+   */
+  props?: Record<string, string[]>;
 }
 
 /**
@@ -85,9 +92,10 @@ export function makeFixture(
     doc_kind: n.doc_kind ?? null,
     topic: n.topic ?? null,
     related: Object.values(n.related ?? {}).flat(),
-    props: Object.fromEntries(
-      Object.entries(n.related ?? {}).map(([field, vals]) => [field, vals]),
-    ),
+    props: {
+      ...Object.fromEntries(Object.entries(n.related ?? {}).map(([f, v]) => [f, v])),
+      ...(n.props ?? {}),
+    },
   })) as unknown as LinkInfo[];
 
   // vault 파일도 실제로 쓴다 — 스니펫이 디스크를 읽고, staleness가 mtime을 본다.

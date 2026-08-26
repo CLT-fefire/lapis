@@ -63,19 +63,30 @@ describe("isGroupVisible — 모드별 그룹", () => {
   });
 
   it("prefix 단일 목적 모드는 자기 그룹만 낸다", () => {
-    expect(visible("tag")).toEqual(["recents", "notes", "content", "tags"]);
-    expect(visible("facet")).toEqual(["recents", "notes", "content", "facets"]);
-    expect(visible("command")).toEqual(["recents", "notes", "content", "commands"]);
+    // ⚠️ `recents`·`changed`는 빈 입력 흐름 전용이라 모드와 무관하게 "보인다"로 둔다
+    // (그 모드에서는 어차피 비어 있다). 가시성과 채워짐을 섞으면 규칙이 두 벌이 된다.
+    expect(visible("tag")).toEqual(["recents", "changed", "notes", "content", "tags"]);
+    expect(visible("facet")).toEqual(["recents", "changed", "notes", "content", "facets"]);
+    expect(visible("command")).toEqual(["recents", "changed", "notes", "content", "commands"]);
   });
 
   it("recents는 모든 모드에서 낸다 — 빈 입력 흐름이라 모드와 무관하다", () => {
     for (const mode of ["all", "files", "fulltext", "tag", "facet", "command"] as PaletteMode[]) {
       expect(isGroupVisible(mode, "recents")).toBe(true);
+      expect(isGroupVisible(mode, "changed")).toBe(true);
     }
   });
 
   // ⚠️ 순서 자체가 계약이다 — `displayList`가 이 순서로 평면화하고 ↑/↓ 탐색이 그 인덱스를 쓴다.
   it("GROUP_ORDER가 화면 순서다", () => {
-    expect(GROUP_ORDER).toEqual(["recents", "notes", "content", "tags", "facets", "commands"]);
+    expect(GROUP_ORDER).toEqual([
+      "recents",
+      "changed",
+      "notes",
+      "content",
+      "tags",
+      "facets",
+      "commands",
+    ]);
   });
 });

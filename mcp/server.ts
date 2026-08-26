@@ -56,6 +56,23 @@ const TOOL = {
         description:
           "BM25 상대 점수 하한 [0,1]. 결과 행의 `rel`(그 질의 안에서 top-1=1.0)과 비교한다. raw `score`는 질의마다 스케일이 달라(63 vs 1,494) 임계값으로 못 쓴다. `used[].combine`이 OR·OR-min이라 결과가 넓을 때 꼬리를 자르는 용도. 자른 건수는 `used[].dropped_by_min_rel`",
       },
+      since: {
+        type: "string",
+        description:
+          "이 시점 이후만. 기간(`7d` · `24h` · `2w`) 또는 날짜(`2026-08-01`, UTC 자정). 시간 값이 없는 노트는 빠지고 `used[].dropped_no_time`에 건수가 남는다",
+      },
+      sort: {
+        type: "string",
+        enum: ["recent", "path", "score"],
+        description:
+          "결과 순서. 생략하면 점수가 있으면 점수순, 없으면 경로순. `score`는 text 질의에만 쓸 수 있다(구조 질의에는 점수가 없다)",
+      },
+      by: {
+        type: "string",
+        enum: ["mtime", "date"],
+        description:
+          "시간축. 기본 `mtime`(파일 수정 시각) · `date`(frontmatter). ⚠️ git pull·checkout이 mtime을 덮어쓰므로, git으로 동기화하는 vault에서는 `date`가 사실에 가깝다",
+      },
       vault: { type: "string", description: "vault 루트 절대 경로. 여러 vault를 캐시한 경우 지정" },
     },
   },

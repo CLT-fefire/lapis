@@ -3,6 +3,7 @@ import { watchVault, unwatchVault, onVaultChange, type VaultChange } from "$lib/
 import { readNote } from "$lib/tauri/notes";
 import { invalidateCacheBySource } from "$lib/backlinks";
 import { markChangedFromWatcher } from "./unread";
+import { touchMtime, dropMtime } from "./mtimes";
 import { scheduleAutoCommit } from "./git";
 import {
   vaultPath,
@@ -85,6 +86,8 @@ async function handleChange(change: VaultChange): Promise<void> {
       pendingRemoved.delete(change.path);
       pendingChanged.add(change.path);
       touched.push(change.path);
+      // 시간축 지도도 같이 고친다. 안 고치면 팔레트의 '최근 변경'이 낡은다.
+      touchMtime(change.path, "mtime_ms" in change ? change.mtime_ms : Date.now());
       // 본문이 바뀌었으니 이 path를 source로 하는 백링크 snippet 캐시는 stale.
       invalidateCacheBySource(change.path);
       // 현재 열린 노트가 영향 받으면 외부변경 충돌/리로드 즉시 처리.
@@ -103,6 +106,8 @@ async function handleChange(change: VaultChange): Promise<void> {
       pendingRemoved.add(change.path);
       touched.push(change.path);
       invalidateCacheBySource(change.path);
+      // 남겨두면 없는 노트가 '최근 변경'에 뜬다.
+      dropMtime(change.path);
       void closeTab(change.path); // 열려 있었다면 탭 제거
       break;
     case "renamed":

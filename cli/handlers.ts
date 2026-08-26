@@ -1,4 +1,5 @@
-import { lapisQuery, resolveNotePath, type QueryArgs } from "../mcp/query.ts";
+import { lapisQuery, resolveNotePath, vaultTimeOf, type QueryArgs } from "../mcp/query.ts";
+import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
 import { resolveVault, checkStale } from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
@@ -49,6 +50,10 @@ function baseArgs(p: ParsedCommand): QueryArgs {
     ...(typeof o.vault === "string" ? { vault: o.vault } : {}),
     ...(typeof o.limit === "number" ? { limit: o.limit } : {}),
     ...(o["include-archive"] === true ? { include_archive: true } : {}),
+    // 시간축 — `search` · `backlinks` · `links`가 공유한다(`TIME_OPTS`).
+    ...(typeof o.since === "string" ? { since: o.since } : {}),
+    ...(typeof o.sort === "string" ? { sort: o.sort as "recent" | "path" | "score" } : {}),
+    ...(typeof o.by === "string" ? { by: o.by as "mtime" | "date" } : {}),
   };
 }
 
@@ -122,15 +127,69 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
   const index = buildIndex(vc.infos);
 
   const rel = relativizer(vc.root);
+  const since = typeof p.options.since === "string" ? p.options.since : undefined;
+  const sort = typeof p.options.sort === "string" ? p.options.sort : undefined;
+  const axis = p.options.by === "date" ? "date" : "mtime";
+
+  // ⚠️ 시간 옵션은 고아 목록에만 뜻이 있다. 조용히 무시하면 도움말에 보이는 옵션이
+  // 아무 일도 안 하고, 사용자는 먹은 줄 안다 — 실측에서 그렇게 나왔다.
+  if (!orphans && (since !== undefined || sort !== undefined || p.options.by !== undefined)) {
+    out.fail(
+      "no_criteria",
+      "시간 옵션은 --orphans 에만 쓸 수 있다",
+      "끊긴 링크는 노트가 아니라 링크 대상별로 묶여 시간축이 없다",
+      2,
+    );
+  }
 
   if (orphans) {
-    const rows = findOrphans(index).map((o) => ({ ...o, path: rel(o.path) }));
-    if (out.json) return out.json_({ vault: vc.root, orphans: rows.length, notes: rows });
-    out.line(renderOrphans(rows));
-    if (rows.length > 0) {
-      out.line(`\n${rows.length}개`);
+    // 시간축은 `lapisQuery`와 **같은 공급자**를 쓴다. 여기서 따로 짜면 축의 뜻이 갈린다.
+    const needTime = since !== undefined || sort === "recent";
+    const timeOf = needTime ? vaultTimeOf(vaultOf(p), axis) : () => null;
+
+    let rows = findOrphans(index);
+    let droppedNoTime = 0;
+    let droppedOlder = 0;
+    if (since !== undefined) {
+      let cutoff: number;
+      try {
+        cutoff = parseSince(since, Date.now());
+      } catch (e) {
+        if (e instanceof SinceError) {
+          out.fail("no_criteria", e.message, "7d · 24h · 2w · YYYY-MM-DD", 2);
+        }
+        throw e;
+      }
+      const part = partitionSince(rows, cutoff, timeOf);
+      rows = part.kept;
+      droppedNoTime = part.droppedNoTime;
+      droppedOlder = part.droppedOlder;
+    }
+    if (sort === "recent") rows = sortRecent(rows, timeOf);
+    else if (sort === "path") rows = sortPath(rows);
+
+    const shown = rows.map((o) => ({ ...o, path: rel(o.path) }));
+    if (out.json) {
+      return out.json_({
+        vault: vc.root,
+        orphans: shown.length,
+        notes: shown,
+        ...(since !== undefined
+          ? { since: { axis, dropped_older: droppedOlder, dropped_no_time: droppedNoTime } }
+          : {}),
+      });
+    }
+    out.line(renderOrphans(shown));
+    if (shown.length > 0) {
+      out.line(`\n${shown.length}개`);
       // ⚠️ 진입점은 정상적으로 여기 걸린다. 그걸 안 말해주면 목록을 안 믿게 된다.
       out.line("나가는 링크가 많은 것은 진입점(허브)일 수 있다 — 그건 정상이다.");
+    }
+    // ⚠️ 자른 건수를 **말한다.** 조용히 줄이면 왜 안 나오는지 알 방법이 없다.
+    if (droppedOlder > 0 || droppedNoTime > 0) {
+      out.line(
+        `(${axis} 기준으로 ${droppedOlder}건이 기간 밖, ${droppedNoTime}건은 시간 값이 없어 제외)`,
+      );
     }
     return;
   }

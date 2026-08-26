@@ -22,6 +22,15 @@
 import { readFileSync, statSync } from "node:fs";
 import MiniSearch from "minisearch";
 import {
+  parseSince,
+  parseFrontmatterDate,
+  partitionSince,
+  sortRecent,
+  sortPath,
+  SinceError,
+  type TimeOf,
+} from "$lib/recency";
+import {
   applyFilters,
   buildIndex,
   buildTagIndex,
@@ -36,6 +45,7 @@ import {
 import {
   LapisError,
   checkStale,
+  walkVaultEntries,
   type Staleness,
   loadShards,
   norm,
@@ -139,6 +149,27 @@ export interface QueryArgs {
    * ⚠️ 단계마다 모집단이 달라 같은 값이 같은 뜻은 아니다 — `used[].combine`을 함께 본다.
    */
   min_rel?: number;
+  /**
+   * 이 시점 이후만. `7d` · `24h` · `2w` · `2026-08-01`.
+   *
+   * ⚠️ 시간 값이 없는 노트는 **빠지고, 몇 개인지 응답에 남는다**
+   * (`used[].dropped_no_time`). 조용히 줄이지 않는다.
+   */
+  since?: string;
+  /**
+   * 결과 순서. `recent` · `path` · `score`.
+   *
+   * 기본은 지금까지의 동작이다 — 점수가 있으면 점수순, 없으면 경로순.
+   * ⚠️ `score`를 구조 질의(점수가 없는 질의)에 주면 사용법 오류다.
+   */
+  sort?: "recent" | "path" | "score";
+  /**
+   * 시간축. `mtime`(기본) · `date`(프론트매터).
+   *
+   * ⚠️ `git pull`·`checkout`이 mtime을 덮어쓴다 — 새로 클론하면 전부 같은 값이다.
+   * 두 머신을 git으로 동기화하면 `date` 쪽이 사실에 가깝다. 자세한 것은 `$lib/recency`.
+   */
+  by?: "mtime" | "date";
 }
 
 interface Loaded {
@@ -343,6 +374,46 @@ export function resolveNotePath(input: string, vault?: string): { path: string; 
   return { path: resolveNote(st, input), vault: st.vc.root };
 }
 
+/**
+ * 이 질의의 시간축 값을 내는 함수.
+ *
+ * ⚠️ **`mtime`은 `checkStale`이 이미 하는 walk를 재사용한다**(`walkVaultEntries`).
+ * 따로 훑으면 매 질의에 walk가 둘이 되고, 더 나쁘게는 두 walk 사이에 vault가 바뀌어
+ * fingerprint와 시간 값이 어긋난 답을 낸다.
+ *
+ * `date`는 캐시의 `props.date`에서 온다 — 추가 IO가 없다.
+ */
+/**
+ * vault의 시간축 공급자 — CLI의 감사 명령이 쓴다.
+ *
+ * `lapisQuery`를 거치지 않는 경로(`links --orphans`)도 **같은 시간 값**을 봐야 한다.
+ * 여기서 내보내지 않으면 소비자가 각자 walk를 짜고, 그러면 축의 뜻이 갈린다.
+ */
+export function vaultTimeOf(vault: string | undefined, axis: "mtime" | "date"): TimeOf {
+  return timeSource(loadStructural(vault), axis);
+}
+function timeSource(st: Loaded, axis: "mtime" | "date"): TimeOf {
+  if (axis === "date") {
+    const cache = new Map<string, number | null>();
+    return (abs) => {
+      if (cache.has(abs)) return cache.get(abs)!;
+      const raw = st.link.byPath.get(abs)?.props?.date?.[0];
+      const ms = raw ? parseFrontmatterDate(raw) : null;
+      cache.set(abs, ms);
+      return ms;
+    };
+  }
+  const times = new Map<string, number>();
+  // ⚠️ walk는 **vault 상대** 경로를 낸다. 키는 **절대** 경로여야 한다(`byPath`와 같은 형태).
+  // 처음엔 `root.slice(0, cut) + rel` 로 붙였는데 구분자가 빠져 조회가 **전부 null**이 됐다
+  // — 그러면 `--since`가 모든 노트를 "시간 값 없음"으로 버리고 `--sort recent`는 경로순으로
+  // 조용히 떨어진다. 실측에서 20건이 통째로 사라졌다.
+  const prefix = st.vc.root.endsWith("/") ? st.vc.root : st.vc.root + "/";
+  for (const e of walkVaultEntries(st.vc).entries) {
+    times.set(prefix + e.rel, e.mtimeMs);
+  }
+  return (abs) => times.get(abs) ?? null;
+}
 export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const {
     vault,
@@ -357,6 +428,9 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     include_archive = false,
     limit = DEFAULT_LIMIT,
     min_rel: minRelArg = 0,
+    since,
+    sort,
+    by: axis = "mtime",
   } = args;
 
   const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of);
@@ -378,6 +452,34 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const minRel = Number.isFinite(minRelArg) ? Math.min(Math.max(minRelArg, 0), 1) : 0;
   const ex = [...exclude.map(norm), ...(include_archive ? [] : ARCHIVE_PREFIXES)];
   const allow = new Set<string>(sources ?? ["bm25", "structural"]);
+
+  // ⚠️ 상대 기간(`7d`)은 본질적으로 "지금"에 의존한다. 테스트는 절대 날짜를 쓴다 —
+  // 그러면 같은 인자가 언제 돌려도 같은 결과를 낸다.
+  const nowMs = Date.now();
+
+  // ⚠️ 사용법 오류는 **질의 전에** 잡는다. 뒤에서 조용히 무시하면 사용자는 인자가
+  // 먹은 줄 안다.
+  if (sort === "score" && !text) {
+    throw new LapisError(
+      "no_criteria",
+      "sort: \"score\" 는 text 질의에만 쓸 수 있다",
+      "구조 질의에는 점수가 없다 — sort: \"recent\" 또는 \"path\"",
+    );
+  }
+  if (axis !== "mtime" && axis !== "date") {
+    throw new LapisError(
+      "no_criteria",
+      `모르는 시간축: ${String(axis)}`,
+      "mtime(파일 수정 시각) 또는 date(프론트매터)",
+    );
+  }
+  if (sort !== undefined && sort !== "recent" && sort !== "path" && sort !== "score") {
+    throw new LapisError(
+      "no_criteria",
+      `모르는 정렬: ${String(sort)}`,
+      "recent · path · score",
+    );
+  }
 
   if (!list) {
     const effective =
@@ -529,6 +631,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   //    grep 베이스라인이 4문항 45 KB였으니 단일 질의가 그보다 컸다 — 이 도구의 존재
   //    이유를 스스로 무너뜨린다. 원래 의도는 "BM25 노이즈가 구조 결과를 밀어내지 않게"
   //    였으므로 **구조 우선 + 상한 준수 + `structural_total`로 집합 크기 통보**로 만족시킨다.
+
   const results: ResultRow[] = [];
   const seen = new Set<string>();
 
@@ -548,12 +651,66 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   // 구조 질의에는 점수가 없어(`rel`이 `null`) 순서를 줄 다른 신호가 없다. 경로 오름차순은
   // 재현되고, 디렉터리로 묶이고, 설명할 수 있다 — facet 목록이 (건수, 이름)으로 정렬하는
   // 것과 같은 이유다.
-  const poolLive =
+  // 시간축은 요청됐을 때만 만든다 — `mtime`은 vault walk를 한 번 더 쓰기 때문이다
+  // (`checkStale`이 하는 walk를 재사용하지만, 아무도 안 물으면 그것도 안 한다).
+  const wantsTime = since !== undefined || sort === "recent";
+  const timeOf: TimeOf = wantsTime ? timeSource(st, axis) : () => null;
+  let cutoff: number | null = null;
+  if (since !== undefined) {
+    try {
+      cutoff = parseSince(since, nowMs);
+    } catch (e) {
+      if (e instanceof SinceError) {
+        throw new LapisError(
+          "no_criteria",
+          e.message,
+          "기간(7d · 24h · 2w) 또는 날짜(YYYY-MM-DD)",
+        );
+      }
+      throw e;
+    }
+  }
+
+  /** 시간 필터 + 정렬을 후보 목록에 적용한다. **자르기 전에** 해야 의미가 있다. */
+  const applyTime = <T extends { path: string }>(rowsIn: T[], scored: boolean): T[] => {
+    let out = rowsIn;
+    if (cutoff !== null) {
+      const part = partitionSince(out, cutoff, timeOf);
+      out = part.kept;
+      // ⚠️ 자른 건수를 **남긴다.** 조용히 줄이면 `--by date`로 물었을 때 날짜를 안 적은
+      // 노트가 사라진 이유를 아무도 모른다.
+      used.push({
+        name: "since",
+        axis,
+        cutoff_ms: cutoff,
+        matched: out.length,
+        dropped_older: part.droppedOlder,
+        dropped_no_time: part.droppedNoTime,
+      });
+    }
+    if (sort === "recent") return sortRecent(out, timeOf);
+    if (sort === "path") return sortPath(out);
+    // 기본은 지금까지의 동작 — 점수가 있으면 점수순(호출부가 이미 정렬해 넘긴다),
+    // 없으면 경로순.
+    return scored ? out : sortPath(out);
+  };
+
+  const poolLive = applyTime(
     pool === null
       ? []
       : [...pool]
           .filter((abs) => !excluded(st.rel(abs), ex))
-          .sort((a, b) => asc(st.rel(a), st.rel(b)));
+          .map((abs) => ({ path: abs })),
+    false,
+  ).map((r) => r.path);
+
+  // BM25 결과에도 같은 필터·정렬을 건다. `applyTime`이 `used`에 두 번 기록하지 않도록
+  // 구조 쪽에서 이미 기록했으면 여기선 필터만 다시 적용한다(같은 cutoff·같은 축이다).
+  if (cutoff !== null && ranked.length > 0) {
+    ranked = partitionSince(ranked, cutoff, timeOf).kept;
+  }
+  if (sort === "recent") ranked = sortRecent(ranked, timeOf);
+  else if (sort === "path") ranked = sortPath(ranked);
   const structuralTotal = poolLive.length;
   let structuralCount = 0;
 

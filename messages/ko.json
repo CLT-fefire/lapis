@@ -298,6 +298,7 @@
   "cmd_vault_root": "(vault 루트)",
   "palette_aria": "명령 팔레트",
   "palette_group_recent": "최근",
+  "palette_group_changed": "최근 변경",
   "palette_group_notes": "노트",
   "palette_group_content": "본문",
   "palette_group_tags": "태그",

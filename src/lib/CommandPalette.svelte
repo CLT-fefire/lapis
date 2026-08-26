@@ -106,6 +106,7 @@
   const displayList = $derived.by<PaletteResult[]>(() => {
     const out: PaletteResult[] = [];
     if (showRecents) out.push(...groups.recents);
+    if (showChanged) out.push(...groups.changed);
     if (showNotes) out.push(...groups.notes);
     if (showContent) out.push(...groups.content);
     if (showTagsGroup) out.push(...groups.tags);
@@ -236,6 +237,7 @@
       case "note":
       case "content":
       case "recent":
+      case "changed":
         return `${entry.kind}:${entry.path}`;
       case "tag":
         return `tag:${entry.mode}:${entry.key}`;
@@ -250,6 +252,7 @@
   // 모드별 가시성 규칙은 `palette.ts`의 `isGroupVisible`에 있다 — 여기 두면 테스트가 못 붙는다
   // (vitest가 environment:"node"라 컴포넌트를 못 띄운다). 여기선 "비어 있지 않은가"만 곱한다.
   const showRecents = $derived(groups.recents.length > 0);
+  const showChanged = $derived(groups.changed.length > 0);
   const showNotes = $derived(isGroupVisible($paletteHintMode, "notes") && groups.notes.length > 0);
   const showContent = $derived(
     isGroupVisible($paletteHintMode, "content") && groups.content.length > 0,
@@ -317,6 +320,32 @@
           {#each groups.recents as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "recent"}
+              {@const gi = displayIndexOf(e)}
+              <button
+                type="button"
+                class="result"
+                class:active={gi === activeIndex}
+                data-idx={gi}
+                onclick={() => execute(gi)}
+                onmouseenter={() => { if (!keyboardNavMode) activeIndex = gi; }}
+              >
+                <div class="title">{e.label}</div>
+                {#if e.subtitle}<div class="sub">{e.subtitle}</div>{/if}
+              </button>
+            {/if}
+          {/each}
+        {/if}
+
+        <!--
+          '최근 연 것'과 **따로** 낸다. 섞으면 어느 축인지 알 수 없고, 밖에서 바뀐 노트는
+          열람 이력에 없어서 위 목록엔 절대 안 나온다 — vault를 쓰는 건 Lapis가 아니라
+          바깥 도구들이다.
+        -->
+        {#if showChanged}
+          <div class="group-header">{m.palette_group_changed()}</div>
+          {#each groups.changed as r (entryKey(r.entry))}
+            {@const e = r.entry}
+            {#if e.kind === "changed"}
               {@const gi = displayIndexOf(e)}
               <button
                 type="button"

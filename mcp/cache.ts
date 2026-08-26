@@ -597,7 +597,21 @@ export function fingerprintOf(
   return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
 }
 
-export function checkStale(vc: VaultCache): Staleness {
+/**
+ * vault를 한 번 훑어 노트별 `{rel, mtimeMs, size}`를 모은다.
+ *
+ * ⚠️ **`checkStale`이 이미 하던 일이다.** 예전엔 fingerprint를 계산하고 이 목록을
+ * 버렸는데, 시간축 질의(`--since` · `--sort recent`)가 정확히 같은 값을 필요로 한다.
+ * 따로 훑으면 매 질의에 walk가 둘이 되고, 더 나쁘게는 두 walk 사이에 vault가 바뀌어
+ * **fingerprint와 시간 값이 어긋난 답**을 낸다.
+ *
+ * 정렬 기준은 앱(`walk_md_stats`)과 같아야 한다 — 다르면 fingerprint가 달라진다.
+ */
+export function walkVaultEntries(vc: VaultCache): {
+  entries: { rel: string; mtimeMs: number; size: number }[];
+  newer: { ms: number; rel: string }[];
+  metaMs: number;
+} {
   const metaMs = statSync(vc.metaFile).mtimeMs;
   const entries: { rel: string; mtimeMs: number; size: number }[] = [];
   const newer: { ms: number; rel: string }[] = [];
@@ -634,9 +648,13 @@ export function checkStale(vc: VaultCache): Staleness {
 
   // 앱과 같은 정렬 기준(`rel` 문자열 오름차순). 다르면 fingerprint가 달라진다.
   entries.sort((x, y) => (x.rel < y.rel ? -1 : x.rel > y.rel ? 1 : 0));
-  const fingerprint = fingerprintOf(entries);
-
   newer.sort((a, b) => b.ms - a.ms);
+  return { entries, newer, metaMs };
+}
+
+export function checkStale(vc: VaultCache): Staleness {
+  const { entries, newer, metaMs } = walkVaultEntries(vc);
+  const fingerprint = fingerprintOf(entries);
   return {
     changed: fingerprint !== vc.fingerprint,
     newer_count: newer.length,
@@ -646,3 +664,4 @@ export function checkStale(vc: VaultCache): Staleness {
     fingerprint,
   };
 }
+

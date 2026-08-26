@@ -42,6 +42,21 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ---
 
 ### Added
+- **시간축 — `--since` · `--sort` · `--by`** ([#223]). vault는 모든 노트가 언제 바뀌었는지
+  알고 있는데 물어볼 방법이 없었다. `checkStale`이 이미 매 질의마다 vault 전체를 훑고 그
+  타임스탬프를 **버리고** 있었고, 프론트매터 `date`도 이미 인덱싱돼 있었다. 둘 다 질의
+  차원이 된다 — `search` · `backlinks` · `links --orphans`, 그리고 MCP 도구에서.
+
+  축이 둘인 이유는 **서로 다른 질문에 답하고, 하나는 거짓말을 하기** 때문이다. `mtime`은
+  내가 실제로 만진 것이지만 `git pull`·`checkout`이 덮어쓴다 — 새로 클론하면 전부 같은
+  값이라, pull 직후 "최근 바뀐 것"은 "pull이 건드린 것"이 된다. 프론트매터 `date`는 git에
+  안 흔들리지만 사람이 적은 곳에만 있다.
+
+  고른 축에 값이 없는 노트는 `--since`에서 빠지고 정렬에서는 맨 뒤로 간다 — **빠진 건수는
+  항상 보고한다.**
+
+  앱에서는 명령 팔레트 빈 입력에 **최근 변경** 그룹이 생겼다. *최근 연* 노트와 **따로** 낸다
+  — 편집기·git·다른 도구가 쓴 변경은 열람 이력에 절대 안 남는다.
 - **새 앱 아이콘.** 그동안 Tauri 기본 로고로 배포되고 있었다 — 인디고 대괄호와 금색 보석으로
   바뀐다. 벡터 원본(`src-tauri/icons/lapis-light.svg` · `lapis-dark.svg`)을 함께 두어 언제든
   다시 생성할 수 있게 했다.
@@ -768,6 +783,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#223]: https://github.com/eren0315/lapis/pull/223
 [#221]: https://github.com/eren0315/lapis/pull/221
 [#220]: https://github.com/eren0315/lapis/pull/220
 [#219]: https://github.com/eren0315/lapis/pull/219
