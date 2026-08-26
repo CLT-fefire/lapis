@@ -1,6 +1,6 @@
 {
   "name": "lapis",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Personal Markdown Knowledge Workbench",
   "type": "module",
   "scripts": {
