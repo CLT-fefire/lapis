@@ -17,6 +17,7 @@ import {
 } from "$lib/stores/layout";
 import { openPalette } from "$lib/stores/palette";
 import { openTableView } from "$lib/stores/tableView";
+import { openBrokenLinks } from "$lib/stores/brokenLinks";
 import { newWindow } from "$lib/tauri/window";
 
 export interface Command {
@@ -69,6 +70,17 @@ export const BUILTIN_COMMANDS: Command[] = [
     disabled: () => !get(vaultPath),
     run() {
       openTableView();
+    },
+  },
+  {
+    id: "broken-links",
+    get label() {
+      return m.cmd_broken_links();
+    },
+    // 단축키 없음 — 자주 쓰는 동작이 아니고, 남은 조합을 여기 쓰면 아까운 자리다.
+    disabled: () => !get(vaultPath),
+    run() {
+      openBrokenLinks();
     },
   },
   {

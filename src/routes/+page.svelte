@@ -14,6 +14,7 @@
   import NewNoteModal from "$lib/NewNoteModal.svelte";
   import SettingsModal from "$lib/SettingsModal.svelte";
   import TableView from "$lib/TableView.svelte";
+  import BrokenLinksModal from "$lib/BrokenLinksModal.svelte";
   import { openTableView } from "$lib/stores/tableView";
   import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
@@ -1128,6 +1129,7 @@
 <NewNoteModal />
 <SettingsModal />
 <TableView />
+<BrokenLinksModal />
 <LinkRewritePreviewModal />
 
 {#if $externalConflict}
