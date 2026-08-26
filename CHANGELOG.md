@@ -40,6 +40,22 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ---
 
+### Added
+- **`lapis links --orphans` and `lapis tag audit`** ([#221]). Two audits that read what the index
+  already holds. Orphans are notes nothing links to — the mirror image of the broken-link audit,
+  and, since backlinks are the primary way to navigate, notes that are effectively unreachable.
+  The tag audit reports duplicate candidates: the same leaf filed under two parents, tags differing
+  only in case, and names that resolve to more than one note.
+
+  Neither one tells you what to do. Orphan rows carry an outgoing-link count so an entry point
+  (many outgoing, none incoming) reads differently from a stranded note, and merging is left to
+  `tag rename`, which previews, backs up and rolls back.
+
+  In the app the broken-link screen became **Vault hygiene** with three tabs. The Command Palette
+  entry changed name accordingly.
+
+---
+
 ## [1.17.0] — 2026-08-26
 
 ### Added
@@ -781,6 +797,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#221]: https://github.com/eren0315/lapis/pull/221
 [#220]: https://github.com/eren0315/lapis/pull/220
 [#219]: https://github.com/eren0315/lapis/pull/219
 [#217]: https://github.com/eren0315/lapis/pull/217

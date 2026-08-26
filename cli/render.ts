@@ -183,3 +183,72 @@ export function renderTagPreview(
   }
   return out.join("\n");
 }
+
+export interface OrphanRow {
+  path: string;
+  name: string;
+  outgoing: number;
+}
+
+/**
+ * 고아 노트.
+ *
+ * ⚠️ **나가는 링크 수를 함께 낸다.** 그게 진입점(허브)과 떨어진 섬을 가르는 유일한 수단이다
+ * — vault의 HOME 같은 문서는 들어오는 링크가 없어도 정상이고, 그건 나가는 링크가 많다는
+ * 것으로 드러난다. 앱이 판정하지 않고 두 숫자를 나란히 보여준다.
+ */
+export function renderOrphans(rows: readonly OrphanRow[]): string {
+  if (rows.length === 0) return "고아 노트 없음";
+  return table([
+    ["나감", "노트", ""],
+    ...rows.map((r) => [String(r.outgoing), r.name, r.path]),
+  ]);
+}
+
+export interface TagIssueRow {
+  kind: string;
+  tags: { tag: string; count: number }[];
+}
+
+/** 종류별 한 줄 설명 — 무엇을 하라는 게 아니라 무엇이 보이는지만 말한다. */
+const TAG_ISSUE_LABEL: Record<string, string> = {
+  "same-leaf": "같은 잎, 다른 부모",
+  "case-only": "대소문자만 다름",
+  "near-universal": "거의 모든 노트에 붙음",
+};
+
+export function renderTagIssues(rows: readonly TagIssueRow[]): string {
+  if (rows.length === 0) return "태그 중복 후보 없음";
+  const out: string[] = [];
+  let lastKind = "";
+  for (const r of rows) {
+    if (r.kind !== lastKind) {
+      if (lastKind) out.push("");
+      out.push(`[${TAG_ISSUE_LABEL[r.kind] ?? r.kind}]`);
+      lastKind = r.kind;
+    }
+    out.push("  " + r.tags.map((t) => `${t.tag}(${t.count})`).join("  ·  "));
+  }
+  return out.join("\n");
+}
+
+export interface AmbiguousRow {
+  name: string;
+  paths: string[];
+}
+
+/**
+ * 모호한 이름.
+ *
+ * 링크는 가장 가까운 것으로 해소되지만, **사람이 그 이름을 주면 거부된다** — 맥락이 없어
+ * 추측할 수 없기 때문이다. 어느 이름이 그런지 알아야 이름을 바꾸든 경로로 부르든 한다.
+ */
+export function renderAmbiguous(rows: readonly AmbiguousRow[]): string {
+  if (rows.length === 0) return "모호한 이름 없음";
+  const out: string[] = [];
+  for (const r of rows) {
+    out.push(`${r.name}  ${r.paths.length}곳`);
+    for (const p of r.paths) out.push(`    ${p}`);
+  }
+  return out.join("\n");
+}

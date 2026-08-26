@@ -41,6 +41,21 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ---
 
+### Added
+- **`lapis links --orphans` · `lapis tag audit`** ([#221]). 인덱스에 이미 있는 것만 읽는 감사 둘.
+  고아는 **아무도 안 가리키는 노트**로, 끊긴 링크 감사의 거울상이다 — 백링크가 주된 이동
+  수단이므로 사실상 닿을 수 없는 문서라는 뜻이다. 태그 감사는 중복 후보를 낸다: 같은 잎을
+  다른 부모에 단 것, 대소문자만 다른 것, 그리고 노트 여럿으로 해소되는 이름.
+
+  둘 다 **무엇을 하라고 말하지 않는다.** 고아 행에는 나가는 링크 수가 함께 붙어 진입점
+  (나감 많음 · 들어옴 없음)과 떨어진 섬이 구분되고, 합치는 일은 미리보기 → 백업 → 롤백을
+  거치는 `tag rename`이 맡는다.
+
+  앱에서는 끊긴 링크 화면이 **vault 위생**으로 넓어져 탭 셋이 됐다. 팔레트 항목 이름도
+  따라 바뀐다.
+
+---
+
 ## [1.17.0] — 2026-08-26
 
 ### Added
@@ -747,6 +762,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#221]: https://github.com/eren0315/lapis/pull/221
 [#220]: https://github.com/eren0315/lapis/pull/220
 [#219]: https://github.com/eren0315/lapis/pull/219
 [#217]: https://github.com/eren0315/lapis/pull/217

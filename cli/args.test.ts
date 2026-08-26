@@ -114,10 +114,17 @@ describe("표면 정의와 구현의 짝", () => {
 });
 
 describe("tag 명령", () => {
-  it("동작·이전·새이름 세 인자가 필요하다", () => {
+  /**
+   * ⚠️ 파서는 `<동작>` 하나만 요구한다.
+   *
+   * `rename`은 이전·새이름을 받지만 `audit`은 안 받는다. **파서는 어떤 동작인지 모르므로**
+   * 위치 인자를 필수로 두면 `tag audit`이 파싱 단계에서 막힌다. 동작별 요구는 핸들러가
+   * 검사하고, 거기서도 같은 종료 코드(2)로 실패한다.
+   */
+  it("동작은 필수, 나머지는 동작이 정한다", () => {
     expect(() => parseArgs(["tag"])).toThrow(/<동작>가 필요하다/);
-    expect(() => parseArgs(["tag", "rename"])).toThrow(/<이전>가 필요하다/);
-    expect(() => parseArgs(["tag", "rename", "a"])).toThrow(/<새이름>가 필요하다/);
+    expect(parseArgs(["tag", "audit"]).positional).toEqual(["audit"]);
+    expect(parseArgs(["tag", "rename"]).positional).toEqual(["rename"]);
   });
 
   it("세 인자를 받으면 통과", () => {

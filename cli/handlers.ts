@@ -2,6 +2,7 @@ import { lapisQuery, resolveNotePath, type QueryArgs } from "../mcp/query.ts";
 import { resolveVault, checkStale } from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
+import { findOrphans, findTagIssues, findAmbiguousNames } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync } from "node:fs";
@@ -12,7 +13,16 @@ import { launchOpen, LaunchError } from "./appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
 import { FACETS, TAG_ACTIONS } from "./spec.ts";
-import { renderResults, renderFacet, renderBroken, renderTagPreview, table } from "./render.ts";
+import {
+  renderResults,
+  renderFacet,
+  renderBroken,
+  renderTagPreview,
+  renderOrphans,
+  renderTagIssues,
+  renderAmbiguous,
+  table,
+} from "./render.ts";
 
 /**
  * 명령 핸들러 — 질의 핵을 부르고 렌더 결과를 `Out`으로 넘긴다.
@@ -44,6 +54,18 @@ function baseArgs(p: ParsedCommand): QueryArgs {
 
 function vaultOf(p: ParsedCommand): string | undefined {
   return typeof p.options.vault === "string" ? p.options.vault : undefined;
+}
+
+/**
+ * vault 상대 경로로. **출력 경로는 전부 상대다** — `lapisQuery`가 그렇게 내고,
+ * 한 도구가 어떤 명령에서는 절대, 어떤 명령에서는 상대를 내면 스크립트가 갈린다.
+ *
+ * ⚠️ `$lib` 쪽 순수 함수는 **절대 경로를 낸다.** 앱은 절대 경로로 노트를 열기 때문이다.
+ * 자르는 건 표면의 몫이다.
+ */
+function relativizer(root: string): (abs: string) => string {
+  const cut = root.endsWith("/") ? root.length : root.length + 1;
+  return (abs) => (abs.startsWith(root) ? abs.slice(cut) : abs);
 }
 
 export function cmdSearch(p: ParsedCommand, out: Out): void {
@@ -91,11 +113,32 @@ export function cmdList(p: ParsedCommand, out: Out): void {
 }
 
 export function cmdLinks(p: ParsedCommand, out: Out): void {
-  if (p.options.broken !== true) {
-    out.fail("no_criteria", "무엇을 볼지 지정하지 않았다", "지금은 --broken 하나뿐이다", 2);
+  const broken = p.options.broken === true;
+  const orphans = p.options.orphans === true;
+  if (!broken && !orphans) {
+    out.fail("no_criteria", "무엇을 볼지 지정하지 않았다", "--broken 또는 --orphans", 2);
   }
   const vc = resolveVault(vaultOf(p));
-  const groups = findBrokenLinks(buildIndex(vc.infos));
+  const index = buildIndex(vc.infos);
+
+  const rel = relativizer(vc.root);
+
+  if (orphans) {
+    const rows = findOrphans(index).map((o) => ({ ...o, path: rel(o.path) }));
+    if (out.json) return out.json_({ vault: vc.root, orphans: rows.length, notes: rows });
+    out.line(renderOrphans(rows));
+    if (rows.length > 0) {
+      out.line(`\n${rows.length}개`);
+      // ⚠️ 진입점은 정상적으로 여기 걸린다. 그걸 안 말해주면 목록을 안 믿게 된다.
+      out.line("나가는 링크가 많은 것은 진입점(허브)일 수 있다 — 그건 정상이다.");
+    }
+    return;
+  }
+
+  const groups = findBrokenLinks(index).map((g) => ({
+    ...g,
+    sources: g.sources.map((src) => ({ ...src, path: rel(src.path) })),
+  }));
   if (out.json) {
     return out.json_({
       vault: vc.root,
@@ -154,6 +197,19 @@ export async function cmdTag(p: ParsedCommand, out: Out): Promise<void> {
   if (!(TAG_ACTIONS as readonly string[]).includes(action)) {
     out.fail("no_criteria", `모르는 동작: ${action}`, `쓸 수 있는 값: ${TAG_ACTIONS.join(" · ")}`, 2);
   }
+
+  if (action === "audit") return cmdTagAudit(p, out);
+
+  // ⚠️ 위치 인자 요구가 동작마다 다르므로 spec이 아니라 여기서 본다. 파서는 어떤
+  // 동작인지 모른다.
+  if (!oldTag || !newTag) {
+    out.fail(
+      "no_criteria",
+      "rename에는 이전·새이름이 필요하다",
+      "lapis tag rename <이전> <새이름>",
+      2,
+    );
+  }
   if (oldTag === newTag) {
     out.fail("no_criteria", "이전 이름과 새 이름이 같다", "바꿀 이름을 다르게 주어라", 2);
   }
@@ -209,6 +265,33 @@ export async function cmdTag(p: ParsedCommand, out: Out): Promise<void> {
   out.line(`${oldTag} → ${newTag}: 노트 ${preview.items.length}개 갱신`);
   // ⚠️ 앱이 인덱스 생산자다. CLI가 쓴 것은 앱이 다시 읽어야 검색에 반영된다.
   out.line("앱이 떠 있으면 watcher가 반영한다. 아니면 다음에 vault를 열 때 재색인된다.");
+}
+
+/**
+ * 태그 위생 — **후보만 낸다.** 실행은 옆에 있는 `tag rename`이 맡는다.
+ *
+ * 모호한 이름도 여기서 함께 보고한다. 태그는 아니지만 같은 부류의 위생 문제이고,
+ * 사람이 `lapis open`에서 그 이름으로 거부당하기 전에 알아야 한다.
+ */
+function cmdTagAudit(p: ParsedCommand, out: Out): void {
+  const vc = resolveVault(vaultOf(p));
+  const issues = findTagIssues(vc.infos);
+  const rel = relativizer(vc.root);
+  const ambiguous = findAmbiguousNames(buildIndex(vc.infos)).map((a) => ({
+    ...a,
+    paths: a.paths.map(rel),
+  }));
+
+  if (out.json) {
+    return out.json_({ vault: vc.root, tag_issues: issues, ambiguous_names: ambiguous });
+  }
+  out.line(renderTagIssues(issues));
+  out.line("");
+  out.line(renderAmbiguous(ambiguous));
+  if (issues.length > 0) {
+    out.line("");
+    out.line("`lapis tag rename <이전> <새이름>` 으로 합칠 수 있다 (기본은 미리보기).");
+  }
 }
 
 /**

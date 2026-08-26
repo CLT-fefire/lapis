@@ -8,6 +8,9 @@ import {
   renderRootHelp,
   renderCommandHelp,
   renderTagPreview,
+  renderOrphans,
+  renderTagIssues,
+  renderAmbiguous,
 } from "./render.ts";
 import { COMMANDS, GLOBAL_OPTIONS, optionsFor } from "./spec.ts";
 
@@ -163,5 +166,63 @@ describe("태그 미리보기 렌더", () => {
 
   it("병합이 아니면 경고하지 않는다", () => {
     expect(renderTagPreview("a", "b", rows, 3, false)).not.toContain("합쳐진다");
+  });
+});
+
+describe("고아 노트", () => {
+  it("비었으면 그렇다고 말한다 — 빈 줄이 아니다", () => {
+    expect(renderOrphans([])).toBe("고아 노트 없음");
+  });
+
+  /** ⚠️ 나가는 링크 수가 진입점과 떨어진 섬을 가르는 유일한 단서다. 빠지면 판단이 불가능하다. */
+  it("나가는 링크 수를 함께 낸다", () => {
+    const out = renderOrphans([
+      { path: "HOME.md", name: "홈", outgoing: 11 },
+      { path: "a/lonely.md", name: "외딴", outgoing: 0 },
+    ]);
+    expect(out).toContain("11");
+    expect(out).toContain("홈");
+    expect(out).toContain("a/lonely.md");
+  });
+});
+
+describe("태그 위생", () => {
+  it("비었으면 그렇다고 말한다", () => {
+    expect(renderTagIssues([])).toBe("태그 중복 후보 없음");
+  });
+
+  it("종류를 사람 말로 묶어 보여준다", () => {
+    const out = renderTagIssues([
+      {
+        kind: "same-leaf",
+        tags: [
+          { tag: "a/x", count: 2 },
+          { tag: "b/x", count: 1 },
+        ],
+      },
+    ]);
+    expect(out).toContain("같은 잎, 다른 부모");
+    expect(out).toContain("a/x(2)");
+    expect(out).toContain("b/x(1)");
+  });
+
+  /** 모르는 종류가 와도 죽지 않는다 — 판정이 늘어도 렌더가 따라간다. */
+  it("모르는 종류는 그대로 낸다", () => {
+    const out = renderTagIssues([{ kind: "future", tags: [{ tag: "t", count: 1 }] }]);
+    expect(out).toContain("future");
+  });
+});
+
+describe("모호한 이름", () => {
+  it("비었으면 그렇다고 말한다", () => {
+    expect(renderAmbiguous([])).toBe("모호한 이름 없음");
+  });
+
+  it("이름 아래에 후보 경로를 늘어놓는다", () => {
+    const out = renderAmbiguous([{ name: "state", paths: ["a/STATE.md", "b/STATE.md"] }]);
+    expect(out).toContain("state");
+    expect(out).toContain("2곳");
+    expect(out).toContain("a/STATE.md");
+    expect(out).toContain("b/STATE.md");
   });
 });
