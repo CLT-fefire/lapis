@@ -37,6 +37,18 @@ export const GLOBAL_OPTIONS: OptionSpec[] = [
   { name: "help", kind: "boolean", desc: "이 명령의 사용법" },
 ];
 
+/**
+ * 쓰기 명령의 낡은 인덱스 탈출구 — `tag rename` · `replace`가 공유한다.
+ *
+ * ⚠️ **읽기 명령에는 안 붙인다.** 읽기는 애초에 막지 않으므로(보고만 한다) 여기 옵션이
+ * 있으면 아무 일도 안 하는 표면이 하나 는다.
+ */
+const ALLOW_STALE: OptionSpec = {
+  name: "allow-stale",
+  kind: "boolean",
+  desc: "인덱스가 낡아도 쓴다. 새 노트가 빠질 수 있다",
+};
+
 const LIMIT: OptionSpec = {
   name: "limit",
   kind: "number",
@@ -133,7 +145,14 @@ export const COMMANDS: CommandSpec[] = [
         // 실행하면 안 된다. 앱 쪽도 미리보기 → 확인 순서를 강제한다.
         desc: "실제로 쓴다. 없으면 미리보기만 (기본)",
       },
+      ALLOW_STALE,
     ],
+  },
+  {
+    name: "doctor",
+    desc: "vault 건강 검진 — 끊긴 링크 · 고아 · 태그 중복 · 인덱스 낡음을 한 번에",
+    positional: [],
+    options: [],
   },
   {
     name: "status",
@@ -166,6 +185,7 @@ export const COMMANDS: CommandSpec[] = [
       { name: "ignore-case", kind: "boolean", desc: "대소문자 무시" },
       { name: "whole-word", kind: "boolean", desc: "단어 경계로 감싼다" },
       { name: "path", kind: "string", desc: "vault 상대 경로 접두로 대상을 좁힌다" },
+      ALLOW_STALE,
     ],
   },
   {

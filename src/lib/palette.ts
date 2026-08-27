@@ -29,7 +29,13 @@ export type PaletteEntry =
   | { kind: "content"; path: string; name: string; snippet: string }
   | { kind: "tag"; key: string; display: string; mode: "leaf" | "prefix"; count: number }
   | { kind: "facet"; field: "doc_kind" | "topic"; value: string; count: number }
-  | { kind: "command"; command: Command }
+  /**
+   * `strong` — 질의가 라벨의 **어느 단어의 접두사**인가. `isStrongCommandMatch` 참조.
+   *
+   * ⚠️ 매칭 시점에 정해서 들고 다닌다. `groupResults`가 질의를 안 받기 때문이다 —
+   * 거기서 다시 판정하려면 질의를 인자로 흘려야 하고, 그러면 판정이 두 곳이 된다.
+   */
+  | { kind: "command"; command: Command; strong: boolean }
   | { kind: "recent"; path: string; label: string; subtitle?: string }
   /**
    * **최근 바뀐** 노트 — `recent`(최근 **연** 노트)와 다른 축이다.
@@ -225,10 +231,40 @@ async function fillContentSnippets(results: PaletteResult[], query: string): Pro
   );
 }
 
+/**
+ * 질의가 명령 라벨을 **강하게** 맞췄나 — 라벨 전체나 라벨 안 어느 단어의 접두사일 때.
+ *
+ * ## 왜 접두사인가
+ *
+ * 이 판정의 목적은 **명령을 목록 위로 올릴지** 정하는 것이다. 조건이 헐거우면 노트를
+ * 찾는 흔한 흐름에 명령이 계속 끼어들어, 고치려던 것보다 나빠진다.
+ *
+ * 퍼지 매칭(`fuzzyMatch`)은 `vlt` → `vault`처럼 흩어진 글자도 잡는다. 그건 목록 아래에서
+ * 찾아주기엔 좋지만 **맨 위로 올릴 근거로는 약하다.** 접두사는 사용자가 이름을 알고
+ * 치기 시작했다는 뜻이라 훨씬 강한 신호다.
+ *
+ * ⚠️ 소문자화만 한다. `norm()`은 태그용(NFC 정규화)이라 여기 쓰지 않는다.
+ */
+export function isStrongCommandMatch(query: string, label: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  const l = label.toLowerCase();
+  if (l.startsWith(q)) return true;
+  // 단어 경계마다 본다. 구분자는 공백과 흔한 구두점 — 라벨이 `vault 위생 (…)` 꼴이다.
+  for (const word of l.split(/[\s(){}[\]·,./|-]+/)) {
+    if (word && word.startsWith(q)) return true;
+  }
+  return false;
+}
+
 function commandsAsResults(query: string, limit = 20): PaletteResult[] {
   const hits = matchCommands(query, limit);
   return hits.map((h) => ({
-    entry: { kind: "command", command: h.command },
+    entry: {
+      kind: "command" as const,
+      command: h.command,
+      strong: isStrongCommandMatch(query, h.command.label),
+    },
     score: normalizedScore("command", h.score),
   }));
 }
@@ -296,10 +332,16 @@ function changedAsResults(limit: number = RECENT_DISPLAY): PaletteResult[] {
   }));
 }
 
-/** 빌트인 명령 전체 (빈 입력 시 QUICK ACTIONS 그룹용) — 비활성 명령은 제외. */
+/**
+ * 빌트인 명령 전체 (빈 입력 시 QUICK ACTIONS 그룹용) — 비활성 명령은 제외.
+ *
+ * ⚠️ `strong: false` 고정이다. 질의가 비어 있으면 승격할 근거가 없고, 여기서 참을 주면
+ * **빈 팔레트를 열자마자 명령 전부가 맨 위로 올라온다** — Recent를 보려고 여는 흐름이
+ * 통째로 망가진다.
+ */
 function quickActionsAsResults(): PaletteResult[] {
   return BUILTIN_COMMANDS.filter((c) => !c.disabled?.()).map((command, i) => ({
-    entry: { kind: "command", command },
+    entry: { kind: "command" as const, command, strong: false },
     score: normalizedScore("command", BUILTIN_COMMANDS.length - i),
   }));
 }
@@ -384,6 +426,8 @@ export async function unifiedSearch(
 
 /** 그룹별로 결과 분할 — UI 렌더링용. 빈 그룹은 제외하지 않음(헤더 결정은 UI에서). */
 export interface ResultGroups {
+  /** 라벨 접두사가 맞은 명령 — 목록 맨 위. */
+  topCommands: PaletteResult[];
   recents: PaletteResult[];
   changed: PaletteResult[];
   notes: PaletteResult[];
@@ -395,6 +439,7 @@ export interface ResultGroups {
 
 export function groupResults(results: PaletteResult[]): ResultGroups {
   const groups: ResultGroups = {
+    topCommands: [],
     recents: [],
     changed: [],
     notes: [],
@@ -424,7 +469,7 @@ export function groupResults(results: PaletteResult[]): ResultGroups {
         groups.facets.push(r);
         break;
       case "command":
-        groups.commands.push(r);
+        (r.entry.strong ? groups.topCommands : groups.commands).push(r);
         break;
     }
   }
@@ -432,7 +477,19 @@ export function groupResults(results: PaletteResult[]): ResultGroups {
 }
 
 /** `ResultGroups`의 그룹 이름. 화면에 그리는 순서이기도 하다. */
+/**
+ * 화면에 그리는 그룹 순서. **점수가 아니라 이 배열이 자리를 정한다.**
+ *
+ * ⚠️ 예전에 `commands`가 항상 마지막이었다. `normalizedScore`가 명령에 `× 1.2` 우대를
+ * 주고 있었는데도 **효과가 없었다** — 그룹 순서가 점수를 덮어쓰기 때문이다. 우대 코드는
+ * 멀쩡히 있어서 `palette.ts`만 읽으면 명령이 우대받는 것처럼 보인다.
+ *
+ * `topCommands`(라벨 접두사가 맞은 명령)만 맨 위로 온다. 그룹 전체를 점수순으로 재정렬하지
+ * **않는** 이유: 자리가 매번 바뀌면 근육 기억이 죽고, 팔레트에서 잘못 고르면 노트가
+ * 바뀌거나 창이 열린다.
+ */
 export const GROUP_ORDER = [
+  "topCommands",
   "recents",
   "changed",
   "notes",
@@ -470,6 +527,7 @@ export function isGroupVisible(mode: PaletteMode, group: GroupName): boolean {
       return mode === "all" || mode === "tag" || mode === "fulltext";
     case "facets":
       return mode === "all" || mode === "facet" || mode === "fulltext";
+    case "topCommands":
     case "commands":
       return mode === "all" || mode === "command";
   }

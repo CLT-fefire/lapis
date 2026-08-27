@@ -98,7 +98,10 @@ async function main(argv: readonly string[]): Promise<void> {
     }
     throw e;
   }
-  process.exit(EXIT_OK);
+  // ⚠️ 핸들러가 `process.exitCode`를 세웠으면 **존중한다.** `doctor`가 "문제를 찾았다"를
+  //    종료 코드로 말하는데, 무조건 `EXIT_OK`로 끝내면 그 신호가 조용히 사라진다 —
+  //    훅이나 CI에서는 종료 코드가 유일한 신호라 아무도 눈치 못 챈다.
+  process.exit(typeof process.exitCode === "number" ? process.exitCode : EXIT_OK);
 }
 
 // ⚠️ 최상위 await 대신 catch를 붙인다. 여기서 새는 예외는 버그다 — 조용히 0으로

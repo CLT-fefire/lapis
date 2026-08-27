@@ -105,6 +105,9 @@
   // ↑/↓ 탐색이 자연스럽게 동작한다. results(점수 순)와 다름에 주의.
   const displayList = $derived.by<PaletteResult[]>(() => {
     const out: PaletteResult[] = [];
+    // ⚠️ 순서는 `palette.ts`의 `GROUP_ORDER`와 같아야 한다. 갈라져도 에러가 안 나므로
+    //    `palette.test.ts`가 이 파일을 읽어 대조한다.
+    if (showTopCommands) out.push(...groups.topCommands);
     if (showRecents) out.push(...groups.recents);
     if (showChanged) out.push(...groups.changed);
     if (showNotes) out.push(...groups.notes);
@@ -266,6 +269,16 @@
   const showCommands = $derived(
     isGroupVisible($paletteHintMode, "commands") && groups.commands.length > 0,
   );
+  /**
+   * 라벨 접두사가 맞은 명령 — 목록 **맨 위**.
+   *
+   * 예전엔 명령이 항상 마지막이라, 명령 이름을 정확히 치기 시작해도 본문 검색 결과에
+   * 밀려 한참 아래에 있었다. 점수로는 못 고친다 — 자리를 정하는 것은 점수가 아니라
+   * 이 렌더 순서다.
+   */
+  const showTopCommands = $derived(
+    isGroupVisible($paletteHintMode, "topCommands") && groups.topCommands.length > 0,
+  );
 
   // 빈 입력 시 COMMANDS 그룹은 "QUICK ACTIONS"로 라벨
   const commandsHeaderLabel = $derived(query.trim() ? "COMMANDS" : "QUICK ACTIONS");
@@ -315,6 +328,33 @@
       {/if}
 
       <div class="results" bind:this={listEl}>
+        <!--
+          이름을 치기 시작한 명령은 **맨 위**. 아래 COMMANDS 그룹과 같은 마크업이지만
+          자리가 다르다 — 헤더 라벨도 항상 COMMANDS다(빈 질의에서는 이 그룹이 비므로
+          QUICK ACTIONS 분기가 필요 없다).
+        -->
+        {#if showTopCommands}
+          <div class="group-header">COMMANDS</div>
+          {#each groups.topCommands as r (entryKey(r.entry))}
+            {@const e = r.entry}
+            {#if e.kind === "command"}
+              {@const gi = displayIndexOf(e)}
+              <button
+                type="button"
+                class="result"
+                class:active={gi === activeIndex}
+                data-idx={gi}
+                onclick={() => execute(gi)}
+                onmouseenter={() => { if (!keyboardNavMode) activeIndex = gi; }}
+              >
+                <div class="title">{e.command.label}</div>
+                {#if e.command.shortcut}
+                  <div class="shortcut">{formatShortcut(e.command.shortcut)}</div>
+                {/if}
+              </button>
+            {/if}
+          {/each}
+        {/if}
         {#if showRecents}
           <div class="group-header">{m.palette_group_recent()}</div>
           {#each groups.recents as r (entryKey(r.entry))}
