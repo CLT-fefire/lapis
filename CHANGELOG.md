@@ -17,7 +17,25 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Changed
-- **The accent splits into three** ([#264]). One value cannot carry fills, text, and borders at
+- **The shell gets a title bar and a status bar** ([#264]). Two full-width rows the window owns,
+  rather than rows a note owns.
+
+  v2.0.0 dissolved the global top bar into the note header because Discord has no global bar.
+  What Discord also does not have is a vault, an indexing pass, and one-vault-per-window — those
+  belong to the **window**, and a note header has nowhere to put them when no note is open.
+
+  The vault menu, the ⌘K command bar, and the index state move up; watch state, note count,
+  document stats, and the current path move down. The note header keeps the name of what you are
+  looking at, and nothing else.
+
+  ⚠️ **Indexing shows real progress now.** The old strip was an infinite sliding bar — it says
+  "working" and not "how much longer", and on twelve thousand notes that is the difference that
+  matters. `buildProgress` had done/total all along and the screen was not reading it.
+
+  ⚠️ Watch state and note count used to live in the sidebar footer, so **collapsing the sidebar
+  hid them** — as though collapsing a panel stopped the watcher.
+- **`data-lapis="titlebar"` joins the custom-CSS contract** ([#264]).
+- **The accent splits into three** ([#263]). One value cannot carry fills, text, and borders at
   once — something always falls under threshold. The old Blurple was chosen for fills and measured
   **3.7:1 as text**, which is where links used it.
 

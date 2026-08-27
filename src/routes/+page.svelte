@@ -5,6 +5,8 @@
   import Sidebar from "$lib/Sidebar.svelte";
   import SidebarRail from "$lib/SidebarRail.svelte";
   import GitBanner from "$lib/GitBanner.svelte";
+  import Titlebar from "$lib/Titlebar.svelte";
+  import Statusbar from "$lib/Statusbar.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
@@ -17,7 +19,6 @@
   import TagRenameModal from "$lib/TagRenameModal.svelte";
   import { openGrep } from "$lib/stores/grep";
   import { openTableView } from "$lib/stores/tableView";
-  import NavHistoryMenu from "$lib/NavHistoryMenu.svelte";
   import TabBar from "$lib/TabBar.svelte";
   import ReadingControls from "$lib/ReadingControls.svelte";
   import PaneMenu, { type PaneMenuItem } from "$lib/PaneMenu.svelte";
@@ -192,7 +193,6 @@ import { isPanicChord } from "$lib/userCss";
   const docStats = $derived(computeTextStats(raw));
 
   // 노트 히스토리 드롭다운 열림 상태 (topbar ▾ 토글).
-  let historyMenuOpen = $state(false);
 
   // 현재 노트의 백링크 (다른 노트에서 이 노트를 [[wikilink]]로 가리키는 항목들)
   const currentBacklinks = $derived.by<LinkInfo[]>(() => {
@@ -1258,6 +1258,7 @@ import { isPanicChord } from "$lib/userCss";
 {/if}
 
 <div class="app" data-lapis="app">
+  <Titlebar />
   <GitBanner />
 
   <div
@@ -1317,16 +1318,7 @@ import { isPanicChord } from "$lib/userCss";
         disabled={!$canGoForward}
         onclick={() => void goForwardNote()}
         >▶</button>
-        <button
-        class="btn btn--icon btn--sm nav-history-toggle"
-        class:active={historyMenuOpen}
-        title={m.page_nav_history()}
-        aria-label={m.page_nav_history_aria()}
-        aria-expanded={historyMenuOpen}
-        disabled={!($canGoBack || $canGoForward)}
-        onclick={() => (historyMenuOpen = !historyMenuOpen)}
-        >▾</button>
-        <NavHistoryMenu open={historyMenuOpen} onClose={() => (historyMenuOpen = false)} />
+
         </div>
         <span class="meta">
         {#if $currentNotePath}
@@ -1379,25 +1371,8 @@ import { isPanicChord } from "$lib/userCss";
       </button>
       </div>
       <div class="pane-actions">
-          <!-- 좌: 지금 보는 노트 / 우: 그것에 대한 것들 — 디스코드 채널 헤더와 같은 배치 -->
-          {#if $currentNotePath}
-          <span class="doc-stats" title={m.page_stats_title()}>
-          {m.page_doc_stats({
-          words: docStats.words.toLocaleString(),
-          chars: docStats.charsNoSpaces.toLocaleString(),
-          time: readingTimeLabel(docStats.readingMinutes),
-          })}
-          </span>
-          {/if}
-          <div class="topbar-actions">
-          <!-- watcher 상태 점은 사이드바 하단 상태 줄로 통합(2026-08-05 PR-10) —
-          흩어진 상태 신호를 한 곳에서 읽게 하려는 것. -->
-          <button
-          class="btn btn--icon btn--sm"
-          title="Command palette (Cmd+K)"
-          onclick={() => openPalette("all")}
-          >🔎</button>
-          </div>
+          <!-- ⚠️ 문서 통계·경로·팔레트 진입은 **상태바와 상단바로 옮겼다**(3.0 PR-3).
+               노트 헤더에는 "지금 보는 것의 이름"만 남는다. -->
           {#if isDebug}
             <span class="debug-badge" title={m.page_debug_badge()}>DEBUG</span>
           {/if}
@@ -1532,6 +1507,18 @@ import { isPanicChord } from "$lib/userCss";
       {/if}
     </section>
   </div>
+
+  <Statusbar
+    docStats={$currentNotePath
+      ? m.page_doc_stats({
+          words: docStats.words.toLocaleString(),
+          chars: docStats.charsNoSpaces.toLocaleString(),
+          time: readingTimeLabel(docStats.readingMinutes),
+        })
+      : null}
+    onCopyPath={() => void copyCurrentPath()}
+    {pathCopied}
+  />
 </div>
 
 <style>
@@ -1633,13 +1620,6 @@ import { isPanicChord } from "$lib/userCss";
 
   .meta-path.copied {
     color: var(--accent-text);
-  }
-
-  .doc-stats {
-    color: var(--text-muted);
-    font-size: var(--fs-xs);
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 
   .save-badge {
@@ -1779,13 +1759,6 @@ import { isPanicChord } from "$lib/userCss";
     font-size: var(--fs-xs);
     font-weight: 400;
     color: var(--text-muted);
-  }
-
-  .topbar-actions {
-    display: flex;
-    gap: var(--sp-2);
-    margin-left: var(--sp-4);
-    align-items: center;
   }
 
   .workspace {
