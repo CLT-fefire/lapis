@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-08-27
+
 ### Added
 - **MCP 가 vault 위생을 물을 수 있다** ([#259]). 감사가 앱에 다섯 · CLI에 다섯 ·
   **MCP에 0개**였다 — 도우미가 vault를 검색은 하는데 **무엇이 깨졌는지**는 못 물었다.
@@ -1276,6 +1278,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
