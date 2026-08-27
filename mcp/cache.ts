@@ -23,7 +23,7 @@ import type { LinkInfo } from "./entry.ts";
  * MCP도 *이 상수*로 읽으니 양쪽이 늘 일치한다. 그래서 Rust 파일을 직접 읽어 대조하는
  * 가드를 따로 뒀다(`mcp/cacheVersion.test.ts`).
  */
-export const CACHE_VERSION = 8;
+export const CACHE_VERSION = 9;
 
 /**
  * 캐시 위치 — **두 곳을 본다.**

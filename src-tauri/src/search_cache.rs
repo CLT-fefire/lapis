@@ -22,6 +22,10 @@
 //!   않아 JS가 재현할 수 없었고, 그래서 MCP는 stale을 mtime 프록시로 **추정**해 수정만
 //!   있는 변경을 놓쳤다(`mcp/README.md` 남은 한계). 경로 정규화는 같은 vault가 macOS와
 //!   Windows에서 다른 fingerprint를 내던 것도 함께 닫는다. → `vault.rs::fingerprint_of`
+//! - v9: 풀텍스트 인덱스 필드에 `title` 추가 — `["name","body"]` → `["name","title","body"]`.
+//!   `name`은 파일명이라 한글 제목 질의에 아무 일도 안 했고, frontmatter `title`은 자기
+//!   필드가 없어 `body` 안에서 다른 산문과 같은 취급을 받았다. 같은 183 케이스 A/B에서
+//!   제목 2어절 질의 R@1 **67.2% → 86.9%**. 인덱스 토큰 공간이 바뀌므로 낡은 샤드는 못 쓴다.
 //!
 //! ## meta ↔ shard skew (v7에서 닫음)
 //!
@@ -56,7 +60,7 @@ use crate::hash::{fnv1a32, FNV32_OFFSET};
 use crate::uipath::to_ui;
 use crate::vault::{FileStat, LinkInfo};
 
-pub const CACHE_VERSION: u32 = 8;
+pub const CACHE_VERSION: u32 = 9;
 
 /// 메타 파일 schema — `*.meta.json.gz`에 직렬화.
 #[derive(Debug, Serialize, Deserialize, Clone)]

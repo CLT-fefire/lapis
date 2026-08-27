@@ -93,6 +93,9 @@ export async function rebuildIndexes(
   quickEntries.set(buildQuickEntries(linkInfos));
   indexBuilding.set(true);
   fullTextIndexReady.set(false);
+  // frontmatter title은 `NoteContent`(Rust 번들의 본문 쪽)에 없고 `LinkInfo`에 있다.
+  // 둘 다 이미 여기 와 있으므로 경로로 잇는다 — Rust 번들 모양을 바꿀 이유가 없다.
+  const titleByPath = new Map(linkInfos.map((i) => [i.source_path, i.title ?? ""]));
   const shardCount = decideShardCount(contents.length);
   buildProgress.set({ done: 0, total: contents.length });
   let done = 0;
@@ -106,7 +109,12 @@ export async function rebuildIndexes(
     const shards: FullTextDoc[][] = Array.from({ length: shardCount }, () => []);
     for (const n of contents) {
       const s = computeShardId(n.path, shardCount);
-      shards[s].push({ id: n.path, name: n.name, body: n.body });
+      shards[s].push({
+        id: n.path,
+        name: n.name,
+        title: titleByPath.get(n.path) ?? "",
+        body: n.body,
+      });
     }
     // 순차 빌드. 각 shard를 작은 배치로 나눠 worker에 전송 — 한 shard 전체(수천 doc ×
     // body)를 한 번에 postMessage하면 WKWebView가 main thread structured clone에 수 초를

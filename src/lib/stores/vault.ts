@@ -415,9 +415,11 @@ async function applyFullTextPatch(
       // 이름은 구조 델타가 이미 갱신해 둔 `byPath`에서 — 여기서 다시 scan 하지 않는다.
       const info = idx?.byPath.get(path);
       const body = await readNote(path);
+      // ⚠️ 전량 빌드와 **같은 모양**이어야 한다 — 위 델타 경로와 같은 이유.
       await workerUpdateDoc(computeShardId(path, shardCount), {
         id: path,
         name: info?.source_name ?? path,
+        title: info?.title ?? "",
         body,
       });
     } catch (e) {
@@ -876,9 +878,12 @@ export async function reindexIncremental(
         infosMap.set(info.source_path, info);
         if (ftReady) {
           const body = await readNote(path);
+          // ⚠️ 전량 빌드(`rebuildIndexes`)와 **같은 모양**이어야 한다. 여기만 필드가
+          //    빠지면 파일을 고친 노트만 다른 모양으로 색인되고, 검색 결과가 조용히 틀린다.
           await workerUpdateDoc(computeShardId(path, activeShardCount), {
             id: path,
             name: info.source_name,
+            title: info.title ?? "",
             body,
           });
         }

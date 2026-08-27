@@ -125,7 +125,12 @@ export function makeFixture(
   for (let i = 0; i < writeShards; i++) {
     const docs: FullTextDoc[] = notes
       .filter((_, idx) => idx % Math.max(1, shardCount) === i)
-      .map((n) => ({ id: `${vaultRoot}/${n.rel}`, name: basename(n.rel), body: n.body }));
+      .map((n) => ({
+        id: `${vaultRoot}/${n.rel}`,
+        name: basename(n.rel),
+        title: n.title ?? "",
+        body: n.body,
+      }));
     const ms = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
     ms.addAll(docs);
     writeGz(path.join(cacheDir, `${key}.shard${i}.json.gz`), {

@@ -181,11 +181,17 @@ export function searchQuickIncremental(query: string, entries: QuickEntry[], lim
  * MiniSearch 인스턴스는 worker thread에 보관. main thread freeze 0.
  * ========================================================= */
 
-export interface FullTextDoc {
-  id: string;
-  name: string;
-  body: string;
-}
+/**
+ * ⚠️ **`$lib/fullTextOptions`가 단일 출처다.** 여기엔 같은 모양의 복사본이 따로 있었다.
+ *
+ * 둘이 우연히 같았기 때문에 아무 일도 안 일어났지만, 실제로 한쪽에만 필드를 더하니
+ * **앱은 이 정의로 문서를 만들고 인덱스는 저 정의로 설정되는** 상태가 됐다. 각 파일은
+ * 스스로 일관되므로 타입 검사도 안 걸린다 — 검색 결과만 조용히 틀린다.
+ *
+ * `MiniSearch`를 설정하는 쪽(`FULLTEXT_OPTIONS`)이 진실이라, 그쪽을 다시 내보낸다.
+ */
+import type { FullTextDoc } from "$lib/fullTextOptions";
+export type { FullTextDoc };
 
 export interface WorkerHit {
   path: string;
