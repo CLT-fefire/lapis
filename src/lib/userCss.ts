@@ -36,6 +36,9 @@
  */
 export const LAPIS_HOOKS = [
   "app",
+  // 3.0 에서 셸이 상단바·상태바를 갖는다. 둘 다 창 전체를 가로지르는 줄이라
+  // 사용자 CSS 가 가장 먼저 붙잡고 싶어 하는 자리다.
+  "titlebar",
   "rail",
   "sidebar",
   "file-tree",

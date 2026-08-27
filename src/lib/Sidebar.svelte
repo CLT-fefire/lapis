@@ -250,33 +250,12 @@
 </script>
 
 <aside class="sidebar" data-lapis="sidebar">
-  <header class="sidebar-header">
-    {#if $vaultPath}
-      <!-- Discord 서버 헤더 — 이름 전체가 트리거이고 액션은 메뉴 안으로 접는다.
-           접기(◀)는 레일에 상시 있으므로 여기서 제거(중복). -->
-      <PaneMenu
-        items={vaultMenuItems}
-        label={m.sidebar_vault_menu()}
-        triggerClass="vault-trigger"
-        align="left"
-      >
-        {#snippet trigger()}
-          <span class="vault-name" title={$vaultPath}>{vaultDisplayName($vaultPath)}</span>
-          <ChevronDown size={14} strokeWidth={2.5} aria-hidden="true" />
-        {/snippet}
-      </PaneMenu>
-    {:else}
-      <button class="open-btn" onclick={pickAndOpenVault}>{m.sidebar_open_vault()}</button>
-    {/if}
-  </header>
+  <!-- ⚠️ vault 메뉴는 **상단바로 옮겼다**(3.0 PR-3). vault 는 노트가 아니라 창에 딸린
+       것이라 사이드바를 접으면 같이 사라지면 안 된다. -->
 
-  {#if $indexBuilding || $indexRefreshing}
-    <!-- 최초 빌드(blocking)·백그라운드 재빌드/증분 모두 이 얇은 strip으로 표시.
-         dim 오버레이(.index-overlay)는 최초 빌드($indexBuilding)에만 — 아래 참조. -->
-    <div class="progress-strip" title={m.sidebar_indexing_strip()}>
-      <div class="progress-fill"></div>
-    </div>
-  {/if}
+  <!-- ⚠️ 인덱스 진행은 **상단바 pill** 이 든다(3.0 PR-3). 무한 슬라이딩 바에서
+       `buildProgress` 의 done/total 을 쓰는 실측 진행으로 바뀌었다.
+       dim 오버레이(.index-overlay)는 최초 빌드에만 — 아래 그대로 남는다. -->
 
   <div class="sidebar-body">
     {#if !$vaultPath}
@@ -437,26 +416,8 @@
     {/if}
   </div>
 
-  <footer class="sidebar-foot">
-    <!-- Discord 유저 패널 자리 — 상태 전용.
-         설정 버튼은 두지 않는다: 여기에 라벨 없는 작은 ⚙를 놓으면 "작은 글리프는 인지가
-         어렵다"는 과거 피드백을 되돌리게 된다. 진입 경로는 레일 ⚙(툴팁 있음) ·
-         vault 메뉴 m.sidebar_menu_settings() · ⌘K 로 이미 셋이다. -->
-    {#if $vaultPath}
-      <div class="vault-status" data-lapis="statusbar" title={$vaultPath}>
-        <span
-          class="status-dot"
-          class:ok={vaultStatus.tone === "ok"}
-          class:busy={vaultStatus.tone === "busy"}
-          class:error={vaultStatus.tone === "error"}
-        ></span>
-        <span class="status-text">{vaultStatus.text}</span>
-        {#if noteCount > 0}
-          <span class="status-count">{noteCount.toLocaleString()}</span>
-        {/if}
-      </div>
-    {/if}
-  </footer>
+  <!-- ⚠️ 상태 줄은 **상태바로 옮겼다**(3.0 PR-3). 감시 상태와 노트 수는 창에 딸린
+       정보라, 사이드바를 접었다고 사라지면 안 된다. -->
 </aside>
 
 <style>
@@ -471,26 +432,6 @@
     min-width: 0;
   }
 
-  .sidebar-header {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-4);
-    padding: var(--sp-5);
-    /* 사이드바 본체(--surface-panel)보다 밝아 보더 없이 헤더가 도드라진다. */
-    background: var(--surface-raised);
-    min-height: calc(var(--control-h-lg) + var(--sp-5));
-  }
-
-  .vault-name {
-    flex: 1;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-weight: 600;
-    font-size: var(--fs-base);
-    color: var(--accent-text);
-  }
-
   /* 트리 로딩 표시는 하단 상태 줄(.status-dot.busy)로 통합 — 2026-08-05 PR-10.
      pulse-dot keyframes는 아래 index-overlay에서 계속 쓴다. */
 
@@ -500,29 +441,12 @@
   }
 
   /* 인덱스 빌드 — 길음 (~1-3s). 헤더 하단 1px sliding bar. */
-  .progress-strip {
-    height: 2px;
-    background: var(--surface-base);
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    width: 35%;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    animation: slide 1.2s ease-in-out infinite;
-    /* 컴포지터 레이어로 승격 → 인덱스 빌드가 메인 스레드를 점유해도(WKWebView)
-       transform 애니메이션이 별도 스레드에서 계속 돌아 멈추지 않음. */
-    will-change: transform;
-  }
-
   @keyframes slide {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(380%); }
   }
 
 
-  .open-btn,
   .link-btn {
     background: transparent;
     border: 1px solid var(--border-strong);
@@ -530,18 +454,6 @@
     border-radius: var(--r-sm);
     cursor: pointer;
     font-family: inherit;
-  }
-
-  .open-btn {
-    width: 100%;
-    padding: var(--sp-3) var(--sp-5);
-    font-size: var(--fs-base);
-    background: var(--surface-overlay);
-  }
-
-  .open-btn:hover {
-    border-color: var(--accent);
-    background: var(--surface-sunken);
   }
 
   /* 구 가로 탭 CSS(.tabs/.tab/.badge)는 #96 세로 아코디언 개편 때 마크업이 사라졌는데
@@ -572,61 +484,7 @@
   }
 
   /* 하단 푸터 — 톱니바퀴 등 보조 액션. vault 미선택 상태에서도 노출. */
-  .sidebar-foot {
-    display: flex;
-    align-items: center;
-    padding: var(--sp-2) var(--sp-3);
-    border-top: 1px solid var(--border-subtle);
-    background: var(--surface-raised);
-    flex-shrink: 0;
-  }
-
   /* vault 상태 한 줄 — 점(상태) + 텍스트 + 노트 수. */
-  .vault-status {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-    width: 100%;
-    min-width: 0;
-    padding: var(--sp-2) var(--sp-3);
-    font-size: var(--fs-xs);
-    color: var(--text-muted);
-  }
-
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--r-full);
-    background: var(--text-disabled);
-    flex-shrink: 0;
-    transition: background var(--dur-slow), box-shadow var(--dur-slow);
-  }
-  .status-dot.ok {
-    background: var(--success);
-    box-shadow: 0 0 0 3px var(--success-bg-subtle);
-  }
-  .status-dot.busy {
-    background: var(--warning);
-    box-shadow: 0 0 0 3px var(--warning-bg-subtle);
-  }
-  .status-dot.error {
-    background: var(--danger);
-    box-shadow: 0 0 0 3px var(--danger-bg-subtle);
-  }
-
-  .status-text {
-    flex: 1;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .status-count {
-    font-variant-numeric: tabular-nums;
-    color: var(--text-disabled);
-    flex-shrink: 0;
-  }
-
   /* vault 헤더 트리거 — 이름 전체가 버튼(Discord 서버 헤더). */
   :global(.vault-trigger) {
     display: flex;
