@@ -9,7 +9,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupFixtures, makeFixture, type FixtureNote } from "./fixture.ts";
-import { lapisQuery, resetState } from "./query.ts";
+import { lapisQuery, isAudit, resetState } from "./query.ts";
 
 afterEach(() => {
   delete process.env.LAPIS_CACHE_DIR;
@@ -37,7 +37,7 @@ describe("응답 크기 상한", () => {
   it.each([10, 50])("넓은 구조 질의가 limit=%i을 지킨다", (limit) => {
     setupMany();
     const r = lapisQuery({ doc_kind: "solution", limit });
-    if (r.list !== undefined) throw new Error("검색 응답을 기대했다");
+    if (isAudit(r) || r.list !== undefined) throw new Error("검색 응답을 기대했다");
     expect(r.returned).toBe(limit);
     expect(r.structural_total).toBe(200); // 집합 크기는 따로 알려준다
     expect(r.truncated).toBe(true);
@@ -48,7 +48,7 @@ describe("응답 크기 상한", () => {
   it("tag prefix 질의도 같은 상한을 받는다", () => {
     setupMany();
     const r = lapisQuery({ tag: "tech", limit: 10 });
-    if (r.list !== undefined) throw new Error("검색 응답을 기대했다");
+    if (isAudit(r) || r.list !== undefined) throw new Error("검색 응답을 기대했다");
     expect(r.returned).toBe(10);
     expect(r.structural_total).toBe(200);
   });
@@ -56,7 +56,7 @@ describe("응답 크기 상한", () => {
   it("list 열거도 limit을 지킨다", () => {
     setupMany();
     const r = lapisQuery({ list: "topics", limit: 1 });
-    if (r.list === undefined) throw new Error("list 응답을 기대했다");
+    if (isAudit(r) || r.list === undefined) throw new Error("list 응답을 기대했다");
     expect(r.returned).toBe(1);
   });
 });

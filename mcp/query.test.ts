@@ -22,6 +22,7 @@ import {
   type FacetListResponse,
   type QueryArgs,
   type SearchResponse,
+  isAudit,
 } from "./query.ts";
 import { CACHE_VERSION, LapisError } from "./cache.ts";
 
@@ -48,6 +49,9 @@ afterEach(() => {
 /** 검색 응답으로 좁힌다 — `list` 응답이 오면 테스트가 그 자리에서 실패해야 한다. */
 function search(args: QueryArgs): SearchResponse {
   const r = lapisQuery(args);
+  // ⚠️ 감사 응답을 **먼저** 배제한다. 좁히기는 왼쪽부터라, `.list` 를 먼저 읽으면
+  //    `AuditResponse` 에 없는 속성이라 타입이 막는다.
+  if (isAudit(r)) throw new Error(`검색 응답을 기대했는데 audit=${r.audit}`);
   if (r.list !== undefined) throw new Error(`검색 응답을 기대했는데 list=${r.list}`);
   return r;
 }
@@ -55,7 +59,7 @@ function search(args: QueryArgs): SearchResponse {
 /** facet 열거 응답으로 좁힌다. */
 function facets(args: QueryArgs): FacetListResponse {
   const r = lapisQuery(args);
-  if (r.list === undefined) throw new Error("list 응답을 기대했다");
+  if (isAudit(r) || r.list === undefined) throw new Error("list 응답을 기대했다");
   return r;
 }
 

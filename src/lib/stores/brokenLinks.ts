@@ -10,7 +10,22 @@ import { writable } from "svelte/store";
  */
 export const brokenLinksOpen = writable<boolean>(false);
 
-export function openBrokenLinks(): void {
+/** 위생 화면의 탭 id — 모달과 팔레트가 공유한다. */
+export type HygieneTab = "broken" | "orphans" | "tags" | "unlinked" | "props";
+
+/**
+ * **열 때 어느 탭으로 갈지.** 팔레트가 세우고 모달이 읽는다.
+ *
+ * ⚠️ 감사가 다섯이 되고 나서는 "속성 위생을 보자"에 클릭이 셋 든다(팔레트 → 모달 →
+ * 탭). 열림 상태만 두면 팔레트가 목적지를 말할 방법이 없다.
+ *
+ * ⚠️ **결과를 캐시하는 게 아니다.** 위 주석의 원칙은 그대로다 — 이건 목적지 하나뿐이고,
+ * 모달이 열릴 때 한 번 읽고 만다.
+ */
+export const hygieneInitialTab = writable<HygieneTab>("broken");
+
+export function openBrokenLinks(tab: HygieneTab = "broken"): void {
+  hygieneInitialTab.set(tab);
   brokenLinksOpen.set(true);
 }
 

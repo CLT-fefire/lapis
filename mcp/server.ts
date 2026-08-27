@@ -22,6 +22,7 @@ const TOOL = {
     "노트 이름만 줘도 해소된다(경로·확장자 불필요).\n" +
     "· 값을 모르면 먼저 `list`로 확인하라 — topic/tag 정확일치가 '전부 찾아라'의 완결성을 낸다.\n" +
     "· 과거 세션 아카이브(`_memories`, vault의 94%)는 **기본 제외**. 필요하면 include_archive:true.\n" +
+    "· `audit`으로 vault 위생 다섯 가지를 물을 수 있다 — 앱·CLI와 **같은 판정**이다.\n" +
     "· 인덱스 생산자는 Lapis 앱이다. vault가 캐시보다 새로우면 `stale`로 실패한다 — 앱을 켜면 2초 안에 갱신된다.",
   inputSchema: {
     type: "object",
@@ -38,6 +39,15 @@ const TOOL = {
         type: "string",
         enum: ["topics", "tags", "doc_kinds"],
         description: "facet 값을 빈도순으로 열거한다. 구조 인자에 뭘 넣을지 모를 때 먼저 호출",
+      },
+      audit: {
+        type: "string",
+        enum: ["broken", "orphans", "unlinked", "tags", "props"],
+        description:
+          "vault 위생 감사 하나. broken=끊긴 링크 · orphans=아무도 안 가리키는 노트 · " +
+          "unlinked=이름을 말했는데 링크는 안 건 자리 · tags=태그 중복+모호한 이름 · " +
+          "props=거를 수 있는 축(doc_kind·topic 등)의 값이 갈린 곳. " +
+          "⚠️ unlinked만 본문을 전부 읽어 느리다. 고치라고 하지 않고 보여주기만 한다",
       },
       sources: {
         type: "array",
