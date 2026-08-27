@@ -38,6 +38,37 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
 
 ### Added
+- **Callouts** ([#251]). `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`.
+
+  Measured first: 41 of this vault's files carry 218 hand-rolled callouts written as `⚠️ **…**`.
+  The syntax was missing, so bold text and an emoji stood in for it.
+
+  ⚠️ **Only the five GitHub supports.** Obsidian takes a dozen more, but these documents are also
+  read on GitHub — the repository is public and the README and changelogs render there. Anything
+  outside the intersection shows up in one place and not the other. An unknown type is left as an
+  ordinary blockquote on purpose: `[!QUESTION]` stays visible, so whoever wrote it can see why it
+  did not take. Swallowing it silently would not tell them.
+
+### Fixed
+- **The rendered-body stylesheet was imported from a single route** ([#251]). It lived in the main
+  page component, so the component preview route rendered Markdown with **no styling at all** —
+  the five callouts came out identical, with no error anywhere. Exactly the shape of the custom-CSS
+  bug fixed in [#243]; the stylesheet import did not get moved at the same time. It is in the root
+  layout now, with a guard.
+
+  Found by reading computed colors out of a real browser. Every test passed while it was broken —
+  they check structure, and happy-dom has no layout engine.
+- **`--danger` is not readable as text** ([#251]). It measures 3.35:1 against the content
+  background, under the 4.5 threshold. The saturated red is right for fills and borders and wrong
+  for letters — the same shape as the `--n-700` fix in 2.1.0. `--danger-text` (5.54:1) joins the
+  palette and the caution callout uses it.
+
+  ⚠️ Eight existing places still set `color: var(--danger)`. They are being moved separately, with
+  eyes on them — changing them all at once would make it impossible to see what shifted.
+- **A callout titled with the accent color would have been unreadable in most themes** ([#251]).
+  On the default accent it measured 2.37:1 over its own tint, and the twenty-six color themes each
+  move `--accent` somewhere new, so the number is a lottery. `note` is neutral instead; the other
+  four use status colors, which themes do not touch. Measured: 4.65 to 11.48:1, all above AA.
 - **frontmatter hygiene — the fifth audit** ([#250]). Values that have split apart on an axis you
   can filter by. `lapis props audit`, a fifth tab in the vault hygiene panel, and a row in
   `lapis doctor`. The first four audits look at the link graph; this one looks at the axes.
@@ -1240,6 +1271,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#251]: https://github.com/eren0315/lapis/pull/251
 [#250]: https://github.com/eren0315/lapis/pull/250
 [#249]: https://github.com/eren0315/lapis/pull/249
 [#247]: https://github.com/eren0315/lapis/pull/247

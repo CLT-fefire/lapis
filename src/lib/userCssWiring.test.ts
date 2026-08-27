@@ -64,4 +64,19 @@ describe("주입 위치", () => {
     expect(page).not.toContain("applyUserCss($");
     expect(page).not.toContain("applyColorThemeCss(themeCss");
   });
+
+  /**
+   * ⚠️ **렌더 스타일시트도 같은 자리에 있어야 한다.** `+page.svelte`에 있던 동안
+   * `/dev/preview`에서 마크다운을 그리면 **스타일이 하나도 안 붙었다** — 콜아웃 다섯 종이
+   * 전부 같은 색으로 나왔고 에러는 없었다. 브라우저에서 계산된 색을 읽어 보고서야 알았다.
+   *
+   * #243에서 사용자 CSS 주입을 옮길 때 이 import는 같이 안 옮겼다. 같은 고장이 두 번 났다.
+   */
+  it("렌더 스타일시트를 레이아웃에서 들여온다", () => {
+    const IMPORT = 'import "$lib/styles/rendered.css"';
+    expect(layout).toContain(IMPORT);
+    // ⚠️ 경로 문자열이 아니라 **import 문**을 찾는다. 페이지에는 이 파일로 옮겼다는
+    //    설명 주석이 남아 있어서, 경로만 찾으면 가드가 그 주석을 보고 운다.
+    expect(page).not.toContain(IMPORT);
+  });
 });

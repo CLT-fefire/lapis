@@ -4,6 +4,7 @@
 import SettingsModal from "$lib/SettingsModal.svelte";
 import { settingsOpen } from "$lib/stores/settings";
   import { buildIndex } from "$lib/linkIndex";
+  import { parseNote } from "$lib/markdown";
   import { computeReplacePreview } from "$lib/replacePlan";
   import { linkIndex } from "$lib/stores/vault";
   import { brokenLinksOpen } from "$lib/stores/brokenLinks";
@@ -50,7 +51,7 @@ import { settingsOpen } from "$lib/stores/settings";
 
   const DEV = import.meta.env.DEV;
 
-  type Surface = "hygiene" | "replace" | "settings";
+  type Surface = "hygiene" | "replace" | "settings" | "rendered";
   let surface = $state<Surface>("hygiene");
 
   const mkInfo = (path: string, extra: Partial<LinkInfo> = {}): LinkInfo => {
@@ -98,6 +99,40 @@ import { settingsOpen } from "$lib/stores/settings";
     {},
   );
 
+  /**
+   * 렌더 견본 — **색과 간격은 사람 눈으로만 본다.** happy-dom에 레이아웃 엔진이 없어
+   * DOM 테스트가 구조만 잡는다. 콜아웃 다섯 종이 서로 구별되는지는 여기서 확인한다.
+   */
+  const RENDER_SAMPLE = [
+    "# 렌더 견본",
+    "",
+    "> [!NOTE]",
+    "> 그냥 참고. 색은 액센트를 쓴다.",
+    "",
+    "> [!TIP] 제목을 붙일 수 있다",
+    "> 표식 줄의 나머지가 제목이 된다.",
+    "",
+    "> [!IMPORTANT]",
+    "> **굵게** 와 `코드` 가 그대로 산다.",
+    "",
+    "> [!WARNING]",
+    "> 이 vault에서 손으로 218번 쓰던 것.",
+    "",
+    "> [!CAUTION]",
+    "> 되돌릴 수 없는 것.",
+    "",
+    "> [!QUESTION]",
+    "> 모르는 종류는 콜아웃이 아니다 — 평범한 인용문으로 남는다.",
+    "",
+    "> 평범한 인용문. 이것도 그대로여야 한다.",
+    "",
+    "| 표 | 도 |",
+    "|---|---|",
+    "| 같이 | 본다 |",
+  ].join("\n");
+
+  const renderedHtml = parseNote(RENDER_SAMPLE).html;
+
   function apply() {
     if (!DEV) return;
     // 테마는 다크 하나다(v2.0.0). 예전엔 여기 선택기가 있었는데, 테마가 줄어든 뒤에도
@@ -141,10 +176,16 @@ import { settingsOpen } from "$lib/stores/settings";
         <option value="hygiene">vault 위생</option>
         <option value="replace">찾아 바꾸기</option>
         <option value="settings">설정</option>
+        <option value="rendered">렌더 (콜아웃)</option>
       </select>
     </label>
     <span class="note">테마: dark 고정</span>
   </div>
+
+  {#if surface === "rendered"}
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    <div class="rendered sample">{@html renderedHtml}</div>
+  {/if}
 
   <VaultHygieneModal />
   <GrepModal />
@@ -169,6 +210,12 @@ import { settingsOpen } from "$lib/stores/settings";
     color: var(--text-primary);
     font-size: 0.85rem;
   }
+  .sample {
+    margin: 56px auto 40px;
+    max-width: 60em;
+    padding: 0 24px;
+  }
+
   .note {
     color: var(--text-secondary);
   }

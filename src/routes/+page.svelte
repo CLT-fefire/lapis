@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  // 렌더된 본문 스타일 — HTML 내보내기와 공유하는 단일 진실 위치. 전역으로 주입된다.
-  import "$lib/styles/rendered.css";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
   import Sidebar from "$lib/Sidebar.svelte";
