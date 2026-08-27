@@ -35,3 +35,22 @@ export async function settingsRead(): Promise<LapisSettings> {
 export async function settingsWrite(next: LapisSettings): Promise<void> {
   await invoke("settings_write", { next });
 }
+
+/**
+ * 설정 파일이 **어디에 있고 MCP는 어디를 보는지**.
+ *
+ * ⚠️ dev 빌드에서 "MCP 질의"를 켜면 `-dev` 파일만 바뀌는데 MCP 게이트는 **릴리즈를
+ * 먼저** 본다. 그러면 "앱에선 켰는데 MCP는 꺼져 있다"가 되고, 결함이 아닌데 결함과
+ * 구분이 안 된다. 화면이 두 경로를 나란히 보여주려고 있다.
+ */
+export interface SettingsPaths {
+  /** 이 빌드가 쓰는 파일. */
+  writes: string;
+  /** MCP 게이트가 읽을 파일 — 릴리즈 우선. */
+  mcp_reads: string;
+  same: boolean;
+}
+
+export function settingsPaths(): Promise<SettingsPaths> {
+  return invoke<SettingsPaths>("settings_paths");
+}

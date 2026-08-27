@@ -71,11 +71,17 @@ describe("응답", () => {
     });
   }
 
-  maybe("props 감사가 실제로 무언가를 찾는다", () => {
+  /**
+   * ⚠️ **"무언가를 찾는지"는 단언하지 않는다.** 처음엔 `count > 0` 으로 뒀는데,
+   * vault 의 frontmatter 분열을 실제로 고치자마자 이 테스트가 빨개졌다 — 코드가 아니라
+   * **데이터**를 단언하고 있었던 것이다. 고치면 깨지는 테스트는 고치는 것을 막는다.
+   *
+   * 배선은 위 루프가 본다(다섯 종 전부 감사 응답을 내는지).
+   */
+  maybe("count 는 자르기 전 개수다", () => {
     const r = lapisQuery({ vault: VAULT, audit: "props" });
     if (!isAudit(r)) throw new Error("감사 응답을 기대했다");
-    // 이 vault 에는 doc_kind todo/todos 가 있다 — 0이면 배선이 끊긴 것이다.
-    expect(r.count).toBeGreaterThan(0);
+    expect(r.count).toBeGreaterThanOrEqual(r.rows.length);
   });
 
   maybe("limit 이 rows 를 자른다", () => {

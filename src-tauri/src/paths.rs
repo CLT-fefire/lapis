@@ -62,6 +62,25 @@ pub fn app_data_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// **릴리즈** 앱 데이터 루트 — dev 빌드에서도 릴리즈 쪽을 가리킨다. 만들지 않는다.
+///
+/// ⚠️ 보고 전용이다. MCP 게이트(`mcp/cache.ts`의 `settingsFileCandidates`)가 **릴리즈를
+/// 먼저** 보기 때문에, dev 빌드에서 설정을 켜면 앱은 `-dev` 파일을 쓰고 MCP는 릴리즈
+/// 파일을 읽는다 — **"앱에선 켰는데 MCP는 꺼져 있다"** 가 된다. 결함이 아닌데 결함과
+/// 구분이 안 되므로, 화면이 두 경로를 같이 보여줄 수 있게 여기서 낸다.
+///
+/// `create_dir_all` 을 하지 않는 것이 요점이다 — 있지도 않은 릴리즈 디렉터리를 dev 빌드가
+/// 만들어 두면 다음 사람이 "릴리즈를 쓴 적이 있다"고 읽는다.
+pub fn release_data_root(app: &AppHandle) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir 조회 실패: {e}"))?;
+    // dev·릴리즈 둘 다 `app_data_dir()` 자체가 릴리즈 경로다 — 접미사는 위
+    // `app_data_root` 가 붙인다. 그래서 분기가 없다.
+    Ok(base)
+}
+
 #[cfg(test)]
 mod tests {
     use super::DEV_SUFFIX;

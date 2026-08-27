@@ -24,6 +24,8 @@
   "settings_mcp_title": "MCP query",
   "settings_mcp_desc": "Lets Claude Code and Desktop query this vault's index through <code>lapis_query</code>. <strong>Blocked by default</strong> — you have to allow it.",
   "settings_mcp_warn": "⚠️ The server process is spawned by the Claude client — blocking here only refuses queries, it cannot stop the process from starting. To stop it entirely, remove <code>mcpServers.lapis</code> from <code>~/.claude.json</code>.",
+  "settings_mcp_paths_same": "Settings file: {path}",
+  "settings_mcp_paths_split": "⚠️ This build writes {writes} but MCP reads {reads}. Turning it on here will not reach MCP.",
   "settings_mcp_aria": "Allow MCP queries",
   "settings_mcp_allow": "Allow",
   "settings_mcp_block": "Block",
