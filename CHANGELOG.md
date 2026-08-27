@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-08-27
+
 ### Fixed
 - **Turning on MCP queries could do nothing, silently** ([#261]). Two defects, either of which
   produces "I switched it on and it did not take":
@@ -1383,6 +1385,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0

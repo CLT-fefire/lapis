@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-08-27
+
 ### Fixed
 - **MCP 질의를 켜도 조용히 아무 일도 안 할 수 있었다** ([#261]). 결함이 둘이고, 어느 쪽이든
   "켰는데 안 된다"를 만든다:
@@ -1305,6 +1307,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0
