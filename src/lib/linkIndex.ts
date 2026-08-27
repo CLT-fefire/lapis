@@ -42,6 +42,43 @@ export function targetName(rawTarget: string): string {
   return (idx === -1 ? rawTarget : rawTarget.slice(0, idx)).trim();
 }
 
+/**
+ * `노트#헤딩` → 이름과 앵커. `#`이 없으면 `anchor`는 `null`이다.
+ *
+ * ⚠️ **첫 번째 `#`에서만 가른다.** 헤딩 텍스트에 `#`이 또 있을 수 있다(`C# 이야기`).
+ *
+ * ⚠️ 별칭(`|`)은 여기서 다루지 않는다. 순서가 `[[노트#헤딩|별칭]]`이라 **`targetName`을
+ * 먼저** 통과시켜야 한다. 반대로 하면 별칭 안의 `#`이 앵커로 잡힌다.
+ */
+export function splitAnchor(raw: string): { name: string; anchor: string | null } {
+  const i = raw.indexOf("#");
+  if (i === -1) return { name: raw.trim(), anchor: null };
+  return { name: raw.slice(0, i).trim(), anchor: raw.slice(i + 1).trim() };
+}
+
+/**
+ * resolver가 **실제로 아는** 키. 없으면 `null`.
+ *
+ * ## ⚠️ 앵커 폴백을 여기 한 곳에만 둔다
+ *
+ * 마크다운 링크는 Rust(`extract_md_links`)가 이미 `#`을 떼고 넘긴다. 위키링크만 안 뗐다.
+ * 그래서 `[[노트#헤딩]]`은 노트가 멀쩡히 있는데도 **끊긴 링크로 보고**되고, 백링크
+ * 인덱스에 안 들어가 **간선이 통째로 사라졌다.** 둘 다 에러가 아니라 회색 링크와
+ * 한 줄 짧은 목록으로만 보인다.
+ *
+ * ⚠️ **통째로 먼저 찾고, 없을 때만 앵커를 뗀다.** 파일 이름에 `#`이 들어갈 수 있어서다
+ * (`C#.md`). 순서를 뒤집으면 지금 잘 가던 `[[C#]]`이 조용히 `C.md`로 간다 — 이 폴백은
+ * **이미 해소되는 것을 절대 안 건드린다**는 성질이 있어야 안전하다.
+ */
+export function resolverKey(target: string, source: ResolveSource): string | null {
+  const whole = target.trim().toLowerCase();
+  if (source.resolver.has(whole)) return whole;
+  const { name, anchor } = splitAnchor(target);
+  if (anchor === null || !name) return null;
+  const bare = name.toLowerCase();
+  return source.resolver.has(bare) ? bare : null;
+}
+
 /** 경로에서 디렉터리 세그먼트만. `/v/a/b.md` → `["", "v", "a"]` */
 function dirSegments(path: string): string[] {
   const segs = path.split("/");
@@ -83,7 +120,8 @@ export function resolveTarget(
   index: ResolveSource,
   fromPath: string,
 ): string | null {
-  const candidates = index.resolver.get(target.toLowerCase());
+  const key = resolverKey(target, index);
+  const candidates = key === null ? undefined : index.resolver.get(key);
   if (!candidates || candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 
@@ -98,6 +136,38 @@ export function resolveTarget(
     }
   }
   return best;
+}
+
+/** 위키링크 하나를 풀어 놓은 것 — **어디로 갈지**와 **어디로 스크롤할지**. */
+export interface WikilinkTarget {
+  /** 이동할 노트. 같은 문서 안이거나 해소 실패면 `null`. */
+  path: string | null;
+  /** 스크롤할 헤딩(원문 그대로). 없으면 `null`. */
+  anchor: string | null;
+  /** `[[#헤딩]]` — 지금 보고 있는 문서 안. `path`가 `null`인 두 경우를 가른다. */
+  sameDoc: boolean;
+}
+
+/**
+ * `[[…]]` 하나를 이동 목적지로 푼다. **`resolverKey`와 같은 우선순위를 쓴다** —
+ * 두 곳에서 따로 판단하면 링크가 파랗게 보이는데 눌러도 안 가는 상태가 생긴다.
+ *
+ * ⚠️ 앵커를 **해소에 실제로 썼을 때만** 돌려준다. `C#.md`가 있어서 `[[C#]]`이 통째로
+ * 해소됐다면 스크롤할 헤딩은 없다. 여기서 틀리면 맞는 노트에 도착해 없는 헤딩을 찾다가
+ * **아무 일도 안 일어난 것처럼** 보인다.
+ */
+export function resolveWikilink(
+  target: string,
+  index: ResolveSource,
+  fromPath: string,
+): WikilinkTarget {
+  const whole = target.trim().toLowerCase();
+  if (index.resolver.has(whole)) {
+    return { path: resolveTarget(target, index, fromPath), anchor: null, sameDoc: false };
+  }
+  const { name, anchor } = splitAnchor(target);
+  if (anchor !== null && !name) return { path: null, anchor, sameDoc: true };
+  return { path: resolveTarget(target, index, fromPath), anchor, sameDoc: false };
 }
 
 /** byPath + resolver(alias>title>stem 우선순위) 빌드. sync/chunked 빌더가 공유. */

@@ -46,6 +46,33 @@ describe("rewriteLinksInNote — 기본 4종 패턴", () => {
     expect(r.newContent).toBe("[text](sub/dir/newStem.md)");
   });
 
+  /**
+   * ⚠️ 마크다운 링크는 처음부터 앵커를 보존했는데 **위키링크만 안 했다.** 앵커가
+   * 해소되게 된 뒤로는 이게 이름 바꾸기가 링크를 조용히 깨는 경로가 된다.
+   */
+  it("wikilink anchor 보존", () => {
+    const r = rewriteLinksInNote("[[oldStem#어떤 헤딩]]", "oldStem", "newStem");
+    expect(r.changed).toBe(true);
+    expect(r.newContent).toBe("[[newStem#어떤 헤딩]]");
+  });
+
+  it("wikilink anchor + alias 둘 다 보존", () => {
+    const r = rewriteLinksInNote("[[oldStem#헤딩|보이는 이름]]", "oldStem", "newStem");
+    expect(r.newContent).toBe("[[newStem#헤딩|보이는 이름]]");
+  });
+
+  /** 헤딩 텍스트 안의 `#`도 그대로 간다. */
+  it("앵커 안의 # 도 보존", () => {
+    const r = rewriteLinksInNote("[[oldStem#C# 이야기]]", "oldStem", "newStem");
+    expect(r.newContent).toBe("[[newStem#C# 이야기]]");
+  });
+
+  /** ⚠️ 다른 노트를 가리키는 앵커 링크까지 잡아채면 안 된다. */
+  it("이름이 다르면 앵커가 있어도 안 건드린다", () => {
+    const r = rewriteLinksInNote("[[otherStem#헤딩]]", "oldStem", "newStem");
+    expect(r.changed).toBe(false);
+  });
+
   it("md link anchor 보존", () => {
     const r = rewriteLinksInNote(
       "[text](oldStem.md#section-1)",

@@ -1481,6 +1481,26 @@ fn walk_dir(root: &Path, current: &Path) -> std::io::Result<Vec<NoteEntry>> {
 mod tests {
     use super::*;
 
+    /// ⚠️ **앵커를 여기서 떼지 않는다** — 프런트(`resolverKey`)가 뗀다.
+    ///
+    /// 파일 이름에 `#`이 들어갈 수 있어서(`C#.md`), 이름과 앵커를 가르려면 vault에
+    /// 무엇이 있는지 알아야 한다. 여기는 그걸 모른다. 그래서 **원형 그대로** 넘긴다.
+    ///
+    /// 마크다운 링크(`extract_md_links`)는 반대로 여기서 뗀다 — 거기서는 `.md` 확장자가
+    /// 경계를 정해 줘서 애매하지 않다. 두 경로가 다른 것은 의도다.
+    #[test]
+    fn wikilink_keeps_heading_anchor() {
+        let t = extract_wikilinks("본문 [[노트#어떤 헤딩]] 와 [[노트#헤딩|별칭]]");
+        assert_eq!(t, vec!["노트#어떤 헤딩", "노트#헤딩|별칭"]);
+    }
+
+    /// 마크다운 링크는 앵커를 뗀 stem만 남는다. 위 테스트와 짝이다.
+    #[test]
+    fn md_link_strips_heading_anchor() {
+        let t = extract_md_links("[글자](sub/노트.md#어떤-헤딩)");
+        assert_eq!(t, vec!["노트"]);
+    }
+
     fn props_of(yaml: &str) -> BTreeMap<String, Vec<String>> {
         let mut p = BTreeMap::new();
         collect_all_props(yaml, &mut p);

@@ -56,7 +56,13 @@ import {
 } from "$lib/safeWrite";
 import { markOpened, syncFromDisk } from "./unread";
 import { primeMtimes, resetMtimes } from "./mtimes";
-import { buildIndexChunked, resolveTarget, type LinkIndex } from "$lib/linkIndex";
+import {
+  buildIndexChunked,
+  resolveTarget,
+  resolveWikilink,
+  type LinkIndex,
+} from "$lib/linkIndex";
+import { pendingHeadingAnchor } from "$lib/stores/outline";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { diffFileStats, deltaGate, touchedPaths, type CacheDelta } from "$lib/cacheDelta";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
@@ -1192,9 +1198,18 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
   if (!idx) return false;
   // ⚠️ 지금 보고 있는 노트를 맥락으로 넘긴다 — 같은 이름의 노트가 둘일 때 어느 쪽으로
   // 갈지가 여기서 갈린다. 열린 노트가 없으면 vault 루트 기준이 된다(후보 중 경로순).
-  const path = resolveTarget(target, idx, get(currentNotePath) ?? "");
-  if (!path) return false;
-  await selectNote(path);
+  const hit = resolveWikilink(target, idx, get(currentNotePath) ?? "");
+  // `[[#헤딩]]` — 지금 문서 안이라 이동은 없고 스크롤만 한다.
+  if (hit.sameDoc) {
+    pendingHeadingAnchor.set(hit.anchor);
+    return true;
+  }
+  if (!hit.path) return false;
+  await selectNote(hit.path);
+  // ⚠️ **이동한 뒤에** 심는다. 먼저 심으면 아직 **이전 노트의** 헤딩 목록을 보고 있는
+  //    한 틱이 생기고, 우연히 같은 이름의 헤딩이 있으면 안 넘어가고 제자리에서
+  //    스크롤한다. 늦게 심는 쪽은 최악이 '스크롤이 한 틱 늦다'로 끝난다.
+  if (hit.anchor !== null) pendingHeadingAnchor.set(hit.anchor);
   return true;
 }
 

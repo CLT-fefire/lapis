@@ -1,4 +1,4 @@
-import { targetName, type LinkIndex } from "$lib/linkIndex";
+import { targetName, resolverKey, type LinkIndex } from "$lib/linkIndex";
 
 /**
  * 끊긴 링크 감사 — **본문 위키링크/마크다운 링크 중 어느 노트로도 해소되지 않는 것**.
@@ -65,23 +65,33 @@ export function findBrokenLinks(index: LinkIndex): BrokenTarget[] {
       const key = name.toLowerCase();
       if (seenInNote.has(key)) continue;
       seenInNote.add(key);
-      if (index.resolver.has(key)) continue;
+      // ⚠️ `resolver.has`를 직접 묻지 않는다 — 헤딩 앵커 폴백이 거기 없어서,
+      //    `[[노트#헤딩]]`이 노트가 있는데도 끊긴 것으로 잡혔다.
+      if (resolverKey(name, index) !== null) continue;
 
       let g = groups.get(key);
       if (!g) {
         g = { target: name, sources: [] };
         groups.set(key, g);
       }
-      g.sources.push({ path: info.source_path, name: info.title ?? info.source_name });
+      g.sources.push({
+        path: info.source_path,
+        name: info.title ?? info.source_name,
+      });
     }
   }
 
   const out = [...groups.values()];
   for (const g of out) {
-    g.sources.sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
+    g.sources.sort(
+      (a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path),
+    );
   }
   // 참조 수 내림차순 → 같으면 이름순(결과 순서가 실행마다 흔들리지 않게).
-  out.sort((a, b) => b.sources.length - a.sources.length || a.target.localeCompare(b.target));
+  out.sort(
+    (a, b) =>
+      b.sources.length - a.sources.length || a.target.localeCompare(b.target),
+  );
   return out;
 }
 
