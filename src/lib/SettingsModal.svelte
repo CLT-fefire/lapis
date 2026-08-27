@@ -1,5 +1,7 @@
 <script lang="ts">
   import ModalShell from "$lib/ModalShell.svelte";
+  import CustomCssEditor from "$lib/CustomCssEditor.svelte";
+  import { getVersion } from "@tauri-apps/api/app";
   import {
     settingsOpen,
     closeSettings,
@@ -24,6 +26,35 @@
 
   // ⚠️ `{#key $activeLocale}`(+layout)이 로케일 변경 시 컴포넌트를 재생성하므로
   // 이 const들도 다시 평가된다 — 그래서 최상위 const로 둬도 로케일을 따라온다.
+
+  /**
+   * 설정 카테고리. **순서가 화면 순서다.**
+   *
+   * ⚠️ 새 설정을 더할 때 어느 카테고리인지 정하지 않으면 어디에도 안 보인다 —
+   * 예전 평평한 목록에서는 그냥 아래 붙이면 됐다. `settingsCategories.test.ts`가
+   * 모든 섹션이 어떤 카테고리에는 속하는지 본다.
+   */
+  const CATEGORIES = [
+    { id: "appearance", label: () => m.settings_cat_appearance() },
+    { id: "language", label: () => m.settings_cat_language() },
+    { id: "vault", label: () => m.settings_cat_vault() },
+    { id: "advanced", label: () => m.settings_cat_advanced() },
+  ] as const;
+
+  type CatId = (typeof CATEGORIES)[number]["id"];
+  let cat = $state<CatId>("appearance");
+  const activeLabel = $derived(
+    () => CATEGORIES.find((c) => c.id === cat)?.label() ?? m.settings_title(),
+  );
+
+  /** 버전 — 카테고리 목록 하단(디스코드가 버전을 두는 자리). */
+  let appVersion = $state<string>("");
+  $effect(() => {
+    void getVersion()
+      .then((v) => (appVersion = v))
+      // 버전을 못 읽어도 설정은 열려야 한다. 라벨만 비운다.
+      .catch(() => (appVersion = ""));
+  });
 
   const DENSITY_OPTIONS: { value: Density; label: string }[] = [
     { value: "default", label: m.settings_density_default() },
@@ -150,37 +181,46 @@
       aria-modal="true"
       aria-labelledby="settings-title"
     >
-      <header class="settings-head">
-        <h2 id="settings-title">{m.settings_title()}</h2>
-        <button class="btn btn--icon btn--sm btn--plain" aria-label={m.settings_close()} onclick={closeSettings}>×</button>
-      </header>
+      <!--
+        디스코드 설정 문법 — 왼쪽 카테고리, 오른쪽 그 카테고리의 항목들.
 
-      <div class="settings-body">
-        <section class="setting-row">
-          <div class="setting-label number">
-            <span class="label-text">
-              <span class="label-title">{m.settings_language_title()}</span>
-              <span class="label-desc">{m.settings_language_desc()}</span>
-            </span>
-          </div>
-          <div class="setting-control">
-            <div class="segmented" role="group" aria-label={m.settings_language_title()}>
-              {#each LOCALE_OPTIONS as opt (opt.value)}
-                <button
-                  type="button"
-                  class="segment"
-                  class:active={$localeMode === opt.value}
-                  aria-pressed={$localeMode === opt.value}
-                  onclick={() => setLocaleMode(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </section>
+        예전엔 섹션 일곱이 한 줄로 나열돼 있었다. 항목이 늘수록 스크롤만 길어지고,
+        "어디에 있더라"를 매번 훑어야 했다.
 
+        ⚠️ 버전이 카테고리 목록 **하단**에 있다. B단계에서 전역 상단바를 없애며 노트
+        헤더로 옮겨 뒀던 것을 여기로 데려왔다 — 디스코드가 버전을 두는 자리고,
+        노트를 볼 때마다 보일 이유가 없는 정보다.
+      -->
+      <nav class="settings-nav" aria-label={m.settings_title()}>
+        {#each CATEGORIES as c (c.id)}
+          <button
+            type="button"
+            class="cat"
+            class:active={cat === c.id}
+            aria-pressed={cat === c.id}
+            onclick={() => (cat = c.id)}
+          >
+            {c.label()}
+          </button>
+        {/each}
+        <div class="nav-spacer"></div>
+        {#if appVersion}
+          <span class="nav-version">v{appVersion}</span>
+        {/if}
+      </nav>
 
+      <div class="settings-pane">
+        <header class="settings-head">
+          <h2 id="settings-title">{activeLabel()}</h2>
+          <button
+            class="btn btn--icon btn--sm btn--plain"
+            aria-label={m.settings_close()}
+            onclick={closeSettings}
+          >×</button>
+        </header>
+
+        <div class="settings-body">
+        {#if cat === "appearance"}
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
@@ -204,7 +244,6 @@
             </div>
           </div>
         </section>
-
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
@@ -229,7 +268,33 @@
             </div>
           </div>
         </section>
-
+        {/if}
+        {#if cat === "language"}
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_language_title()}</span>
+              <span class="label-desc">{m.settings_language_desc()}</span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label={m.settings_language_title()}>
+              {#each LOCALE_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$localeMode === opt.value}
+                  aria-pressed={$localeMode === opt.value}
+                  onclick={() => setLocaleMode(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+        {/if}
+        {#if cat === "vault"}
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
@@ -261,7 +326,51 @@
             />
           </div>
         </section>
-
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_git_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_git_desc()}</span>
+              {#if gitHint}
+                <span class="label-hint">{gitHint}</span>
+              {/if}
+            </span>
+          </div>
+          <div class="setting-control">
+            {#if !$vaultPath}
+              <span class="setting-status">{m.settings_git_no_vault()}</span>
+            {:else if $gitRepo}
+              <span class="setting-status on">{m.settings_git_active()}</span>
+            {:else}
+              <button
+                class="btn btn--primary btn--sm"
+                disabled={$gitBusy}
+                onclick={onStartVersioning}
+              >
+                {$gitBusy ? m.settings_git_starting() : m.settings_git_start()}
+              </button>
+            {/if}
+          </div>
+        </section>
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_reindex_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_reindex_desc()}</span>
+            </span>
+          </div>
+          <div class="setting-control">
+            {#if !$vaultPath}
+              <span class="setting-status">{m.settings_git_no_vault()}</span>
+            {:else}
+              <button class="btn btn--sm" onclick={onRebuildIndex}>{m.settings_reindex_button()}</button>
+            {/if}
+          </div>
+        </section>
+        {/if}
+        {#if cat === "advanced"}
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
@@ -291,61 +400,23 @@
             </div>
           </div>
         </section>
+          <!-- 사용자 정의 CSS 는 아래 CustomCssEditor 가 담당한다. -->
+          <CustomCssEditor />
+        {/if}
+        </div>
 
-        <section class="setting-row">
-          <div class="setting-label number">
-            <span class="label-text">
-              <span class="label-title">{m.settings_git_title()}</span>
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-              <span class="label-desc">{@html m.settings_git_desc()}</span>
-              {#if gitHint}
-                <span class="label-hint">{gitHint}</span>
-              {/if}
-            </span>
-          </div>
-          <div class="setting-control">
-            {#if !$vaultPath}
-              <span class="setting-status">{m.settings_git_no_vault()}</span>
-            {:else if $gitRepo}
-              <span class="setting-status on">{m.settings_git_active()}</span>
-            {:else}
-              <button
-                class="btn btn--primary btn--sm"
-                disabled={$gitBusy}
-                onclick={onStartVersioning}
-              >
-                {$gitBusy ? m.settings_git_starting() : m.settings_git_start()}
-              </button>
-            {/if}
-          </div>
-        </section>
-
-        <section class="setting-row">
-          <div class="setting-label number">
-            <span class="label-text">
-              <span class="label-title">{m.settings_reindex_title()}</span>
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-              <span class="label-desc">{@html m.settings_reindex_desc()}</span>
-            </span>
-          </div>
-          <div class="setting-control">
-            {#if !$vaultPath}
-              <span class="setting-status">{m.settings_git_no_vault()}</span>
-            {:else}
-              <button class="btn btn--sm" onclick={onRebuildIndex}>{m.settings_reindex_button()}</button>
-            {/if}
-          </div>
-        </section>
+        <footer class="settings-foot">
+          <button class="btn btn--ghost" onclick={closeSettings}>{m.settings_close()}</button>
+        </footer>
       </div>
-
-      <footer class="settings-foot">
-        <button class="btn btn--ghost" onclick={closeSettings}>{m.settings_close()}</button>
-      </footer>
     </div>
   </ModalShell>
 {/if}
 
 <style>
+  /* 디스코드 설정 문법 — 왼쪽 카테고리 목록, 오른쪽 그 카테고리의 항목들.
+     ⚠️ 예전엔 `flex-direction: column`이었다(머리 → 본문 → 발). 카테고리를 넣으면서
+     가로 2단이 됐고, 세로 쌓기는 오른쪽 `.settings-pane` 안으로 내려갔다. */
   .settings-modal {
     background: var(--surface-raised);
     border: 1px solid var(--border-default);
@@ -353,10 +424,61 @@
     box-shadow: var(--shadow-overlay);
     color: var(--text-primary);
     width: 100%;
-    max-width: var(--modal-w-lg);
+    /* 2단이 되면서 넓어져야 한다 — lg(540px)로는 목록과 본문이 같이 안 들어간다. */
+    max-width: 760px;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .settings-nav {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    gap: var(--sp-1);
+    flex: 0 0 176px;
+    padding: var(--sp-5) var(--sp-4);
+    /* 셸 3계층과 같은 어휘 — 목록이 본문보다 어둡다. */
+    background: var(--surface-panel);
+  }
+
+  .cat {
+    padding: var(--sp-3) var(--sp-4);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: var(--fs-base);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .cat:hover {
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+  }
+  /* 디스코드 채널 아이템과 같다 — 선택은 배경으로 말한다. */
+  .cat.active {
+    background: var(--accent-bg-subtle);
+    color: var(--text-primary);
+  }
+
+  .nav-spacer {
+    flex: 1;
+  }
+
+  /* 버전 — 디스코드가 버전을 두는 자리. B단계에서 노트 헤더로 옮겼던 것을 여기로. */
+  .nav-version {
+    padding: 0 var(--sp-4);
+    color: var(--text-disabled);
+    font-size: var(--fs-xs);
+  }
+
+  .settings-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
   }
 
   .settings-head {

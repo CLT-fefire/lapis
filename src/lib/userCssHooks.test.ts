@@ -31,10 +31,30 @@ function svelteFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * 주석과 문자열 리터럴을 걷어낸 소스. **실제 속성만** 본다.
+ *
+ * ⚠️ 이게 없으면 가드가 문서를 잡는다. `CustomCssEditor.svelte`의 설명 주석에
+ * `[data-lapis="app"] { display: none }`가 예시로 들어 있어서, 그걸 "두 번째 app 훅"으로
+ * 검출했다. **왜 이렇게 됐는지를 적어 두는 것과 그 코드가 살아 있는 것은 다르다** —
+ * `mcp/evalHonesty.test.ts`에서 같은 함정을 이미 한 번 밟았다.
+ */
+function markupOf(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, " ") // JS 블록 주석
+    .replace(/<!--[\s\S]*?-->/g, " ") // 마크업 주석
+    .replace(/(^|[^:])\/\/.*$/gm, "$1"); // JS 줄 주석
+}
+
+// ⚠️ 문자열 리터럴까지 걷어내려다 **진짜 속성을 지웠다.** 훅은 줄 끝에 오는 일이 많은데
+//    (`data-lapis="tabs"` 한 줄), "따옴표 뒤 줄 끝" 패턴이 그걸 그대로 문자열로 봤다.
+//    주석만으로 실제 오탐(설명 주석 안의 예시)은 사라지므로 여기서 멈춘다 —
+//    가드를 정교하게 만들려다 가드가 틀리면 아무것도 못 잡는다.
+
 const files = svelteFiles(SRC);
 const found = new Map<string, string[]>();
 for (const f of files) {
-  const text = readFileSync(f, "utf-8");
+  const text = markupOf(readFileSync(f, "utf-8"));
   for (const m of text.matchAll(/data-lapis="([a-z-]+)"/g)) {
     const name = m[1];
     if (!found.has(name)) found.set(name, []);
