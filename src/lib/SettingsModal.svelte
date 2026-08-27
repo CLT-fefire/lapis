@@ -496,7 +496,14 @@
     flex: 1;
   }
 
+  /* ⚠️ 박스 사이 여백은 **여기서만** 준다.
+     `.setting-row`가 배경·보더·라운드를 가진 카드인데 컨테이너에 `gap`이 없어서
+     카드들이 딱 붙어 한 덩어리로 보였다. 카드에 `margin`을 주는 대신 컨테이너가
+     간격을 쥐어야 첫/마지막 카드에 여백이 새지 않는다. */
   .settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
     padding: var(--sp-6) 18px;
     max-height: 60vh;
     overflow-y: auto;
