@@ -46,7 +46,11 @@
   import { markdown } from "@codemirror/lang-markdown";
   import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
   import { tags as t } from "@lezer/highlight";
-  import { linkIndex } from "$lib/stores/vault";
+  import { linkIndex, currentNotePath } from "$lib/stores/vault";
+  import { resolveWikilink } from "$lib/linkIndex";
+  import { parseNote } from "$lib/markdown";
+  import { readNote } from "$lib/tauri/notes";
+  import { lapisSyntaxExtension } from "$lib/editorLapisSyntax";
   import type { LinkIndex } from "$lib/linkIndex";
   import {
     wikilinkCompletionExtension,
@@ -158,6 +162,20 @@
   // ⚠️ **미리보기(`+page.svelte`)와 같은 토큰을 쓴다.** 예전엔 양쪽이 각자 하드코딩했고
   //    값이 이미 갈려 있었다(0.30 vs 0.35 · #ffc107 vs rgba(255,140,0,.75)). 같은 개념이
   //    두 곳에 있으면 반드시 갈린다 — 편집기와 미리보기를 오가면 하이라이트가 달라 보였다.
+  /**
+   * lapis 문법 색 — 콜아웃 표식과 임베드.
+   *
+   * ⚠️ **모르는 종류는 밑줄로 티를 낸다.** 색만 다르면 "다른 색인가 보다" 하고 넘어간다.
+   */
+  const lapisSyntaxTheme = EditorView.theme({
+    ".cm-lapis-callout": { color: "var(--cm-keyword)", fontWeight: "600" },
+    ".cm-lapis-callout-unknown": {
+      color: "var(--danger-text)",
+      textDecoration: "underline wavy",
+    },
+    ".cm-lapis-embed": { color: "var(--cm-link)", fontWeight: "600" },
+  });
+
   const searchHighlightTheme = EditorView.theme({
     ".cm-searchMatch": {
       backgroundColor: "var(--match-bg)",
@@ -370,6 +388,29 @@
     };
   }
 
+  /**
+   * `[[노트#` 자동완성용 헤딩 목록.
+   *
+   * ⚠️ 빈 이름(`[[#헤딩]]`)은 **편집 중인 버퍼**를 본다. 디스크를 읽으면 방금 친 헤딩이
+   * 후보에 없다 — 앵커를 다는 가장 흔한 순간이 "헤딩을 쓰고 바로 가리키는" 때다.
+   *
+   * 다른 노트는 인덱스로 경로를 풀고 디스크에서 읽는다. 모르는 이름이면 `null` 을 내서
+   * 호출부가 **이름 완성으로 떨어지게** 한다.
+   */
+  async function headingsForCompletion(note: string) {
+    if (note === "") return parseNote(view?.state.doc.toString() ?? "").headings;
+    const idx = get(linkIndex);
+    if (!idx) return null;
+    const hit = resolveWikilink(note, idx, get(currentNotePath) ?? "");
+    if (!hit.path) return null;
+    try {
+      return parseNote(await readNote(hit.path)).headings;
+    } catch {
+      // 인덱스에는 있는데 디스크에서 사라졌다. 이름 완성으로 떨어진다.
+      return null;
+    }
+  }
+
   onMount(() => {
     const state = EditorState.create({
       doc: value,
@@ -379,7 +420,12 @@
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         markdown(),
-        wikilinkCompletionExtension(() => buildCandidates(get(linkIndex))),
+        wikilinkCompletionExtension(
+          () => buildCandidates(get(linkIndex)),
+          headingsForCompletion,
+        ),
+        lapisSyntaxExtension(),
+        lapisSyntaxTheme,
         lapisTheme,
         syntaxHighlighting(lapisHighlight),
         searchHighlightTheme, // 테마 이후에 → cm-searchMatch override

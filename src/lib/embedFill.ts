@@ -5,6 +5,7 @@ import {
   embedFailureText,
   isCycle,
   sliceSection,
+  embedSourceHtml,
   type EmbedFailure,
 } from "$lib/embed";
 
@@ -85,7 +86,8 @@ export async function fillEmbeds(
       html = parseNote(section).html;
     }
 
-    el.innerHTML = html;
+    // ⚠️ 원본 표시를 **앞에** 붙인다. 조각을 다 읽고 나서야 출처를 아는 것은 늦다.
+    el.innerHTML = embedSourceHtml(target, anchor, label) + html;
     // 재귀 — 방금 넣은 것 안에 또 임베드가 있을 수 있다.
     await fillEmbeds(el, { ...ctx, fromPath: path }, [...chain, path]);
   }

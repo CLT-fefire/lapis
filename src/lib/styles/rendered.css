@@ -189,6 +189,13 @@
   margin: 1em 0;
 }
 
+/* ⚠️ 어디서 당겨왔는지. 테두리는 "남의 글"만 말하고 "누구 것"은 말해 주지 않는다. */
+.rendered .embed-source {
+  font-size: 0.8em;
+  margin-bottom: var(--sp-2);
+  color: var(--text-muted);
+}
+
 /* 당겨온 조각의 첫 헤딩이 본문 헤딩처럼 커지면 문서 구조가 어긋나 보인다. */
 .rendered .embed :is(h1, h2, h3, h4, h5, h6) {
   font-size: 1.05em;

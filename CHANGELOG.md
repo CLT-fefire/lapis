@@ -16,6 +16,32 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Added
+- **Heading autocomplete in wikilinks** ([#258]). Typing `[[Note#` now offers that note's headings.
+
+  ⚠️ Before this, it did the opposite of nothing — the trigger treated `#` as part of the name, so
+  `[[boundary-contracts#` searched for a note by that literal name and **the list went empty**.
+  2.2.0 added the syntax and never added a way to type it; you had to remember the heading exactly.
+
+  `[[#Heading]]` completes from the **buffer being edited**, not from disk — the most common moment
+  to write an anchor is right after writing the heading, and a note read from disk would not have it
+  yet.
+
+  A note that does not resolve falls back to name completion, so `[[C#` still offers `C#.md`. Same
+  precedence as resolution itself.
+- **Transcluded content says where it came from** ([#258]). A border marks it as somebody else's
+  writing; it did not say **whose**. The source is now a line above the excerpt, and it is an
+  ordinary wikilink — the existing click path handles it rather than a second one being built.
+
+  Failed embeds get no such line. There is nowhere to go.
+- **The editor knows the new syntax** ([#258]). `> [!WARNING]` and `![[Note]]` were plain text
+  while editing and colored in the preview, so a typo like `[!WARN]` was only visible after
+  switching modes.
+
+  ⚠️ **An unknown callout type is marked differently** — that is the point. Coloring only the
+  recognized ones leaves a typo as unhighlighted text, which reads as normal. Unknown types get the
+  danger color *and* a wavy underline; color alone gets skipped over.
+
 ## [2.3.1] — 2026-08-27
 
 ### Fixed
@@ -1351,6 +1377,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#258]: https://github.com/eren0315/lapis/pull/258
 [#256]: https://github.com/eren0315/lapis/pull/256
 [#254]: https://github.com/eren0315/lapis/pull/254
 [#253]: https://github.com/eren0315/lapis/pull/253
