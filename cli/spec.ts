@@ -154,6 +154,12 @@ export const COMMANDS: CommandSpec[] = [
     ],
   },
   {
+    name: "props",
+    desc: "frontmatter 값 위생 — 거를 수 있는 축이 갈렸는지",
+    positional: [{ name: "동작", required: true, desc: "audit" }],
+    options: [],
+  },
+  {
     name: "css",
     desc: "사용자 정의 CSS를 끈다 — 앱이 안 뜰 때의 탈출구",
     positional: [],
@@ -233,6 +239,9 @@ export const FACETS = ["tags", "topics", "doc-kinds"] as const;
  * 동작별 검사는 핸들러가 한다 — 파서는 "동작이 무엇이냐"를 모른다.
  */
 export const TAG_ACTIONS = ["rename", "audit"] as const;
+
+/** `props` 명령이 받는 동작. 지금은 하나뿐이지만 `tag`와 같은 모양을 지킨다. */
+export const PROPS_ACTIONS = ["audit"] as const;
 
 export function findCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);

@@ -232,6 +232,35 @@ export function renderUnlinked(rows: readonly UnlinkedRow[]): string {
   return out.join("\n");
 }
 
+export interface FrontmatterIssueRow {
+  field: string;
+  kind: string;
+  values: { value: string; count: number }[];
+}
+
+/** 종류별 한 줄 설명 — 무엇을 하라는 게 아니라 무엇이 보이는지만 말한다. */
+const FM_ISSUE_LABEL: Record<string, string> = {
+  "case-only": "대소문자만 다름",
+  plural: "단수/복수",
+  prefix: "앞부분이 같음",
+};
+
+/**
+ * frontmatter 값 위생.
+ *
+ * ⚠️ 값을 그대로 낸다. 자유 서술(`완료 — #232`)이 섞여 있어 잘라내면 왜 걸렸는지
+ * 안 보인다 — 판단은 사람이 한다.
+ */
+export function renderFrontmatterIssues(rows: readonly FrontmatterIssueRow[]): string {
+  if (rows.length === 0) return "frontmatter 값이 갈린 곳 없음";
+  const out: string[] = [];
+  for (const r of rows) {
+    out.push(`${r.field}  (${FM_ISSUE_LABEL[r.kind] ?? r.kind})`);
+    for (const v of r.values) out.push(`    ${String(v.count).padStart(3)}  ${v.value}`);
+  }
+  return out.join("\n");
+}
+
 export interface TagIssueRow {
   kind: string;
   tags: { tag: string; count: number }[];

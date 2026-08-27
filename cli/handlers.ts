@@ -16,6 +16,7 @@ import {
   findTagIssues,
   findAmbiguousNames,
   findUnlinkedMentions,
+  findFrontmatterIssues,
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
@@ -27,7 +28,7 @@ import { runIndex, IndexError } from "./indexRun.ts";
 import { launchOpen, LaunchError } from "./appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
-import { FACETS, TAG_ACTIONS } from "./spec.ts";
+import { FACETS, TAG_ACTIONS, PROPS_ACTIONS } from "./spec.ts";
 import {
   renderResults,
   renderFacet,
@@ -38,6 +39,7 @@ import {
   renderTagIssues,
   renderAmbiguous,
   renderUnlinked,
+  renderFrontmatterIssues,
   table,
 } from "./render.ts";
 
@@ -738,6 +740,8 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
 
   // ⚠️ **이 검사 하나만 본문을 읽는다.** 나머지 넷은 인덱스만 본다. 81노트 0.3 MB에서
   //    doctor 전체가 0.73 → 0.79초였다(+54 ms). 큰 vault에서는 이 항목이 비용을 지배한다.
+  const fmIssues = findFrontmatterIssues(index);
+
   const unlinked = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
     ...r,
     target: rel(r.target),
@@ -745,7 +749,12 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   }));
 
   const problems =
-    broken.length + orphans.length + tagIssues.length + ambiguous.length + unlinked.length;
+    broken.length +
+    orphans.length +
+    tagIssues.length +
+    ambiguous.length +
+    unlinked.length +
+    fmIssues.length;
 
   if (out.json) {
     out.json_({
@@ -757,6 +766,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
       orphans: { count: orphans.length, notes: orphans },
       tag_issues: tagIssues,
       ambiguous_names: ambiguous,
+      frontmatter_issues: fmIssues,
       unlinked_mentions: {
         names: unlinked.length,
         mentions: unlinked.reduce((n, r) => n + r.total, 0),
@@ -783,6 +793,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
       ["태그 중복", tagIssues.length === 0 ? "없음" : `${tagIssues.length}묶음`],
       ["모호한 이름", ambiguous.length === 0 ? "없음" : `${ambiguous.length}개`],
       ["안 걸린 언급", unlinked.length === 0 ? "없음" : `이름 ${unlinked.length}개`],
+      ["frontmatter", fmIssues.length === 0 ? "없음" : `${fmIssues.length}묶음`],
     ]),
   );
 
@@ -795,7 +806,38 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   if (orphans.length > 0) out.line("  lapis links --orphans");
   if (tagIssues.length > 0 || ambiguous.length > 0) out.line("  lapis tag audit");
   if (unlinked.length > 0) out.line("  lapis links --unlinked");
+  if (fmIssues.length > 0) out.line("  lapis props audit");
   process.exitCode = 1;
+}
+
+/**
+ * `lapis props audit` — frontmatter 값이 갈린 곳.
+ *
+ * ⚠️ `tag audit`과 성격이 같지만 **대상이 다르다.** 저쪽은 태그, 이쪽은 거를 수 있는
+ * 축(`doc_kind`·`topic`과 열거형처럼 쓰이는 props 필드)이다.
+ */
+export function cmdProps(p: ParsedCommand, out: Out): void {
+  const action = p.positional[0];
+  if (!(PROPS_ACTIONS as readonly string[]).includes(action)) {
+    out.fail(
+      "no_criteria",
+      `모르는 동작: ${action}`,
+      `쓸 수 있는 값: ${PROPS_ACTIONS.join(" · ")}`,
+      2,
+    );
+  }
+  const vc = resolveVault(vaultOf(p));
+  const issues = findFrontmatterIssues(buildIndex(vc.infos));
+  if (out.json) {
+    return out.json_({ vault: vc.root, ...staleField(vc), issues });
+  }
+  out.line(renderFrontmatterIssues(issues));
+  if (issues.length > 0) {
+    // ⚠️ 고치라고 하지 않는다 — 감사 계열이 전부 그렇다.
+    out.line("\n자유 서술이 섞인 값도 여기 걸린다. 그게 틀렸다는 뜻은 아니다 —");
+    out.line("이 축으로 거르는 질의가 절반만 찾는다는 뜻이다.");
+  }
+  reportStale(out, vc);
 }
 
 /**
@@ -843,6 +885,7 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   links: cmdLinks,
   tag: cmdTag,
   status: cmdStatus,
+  props: cmdProps,
   index: cmdIndex,
   open: cmdOpen,
   replace: cmdReplace,

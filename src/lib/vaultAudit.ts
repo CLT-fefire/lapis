@@ -192,6 +192,181 @@ export function findTagIssues(
   return issues;
 }
 
+// ─── frontmatter 위생 ─────────────────────────────────────────────────────────
+
+export type FrontmatterIssueKind = "case-only" | "plural" | "prefix";
+
+export interface FrontmatterIssue {
+  /** `doc_kind` · `topic` · props 필드 이름. */
+  field: string;
+  kind: FrontmatterIssueKind;
+  /** 갈린 값들과 각각의 노트 수. 값 이름 오름차순. */
+  values: { value: string; count: number }[];
+}
+
+/**
+ * props 필드를 **열거형으로 보는** 최소 노트 수.
+ *
+ * ⚠️ 이보다 적으면 갈렸는지 판단할 표본이 없다. 두 노트가 `A`/`a`를 쓴 것은 오타일 수도,
+ * 아직 정하지 않은 것일 수도 있다 — 새 vault가 통째로 걸리는 것을 막는다.
+ */
+export const MIN_ENUM_NOTES = 5;
+
+/**
+ * props 필드가 열거형처럼 쓰이는가 — **값이 반복되는가**로 본다.
+ *
+ * ⚠️ **목록을 손으로 두지 않는다.** `title`·`description`처럼 노트마다 다른 필드를 이름으로
+ * 거르려 하면, 새 필드가 생길 때마다 목록을 고쳐야 하고 안 고치면 조용히 시끄러워진다.
+ * 모양으로 판단하면 필드 이름을 몰라도 된다: **쓰임 대비 값 종류가 적으면** 열거형이다.
+ */
+const ENUM_DISTINCT_RATIO = 0.5;
+
+/** `plan` → `plans`·`planes`. 복수형 후보 둘. */
+const pluralsOf = (v: string) => [`${v}s`, `${v}es`];
+
+/**
+ * `완료` 가 `완료 — #232` 의 접두사인가.
+ *
+ * ⚠️ **경계에서 끊겨야 한다.** `plan`이 `planning`의 접두사라고 보고하면 서로 다른 두
+ * 낱말을 같다고 우기는 것이다. 다음 글자가 글자·숫자면 낱말이 이어지는 중이다.
+ */
+function isPrefixOf(short: string, long: string): boolean {
+  if (short.length >= long.length || !long.startsWith(short)) return false;
+  return !/[\p{L}\p{N}]/u.test(long[short.length]);
+}
+
+/**
+ * 감사에서 **이름으로** 빼는 필드.
+ *
+ * - `tags` — `findTagIssues`가 이미 본다. 두 목록에 같은 것이 나오면 둘 다 덜 믿게 된다
+ * - `aliases` — 값이 이름이라 열거형이 아니다. 갈리는 게 정상이다
+ *
+ * ⚠️ 목록이 이 둘로 끝나는 것이 요점이다. 나머지는 **모양으로** 거른다 — 목록이 자라기
+ * 시작하면 그건 판정이 틀렸다는 신호지, 목록이 짧다는 신호가 아니다.
+ */
+const FM_AUDIT_SKIP = new Set(["tags", "aliases"]);
+
+/** 필드 → 값 → 노트 수. 한 노트가 같은 값을 두 번 적어도 한 번만 센다. */
+function fieldValueCounts(infos: readonly LinkInfo[]): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  const bump = (field: string, value: string) => {
+    const v = value.trim();
+    if (!v) return;
+    const m = out.get(field) ?? out.set(field, new Map()).get(field)!;
+    m.set(v, (m.get(v) ?? 0) + 1);
+  };
+  for (const info of infos) {
+    if (info.doc_kind) bump("doc_kind", info.doc_kind);
+    if (info.topic) bump("topic", info.topic);
+    for (const [field, values] of Object.entries(info.props ?? {})) {
+      if (FM_AUDIT_SKIP.has(field.toLowerCase())) continue;
+      const seen = new Set<string>();
+      for (const value of values) {
+        const v = value.trim();
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        bump(field, v);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * **상호참조 필드**의 이름들 — `related: [feeds, feeds-settings]` 같은 것.
+ *
+ * ⚠️ 실측에서 이걸 안 빼니 목록의 절반이 `related`였다. `feeds`와 `feeds-excerpt-only`는
+ * **서로 다른 문서**지 갈린 값이 아니다. 이름이 비슷한 것은 문서 제목의 자연스러운 성질이다.
+ *
+ * 목록으로 두지 않고 **인덱스에 묻는다** — 값이 노트로 해소되면 상호참조다. 새 필드가
+ * 생겨도 저절로 맞는다.
+ *
+ * ⚠️ 값이 우연히 노트 이름과 같은 열거형 필드는 통째로 빠진다. 보수적인 쪽 —
+ * 덜 보고할지언정 엉뚱한 것을 보고하지 않는다.
+ */
+function relationFields(index: LinkIndex): Set<string> {
+  const out = new Set<string>();
+  for (const rels of index.relations.outgoing.values()) {
+    for (const r of rels) out.add(r.type);
+  }
+  return out;
+}
+
+/**
+ * frontmatter 값이 갈린 곳.
+ *
+ * ## 왜 감사 계열의 다섯째인가
+ *
+ * 앞의 넷은 **링크 그래프**를 본다. 이건 **거를 수 있는 축**을 본다 — `doc_kind`로 거르는
+ * 질의는 `todo`와 `todos`가 갈려 있으면 절반만 찾는다.
+ *
+ * ⚠️ **조용하다.** 질의가 에러를 내지 않고 **적게 찾는다.** 실측(89노트 vault)에서 지금
+ * `doc_kind`에 `todo`/`todos`가 같이 있고 `status`는 12종으로 갈려 있다.
+ *
+ * ⚠️ 자유 서술을 오류라 부르지 않는다. `status: 완료 — #232`는 사람에게 유용하다.
+ * 보고하는 것은 **"같은 접두사로 시작하는 값이 여럿"** 이라는 사실뿐이다.
+ */
+export function findFrontmatterIssues(index: LinkIndex): FrontmatterIssue[] {
+  const byField = fieldValueCounts([...index.byPath.values()]);
+  const issues: FrontmatterIssue[] = [];
+  const crossRef = relationFields(index);
+
+  for (const [field, counts] of byField) {
+    if (crossRef.has(field)) continue;
+    // `doc_kind`·`topic`은 항상 본다 — 질의로 거를 수 있는 축이라 갈리면 바로 답이 틀린다.
+    if (field !== "doc_kind" && field !== "topic") {
+      const used = [...counts.values()].reduce((n, c) => n + c, 0);
+      if (used < MIN_ENUM_NOTES) continue;
+      if (counts.size > used * ENUM_DISTINCT_RATIO) continue;
+    }
+    const values = [...counts.keys()].sort(asc);
+    const entries = (vs: string[]) =>
+      vs.sort(asc).map((value) => ({ value, count: counts.get(value) ?? 0 }));
+
+    // ⚠️ 대소문자를 **먼저** 본다. `Todo`/`todo`는 복수 판정에도 걸릴 수 있는데,
+    //    그렇게 보고하면 처방이 흐려진다. 태그 감사와 같은 순서다.
+    const reported = new Set<string>();
+    const byFolded = new Map<string, string[]>();
+    for (const v of values) {
+      const k = v.toLowerCase();
+      (byFolded.get(k) ?? byFolded.set(k, []).get(k)!).push(v);
+    }
+    for (const [, vs] of byFolded) {
+      if (vs.length < 2) continue;
+      issues.push({ field, kind: "case-only", values: entries([...vs]) });
+      for (const v of vs) reported.add(v);
+    }
+
+    const folded = new Set(values.map((v) => v.toLowerCase()));
+    for (const v of values) {
+      if (reported.has(v)) continue;
+      const lower = v.toLowerCase();
+      for (const p of pluralsOf(lower)) {
+        if (!folded.has(p)) continue;
+        const other = values.find((x) => x.toLowerCase() === p);
+        if (!other || reported.has(other)) continue;
+        issues.push({ field, kind: "plural", values: entries([v, other]) });
+        reported.add(v);
+        reported.add(other);
+      }
+    }
+
+    for (const short of values) {
+      const longer = values.filter((v) => isPrefixOf(short, v));
+      if (longer.length === 0) continue;
+      issues.push({ field, kind: "prefix", values: entries([short, ...longer]) });
+    }
+  }
+
+  const order: FrontmatterIssueKind[] = ["case-only", "plural", "prefix"];
+  return issues.sort(
+    (a, b) =>
+      asc(a.field, b.field) ||
+      order.indexOf(a.kind) - order.indexOf(b.kind) ||
+      asc(a.values[0].value, b.values[0].value),
+  );
+}
+
 // ─── 모호한 이름 ──────────────────────────────────────────────────────────────
 
 export interface AmbiguousName {

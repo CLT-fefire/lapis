@@ -123,12 +123,13 @@ afterEach(() => {
 });
 
 describe("탭 바", () => {
-  it("탭이 넷이고 각각 숫자를 단다", () => {
+  it("탭이 다섯이고 각각 숫자를 단다", () => {
     const badges = textOf(".tab .badge");
-    expect(badges).toHaveLength(4);
+    expect(badges).toHaveLength(5);
     // 끊긴 링크 1(없는문서) · 고아 4(hub·lonely·dup 둘) · 태그 2묶음 + 모호한 이름 1 = 3
     // 넷째는 아직 안 셌다 — 본문을 읽어야 알 수 있고, 탭을 열기 전에는 안 읽는다.
-    expect(badges).toEqual(["1", "4", "3", "–"]);
+    // 다섯째(속성)는 픽스처에 frontmatter 값이 없어 0이다.
+    expect(badges).toEqual(["1", "4", "3", "–", "0"]);
   });
 
   /**
@@ -243,13 +244,13 @@ describe("빈 상태", () => {
    * 깨끗한 vault에서 **탭이 사라지지 않는지** 본다. 숫자 0을 보여주는 것이
    * 이 화면의 값이다 — 목록이 비면 탭까지 없애는 구현이면 "왜 안 보이지"가 된다.
    */
-  it("문제가 없어도 탭 넷과 0이 남는다", () => {
+  it("문제가 없어도 탭 다섯과 0이 남는다", () => {
     // 서로 가리키는 두 노트 — 어느 쪽도 고아가 아니고 끊긴 링크도 없다.
     linkIndex.set(
       buildIndex([mkInfo("/v/a.md", { targets: ["b"] }), mkInfo("/v/b.md", { targets: ["a"] })]),
     );
     flushSync();
-    expect(textOf(".tab .badge")).toEqual(["0", "0", "0", "–"]);
+    expect(textOf(".tab .badge")).toEqual(["0", "0", "0", "–", "0"]);
     expect(document.querySelector(".empty")).not.toBeNull();
   });
 });
@@ -308,5 +309,32 @@ describe("안 걸린 언급 탭", () => {
     await settle();
     expect(textOf(".empty")).toEqual([expect.not.stringMatching(/^$/)]);
     expect(textOf(".tab .badge")[3]).toBe("–");
+  });
+});
+
+describe("속성 탭", () => {
+  /**
+   * ⚠️ 이 탭은 **인덱스만으로** 된다 — 넷째와 달리 본문을 안 읽는다. 배지가 처음부터
+   * 숫자인 것이 그 차이를 드러낸다.
+   */
+  it("갈린 값을 필드별로 묶어 낸다", () => {
+    linkIndex.set(
+      buildIndex([
+        mkInfo("/v/a.md", { doc_kind: "todo" }),
+        mkInfo("/v/b.md", { doc_kind: "todos" }),
+        mkInfo("/v/c.md", { doc_kind: "todos" }),
+      ]),
+    );
+    flushSync();
+    clickTab(4);
+    expect(textOf(".group .value")).toEqual(["todo", "todos"]);
+    expect(textOf(".group .count")).toEqual(["1", "2"]);
+  });
+
+  it("갈린 곳이 없으면 비었다고 말한다", () => {
+    linkIndex.set(buildIndex([mkInfo("/v/a.md", { doc_kind: "plan" })]));
+    flushSync();
+    clickTab(4);
+    expect(document.querySelector(".empty")).not.toBeNull();
   });
 });
