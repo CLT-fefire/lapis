@@ -1632,7 +1632,7 @@ import { isPanicChord } from "$lib/userCss";
   }
 
   .meta-path.copied {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .doc-stats {
@@ -1657,7 +1657,7 @@ import { isPanicChord } from "$lib/userCss";
   }
 
   .save-badge.saving {
-    color: var(--accent);
+    color: var(--accent-text);
     background: var(--accent-bg-subtle);
     border: 1px solid var(--accent-border);
   }
@@ -1769,7 +1769,7 @@ import { isPanicChord } from "$lib/userCss";
 
   .conflict-foot .btn.accept {
     border-color: var(--accent);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .conflict-foot .btn.accept:hover {
     background: var(--accent-bg-subtle);
@@ -1921,7 +1921,7 @@ import { isPanicChord } from "$lib/userCss";
 
   .collapsed-strip:hover {
     background: var(--surface-sunken);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .strip-icon {

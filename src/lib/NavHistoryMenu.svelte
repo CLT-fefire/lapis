@@ -111,7 +111,7 @@
   }
 
   .nav-history-menu button.current {
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 600;
   }
 
@@ -119,7 +119,7 @@
     flex-shrink: 0;
     width: 1em;
     text-align: center;
-    color: var(--accent);
+    color: var(--accent-text);
     font-size: var(--fs-xs);
   }
 

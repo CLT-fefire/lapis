@@ -51,7 +51,7 @@
   .icon {
     display: inline-flex;
     align-items: center;
-    color: var(--accent);
+    color: var(--accent-text);
     flex-shrink: 0;
   }
 

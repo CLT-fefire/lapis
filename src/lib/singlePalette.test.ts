@@ -46,7 +46,12 @@ describe("팔레트는 하나다", () => {
    * 두고, **새 변형을 더하려면 여기도 손대게** 만든다 — 그 손댐이 "이게 두 번째 팔레트인가"를
    * 한 번 생각하게 하는 자리다.
    */
-  const ALLOWED_VARIANTS = [`:root[data-density="compact"]`];
+  // 밀도는 팔레트가 아니라 **간격**만 바꾼다 — 아래 "변형이 팔레트 절반을 덮으면 안 된다"가
+  // 그걸 지킨다. 3.0에서 `cozy` 가 늘었다.
+  const ALLOWED_VARIANTS = [
+    `:root[data-density="compact"]`,
+    `:root[data-density="cozy"]`,
+  ];
 
   function blocks(): { selector: string; tokens: string[] }[] {
     const out: { selector: string; tokens: string[] }[] = [];

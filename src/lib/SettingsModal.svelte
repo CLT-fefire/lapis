@@ -734,7 +734,7 @@
   .label-hint {
     margin-top: var(--sp-3);
     font-size: var(--fs-xs);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   /* ⚠️ `:global()`이 필요하다 — 설명 문구는 번역 문자열에 인라인 마크업(`<code>`·
      `<strong>`)이 들어 있어 `{@html}`로 그린다. **Svelte scoped CSS는 `{@html}`이
@@ -785,6 +785,6 @@
   }
   .segment.active {
     background: var(--accent-bg-subtle);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 </style>

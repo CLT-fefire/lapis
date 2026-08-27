@@ -354,7 +354,7 @@
   .chevron {
     background: transparent;
     border: none;
-    color: var(--accent);
+    color: var(--accent-text);
     cursor: pointer;
     padding: var(--sp-2) var(--sp-3) var(--sp-2) 10px;
     font-family: inherit;
@@ -371,7 +371,7 @@
   .chip {
     background: transparent;
     border: none;
-    color: var(--accent);
+    color: var(--accent-text);
     padding: var(--sp-2) var(--sp-5);
     cursor: pointer;
     font-family: inherit;
@@ -424,7 +424,7 @@
     align-self: flex-start;
     background: transparent;
     border: none;
-    color: var(--accent);
+    color: var(--accent-text);
     font-family: inherit;
     font-size: var(--fs-xs);
     padding: var(--sp-1) 0;
@@ -468,7 +468,7 @@
   }
 
   .commit-chevron {
-    color: var(--accent);
+    color: var(--accent-text);
     flex-shrink: 0;
     font-size: var(--fs-xs);
   }
@@ -521,7 +521,7 @@
     color: var(--danger-text);
   }
   .dl-hunk {
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .dl-meta {
     color: var(--text-muted);

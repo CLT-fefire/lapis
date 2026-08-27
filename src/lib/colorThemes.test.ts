@@ -6,12 +6,14 @@ import {
   COLOR_THEMES,
   DEFAULT_THEME_ID,
   accentForeground,
+  accentTrio,
   contrastRatio,
   findTheme,
   hexToRgb,
   rgbToHsl,
   themeCss,
   tintNeutral,
+  type ColorTheme,
 } from "./colorThemes";
 
 /**
@@ -40,7 +42,9 @@ describe("램프 기준선", () => {
     for (const m of css.matchAll(/^\s+(--n-\d+):\s*(#[0-9a-f]{6});/gim)) {
       inCss[m[1]] = m[2].toLowerCase();
     }
-    expect(Object.keys(inCss).length, "app.css 에서 램프를 못 읽었다").toBe(13);
+    // ⚠️ 개수를 손으로 적지 않는다. 3.0에서 램프가 13 → 15단이 되면서 이 숫자가
+    //    먼저 깨졌는데, 정작 확인하려던 것은 "두 목록이 같은가"다.
+    expect(Object.keys(inCss).length, "app.css 에서 램프를 못 읽었다").toBeGreaterThan(8);
     expect(inCss).toEqual(BASE_RAMP);
   });
 });
@@ -148,4 +152,68 @@ describe("생성된 CSS", () => {
     else expect(css).not.toContain("--n-300:");
   });
 
+});
+
+describe("⚠️ 액센트 셋 — 26종 전부", () => {
+  /**
+   * v2.x 의 Blurple 은 채움에 맞춰 고른 값인데 **링크에도 쓰여** 글자 대비 3.7:1 이었다.
+   * 3.0 은 셋으로 나눴고, 그 셋이 **테마마다** 제 몫을 해야 한다.
+   *
+   * ⚠️ 이 검사가 없으면 프리셋을 하나 더할 때 그 테마만 조용히 미달이 된다.
+   */
+  const AA = 4.5;
+  const NON_TEXT = 3;
+  /** 테마가 tint 를 주면 본문 면도 물든다 — 그 면 위에서 재야 맞다. */
+  const contentFor = (t: ColorTheme) =>
+    t.tint ? tintNeutral(BASE_RAMP["--n-300"], t.tint, t.tintStrength ?? 0.22) : BASE_RAMP["--n-300"];
+
+  for (const t of COLOR_THEMES) {
+    it(`${t.id}: 글자 액센트가 AA 를 넘는다`, () => {
+      const r = contrastRatio(accentTrio(t).text, contentFor(t));
+      expect(r, `${t.id} ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
+    });
+
+    it(`${t.id}: 채움 위의 글자가 AA 를 넘는다`, () => {
+      const solid = accentTrio(t).solid;
+      const r = contrastRatio(accentForeground(solid), solid);
+      expect(r, `${t.id} ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
+    });
+
+    /** `--accent` 는 포커스 링·보더용이다 — 비문자 기준 3:1. */
+    it(`${t.id}: 선 액센트가 비문자 기준을 넘는다`, () => {
+      const r = contrastRatio(t.accent, contentFor(t));
+      expect(r, `${t.id} ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(NON_TEXT);
+    });
+  }
+
+  /** ⚠️ 파생이 **색상**을 흔들면 26종이 서로 닮아 간다. 밝기 한 축만 움직인다. */
+  it("파생은 밝기만 바꾼다", () => {
+    // ⚠️ 정확히 같기를 요구하지 않는다. hex 로 내려가면서 8비트로 반올림되어 색상이
+    //    1~2도 흔들린다 — 그건 색상을 바꾼 게 아니라 표현 한계다. 처음엔 정수 일치로
+    //    적었다가 그 반올림에 걸렸다.
+    const TOLERANCE_DEG = 3;
+    for (const t of COLOR_THEMES) {
+      const trio = accentTrio(t);
+      const hue = (hx: string) => rgbToHsl(hexToRgb(hx))[0] * 360;
+      const gap = (a: string) => Math.abs(hue(a) - hue(t.accent));
+      expect(gap(trio.solid), `${t.id} solid`).toBeLessThanOrEqual(TOLERANCE_DEG);
+      expect(gap(trio.text), `${t.id} text`).toBeLessThanOrEqual(TOLERANCE_DEG);
+    }
+  });
+
+  /** 셋이 실제로 다른 값이어야 한다 — 같으면 나눈 의미가 없다. */
+  it("셋이 서로 다르다", () => {
+    for (const t of COLOR_THEMES) {
+      const trio = accentTrio(t);
+      expect(new Set([trio.solid, trio.base, trio.text]).size, t.id).toBe(3);
+    }
+  });
+
+  /** 테마를 고르면 셋이 **전부** 나가야 한다. 하나 빠지면 그 요소만 기본색으로 남는다. */
+  it("themeCss 가 셋을 다 낸다", () => {
+    const css = themeCss(COLOR_THEMES.find((t) => t.id !== DEFAULT_THEME_ID)!.id);
+    for (const n of ["--accent-solid:", "--accent:", "--accent-text:"]) {
+      expect(css, n).toContain(n);
+    }
+  });
 });

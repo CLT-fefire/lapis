@@ -130,7 +130,7 @@
 
   .rail-btn.active {
     background: var(--accent-bg-subtle);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   /* 선택 인디케이터 — Discord처럼 버튼 안이 아니라 **레일 가장자리**에 붙는 pill.

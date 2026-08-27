@@ -488,7 +488,7 @@
     text-overflow: ellipsis;
     font-weight: 600;
     font-size: var(--fs-base);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   /* 트리 로딩 표시는 하단 상태 줄(.status-dot.busy)로 통합 — 2026-08-05 PR-10.
@@ -734,7 +734,7 @@
   .link-btn {
     background: transparent;
     border: none;
-    color: var(--accent);
+    color: var(--accent-text);
     text-decoration: underline;
     font-size: var(--fs-sm);
     padding: 0;
