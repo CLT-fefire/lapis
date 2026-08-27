@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-08-27
+
 ### Added
 - **위키링크가 헤딩을 가리킬 수 있다** ([#246]). `[[노트#헤딩]]`은 그 노트를 열고 거기로
   스크롤한다. `[[#헤딩]]`은 지금 문서 안에서 움직인다. 마크다운 링크는 처음부터 앵커를 떼고
@@ -1089,6 +1091,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eren0315/lapis/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/eren0315/lapis/compare/v1.20.0...v2.0.0
 [1.20.0]: https://github.com/eren0315/lapis/compare/v1.19.0...v1.20.0
