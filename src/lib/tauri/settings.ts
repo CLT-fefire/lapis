@@ -20,6 +20,8 @@ export interface LapisSettings {
   custom_css: string;
   /** 적용 여부. 기본 true. 패닉 단축키가 이걸 끈다. */
   custom_css_enabled: boolean;
+  /** 색 테마 프리셋 id. 빈 값이면 기본(`app.css` 그대로). */
+  color_theme: string;
 }
 
 export async function settingsRead(): Promise<LapisSettings> {

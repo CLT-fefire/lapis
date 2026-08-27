@@ -54,8 +54,9 @@ export const LAPIS_HOOKS = [
 
 export type LapisHook = (typeof LAPIS_HOOKS)[number];
 
-/** 주입되는 `<style>`의 식별자. 이것도 훅 이름 규칙을 따른다. */
+/** 주입되는 `<style>`의 식별자들. 훅 이름 규칙을 따른다. */
 const STYLE_ID = "user-css";
+const THEME_STYLE_ID = "color-theme";
 
 /**
  * 사용자 CSS를 head **끝**에 넣는다. 마지막이라 특이도만 같으면 이긴다.
@@ -65,14 +66,31 @@ const STYLE_ID = "user-css";
  */
 export function applyUserCss(css: string, enabled: boolean): void {
   if (typeof document === "undefined") return;
-  let el = document.querySelector<HTMLStyleElement>(`style[data-lapis="${STYLE_ID}"]`);
+  // 꺼져 있으면 **빈 문자열**을 넣는다. 요소를 지우지 않는 이유는 위와 같다.
+  styleSlot(STYLE_ID).textContent = enabled ? css : "";
+}
+
+/**
+ * 색 테마 프리셋 주입.
+ *
+ * ⚠️ **사용자 CSS보다 먼저** 들어가야 한다. 둘 다 `:root` 토큰을 덮어쓰는데 특이도가
+ * 같으므로 **나중 것이 이긴다** — 사용자가 프리셋 위에 자기 색을 얹을 수 있어야 한다.
+ * `styleSlot`이 없으면 만들어 append하므로, 이 함수를 먼저 부르는 것으로 순서가 정해진다.
+ */
+export function applyColorThemeCss(css: string): void {
+  if (typeof document === "undefined") return;
+  styleSlot(THEME_STYLE_ID).textContent = css;
+}
+
+/** `<style data-lapis="…">` 슬롯을 얻거나 만든다. 요소를 재사용해 순서를 지킨다. */
+function styleSlot(id: string): HTMLStyleElement {
+  let el = document.querySelector<HTMLStyleElement>(`style[data-lapis="${id}"]`);
   if (!el) {
     el = document.createElement("style");
-    el.setAttribute("data-lapis", STYLE_ID);
+    el.setAttribute("data-lapis", id);
     document.head.appendChild(el);
   }
-  // 꺼져 있으면 **빈 문자열**을 넣는다. 요소를 지우지 않는 이유는 위와 같다.
-  el.textContent = enabled ? css : "";
+  return el;
 }
 
 /**
@@ -99,3 +117,65 @@ export function isPanicChord(e: {
   //    `keymap.ts`의 `isOptionB`가 같은 이유로 같은 짓을 한다.
   return e.code === "KeyC" || e.key.toLowerCase() === "c" || e.key === "ç" || e.key === "Ç";
 }
+
+/**
+ * 편집기가 비었을 때 채워 넣는 **예시**.
+ *
+ * ## ⚠️ 저장된 값이 아니다
+ *
+ * 설정에 빈 문자열이 저장돼 있을 때 **편집기 초기 문서로만** 쓴다. 저장을 누르기 전에는
+ * 아무것도 적용되지 않고, 전부 주석이라 그대로 저장해도 화면이 안 바뀐다.
+ *
+ * 기본값 자체를 이걸로 두지 않는 이유: 그러면 "아무것도 설정 안 한 상태"가 사라져서,
+ * 사용자가 지워도 다음에 다시 나타나거나 반대로 영영 안 나타난다. **비어 있음은 비어
+ * 있음으로 남겨 두고, 보여 주기만 한다.**
+ *
+ * 내용은 **실제로 동작하는 규칙**을 주석 처리한 것이다. 설명만 있는 예시는 무엇을 붙잡을
+ * 수 있는지 안 알려준다 — 주석 하나만 풀면 바로 결과가 보이는 쪽이 배우기 쉽다.
+ */
+export const EXAMPLE_CSS = [
+  "/* Lapis 사용자 정의 CSS",
+  " *",
+  " * 아래 규칙의 주석을 풀면 바로 적용됩니다. 저장을 눌러야 반영됩니다.",
+  " *",
+  " * 붙잡을 수 있는 것은 두 가지뿐입니다:",
+  " *   1. app.css 의 디자인 토큰 (--surface-* · --text-* · --accent* · --r-* …)",
+  " *   2. 아래 목록의 [data-lapis=\"…\"] 훅 15개",
+  " *",
+  " * .file-row 같은 내부 클래스는 예고 없이 바뀝니다.",
+  " *",
+  " * ⚠️ 화면을 못 쓰게 만들었다면 ⌘⇧⌥C (Ctrl+Shift+Alt+C) 로 적용을 끕니다.",
+  " */",
+  "",
+  "/* 1) 색 바꾸기 — 토큰만 덮어쓰면 앱 전체가 따라옵니다. */",
+  "/*",
+  ":root {",
+  "  --accent: #ff6b6b;",
+  "  --surface-content: #2a2d33;",
+  "}",
+  "*/",
+  "",
+  "/* 2) 특정 영역만 — 훅으로 붙잡습니다. */",
+  "/*",
+  "[data-lapis=\"sidebar\"] {",
+  "  border-right: 1px solid var(--accent);",
+  "}",
+  "*/",
+  "",
+  "/* 3) 본문 글자 — 읽는 화면만 키우기 */",
+  "/*",
+  "[data-lapis=\"preview\"] {",
+  "  font-size: 15px;",
+  "  line-height: 1.8;",
+  "}",
+  "*/",
+  "",
+  "/* 4) 모서리를 각지게 */",
+  "/*",
+  ":root {",
+  "  --r-sm: 0;",
+  "  --r-md: 2px;",
+  "  --r-lg: 4px;",
+  "}",
+  "*/",
+].join("\n");

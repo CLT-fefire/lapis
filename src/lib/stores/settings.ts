@@ -1,4 +1,5 @@
 import { writable } from "svelte/store";
+import { DEFAULT_THEME_ID, findTheme } from "$lib/colorThemes";
 import { settingsRead, settingsWrite, type LapisSettings } from "$lib/tauri/settings";
 
 // 백엔드 `lapis-settings.json`이 단일 SOT. localStorage 사용 안 함.
@@ -21,6 +22,7 @@ export const MCP_ENABLED_DEFAULT = false;
 export const mcpEnabled = writable<boolean>(MCP_ENABLED_DEFAULT);
 
 export const CUSTOM_CSS_DEFAULT = "";
+export const colorTheme = writable<string>(DEFAULT_THEME_ID);
 export const customCss = writable<string>(CUSTOM_CSS_DEFAULT);
 /** 사용자 CSS 적용 여부. 패닉 단축키가 이걸 끈다. */
 export const customCssEnabled = writable<boolean>(true);
@@ -30,6 +32,7 @@ export const SETTINGS_DEFAULTS: LapisSettings = {
   mcp_enabled: MCP_ENABLED_DEFAULT,
   custom_css: CUSTOM_CSS_DEFAULT,
   custom_css_enabled: true,
+  color_theme: DEFAULT_THEME_ID,
 };
 
 export function clampBackupKeep(n: number): number {
@@ -85,16 +88,20 @@ export async function restoreSettings(): Promise<void> {
     const css = typeof s.custom_css === "string" ? s.custom_css : CUSTOM_CSS_DEFAULT;
     // 없는 필드는 켜진 것으로 읽는다 — 예전 설정 파일에는 이 키가 없다.
     const cssOn = s.custom_css_enabled !== false;
+    // 모르는 id(옛 설정·손편집)는 기본으로 떨어뜨린다. 목록은 프런트가 진실이다.
+    const theme = findTheme(s.color_theme) ? s.color_theme : DEFAULT_THEME_ID;
     snapshot = {
       link_rewrite_backup_keep: keep,
       mcp_enabled: mcp,
       custom_css: css,
       custom_css_enabled: cssOn,
+      color_theme: theme,
     };
     linkRewriteBackupKeep.set(keep);
     mcpEnabled.set(mcp);
     customCss.set(css);
     customCssEnabled.set(cssOn);
+    colorTheme.set(theme);
   } catch (e) {
     console.warn("[settings] restore 실패 → 기본값 유지", e);
   } finally {
@@ -136,5 +143,21 @@ export async function setCustomCssEnabled(on: boolean): Promise<void> {
   } catch (e) {
     // 저장에 실패해도 화면은 이미 돌아왔다. 다음 기동에 다시 켜질 뿐이다.
     console.warn("[settings] 사용자 CSS 토글 저장 실패", e);
+  }
+}
+
+/** 색 테마 프리셋 적용 — 백엔드 JSON + store. */
+export async function applyColorTheme(id: string): Promise<void> {
+  const safe = findTheme(id) ? id : DEFAULT_THEME_ID;
+  // `setCustomCssEnabled`와 같은 순서 — store를 먼저 세워 화면이 바로 따라오게 하고,
+  // 저장은 뒤에 한다. 색을 고르는 조작은 즉시 보이는 것이 전부다.
+  colorTheme.set(safe);
+  try {
+    await patchSettings({ color_theme: safe });
+  } catch (e) {
+    // ⚠️ 호출부가 `void applyColorTheme(...)`로 부른다. 여기서 안 잡으면 unhandled
+    //    rejection이 된다. 저장에 실패해도 이번 세션의 화면은 이미 바뀌었고, 다음 기동에
+    //    옛 테마로 돌아갈 뿐이다 — 색 하나 때문에 콘솔을 어지럽힐 이유가 없다.
+    console.warn("[settings] 색 테마 저장 실패", e);
   }
 }
