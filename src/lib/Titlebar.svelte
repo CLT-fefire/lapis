@@ -34,9 +34,13 @@
    *
    * ## 드래그 영역
    *
-   * ⚠️ `data-tauri-drag-region` 은 **빈 공간에만** 준다. 컨트롤에 주면 클릭이 드래그로
-   * 먹혀 버튼이 안 눌린다. 크롬을 끄면(`chromeMode = "custom"`) 이 영역이 **유일한
-   * 이동 수단**이 된다.
+   * ⚠️ **`deep` 이어야 한다.** 값 없는 `data-tauri-drag-region` 은 **그 요소를 직접
+   * 클릭했을 때만** 먹는다 — 자식이 덮고 있는 자리는 드래그가 안 되고, 40px 짜리 줄에서
+   * 그 남는 자리는 거의 없다. 실제로 창이 안 움직였고 더블클릭 최대화도 안 됐다.
+   *
+   * ⚠️ **컨트롤에 따로 no-drag 를 주지 않아도 된다.** Tauri 가 button·link·checkbox 같은
+   * 상호작용 role 을 **기본으로 막는다.** 손으로 예외를 적으면 새 버튼을 넣을 때마다
+   * 빼먹게 되고, 빼먹으면 그 버튼만 안 눌린다.
    *
    * ## 캡션 버튼
    *
@@ -87,7 +91,7 @@
   const busy = $derived($indexBuilding || $indexRefreshing);
 </script>
 
-<header class="titlebar" data-lapis="titlebar" data-tauri-drag-region>
+<header class="titlebar" data-lapis="titlebar" data-tauri-drag-region="deep">
   <div class="tb-left">
     {#if $vaultPath}
       <PaneMenu
@@ -106,8 +110,8 @@
     {/if}
   </div>
 
-  <!-- ⚠️ 가운데는 드래그 영역을 겸한다. 커맨드바 자체는 버튼이라 드래그를 안 먹는다. -->
-  <div class="tb-center" data-tauri-drag-region>
+  <!-- 드래그는 위 header 의 `deep` 이 전부 덮는다 — 여기 따로 줄 필요가 없다. -->
+  <div class="tb-center">
     <button class="commandbar" title={m.titlebar_command_title()} onclick={() => openPaletteAtLastMode()}>
       <Search size={13} strokeWidth={2.2} aria-hidden="true" />
       <span class="cb-label">{m.titlebar_command_label()}</span>
@@ -155,7 +159,15 @@
   .titlebar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
+    /**
+     * ⚠️ **`stretch` 여야 한다.** `center` 면 세 섹션이 내용 높이(~28px)만 차지하고
+     * 40px 중 위아래가 **아무 요소도 없는 틈**이 된다. 그 틈은 드래그로는 잡히지만
+     * (header 가 `deep` 이므로) 캡션 버튼의 `height: 100%` 는 그 28px 을 기준으로 잡혀
+     * hover 사각형이 절반 크기가 된다 — Windows 관례의 46×40 이 아니게 된다.
+     *
+     * 세로 가운데 정렬은 각 섹션이 자기 안에서 한다.
+     */
+    align-items: stretch;
     gap: var(--sp-3);
     height: var(--titlebar-h);
     padding: 0 var(--sp-3);
@@ -173,6 +185,8 @@
 
   .tb-center {
     display: flex;
+    /* ⚠️ 부모가 stretch 라 여기서 안 잡으면 커맨드바 버튼이 40px 로 늘어난다. */
+    align-items: center;
     justify-content: center;
   }
 

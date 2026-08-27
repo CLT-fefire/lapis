@@ -96,11 +96,17 @@
   </button>
 
   {#if open}
+    <!--
+      ⚠️ `data-tauri-drag-region="false"` — 이 메뉴가 상단바 안에서도 열린다(vault 스위처).
+      상단바는 `deep` 드래그 영역이라, 이걸 안 막으면 **메뉴의 여백을 누를 때 창이 끌린다.**
+      항목은 버튼이라 Tauri 가 알아서 막지만 `<ul>`·`<li>` 의 빈 자리는 아니다.
+    -->
     <ul
       class="pane-menu-popover"
       class:align-left={align === "left"}
       role="menu"
       aria-label={label}
+      data-tauri-drag-region="false"
       transition:scale={menuPop()}
     >
       {#each items as item (item.id)}

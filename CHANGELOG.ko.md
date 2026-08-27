@@ -18,6 +18,34 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [3.0.1] — 2026-08-28
+
+### Fixed
+- **커스텀 타이틀바에서 창이 안 움직이고 캡션 버튼이 안 눌리던 것** ([#269]).
+  실물 Windows 창에서 잡혔다. 원인이 둘이고 **둘 다 에러 없이 같은 증상**을 만든다.
+
+  1. **드래그 영역이 사실상 없었다.** 값 없는 `data-tauri-drag-region` 은 **그 요소를
+     직접 클릭했을 때만** 먹는다 — 자식이 덮은 자리는 안 잡히는데, 40px 짜리 줄에서
+     자식이 안 덮은 자리는 거의 없다. 게다가 그 속성이 가운데 트랙에만 붙어 있었다.
+     이제 상단바 전체가 `deep` 이다.
+
+     ⚠️ 컨트롤마다 no-drag 예외를 손으로 적지 않는다 — Tauri 가 button·link 같은
+     **상호작용 role 을 기본으로 막는다.** 손으로 적으면 새 버튼마다 빼먹고, 빼먹은
+     버튼만 안 눌린다.
+
+  2. **캡션 버튼이 절반 높이였다.** `.titlebar` 가 `align-items: center` 라 세 섹션이
+     내용 높이(~28px)만 차지했고, `height: 100%` 인 버튼이 그것을 기준으로 풀렸다.
+     Windows 관례는 46×40 인데 46×28 이 나오고 있었다. 이제 46×40 이고 닫기 버튼이
+     창 오른쪽 끝에 붙는다.
+
+  더블클릭 최대화도 1번 때문에 안 됐다 — 잡을 면이 없으면 더블클릭도 그 면에 안 닿는다.
+- **상단바에서 vault 메뉴를 열면 메뉴 여백을 눌러도 창이 끌리던 것** ([#269]).
+  `deep` 은 하위 전체를 잡으므로 팝업이 자기 자리를 `data-tauri-drag-region="false"` 로
+  막는다. 항목은 버튼이라 Tauri 가 알아서 막지만 `<ul>`·`<li>` 의 빈 자리는 아니다.
+
+`titlebarChrome.test.ts` 가 넷을 못 박는다: `deep` 인지, 값 없는 속성이 남았는지,
+섹션이 늘어나는지, 버튼 폭이 46px 리터럴인지(밀도 토큰으로 바꾸면 조밀 모드에서 좁아진다).
+
 ## [3.0.0] — 2026-08-28
 
 > 셸 재설계(상단바 · 상태바 · 단일 뷰 사이드바 · 세그먼트 탭 · 밑줄 탭)와 색 토대는
@@ -1520,7 +1548,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.1...main
+[3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...v3.0.0
 [3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
 [2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
@@ -1570,6 +1599,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#269]: https://github.com/eren0315/lapis/pull/269
 [#268]: https://github.com/eren0315/lapis/pull/268
 [#267]: https://github.com/eren0315/lapis/pull/267
 [#265]: https://github.com/eren0315/lapis/pull/265
