@@ -15,12 +15,12 @@
 import { m } from "$lib/paraglide/messages.js";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
-import { resolveEffectiveTheme } from "$lib/stores/theme";
 
 const SCALE = 3;
 /** 다이어그램 테마(라이트/다크)에 맞춘 불투명 PNG 배경. */
 function exportBackground(): string {
-  return resolveEffectiveTheme() === "light" ? "#ffffff" : "#1e1e1e";
+  // 테마가 다크 하나뿐이라 고정이다. 다시 늘어나면 여기가 갈라진다.
+  return "#1e1e1e";
 }
 /** WebKit(WKWebView) canvas 면적 한계 ≈ 16,777,216 px² (≈4096×4096). 초과 시 빈/검은 출력. */
 const MAX_CANVAS_AREA = 16_777_216;

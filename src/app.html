@@ -6,16 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Lapis</title>
     <script>
-      // FOUC 방지 — first-paint 전에 테마 속성 적용 (theme.ts와 키 동기화)
-      (function () {
-        try {
-          var t = localStorage.getItem("lapis.theme");
-          document.documentElement.dataset.theme =
-            t === "light" || t === "dark" || t === "system" ? t : "system";
-        } catch (e) {
-          document.documentElement.dataset.theme = "system";
-        }
-      })();
+      // 테마는 다크 하나다. localStorage를 읽지 않는다 — 예전엔 light/dark/system
+      // 중에서 골랐고, 그 값에 따라 app.css가 팔레트를 세 벌 갖고 있었다.
+      // 색을 바꾸는 길은 이제 사용자 정의 CSS다. (theme.ts 참조)
+      document.documentElement.dataset.theme = "dark";
       // 레이아웃 점프 방지 — first-paint 전에 밀도 속성 적용 (density.ts와 키 동기화)
       (function () {
         try {
