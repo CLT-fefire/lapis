@@ -40,6 +40,8 @@ Your files live only on your local filesystem. No accounts, no cloud sync, no te
 ### Connections between documents
 
 - **Wikilinks** — jump with `[[Note name]]`. `[[...]]` inside fenced code blocks and inline code is **not** treated as a link (e.g. `[[String: Any]]` is code, not a link).
+- **Point at a heading** — `[[Note#Heading]]` opens the note and scrolls to that heading. `[[#Heading]]` moves within the current document. If the heading is not there, the note opens and stays put.
+  - A note whose *name* contains `#` (`C#.md`) wins: the whole target is looked up first, and only a miss is read as an anchor.
 - **Backlinks panel** — every document pointing at this one. Reverse references are the primary way to navigate.
 - **Frontmatter cross-refs** — `related`, `amends`, and `superseded_by` are indexed separately, **preserving the relation type**. "The document that corrected this one" doesn't get mixed in with "merely related".
 - **Automatic link updates** — rename a file and references to it are followed and fixed, after a **dry-run preview** and a **backup**.

@@ -192,8 +192,14 @@ function rewriteLinksInBody(
 
   // 정규식 escape
   const escapedOld = escapeRegex(oldStem);
-  // Wikilink: [[oldStem]] or [[oldStem|alias]] — alias 보존
-  const wikilinkRe = new RegExp(`\\[\\[(${escapedOld})(\\|[^\\]\\n]*)?\\]\\]`, "g");
+  // Wikilink: [[oldStem]] · [[oldStem#anchor]] · [[oldStem|alias]] · [[oldStem#anchor|alias]]
+  // ⚠️ 앵커와 별칭을 **둘 다 보존**한다. 마크다운 링크는 처음부터 앵커를 보존했는데
+  //    위키링크만 안 했다 — 앵커가 해소되게 된 뒤로는 여기가 이름 바꾸기가 링크를
+  //    조용히 깨는 경로가 된다. 앵커 안의 `#`은 그대로 두되 `|`에서 멈춘다.
+  const wikilinkRe = new RegExp(
+    `\\[\\[(${escapedOld})(#[^\\]\\n|]*)?(\\|[^\\]\\n]*)?\\]\\]`,
+    "g",
+  );
   // MD link: [text](oldStem.md) or [text](path/oldStem.md) or [text](oldStem.md#anchor)
   const mdlinkRe = new RegExp(
     `(\\]\\(\\s*)([^)\\n]*?\\/)?${escapedOld}(\\.md)(#[^)\\n]*)?(\\s*\\))`,
@@ -210,9 +216,9 @@ function rewriteLinksInBody(
       .map((seg) => {
         if (seg.isCode) return seg.text;
         let s = seg.text;
-        s = s.replace(wikilinkRe, (_match, _stem, aliasPart) => {
+        s = s.replace(wikilinkRe, (_match, _stem, anchorPart, aliasPart) => {
           count++;
-          return `[[${newStem}${aliasPart ?? ""}]]`;
+          return `[[${newStem}${anchorPart ?? ""}${aliasPart ?? ""}]]`;
         });
         s = s.replace(mdlinkRe, (_match, prefix, pathPart, _ext, anchor, suffix) => {
           count++;

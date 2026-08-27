@@ -17,6 +17,21 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **Wikilinks can point at a heading** ([#246]). `[[Note#Heading]]` opens the note and scrolls
+  there; `[[#Heading]]` moves within the current document. Markdown links have always dropped the
+  anchor before resolving (Rust does it during extraction) — wikilinks never did, so `[[Note#H]]`
+  resolved to nothing.
+
+  That failure was quiet in two places at once. The link rendered grey as if the note did not
+  exist, it was reported under broken links, and the **backlink edge disappeared** — the target's
+  backlink list was simply one row shorter, with nothing to indicate why.
+
+  ⚠️ **The whole target is looked up first, and only a miss is read as an anchor.** A file name may
+  contain `#` (`C#.md`), and the other order would send an already-working `[[C#]]` quietly to
+  `C.md`. Written this way the fallback cannot change any link that resolves today.
+
+  A heading that is not there does not scroll anywhere. Landing at the top of the right note beats
+  landing on the wrong heading, which reads as if it were the right one.
 - **Unlinked mentions — the fourth audit** ([#245]). Places that name another note without linking
   to it. `lapis links --unlinked`, a fourth tab in the vault hygiene panel, and a row in
   `lapis doctor`. Broken links ask "pointed at nothing", orphans ask "nobody points here"; this one
@@ -44,6 +59,10 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   them too: 0.73 → 0.79 s on the same vault (+54 ms), and on a large vault this row dominates.
 
 ### Fixed
+- **Renaming a note dropped the anchor from wikilinks** ([#246]). `[[old#Heading]]` became
+  `[[new]]`. Markdown links preserved anchors from the start; the wikilink pattern matched only
+  `[[stem]]` and `[[stem|alias]]`. It never mattered while anchors did not resolve — now it would
+  be a rename silently breaking a link.
 - **Three of the first five hits were notes that already linked to the target** ([#245]). Found by
   running the audit against a real vault before shipping it. All three had the same shape — a link
   written with the filename and the description written with the title:
@@ -1156,6 +1175,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#246]: https://github.com/eren0315/lapis/pull/246
 [#245]: https://github.com/eren0315/lapis/pull/245
 [#243]: https://github.com/eren0315/lapis/pull/243
 [#240]: https://github.com/eren0315/lapis/pull/240

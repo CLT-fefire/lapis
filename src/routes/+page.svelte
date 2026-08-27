@@ -44,6 +44,9 @@
     outlineHeadings,
     activeHeadingSlug,
     headingJumpRequest,
+    pendingHeadingAnchor,
+    findHeadingByAnchor,
+    jumpToHeading,
   } from "$lib/stores/outline";
   import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
   import { openNewNote } from "$lib/stores/tree-ui";
@@ -98,7 +101,8 @@
 import { isPanicChord } from "$lib/userCss";
   import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
-  import { getBacklinks, resolveTarget } from "$lib/linkIndex";
+  import { getBacklinks, resolveWikilink, type LinkIndex } from "$lib/linkIndex";
+  import type { HeadingInfo } from "$lib/markdownPlugins/headingAnchor";
   import { groupRelations, type RelationGroup } from "$lib/relations";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
   import { exportMermaidHostToPng } from "$lib/mermaidExport";
@@ -348,6 +352,21 @@ import { isPanicChord } from "$lib/userCss";
     });
   }
 
+  /**
+   * 이 링크가 **실제로 갈 데가 있나.** 클릭 처리(`jumpToWikilink`)와 같은 판정이어야
+   * 한다 — 갈라지면 파랗게 보이는데 눌러도 안 가거나, 회색인데 눌리면 간다.
+   */
+  function isLive(
+    target: string,
+    idx: LinkIndex,
+    from: string,
+    headings: readonly HeadingInfo[],
+  ): boolean {
+    const hit = resolveWikilink(target, idx, from);
+    if (hit.sameDoc) return hit.anchor !== null && findHeadingByAnchor(headings, hit.anchor) !== null;
+    return hit.path !== null;
+  }
+
   // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
   $effect(() => {
     trackPreviewHtml();
@@ -355,10 +374,13 @@ import { isPanicChord } from "$lib/userCss";
     // ⚠️ 지금 그리고 있는 노트를 맥락으로 넘긴다. 이게 빠지면 같은 이름의 노트가 둘일 때
     // "해소됨" 표시가 실제로 점프할 곳과 어긋난다.
     const from = $currentNotePath ?? "";
+    // ⚠️ 같은 문서 앵커(`[[#헤딩]]`)는 인덱스가 모른다 — 헤딩 목록으로 판정한다.
+    //    여기서 빼면 잘 동작하는 링크가 회색으로 보이고, 사용자는 안 눌러 본다.
+    const headings = parsed.headings;
     afterPreviewRender((body) => {
       for (const a of body.querySelectorAll<HTMLElement>(".wikilink")) {
         const target = a.getAttribute("data-target");
-        const resolved = idx && target ? !!resolveTarget(target, idx, from) : false;
+        const resolved = idx && target ? isLive(target, idx, from, headings) : false;
         a.classList.toggle("resolved", resolved);
         a.classList.toggle("unresolved", !resolved);
       }
@@ -436,6 +458,28 @@ import { isPanicChord } from "$lib/userCss";
   // parsed.headings → outline 스토어 (사이드바 OutlinePanel이 구독).
   $effect(() => {
     outlineHeadings.set(parsed.headings);
+  });
+
+  /**
+   * `[[노트#헤딩]]`으로 넘어온 뒤 그 헤딩으로 스크롤한다.
+   *
+   * ⚠️ **`parsed.headings`를 같이 읽는 것이 핵심이다.** 앵커만 보고 돌면 아직 이전
+   * 노트의 목록일 수 있다. 둘을 한 effect에서 읽으면 노트가 바뀐 뒤의 목록으로 찾는다.
+   *
+   * ⚠️ 못 찾으면 **아무 데도 안 간다.** 문서 맨 위에 그대로 있는 편이 엉뚱한 헤딩으로
+   * 스크롤하는 것보다 낫다 — 후자는 사용자가 잘못된 곳을 읽고 있는 줄 모른다.
+   */
+  $effect(() => {
+    const want = $pendingHeadingAnchor;
+    const headings = parsed.headings;
+    if (want === null) return;
+    pendingHeadingAnchor.set(null);
+    const hit = findHeadingByAnchor(headings, want);
+    if (!hit) {
+      console.info("wikilink anchor not found:", want);
+      return;
+    }
+    jumpToHeading(hit);
   });
 
   // TOC 클릭 → 에디터 라인 점프 + 프리뷰 스크롤. nonce로 동일 헤딩 반복 클릭도 재발화.
