@@ -21,10 +21,11 @@ import {
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
 import { runIndex, IndexError } from "./indexRun.ts";
+import { runExport, ExportError } from "./exportRun.ts";
 import { launchOpen, LaunchError } from "./appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
@@ -811,6 +812,80 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
 }
 
 /**
+ * 설정 파일에서 고른 색 테마를 읽는다. 없으면 `undefined`(기본 팔레트).
+ *
+ * ⚠️ 읽기 실패를 **삼킨다.** 테마를 못 읽어서 내보내기 전체를 막을 이유가 없다 —
+ * 기본 팔레트로 나가는 것이 안 나가는 것보다 낫다. 다만 색이 다를 수 있다는 것은
+ * `cli/README.md`가 말한다.
+ */
+function pickColorTheme(): string | undefined {
+  for (const file of settingsFileCandidates()) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+      const t = parsed.color_theme;
+      if (typeof t === "string" && t) return t;
+    } catch {
+      // 없거나 깨졌다. 다음 후보로.
+    }
+  }
+  return undefined;
+}
+
+/**
+ * `lapis export <노트>` — 자립 HTML 한 장.
+ *
+ * ⚠️ 앱의 내보내기와 **결과가 다를 수 있다**(mermaid · 사용자 CSS). 차이는
+ * `exportRun.ts` 헤더와 `cli/README.md`에 표로 있다.
+ */
+export function cmdExport(p: ParsedCommand, out: Out): void {
+  const target = p.positional[0];
+  const { path: notePath } = resolveNotePath(target, vaultOf(p));
+  const repoRoot = process.env.LAPIS_REPO;
+  if (!repoRoot) {
+    out.fail(
+      "internal",
+      "LAPIS_REPO 가 없다 — 러너를 거치지 않고 실행됐다",
+      "cli/lapis (또는 cli\lapis.cmd) 로 실행하라",
+      2,
+    );
+  }
+
+  let result;
+  try {
+    result = runExport({
+      notePath,
+      repoRoot,
+      ...(pickColorTheme() !== undefined ? { colorTheme: pickColorTheme()! } : {}),
+    });
+  } catch (e) {
+    if (e instanceof ExportError) out.fail("export_failed", e.message, e.remedy, 1);
+    throw e;
+  }
+
+  const dest = typeof p.options.out === "string" ? p.options.out : undefined;
+  if (!dest) {
+    // ⚠️ `--json` 이어도 HTML 을 그대로 낸다. 파이프로 받는 쪽이 원하는 건 문서지
+    //    문서를 감싼 JSON 이 아니다.
+    return out.line(result.html);
+  }
+
+  try {
+    writeFileSync(dest, result.html, "utf8");
+  } catch (e) {
+    out.fail("export_failed", `쓸 수 없다: ${dest}`, String(e), 1);
+  }
+
+  if (out.json) {
+    return out.json_({ note: notePath, out: dest, images: result.images });
+  }
+  out.line(`${dest} 로 썼다.`);
+  if (result.images.failed > 0) {
+    // ⚠️ 조용히 원본 경로를 남기면 "자립"이 거짓이 된다.
+    out.line(`⚠️  이미지 ${result.images.failed}개를 못 넣었다 — 그 자리는 원본 경로 그대로다.`);
+  }
+}
+
+/**
  * `lapis props audit` — frontmatter 값이 갈린 곳.
  *
  * ⚠️ `tag audit`과 성격이 같지만 **대상이 다르다.** 저쪽은 태그, 이쪽은 거를 수 있는
@@ -885,6 +960,7 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   links: cmdLinks,
   tag: cmdTag,
   status: cmdStatus,
+  export: cmdExport,
   props: cmdProps,
   index: cmdIndex,
   open: cmdOpen,

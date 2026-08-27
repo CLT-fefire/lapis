@@ -30,6 +30,57 @@ export function collectCssVarNames(css: string): string[] {
  * @param resolve 토큰 이름 → 값. 정의가 없으면 빈 문자열을 반환해야 한다
  *   (그 경우 선언을 생략해 CSS에 적힌 fallback이 살아남는다).
  */
+/**
+ * 스타일시트의 **무조건적인 `:root`** 블록에서 커스텀 프로퍼티를 읽는다.
+ *
+ * ## ⚠️ 왜 브라우저 없이 읽어야 하나
+ *
+ * 앱은 `getComputedStyle`로 살아 있는 값을 읽는다 — 색 테마와 사용자 CSS가 이미 반영된
+ * 값이다. **CLI에는 브라우저가 없다.** 그래서 `app.css`를 직접 읽는다.
+ *
+ * ⚠️ **조건이 붙은 root는 안 읽는다.** `:root[data-density="compact"]`는 그 밀도를 고른
+ * 사람에게만 참이다. 무조건 가져오면 안 고른 사람의 문서에 compact 간격이 박힌다 —
+ * 문서는 열리고 글자만 촘촘하다. 아무도 왜인지 모른다.
+ */
+/**
+ * `--a: 1px; --b: url(data:image/png;base64,AA);` → 선언 목록.
+ *
+ * ⚠️ **`;`로 그냥 쪼개면 안 된다.** data URI 안에 `;`가 들어간다(`image/png;base64`).
+ * 괄호 깊이를 세서 괄호 안의 `;`는 값의 일부로 둔다. 이걸 놓치면 이미지 하나가 값의
+ * 절반만 박힌 채로 나가고, 문서는 열리되 그림만 안 나온다.
+ */
+function splitDeclarations(body: string): [string, string][] {
+  const out: [string, string][] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= body.length; i++) {
+    const ch = body[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (i !== body.length && !(ch === ";" && depth === 0)) continue;
+    const chunk = body.slice(start, i);
+    start = i + 1;
+    const colon = chunk.indexOf(":");
+    if (colon === -1) continue;
+    const name = chunk.slice(0, colon).trim();
+    if (!name.startsWith("--")) continue;
+    out.push([name, chunk.slice(colon + 1).trim()]);
+  }
+  return out;
+}
+
+export function parseRootTokens(css: string): Map<string, string> {
+  const out = new Map<string, string>();
+  // 선택자가 정확히 `:root` 인 블록만. 앞에 다른 선택자가 붙은 것도 제외한다.
+  const blocks = css.matchAll(/(^|[}\s])(:root)\s*\{([^}]*)\}/g);
+  for (const b of blocks) {
+    // 주석을 먼저 걷어낸다 — 주석 안의 `--x: y;` 가 값으로 잡히면 조용히 틀린다.
+    const body = b[3].replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [name, value] of splitDeclarations(body)) out.set(name, value);
+  }
+  return out;
+}
+
 export function buildRootTokenBlock(
   css: string,
   resolve: (name: string) => string,

@@ -38,6 +38,24 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   cmd.exe는 LF만 있는 배치 파일에서 **티 안 나게** 이상하게 군다.
 
 ### Added
+- **`lapis export <노트>`** ([#253]). 자립 HTML 한 장을 터미널에서. 앱에는 2.0부터 있었는데,
+  헤드리스 소비자가 사는 CLI에는 없었다.
+
+  앱과 **같은 조립기**를 쓴다(`previewExportDoc.ts`). 다른 것은 재료를 어디서 얻느냐이고,
+  그 차이는 숨기지 않고 적었다 — 앱은 mermaid 때문에 **라이브 DOM을 복제**한다(마운트 후
+  런타임에 `<svg>`가 된다). CLI에는 브라우저가 없다. 그래서 mermaid는 코드 펜스로 남고,
+  토큰 값은 `getComputedStyle` 대신 `app.css` + 설정 파일이 말하는 색 테마에서 온다.
+  사용자 정의 CSS는 안 따라간다.
+
+  ⚠️ 못 넣은 이미지는 **세어서 말한다.** 조용히 원본 경로를 남기면 "자립"이 거짓이 된다.
+  원격 이미지는 일부러 그대로 둔다 — 받아오려다 실패하면 그림이 통째로 사라지는데 URL을
+  남기면 온라인에서는 보인다.
+
+### Fixed
+- **네이티브 경로를 주면 내보낸 문서 제목에 전체 경로가 박혔다** ([#253]). `$lib`은 `/`
+  구분자를 전제한다(`to_ui` 계약). CLI는 그 파이프라인 밖이다. 실제 호출은 캐시 경로라 이미
+  정규화돼 있지만, Windows 경로가 들어오면 `<title>C:\\Users\\…\\note</title>` 가 나왔다 —
+  문서는 멀쩡히 그려지고 탭 이름만 이상하다. 경계에서 한 번 정규화한다.
 - **설정 검색** ([#252]). 설정 헤더의 입력칸이 **카테고리를 가로질러** 찾는다 — 어느 카테고리에
   있는지 아는 것이야말로 찾을 때 없는 정보다. 결과마다 카테고리 이름을 같이 내고, 누르면
   그리로 간다.
@@ -1222,6 +1240,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#253]: https://github.com/eren0315/lapis/pull/253
 [#252]: https://github.com/eren0315/lapis/pull/252
 [#251]: https://github.com/eren0315/lapis/pull/251
 [#250]: https://github.com/eren0315/lapis/pull/250

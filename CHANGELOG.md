@@ -38,6 +38,25 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
 
 ### Added
+- **`lapis export <note>`** ([#253]). One self-contained HTML file, from the terminal. The app has
+  had this since 2.0; the CLI is where the other headless consumers live, and it did not.
+
+  Same assembler as the app (`previewExportDoc.ts`). What differs is where the material comes from,
+  and the difference is documented rather than hidden — the app clones the **live DOM** because
+  Mermaid only becomes `<svg>` after mounting, and there is no browser here. So Mermaid stays a
+  code fence, and token values are read out of `app.css` plus whichever color theme the settings
+  file names, rather than from `getComputedStyle`. Custom CSS does not carry over.
+
+  ⚠️ Images that cannot be inlined are **counted and reported**. Leaving the original path in
+  silently would make "self-contained" a lie. Remote images are deliberately left alone: fetching
+  and failing loses the picture entirely, while the URL still works online.
+
+### Fixed
+- **A native path would have put the whole path in the exported title** ([#253]). `$lib` assumes
+  `/` separators — the `to_ui` contract — and the CLI sits outside that pipeline. Real calls pass a
+  cache path, which is already normalized, but a Windows path produced
+  `<title>C:\\Users\\…\\note</title>`: the document renders fine and only the tab name is wrong.
+  Normalized at the boundary now.
 - **Settings search** ([#252]). A box in the settings header that searches **across** categories —
   knowing which category holds a setting is exactly what you lack when you go looking. Each result
   names its category, and clicking one takes you there.
@@ -1289,6 +1308,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#253]: https://github.com/eren0315/lapis/pull/253
 [#252]: https://github.com/eren0315/lapis/pull/252
 [#251]: https://github.com/eren0315/lapis/pull/251
 [#250]: https://github.com/eren0315/lapis/pull/250
