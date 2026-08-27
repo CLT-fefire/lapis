@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [2.3.1] — 2026-08-27
+
 ### Fixed
 - **글자색 `--danger` 가 열다섯 곳에 남아 있었다** ([#256]). 2.3.0에서 문제를 재고 콜아웃만
   옮겼고, 나머지는 눈으로 확인하며 갈 몫으로 남겼다. 이번이 그 차례다.
@@ -1233,6 +1235,7 @@ vault를 git으로 버전 관리.
 <!-- 링크 참조 -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eren0315/lapis/compare/v2.0.0...v2.1.0
