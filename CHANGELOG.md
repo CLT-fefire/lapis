@@ -17,6 +17,32 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Changed
+- **The sidebar shows one view at a time** ([#265]). Four stacked accordion sections become a
+  single view the rail selects, VS Code activity-bar style.
+
+  The v2.0.0 comment already said "VS Code activity bar idiom" while the behavior was section
+  toggling. 3.0 builds what the comment described: another icon switches, **the active icon
+  collapses**. The rail's collapse button is gone — the re-click does that job. ⌘B is unchanged.
+
+  Two views join the rail: the table and vault hygiene. ⚠️ Those are modals, not sidebar views —
+  the rail opens them and leaves the sidebar alone, because routing them through the view state
+  would leave an empty sidebar behind.
+
+  ⚠️ Section heights are gone, and the stored values with them. Four sections sharing 260px meant
+  none of them had room; height dragging handed that problem to the user rather than solving it.
+
+  ⚠️ **Collapsing no longer unmounts the sidebar.** Width-zero plus unmount redrew the whole tree
+  on every expand. It is a 34px strip now, and only the heavy contents are conditional.
+- **The context panel becomes segment tabs** ([#265]). Same reasoning at 300px. The tell was that
+  the outline defaulted to collapsed "because documents vary in length" — that is four sections
+  competing for one column, not a property of outlines.
+
+  The tab contents are untouched; only the container changed.
+- **Tabs are underlined, not folder-shaped** ([#265]). The chip worked by having the active tab
+  climb onto the content surface and join the page below it. With 3.0's surfaces the seam between
+  them is too faint to read. An underline does not depend on surfaces.
+
+  Drag reordering, the context menu, pins, and the dirty dot are unchanged.
 - **The shell gets a title bar and a status bar** ([#264]). Two full-width rows the window owns,
   rather than rows a note owns.
 
@@ -1488,6 +1514,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#265]: https://github.com/eren0315/lapis/pull/265
 [#264]: https://github.com/eren0315/lapis/pull/264
 [#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261

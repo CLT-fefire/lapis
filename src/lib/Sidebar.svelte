@@ -29,13 +29,9 @@
   } from "$lib/stores/treeFilter";
   import { tick } from "svelte";
   import { tagIndex } from "$lib/stores/tags";
-  import SidebarSection from "./SidebarSection.svelte";
+  import SidebarView from "./SidebarView.svelte";
   import {
     sidebarNav,
-    toggleSection,
-    setSectionHeight,
-    SECTION_KEYS,
-    type SidebarSectionKey,
   } from "$lib/stores/sidebar";
   import { FileText, Hash, SlidersHorizontal, Star, Settings, ChevronDown } from "@lucide/svelte";
   import PaneMenu, { type PaneMenuItem } from "./PaneMenu.svelte";
@@ -50,7 +46,7 @@
     selectedTopics,
   } from "$lib/stores/filters";
   import { openSettings } from "$lib/stores/settings";
-  import { toggleSidebar } from "$lib/stores/layout";
+  import { toggleSidebar, sidebarCollapsed } from "$lib/stores/layout";
 
   function vaultDisplayName(path: string): string {
     return path.split("/").filter(Boolean).pop() ?? path;
@@ -90,18 +86,6 @@
   });
 
   const noteCount = $derived($linkIndex ? $linkIndex.byPath.size : 0);
-
-  // === 펼친 섹션 리사이즈 ===
-  // 펼친 섹션을 위→아래 순서로 모은다. 마지막 펼친 섹션은 잔여 공간을 흡수(height=null·핸들 없음),
-  // 그 위 섹션들은 고정 px(미설정이면 균등) + 하단 리사이즈 핸들. (drag = 위 섹션 높이 조절)
-  const openKeys = $derived(SECTION_KEYS.filter((k) => $sidebarNav.sectionOpen[k]));
-  const lastOpenKey = $derived<SidebarSectionKey | null>(openKeys.at(-1) ?? null);
-  function sectionHeight(key: SidebarSectionKey): number | null {
-    return key === lastOpenKey ? null : ($sidebarNav.sectionHeights[key] ?? null);
-  }
-  function sectionResizable(key: SidebarSectionKey): boolean {
-    return openKeys.length > 1 && key !== lastOpenKey;
-  }
 
   // Phase A-1 — 필드 렌즈 그룹핑. 폴더 트리는 기본값, 필드 선택 시 값별 합성 그룹으로.
   const allInfos = $derived($linkIndex ? [...$linkIndex.byPath.values()] : []);
@@ -257,138 +241,114 @@
        `buildProgress` 의 done/total 을 쓰는 실측 진행으로 바뀌었다.
        dim 오버레이(.index-overlay)는 최초 빌드에만 — 아래 그대로 남는다. -->
 
-  <div class="sidebar-body">
+  <!-- ⚠️ 접혀 있으면 **내용을 안 그린다.** 컴포넌트는 살아 있고(펼침이 즉시 뜬다)
+       12,000 노트 트리의 렌더 비용만 안 문다. 예전엔 컴포넌트째로 언마운트했다. -->
+  <div class="sidebar-body" class:hidden={$sidebarCollapsed}>
     {#if !$vaultPath}
       <div class="empty">
         <p>{m.sidebar_pick_vault_hint()}</p>
       </div>
     {:else}
-      <SidebarSection
-        icon={FileText}
-        label={m.section_files()}
-        open={$sidebarNav.sectionOpen.files}
-        onToggle={() => toggleSection("files")}
-        height={sectionHeight("files")}
-        resizable={sectionResizable("files")}
-        onResize={(h) => setSectionHeight("files", h)}
-        onResizeReset={() => setSectionHeight("files", null)}
-      >
-        {#snippet children()}
-          {#if $notes.length > 0}
-            <div class="lens-bar">
-              <span class="lens-label">{m.sidebar_lens_label()}</span>
-              <select
-                class="lens-select"
-                value={$groupingField ?? ""}
-                onchange={(e) => setGroupingField(e.currentTarget.value || null)}
-                title={m.sidebar_lens_title()}
-              >
-                <option value="">{m.sidebar_lens_folder()}</option>
-                {#each groupingCandidatesList as c (c.field)}
-                  <option value={c.field}>{c.field} · {c.noteCount}</option>
-                {/each}
-              </select>
+      {#if $sidebarNav.activeView === "files"}
+        <SidebarView title={m.section_files()}>
+          {#snippet children()}
+      {#if $notes.length > 0}
+        <div class="lens-bar">
+          <span class="lens-label">{m.sidebar_lens_label()}</span>
+          <select
+            class="lens-select"
+            value={$groupingField ?? ""}
+            onchange={(e) => setGroupingField(e.currentTarget.value || null)}
+            title={m.sidebar_lens_title()}
+          >
+            <option value="">{m.sidebar_lens_folder()}</option>
+            {#each groupingCandidatesList as c (c.field)}
+              <option value={c.field}>{c.field} · {c.noteCount}</option>
+            {/each}
+          </select>
+        </div>
+        {#if $groupingField}
+          {#if groupedEntries.length > 0}
+            <div class="files-pane">
+              <FileTree entries={groupedEntries} disableDnd />
             </div>
-            {#if $groupingField}
-              {#if groupedEntries.length > 0}
-                <div class="files-pane">
-                  <FileTree entries={groupedEntries} disableDnd />
-                </div>
-              {:else}
-                <div class="filter-empty">{m.sidebar_lens_empty()}</div>
-              {/if}
-            {:else}
-              <div class="tree-filter">
-                <input
-                  type="text"
-                  class="tree-filter-input"
-                  placeholder={m.sidebar_filter_placeholder()}
-                  value={$treeFilterQuery}
-                  oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
-                  onkeydown={onTreeFilterKeydown}
-                  spellcheck="false"
-                  autocomplete="off"
-                />
-                {#if treeFilterActive}
-                  <span class="match-count" title={m.sidebar_filter_count_title()}>{filteredMatchCount}</span>
-                  <button
-                    class="filter-clear"
-                    onclick={clearTreeFilter}
-                    title={m.sidebar_filter_clear_title()}
-                    aria-label={m.sidebar_filter_clear_aria()}
-                  >✕</button>
-                {/if}
-              </div>
-              {#if treeFilterActive && filteredNotes.length === 0}
-                <div class="filter-empty">{m.sidebar_filter_empty()}</div>
-              {:else}
-                <div class="files-pane" bind:this={filesPaneEl}>
-                  <FileTree
-                    entries={filteredNotes}
-                    forceExpand={treeFilterActive}
-                    activePath={activeFilterPath}
-                  />
-                </div>
-              {/if}
-            {/if}
           {:else}
-            <div class="empty">
-              <p>{m.sidebar_folder_empty()}</p>
-              <p class="empty-hint">{m.sidebar_first_time_hint()}</p>
+            <div class="filter-empty">{m.sidebar_lens_empty()}</div>
+          {/if}
+        {:else}
+          <div class="tree-filter">
+            <input
+              type="text"
+              class="tree-filter-input"
+              placeholder={m.sidebar_filter_placeholder()}
+              value={$treeFilterQuery}
+              oninput={(e) => treeFilterQuery.set(e.currentTarget.value)}
+              onkeydown={onTreeFilterKeydown}
+              spellcheck="false"
+              autocomplete="off"
+            />
+            {#if treeFilterActive}
+              <span class="match-count" title={m.sidebar_filter_count_title()}>{filteredMatchCount}</span>
               <button
-                class="btn btn--primary welcome-btn"
-                onclick={createWelcomeNote}
-                disabled={welcomeCreating}
-              >
-                {welcomeCreating ? m.sidebar_welcome_creating() : m.sidebar_welcome_create()}
-              </button>
-              <button class="link-btn" onclick={pickAndOpenVault}>{m.sidebar_pick_other_vault()}</button>
+                class="filter-clear"
+                onclick={clearTreeFilter}
+                title={m.sidebar_filter_clear_title()}
+                aria-label={m.sidebar_filter_clear_aria()}
+              >✕</button>
+            {/if}
+          </div>
+          {#if treeFilterActive && filteredNotes.length === 0}
+            <div class="filter-empty">{m.sidebar_filter_empty()}</div>
+          {:else}
+            <div class="files-pane" bind:this={filesPaneEl}>
+              <FileTree
+                entries={filteredNotes}
+                forceExpand={treeFilterActive}
+                activePath={activeFilterPath}
+              />
             </div>
           {/if}
-        {/snippet}
-      </SidebarSection>
-
-      <SidebarSection
-        icon={Hash}
-        label={m.section_tags()}
-        open={$sidebarNav.sectionOpen.tags}
-        count={$tagIndex?.sortedTags.length ?? 0}
-        onToggle={() => toggleSection("tags")}
-        height={sectionHeight("tags")}
-        resizable={sectionResizable("tags")}
-        onResize={(h) => setSectionHeight("tags", h)}
-        onResizeReset={() => setSectionHeight("tags", null)}
-      >
-        {#snippet children()}<TagPanel />{/snippet}
-      </SidebarSection>
-
-      <SidebarSection
-        icon={SlidersHorizontal}
-        label={m.section_filters()}
-        open={$sidebarNav.sectionOpen.filters}
-        count={$selectedDocKinds.size + $selectedTopics.size || $docKindCounts.size + $topicCounts.size}
-        onToggle={() => toggleSection("filters")}
-        height={sectionHeight("filters")}
-        resizable={sectionResizable("filters")}
-        onResize={(h) => setSectionHeight("filters", h)}
-        onResizeReset={() => setSectionHeight("filters", null)}
-      >
-        {#snippet children()}<FilterPanel />{/snippet}
-      </SidebarSection>
-
-      <SidebarSection
-        icon={Star}
-        label={m.section_favorites()}
-        open={$sidebarNav.sectionOpen.favorites}
-        count={$pinnedNotePaths.length}
-        onToggle={() => toggleSection("favorites")}
-        height={sectionHeight("favorites")}
-        resizable={sectionResizable("favorites")}
-        onResize={(h) => setSectionHeight("favorites", h)}
-        onResizeReset={() => setSectionHeight("favorites", null)}
-      >
-        {#snippet children()}<FavoritesPanel />{/snippet}
-      </SidebarSection>
+        {/if}
+      {:else}
+        <div class="empty">
+          <p>{m.sidebar_folder_empty()}</p>
+          <p class="empty-hint">{m.sidebar_first_time_hint()}</p>
+          <button
+            class="btn btn--primary welcome-btn"
+            onclick={createWelcomeNote}
+            disabled={welcomeCreating}
+          >
+            {welcomeCreating ? m.sidebar_welcome_creating() : m.sidebar_welcome_create()}
+          </button>
+          <button class="link-btn" onclick={pickAndOpenVault}>{m.sidebar_pick_other_vault()}</button>
+        </div>
+      {/if}
+          {/snippet}
+        </SidebarView>
+      {:else if $sidebarNav.activeView === "tags"}
+        <SidebarView title={m.section_tags()} count={$tagIndex?.sortedTags.length ?? 0}>
+          {#snippet children()}<TagPanel />{/snippet}
+        </SidebarView>
+      {:else if $sidebarNav.activeView === "filters"}
+        <SidebarView
+          title={m.section_filters()}
+          count={$selectedDocKinds.size + $selectedTopics.size}
+        >
+          {#snippet children()}<FilterPanel />{/snippet}
+        </SidebarView>
+      {:else if $sidebarNav.activeView === "favorites"}
+        <SidebarView title={m.section_favorites()} count={$pinnedNotePaths.length}>
+          {#snippet children()}<FavoritesPanel />{/snippet}
+        </SidebarView>
+      {:else}
+        <!-- ⚠️ 테이블·위생은 **모달**이다. 레일에서 고르면 그 모달을 열고 뷰는 파일로
+             돌려 놓는다 — 사이드바에 빈 화면을 남기지 않기 위해서다. -->
+        <SidebarView title={m.section_files()}>
+          {#snippet children()}
+            <div class="empty"><p>{m.sidebar_pick_vault_hint()}</p></div>
+          {/snippet}
+        </SidebarView>
+      {/if}
     {/if}
 
     {#if $indexBuilding}
@@ -421,6 +381,11 @@
 </aside>
 
 <style>
+  /* 접힘 스트립 — 폭은 `.workspace` grid 가 준다. 여기서는 내용만 감춘다. */
+  .sidebar-body.hidden {
+    display: none;
+  }
+
   .sidebar {
     display: flex;
     flex-direction: column;

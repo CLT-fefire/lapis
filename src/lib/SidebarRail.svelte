@@ -5,68 +5,69 @@
     SlidersHorizontal,
     Star,
     Settings,
-    PanelLeftOpen,
-    PanelLeftClose,
+    Table,
+    Stethoscope,
     type LucideIcon,
   } from "@lucide/svelte";
-  import {
-    ensureSectionOpen,
-    toggleSection,
-    sidebarNav,
-    type SidebarSectionKey,
-  } from "$lib/stores/sidebar";
-  import { expandSidebar, toggleSidebar, sidebarCollapsed } from "$lib/stores/layout";
+  import { showView, sidebarNav, type SidebarViewKey } from "$lib/stores/sidebar";
+  import { expandSidebar, collapseSidebar, sidebarCollapsed } from "$lib/stores/layout";
+  import { openTableView } from "$lib/stores/tableView";
+  import { openBrokenLinks } from "$lib/stores/brokenLinks";
   import { openSettings } from "$lib/stores/settings";
   import { m } from "$lib/paraglide/messages.js";
   import { get } from "svelte/store";
 
   /**
-   * 좌측 아이콘 레일 — **상시 표시**(2026-08-05 PR-3). 접기의 "최소 상태"가 곧 레일이라
-   * 레일 자체는 접지 않는다. 사이드바 접힘은 폭 0이 되는 것이고 레일은 자리를 지킨다.
+   * 좌측 아이콘 레일 — **뷰를 고른다**(3.0). 상시 표시이고 레일 자체는 접지 않는다.
    *
-   * 아이콘 클릭 동작은 사이드바 상태에 따라 갈린다:
-   *  - 접힘 → 펼치고 해당 섹션 열기(종전 동작 보존)
-   *  - 펼침 → 해당 섹션 **토글**(VS Code 액티비티바 관용구)
-   * 활성 표시는 "그 섹션이 열려 있는가" — 사이드바가 접혀 있어도 다시 펼쳤을 때의
-   * 상태를 미리 알려준다.
+   * ## ⚠️ 토글에서 선택으로
+   *
+   * v2.0.0 주석은 이미 "VS Code 액티비티바 관용구"라고 적고 있었는데, 실제 동작은
+   * **섹션 토글**이었다(여러 개 동시 펼침). 3.0 은 적혀 있던 대로 만든다:
+   *
+   *  - 다른 아이콘 → 그 뷰로 **전환**
+   *  - 활성 아이콘 다시 → **접기**
+   *
+   * 그래서 맨 위 접기 버튼이 사라진다 — 재클릭이 그 일을 한다. ⌘B 는 그대로다.
    */
-  const items: { key: SidebarSectionKey; icon: LucideIcon; label: string }[] = [
+  const items: { key: SidebarViewKey; icon: LucideIcon; label: string }[] = [
     { key: "files", icon: FileText, label: m.section_files() },
     { key: "tags", icon: Hash, label: m.section_tags() },
     { key: "filters", icon: SlidersHorizontal, label: m.section_filters() },
     { key: "favorites", icon: Star, label: m.section_favorites() },
+    { key: "table", icon: Table, label: m.cmd_table_view() },
+    { key: "hygiene", icon: Stethoscope, label: m.hygiene_title() },
   ];
 
-  // {@const}는 블록/컴포넌트의 직계 자식만 허용되므로(<nav> 안에서는 불가) 룬으로 뽑는다.
-  const ToggleIcon = $derived($sidebarCollapsed ? PanelLeftOpen : PanelLeftClose);
+  /**
+   * ⚠️ 테이블과 위생은 **모달**이라 사이드바 뷰가 아니다. 레일에 두는 이유는 그 둘이
+   * vault 를 훑는 같은 부류이기 때문이고, 누르면 모달을 연다 — 사이드바는 건드리지
+   * 않는다. 여기서 `showView` 를 부르면 **빈 사이드바**가 남는다.
+   */
+  const MODAL_VIEWS: Partial<Record<SidebarViewKey, () => void>> = {
+    table: openTableView,
+    hygiene: () => openBrokenLinks(),
+  };
 
-  function activate(key: SidebarSectionKey) {
+  function activate(key: SidebarViewKey) {
+    const asModal = MODAL_VIEWS[key];
+    if (asModal) return asModal();
     if (get(sidebarCollapsed)) {
       expandSidebar();
-      ensureSectionOpen(key);
-    } else {
-      toggleSection(key);
+      showView(key);
+      return;
     }
+    // 활성 뷰를 다시 누르면 접는다 — 액티비티 바 관용구.
+    if (get(sidebarNav).activeView === key) collapseSidebar();
+    else showView(key);
   }
 </script>
 
 <nav class="rail" data-lapis="rail" aria-label={m.rail_aria()}>
-  <button
-    class="rail-btn"
-    aria-label={$sidebarCollapsed ? m.rail_expand() : m.rail_collapse()}
-    aria-expanded={!$sidebarCollapsed}
-    onclick={toggleSidebar}
-  >
-    <ToggleIcon size={18} />
-    <span class="rail-tip" aria-hidden="true">
-      {$sidebarCollapsed ? m.rail_expand() : m.rail_collapse()}
-      <kbd>⌘B</kbd>
-    </span>
-  </button>
-  <div class="rail-sep" aria-hidden="true"></div>
+  <!-- ⚠️ 접기 버튼이 없다 — **활성 아이콘 재클릭**이 그 일을 한다(3.0). ⌘B 는 그대로다. -->
   {#each items as it (it.key)}
     {@const Icon = it.icon}
-    {@const isOpen = $sidebarNav.sectionOpen[it.key]}
+    {@const isOpen = !$sidebarCollapsed && $sidebarNav.activeView === it.key}
     <button
       class="rail-btn"
       class:active={isOpen}
@@ -75,6 +76,8 @@
       onclick={() => activate(it.key)}
     >
       <Icon size={18} />
+      <!-- ⚠️ 접힘 상태에서만 단축키를 같이 낸다. 펼침 상태에서는 뷰 제목이 이미 보여서 -->
+      <!--    툴팁이 같은 말을 두 번 하게 된다. -->
       <span class="rail-tip" aria-hidden="true">{it.label}</span>
     </button>
   {/each}
@@ -203,21 +206,6 @@
   .rail-btn:focus-visible .rail-tip {
     opacity: 1;
     transform: translateY(-50%) translateX(0);
-  }
-
-  .rail-tip kbd {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    font-weight: 500;
-    opacity: 0.65;
-  }
-
-  .rail-sep {
-    width: 22px;
-    height: 1px;
-    background: var(--border-default);
-    margin: var(--sp-1) 0;
-    flex-shrink: 0;
   }
 
   .rail-spacer {
