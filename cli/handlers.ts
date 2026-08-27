@@ -11,7 +11,12 @@ import {
 } from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
-import { findOrphans, findTagIssues, findAmbiguousNames } from "$lib/vaultAudit";
+import {
+  findOrphans,
+  findTagIssues,
+  findAmbiguousNames,
+  findUnlinkedMentions,
+} from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
@@ -32,6 +37,7 @@ import {
   renderOrphans,
   renderTagIssues,
   renderAmbiguous,
+  renderUnlinked,
   table,
 } from "./render.ts";
 
@@ -105,6 +111,24 @@ function requireFreshIndex(out: Out, vc: VaultCache, p: ParsedCommand): void {
     "먼저 `lapis index` 를 돌려라 — 지금 쓰면 새 노트가 조용히 빠진다. 알면서 진행하려면 --allow-stale",
     2,
   );
+}
+
+/**
+ * vault의 모든 노트 본문. **캐시 목록 기준**이라 낡았으면 그만큼 덜 읽는다(그건 낡음 보고가 말한다).
+ *
+ * ⚠️ 감사 중 `--unlinked` 하나만 본문이 필요하다. 나머지는 인덱스만으로 되므로 이 함수를
+ * 부르는 곳을 늘리기 전에 정말 본문이 필요한지 먼저 본다 — 큰 vault에서 비용을 지배한다.
+ */
+function readBodies(vc: VaultCache): Map<string, string> {
+  const bodies = new Map<string, string>();
+  for (const info of vc.infos) {
+    try {
+      bodies.set(info.source_path, readFileSync(info.source_path, "utf8"));
+    } catch {
+      // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
+    }
+  }
+  return bodies;
 }
 
 /** 공통 옵션을 `QueryArgs`로. 명령별 핸들러가 자기 것만 얹는다. */
@@ -186,8 +210,14 @@ export function cmdList(p: ParsedCommand, out: Out): void {
 export function cmdLinks(p: ParsedCommand, out: Out): void {
   const broken = p.options.broken === true;
   const orphans = p.options.orphans === true;
-  if (!broken && !orphans) {
-    out.fail("no_criteria", "무엇을 볼지 지정하지 않았다", "--broken 또는 --orphans", 2);
+  const unlinked = p.options.unlinked === true;
+  if (!broken && !orphans && !unlinked) {
+    out.fail(
+      "no_criteria",
+      "무엇을 볼지 지정하지 않았다",
+      "--broken · --orphans · --unlinked 중 하나",
+      2,
+    );
   }
   const vc = resolveVault(vaultOf(p));
   const index = buildIndex(vc.infos);
@@ -206,6 +236,33 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
       "끊긴 링크는 노트가 아니라 링크 대상별로 묶여 시간축이 없다",
       2,
     );
+  }
+
+  if (unlinked) {
+    // ⚠️ 본문을 전부 읽는다. 다른 감사 셋은 인덱스만으로 되지만 이건 본문이 있어야 한다 —
+    //    그래서 `--unlinked`가 눈에 띄게 느리고, 도움말에도 그렇게 적어 뒀다.
+    const rows = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
+      ...r,
+      target: rel(r.target),
+      sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
+    }));
+    if (out.json) {
+      return out.json_({
+        vault: vc.root,
+        ...staleField(vc),
+        names: rows.length,
+        mentions: rows.reduce((n, r) => n + r.total, 0),
+        rows,
+      });
+    }
+    out.line(renderUnlinked(rows));
+    if (rows.length > 0) {
+      out.line(`\n이름 ${rows.length}개 · 언급 ${rows.reduce((n, r) => n + r.total, 0)}곳`);
+      // ⚠️ 고치라고 하지 않는다 — 감사 셋과 같은 태도다.
+      out.line("모호한 이름과 코드·frontmatter는 제외했다. 링크로 바꾸는 것은 손으로 한다.");
+    }
+    reportStale(out, vc);
+    return;
   }
 
   if (orphans) {
@@ -668,7 +725,16 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   const tagIssues = findTagIssues(vc.infos);
   const ambiguous = findAmbiguousNames(index).map((a) => ({ ...a, paths: a.paths.map(rel) }));
 
-  const problems = broken.length + orphans.length + tagIssues.length + ambiguous.length;
+  // ⚠️ **이 검사 하나만 본문을 읽는다.** 나머지 넷은 인덱스만 본다. 81노트 0.3 MB에서
+  //    doctor 전체가 0.73 → 0.79초였다(+54 ms). 큰 vault에서는 이 항목이 비용을 지배한다.
+  const unlinked = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
+    ...r,
+    target: rel(r.target),
+    sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
+  }));
+
+  const problems =
+    broken.length + orphans.length + tagIssues.length + ambiguous.length + unlinked.length;
 
   if (out.json) {
     out.json_({
@@ -680,6 +746,11 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
       orphans: { count: orphans.length, notes: orphans },
       tag_issues: tagIssues,
       ambiguous_names: ambiguous,
+      unlinked_mentions: {
+        names: unlinked.length,
+        mentions: unlinked.reduce((n, r) => n + r.total, 0),
+        rows: unlinked,
+      },
     });
     // ⚠️ `json_`는 출력만 한다. 종료 코드는 여기서 정해야 한다.
     if (problems > 0) process.exitCode = 1;
@@ -700,6 +771,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
       ["고아 노트", orphans.length === 0 ? "없음" : `${orphans.length}개`],
       ["태그 중복", tagIssues.length === 0 ? "없음" : `${tagIssues.length}묶음`],
       ["모호한 이름", ambiguous.length === 0 ? "없음" : `${ambiguous.length}개`],
+      ["안 걸린 언급", unlinked.length === 0 ? "없음" : `이름 ${unlinked.length}개`],
     ]),
   );
 
@@ -711,6 +783,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   if (broken.length > 0) out.line("  lapis links --broken");
   if (orphans.length > 0) out.line("  lapis links --orphans");
   if (tagIssues.length > 0 || ambiguous.length > 0) out.line("  lapis tag audit");
+  if (unlinked.length > 0) out.line("  lapis links --unlinked");
   process.exitCode = 1;
 }
 

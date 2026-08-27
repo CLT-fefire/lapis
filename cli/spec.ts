@@ -113,7 +113,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "links",
-    desc: "링크 감사. --broken(어디로도 안 가는 링크) · --orphans(아무도 안 가리키는 노트)",
+    desc: "링크 감사. --broken · --orphans · --unlinked 중 하나를 고른다",
     positional: [],
     options: [
       {
@@ -125,6 +125,11 @@ export const COMMANDS: CommandSpec[] = [
         name: "orphans",
         kind: "boolean",
         desc: "들어오는 링크가 없는 노트. 끊긴 링크의 거울상이다",
+      },
+      {
+        name: "unlinked",
+        kind: "boolean",
+        desc: "다른 노트 이름을 말했는데 링크는 없는 곳. 본문을 읽으므로 느리다",
       },
       ...TIME_OPTS,
     ],
@@ -162,7 +167,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "doctor",
-    desc: "vault 건강 검진 — 끊긴 링크 · 고아 · 태그 중복 · 인덱스 낡음을 한 번에",
+    desc: "vault 건강 검진 — 감사 넷 + 인덱스 낡음을 한 번에. 본문을 읽으므로 느리다",
     positional: [],
     options: [],
   },

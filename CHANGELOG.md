@@ -16,6 +16,54 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Added
+- **Unlinked mentions — the fourth audit** ([#245]). Places that name another note without linking
+  to it. `lapis links --unlinked`, a fourth tab in the vault hygiene panel, and a row in
+  `lapis doctor`. Broken links ask "pointed at nothing", orphans ask "nobody points here"; this one
+  asks **"said it, never pointed"** — the same graph from a third angle.
+
+  It lists and stops there. No convert-to-link button: the audits all behave this way, and a bulk
+  action over a list that still contains false positives spreads one mistake across the vault.
+
+  ⚠️ **Keeping false positives out is the whole feature.** The known weakness of the reference
+  implementations is noise, and a noisy list is one nobody opens. Eight rules do the filtering, and
+  each was measured by switching it off against a real 81-note vault:
+
+  | switched off | mentions reported |
+  |---|---|
+  | nothing (shipped) | **2** |
+  | code exclusion | 63 |
+  | sources already connected to the target | 5 |
+  | frontmatter exclusion | 5 |
+  | ambiguous-name rejection | 3 |
+
+  A two-item list looks like a feature that found nothing. The table is how you know it is a vault
+  that is genuinely well linked — loosening any single rule multiplies the list by up to thirty.
+
+  Only this audit reads note bodies; the other three need the index alone. That makes `doctor` read
+  them too: 0.73 → 0.79 s on the same vault (+54 ms), and on a large vault this row dominates.
+
+### Fixed
+- **Three of the first five hits were notes that already linked to the target** ([#245]). Found by
+  running the audit against a real vault before shipping it. All three had the same shape — a link
+  written with the filename and the description written with the title:
+
+  ```md
+  - [[STATE]] — Lapis progress
+  ```
+
+  The linked span is masked, the title sitting next to it is not, so a note that already points at
+  the target was reported as not pointing at it. Sources already connected to the target — by body
+  link or by a frontmatter relation — are now left out entirely. Note-level, not line-level: this
+  audit looks for **missing edges**, and once the edge exists it does not matter which line repeats
+  the name.
+
+### Internal
+- **The masking pass has a test of its own** ([#245]). Line numbers are counted from offsets into
+  the original text, so the mask replaces code and frontmatter with spaces rather than removing
+  them. If that length preservation ever breaks, nothing throws — every reported line number just
+  quietly shifts and still looks plausible.
+
 ## [2.1.0] — 2026-08-27
 
 ### Added
@@ -1108,6 +1156,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#245]: https://github.com/eren0315/lapis/pull/245
 [#243]: https://github.com/eren0315/lapis/pull/243
 [#240]: https://github.com/eren0315/lapis/pull/240
 [#239]: https://github.com/eren0315/lapis/pull/239

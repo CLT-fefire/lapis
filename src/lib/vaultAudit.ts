@@ -216,3 +216,224 @@ export function findAmbiguousNames(index: LinkIndex): AmbiguousName[] {
   out.sort((a, b) => asc(a.name, b.name));
   return out;
 }
+
+// ─── 링크 안 걸린 언급 ────────────────────────────────────────────────────────
+
+/**
+ * 이 길이 미만의 이름은 제안하지 않는다.
+ *
+ * ⚠️ 두 글자 이름(`설계` · `구조`)은 거의 모든 문서에 걸린다. **목록이 시끄러우면 아무도
+ * 안 보고**, 그러면 이 기능이 있는 의미가 없다. 조사한 사례에서 알려진 약점이 정확히
+ * 이 오탐이었다.
+ */
+export const MIN_MENTION_LENGTH = 3;
+
+export interface MentionSource {
+  path: string;
+  name: string;
+  /** 1-based. 그 노트에서 **처음** 나온 줄. */
+  line: number;
+  /** 그 줄. 길면 잘린다. */
+  preview: string;
+  /** 그 노트 안에서 몇 번 말했나. */
+  count: number;
+}
+
+export interface UnlinkedMention {
+  /** 언급된 이름(해소된 노트의 이름 · 제목 · alias 중 실제로 쓰인 것). */
+  name: string;
+  /** 그 이름이 가리키는 노트. */
+  target: string;
+  sources: MentionSource[];
+  /** 전 vault 통틀어 몇 번. */
+  total: number;
+}
+
+/** 미리보기 상한 — 목록이 가로로 터지지 않게. */
+const PREVIEW_MAX = 120;
+
+/**
+ * 본문에서 **코드·frontmatter·이미 걸린 링크**를 지운 사본을 만든다.
+ *
+ * ⚠️ 잘라내지 않고 **같은 길이의 공백으로 덮는다.** 길이가 변하면 줄 번호와 오프셋이
+ * 어긋나서, 찾은 자리를 사용자에게 보여줄 때 엉뚱한 줄을 가리킨다.
+ *
+ * ⚠️ **길이 보존이 조용히 깨지는 종류의 계약이라 밖으로 낸다.** 길이가 어긋나도 예외는
+ * 안 나고, 결과는 그럴듯한 줄 번호를 단 채 틀린다. 직접 겨냥한 테스트가 있어야 한다.
+ */
+export function maskNonProse(body: string): string {
+  let out = body;
+  const blank = (m: string) => m.replace(/[^\n]/g, " ");
+
+  // frontmatter — `title: 캐시 계약`이 자기 언급으로 잡히면 모든 노트가 자기를 언급한 게 된다.
+  out = out.replace(/^---\n[\s\S]*?\n---/, blank);
+  // 코드펜스
+  out = out.replace(/^[ \t]*```[\s\S]*?^[ \t]*```/gm, blank);
+  // 인라인 코드
+  out = out.replace(/`[^`\n]*`/g, blank);
+  // 이미 걸린 링크 — 위키링크와 마크다운 링크의 **표시 텍스트까지** 덮는다.
+  out = out.replace(/\[\[[^\]\n]*\]\]/g, blank);
+  out = out.replace(/\[[^\]\n]*\]\([^)\n]*\)/g, blank);
+  return out;
+}
+
+/**
+ * 그 노트가 **이미** 대상으로 연결돼 있나 — 본문 링크든 frontmatter 관계든.
+ *
+ * ## ⚠️ 실측으로 찾은 가장 큰 남은 오탐원
+ *
+ * 이 규칙을 넣기 전 실제 vault에서 나온 5건 중 **3건이 여기 걸렸다.** 전부 같은 모양이었다:
+ *
+ * ```md
+ * - [[STATE]] — Lapis 진행 상태
+ * ```
+ *
+ * 링크는 파일 이름으로 걸고 **설명은 제목으로** 쓴 줄이다. 링크된 자리는 이미 덮이지만
+ * 바로 옆의 제목은 안 덮여서, 이미 가리키고 있는 노트를 '안 가리킨다'고 보고했다.
+ *
+ * 줄 단위로 볼 수도 있었지만 노트 단위로 본다. 이 감사가 찾는 것은 **없는 간선**이고,
+ * 간선이 이미 있으면 어느 줄에서 다시 말하든 그래프는 이어져 있다.
+ */
+function alreadyLinks(index: LinkIndex, from: string, to: string): boolean {
+  if (index.backlinks.get(to)?.has(from)) return true;
+  // frontmatter `related:` 등은 backlinks가 아니라 relations가 담당한다(Phase A-2).
+  // 선언한 관계도 연결이다 — 여기서 빼면 관계를 적어 둔 노트가 계속 걸린다.
+  return (index.relations.incoming.get(to) ?? []).some((r) => r.path === from);
+}
+
+/** 정규식 메타문자 이스케이프. */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * 링크는 안 걸렸는데 다른 노트의 이름을 말한 곳.
+ *
+ * ## 왜 감사 계열의 네 번째인가
+ *
+ * 끊긴 링크는 "가리켰는데 없다", 고아는 "아무도 안 가리킨다"다. 이건 **"말했는데 안
+ * 가리킨다"** — 같은 그래프를 세 번째 각도에서 보는 것이다.
+ *
+ * ## ⚠️ 오탐을 막는 것이 이 함수의 전부다
+ *
+ * 조사한 사례(Obsidian)의 알려진 약점이 오탐이었다 — 제목 정확 일치로 잡으면 큰 vault에서
+ * 무관한 제안이 쏟아진다. 목록이 시끄러우면 아무도 안 본다.
+ *
+ * 거르는 것: **모호한 이름**(#220과 같은 규칙) · 짧은 이름 · 자기 자신 · 이미 링크된 자리 ·
+ * **이미 그 노트로 연결된 출처** · 코드 · frontmatter · 단어 경계 밖.
+ *
+ * ## ⚠️ 한국어 조사는 못 잡는다
+ *
+ * 단어 경계 규칙이 `캐시 계약을`을 안 잡는다. 알고 넘어가는 한계다 — 놓침은 조용하지만
+ * 해롭지 않고, 조사 목록은 손으로 유지하는 사전이다. 근거와 측정은 계획서 참조.
+ *
+ * ## 성능
+ *
+ * ⚠️ 이름마다 본문을 훑지 **않는다.** 이름 전부를 하나의 교대 정규식으로 합쳐 본문을 한 번만
+ * 지난다. 이름이 N개일 때 N번 훑으면 큰 vault에서 못 쓴다.
+ */
+export function findUnlinkedMentions(
+  index: LinkIndex,
+  bodies: ReadonlyMap<string, string>,
+): UnlinkedMention[] {
+  // 후보 이름 → 대상 경로. 모호한 이름과 짧은 이름은 여기서 이미 뺀다.
+  const nameToPath = new Map<string, string>();
+  for (const [key, paths] of index.resolver) {
+    if (paths.length !== 1) continue; // 모호 — #220과 같은 규칙
+    if (key.length < MIN_MENTION_LENGTH) continue;
+    nameToPath.set(key, paths[0]);
+  }
+  if (nameToPath.size === 0) return [];
+
+  // ⚠️ **긴 이름 먼저.** 정규식 교대는 왼쪽 우선이라, `검색`이 앞에 있으면
+  //    `검색 캐시 계약`이 영영 안 잡힌다.
+  const names = [...nameToPath.keys()].sort((a, b) => b.length - a.length || asc(a, b));
+  // ⚠️ **`\b`를 쓰면 한국어가 통째로 안 잡힌다.** JS의 `\b`는 `u` 플래그를 줘도
+  //    `\w`(= `[A-Za-z0-9_]`) 기준이라 한글은 단어 문자가 아니다. 그래서 `캐시 계약`
+  //    앞뒤 어디에도 경계가 안 생기고 매치가 0이 된다(Rust `regex`는 유니코드 인식이라
+  //    다르게 동작한다 — 언어마다 같은 기호의 뜻이 다르다).
+  //
+  //    글자 부류를 직접 적어 전후를 본다. 이러면:
+  //      `한글날` 안의 `한글`   → 뒤가 글자라 안 잡힌다 (의도)
+  //      `캐시 계약 을`        → 뒤가 공백이라 잡힌다
+  //      `캐시 계약을`         → 뒤가 글자라 안 잡힌다 (알려진 한계 — 조사)
+  const W = "\\p{L}\\p{N}_";
+  const re = new RegExp(
+    `(?<![${W}])(?:${names.map(escapeRe).join("|")})(?![${W}])`,
+    "giu",
+  );
+
+  /** target → name → source path → 집계 */
+  const acc = new Map<string, Map<string, Map<string, MentionSource>>>();
+
+  for (const [path, body] of bodies) {
+    const prose = maskNonProse(body);
+    // 줄 번호는 오프셋으로 센다 — 마스킹이 길이를 보존하므로 원본과 같다.
+    const lineStarts: number[] = [0];
+    for (let i = 0; i < body.length; i++) if (body[i] === "\n") lineStarts.push(i + 1);
+    const lineOf = (off: number) => {
+      let lo = 0;
+      let hi = lineStarts.length - 1;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (lineStarts[mid] <= off) lo = mid;
+        else hi = mid - 1;
+      }
+      return lo;
+    };
+
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(prose)) !== null) {
+      const key = m[0].toLowerCase();
+      const target = nameToPath.get(key);
+      // 대소문자 차이로 키가 안 맞을 수 있다 — 사전에 없으면 건너뛴다.
+      if (!target) continue;
+      if (target === path) continue; // 자기 이름은 언급이 아니다
+      if (alreadyLinks(index, path, target)) continue;
+
+      const byName = acc.get(target) ?? new Map();
+      acc.set(target, byName);
+      const bySrc = byName.get(key) ?? new Map();
+      byName.set(key, bySrc);
+
+      const prev = bySrc.get(path);
+      if (prev) {
+        prev.count++;
+      } else {
+        const li = lineOf(m.index);
+        const raw = body.slice(lineStarts[li], lineStarts[li + 1] ?? body.length);
+        bySrc.set(path, {
+          path,
+          name: index.byPath.get(path)?.source_name ?? path,
+          line: li + 1,
+          preview: raw.trim().slice(0, PREVIEW_MAX),
+          count: 1,
+        });
+      }
+    }
+  }
+
+  const out: UnlinkedMention[] = [];
+  for (const [target, byName] of acc) {
+    for (const [key, bySrc] of byName) {
+      const sources = [...bySrc.values()].sort((a, b) => asc(a.path, b.path));
+      out.push({
+        // 표시는 인덱스가 아는 실제 이름으로 — 소문자 키를 그대로 보여주면 어색하다.
+        name: displayName(index, target, key),
+        target,
+        sources,
+        total: sources.reduce((n, s) => n + s.count, 0),
+      });
+    }
+  }
+  return out.sort((a, b) => asc(a.name, b.name) || asc(a.target, b.target));
+}
+
+/** 소문자 키에 대응하는 **원래 표기**를 찾는다. 없으면 키 그대로. */
+function displayName(index: LinkIndex, target: string, key: string): string {
+  const info = index.byPath.get(target);
+  if (!info) return key;
+  for (const cand of [info.title, ...(info.aliases ?? []), info.source_name]) {
+    if (cand && cand.toLowerCase() === key) return cand;
+  }
+  return key;
+}
