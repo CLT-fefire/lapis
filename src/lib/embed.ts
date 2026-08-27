@@ -80,3 +80,24 @@ export interface EmbedRef {
 export function isCycle(chain: readonly string[], path: string): boolean {
   return chain.includes(path);
 }
+
+/**
+ * 당겨온 조각 위에 붙는 **원본 표시**의 HTML.
+ *
+ * ⚠️ 표시가 없으면 읽다가 **"이거 어디 거지"** 에 답이 없다. 테두리는 남의 글임을
+ * 알려주지만 **누구 것인지**는 말해 주지 않는다.
+ *
+ * 위키링크와 **같은 클래스**를 쓴다(`wikilink resolved`) — 클릭 처리와 색이 이미 거기
+ * 걸려 있고, 임베드 전용 클릭 경로를 하나 더 만들면 두 벌이 된다.
+ */
+export function embedSourceHtml(target: string, anchor: string | null, label: string): string {
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const full = anchor === null ? target : `${target}#${anchor}`;
+  return (
+    `<div class="embed-source">` +
+    `<span class="wikilink resolved" data-target="${esc(full)}" role="link" tabindex="0"` +
+    ` title="${esc(label)}">${esc(full)}</span>` +
+    `</div>`
+  );
+}

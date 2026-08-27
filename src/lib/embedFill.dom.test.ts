@@ -146,3 +146,38 @@ describe("⚠️ 실패는 자리에 남는다", () => {
     expect(r.textContent).not.toContain("끝");
   });
 });
+
+describe("⚠️ 어디서 당겨왔는지 보인다", () => {
+  /**
+   * 테두리는 "남의 글"만 말한다. 읽다가 **"이거 어디 거지"** 에 답이 없으면 임베드는
+   * 출처 없는 인용이 된다.
+   */
+  it("원본 표시가 조각보다 **먼저** 온다", async () => {
+    const r = await render("![[대상]]", { "/v/대상.md": "본문" });
+    const src = slot(r).querySelector(".embed-source");
+    expect(src?.textContent).toContain("대상");
+    // 다 읽고 나서 출처를 아는 것은 늦다.
+    expect(slot(r).firstElementChild).toBe(src);
+  });
+
+  it("앵커까지 보여준다", async () => {
+    const r = await render("![[대상#둘째]]", {
+      "/v/대상.md": "# 제목\n\n## 둘째\n둘째 본문",
+    });
+    expect(slot(r).querySelector(".embed-source")?.textContent).toBe("대상#둘째");
+  });
+
+  /** 위키링크와 **같은 클래스**를 쓴다 — 클릭 경로를 하나 더 만들지 않는다. */
+  it("위키링크로 만들어 기존 클릭 처리를 탄다", async () => {
+    const r = await render("![[대상]]", { "/v/대상.md": "본문" });
+    const link = slot(r).querySelector(".embed-source .wikilink");
+    expect(link?.getAttribute("data-target")).toBe("대상");
+    expect(link?.getAttribute("role")).toBe("link");
+  });
+
+  /** 실패한 자리에는 안 붙인다 — 갈 곳이 없는데 링크를 주면 안 된다. */
+  it("실패한 임베드에는 원본 표시가 없다", async () => {
+    const r = await render("![[없는것]]", {});
+    expect(slot(r).querySelector(".embed-source")).toBeNull();
+  });
+});

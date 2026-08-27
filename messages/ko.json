@@ -393,6 +393,7 @@
   "hygiene_props_plural": "단수/복수",
   "hygiene_props_prefix": "앞부분이 같음",
   "hygiene_props_hint": "거를 수 있는 축(doc_kind · topic 등)의 값이 갈린 곳입니다. 갈려 있으면 그 축으로 거르는 질의가 절반만 찾습니다 — 에러는 나지 않습니다. 자유 서술이 섞인 값도 걸리는데, 그게 틀렸다는 뜻은 아닙니다.",
+  "embed_source": "원본 열기",
   "cmd_grep": "vault 전체 검색 (정규식)",
   "grep_title": "vault 전체 검색",
   "grep_placeholder": "찾을 문자열 또는 정규식 — Enter로 실행",

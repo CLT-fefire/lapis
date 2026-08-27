@@ -19,6 +19,7 @@ import {
   embedFailureText,
   isCycle,
   sliceSection,
+  embedSourceHtml,
   type EmbedFailure,
 } from "$lib/embed";
 
@@ -100,7 +101,8 @@ function fillEmbeds(
       inner = parseNote(section).html;
     }
     const filled = fillEmbeds(inner, index, notePath, [...chain, notePath]);
-    return `<div class="embed">${filled}</div>`;
+    // 앱과 **같은 머리말**을 붙인다 — 규칙은 `$lib/embed.ts` 하나다.
+    return `<div class="embed">${embedSourceHtml(target, anchor, label)}${filled}</div>`;
   });
 }
 
