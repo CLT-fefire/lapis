@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [2.3.1] — 2026-08-27
+
 ### Fixed
 - **`--danger` was still the text color in fifteen places** ([#256]). 2.3.0 measured the problem
   and moved only the callout; the rest were left for a pass with eyes on them. This is that pass.
@@ -1304,6 +1306,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eren0315/lapis/compare/v2.0.0...v2.1.0
