@@ -59,11 +59,24 @@ export interface BuildResult {
  * ⚠️ 앱은 배치를 나눠 넣는다(`POST_BATCH`). 그건 **UI 프리즈를 막으려는 것**이지
  * 인덱스 내용과는 무관하다 — 여기엔 양보할 UI가 없으므로 한 번에 넣는다. 결과는 같다.
  */
-export function buildShards(contents: readonly NoteContentIn[]): BuildResult {
+/**
+ * @param titleByPath frontmatter title. `NoteContentIn`(Rust 번들의 본문 쪽)에는 없고
+ *   같은 내보내기의 `link_infos`에 있다. **앱과 같은 문서를 만들어야** 하므로 여기서도
+ *   싣는다 — 빠뜨리면 CLI가 만든 인덱스와 앱이 만든 인덱스의 토큰 공간이 갈린다.
+ */
+export function buildShards(
+  contents: readonly NoteContentIn[],
+  titleByPath: ReadonlyMap<string, string> = new Map(),
+): BuildResult {
   const shardCount = decideShardCount(contents.length);
   const buckets: FullTextDoc[][] = Array.from({ length: shardCount }, () => []);
   for (const n of contents) {
-    buckets[computeShardId(n.path, shardCount)].push({ id: n.path, name: n.name, body: n.body });
+    buckets[computeShardId(n.path, shardCount)].push({
+      id: n.path,
+      name: n.name,
+      title: titleByPath.get(n.path) ?? "",
+      body: n.body,
+    });
   }
 
   const shards: ShardOut[] = [];

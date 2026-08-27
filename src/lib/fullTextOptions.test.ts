@@ -36,7 +36,8 @@ import { FULLTEXT_OPTIONS, unionRankDetailed, type FullTextDoc } from "./fullTex
 
 function index(docs: [string, string][]): MiniSearch<FullTextDoc>[] {
   const ms = new MiniSearch<FullTextDoc>(FULLTEXT_OPTIONS);
-  ms.addAll(docs.map(([id, body]) => ({ id, name: id, body })));
+  // 제목 없는 노트를 재현한다 — 이 테스트가 보는 것은 결합 사다리지 제목 가중치가 아니다.
+  ms.addAll(docs.map(([id, body]) => ({ id, name: id, title: "", body })));
   return [ms];
 }
 

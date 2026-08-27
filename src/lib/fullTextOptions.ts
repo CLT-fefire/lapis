@@ -21,6 +21,13 @@ import { koBigramTokenize, normalizeTerm } from "./koTokenize";
 export interface FullTextDoc {
   id: string;
   name: string;
+  /**
+   * frontmatter `title`. 없으면 빈 문자열.
+   *
+   * ⚠️ **파일명으로 대체하지 않는다.** 그러면 `name`과 같은 텍스트가 두 필드에 들어가
+   * 파일명이 두 배로 세지고, **재지 않은 방향으로** 랭킹이 움직인다.
+   */
+  title: string;
   body: string;
 }
 
@@ -58,7 +65,35 @@ export interface RankedHit extends FullTextHit {
 }
 
 export const FULLTEXT_OPTIONS: Options<FullTextDoc> = {
-  fields: ["name", "body"],
+  /**
+   * ⚠️ **`fields`를 바꾸면 `CACHE_VERSION`을 올려야 한다.** 낡은 샤드가 무효화되지 않으면
+   * 에러 없이 조용히 오답을 낸다. `mcp/indexShape.test.ts`가 그걸 막는다.
+   *
+   * ## `title`이 왜 따로 있나 (측정 근거)
+   *
+   * 예전엔 `["name", "body"]`뿐이었다. `name`은 파일명이고, 이 저장소 계열 vault에서는
+   * 영문 kebab-case라 **한글 제목 질의에 아무 일도 안 했다.** frontmatter `title`은 자기
+   * 필드가 없어 `body` 안에서 다른 산문과 같은 취급을 받았다.
+   *
+   * 같은 183 케이스로 A/B 한 결과 — 제목 가운데 2어절 질의(`title-short`):
+   *
+   * | 설정 | title-short R@1 |
+   * |---|---:|
+   * | `["name", "body"]` | 67.2% |
+   * | `["name", "title", "body"]` | **86.9%** |
+   *
+   * ⚠️ **boost는 주지 않는다.** title boost를 0.01~100으로 흔들어도 결과가 한 자리도 안
+   * 변한다 — 깨끗한 질의는 100% `AND` 단계에서 끝나고 그 단계는 `AND_OPTIONS`를 명시적으로
+   * 넘겨서, 인스턴스 boost가 도달하지 않는다. 효과는 **BM25 필드 길이 정규화**에서 온다:
+   * 짧은 `title` 필드의 term이 긴 `body` 안의 같은 term보다 무겁게 잡힌다.
+   *
+   * 없는 효과를 내는 숫자를 남기면 다음 사람이 그걸 근거 있는 값으로 읽는다.
+   *
+   * ⚠️ 위 수치는 **하네스가 질의를 `title`에서 뽑는다는 점을 감안해서** 읽어야 한다.
+   * 제목과 무관한 `body` 케이스는 83.6% → 85.2%(+1.6pt)뿐이다. "검색이 10pt 좋아진다"가
+   * 아니라 **"기억한 제목으로 찾는 경우가 크게 좋아진다"** 가 맞는 표현이다.
+   */
+  fields: ["name", "title", "body"],
   storeFields: ["name"],
   idField: "id",
   tokenize: koBigramTokenize,

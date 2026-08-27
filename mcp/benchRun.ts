@@ -75,7 +75,12 @@ const tRead = performance.now();
 const docs: FullTextDoc[] = [];
 for (const info of picked) {
   try {
-    docs.push({ id: info.source_path, name: info.source_name, body: readFileSync(info.source_path, "utf8") });
+    docs.push({
+      id: info.source_path,
+      name: info.source_name,
+      title: info.title ?? "",
+      body: readFileSync(info.source_path, "utf8"),
+    });
   } catch {
     // 캐시에는 있는데 디스크에서 사라진 노트. 벤치 표본에서 빠지는 것 외에 의미 없다.
   }

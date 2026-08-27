@@ -218,7 +218,12 @@ export function runIndex(opts: RunIndexOptions): IndexOutcome {
     // ── ② shard 빌드 ─────────────────────────────────────────────────────────
     say("풀텍스트 인덱스를 만드는 중…");
     const t1 = Date.now();
-    const built = buildShards(contents);
+    // title은 `link_infos`에만 있다. 같은 내보내기의 두 배열을 경로로 잇는다.
+    const titleByPath = new Map<string, string>();
+    for (const li of linkInfos as { source_path?: string; title?: string | null }[]) {
+      if (li?.source_path) titleByPath.set(li.source_path, li.title ?? "");
+    }
+    const built = buildShards(contents, titleByPath);
     const buildMs = Date.now() - t1;
     say(`shard ${built.shardCount}개 [${built.perShard.join(", ")}] · ${buildMs} ms`);
 
