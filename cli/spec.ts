@@ -160,6 +160,18 @@ export const COMMANDS: CommandSpec[] = [
     options: [],
   },
   {
+    name: "export",
+    desc: "노트를 자립 HTML 한 장으로. 앱 내보내기와 차이가 있다 — README 참조",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
+    options: [
+      {
+        name: "out",
+        kind: "string",
+        desc: "쓸 파일. 없으면 표준출력으로 낸다",
+      },
+    ],
+  },
+  {
     name: "css",
     desc: "사용자 정의 CSS를 끈다 — 앱이 안 뜰 때의 탈출구",
     positional: [],

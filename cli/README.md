@@ -89,6 +89,7 @@ PowerShell에서 `cli/lapis`를 치면 **"이 파일을 열 앱을 고르라"는
 | `links --orphans` | 아무도 안 가리키는 노트 + 나가는 링크 수 |
 | `tag audit` | 태그 중복 후보 + 모호한 이름 |
 | `props audit` | frontmatter 값이 갈린 곳. **거를 수 있는 축**만 본다 |
+| `export <노트>` | 자립 HTML 한 장. `--out` 없으면 표준출력 |
 | `links --unlinked` | 다른 노트의 이름을 말했는데 링크는 안 건 자리. **본문을 전부 읽는다** |
 | `replace <패턴> <치환>` | vault 전체 찾아 바꾸기. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
 | `doctor` | 위 감사 다섯 + 인덱스 낡음을 **한 번에**. 종료 코드로 답한다 |
@@ -360,6 +361,30 @@ Rust는 **어느 창이 어느 vault를 열었는지 모른다**(창별 localSto
 ⚠️ `lapis replace`의 정규식은 **JS `RegExp`** 다. `⌘⇧G`는 Rust `regex`라 매치 지점이 다를 수
 있다 — CLI는 grep을 거치지 않으므로 그 문제가 없지만, 앱에서 본 목록과 CLI 결과가 다를 수
 있다는 뜻이다.
+
+### `export` — 앱과 결과가 다를 수 있다
+
+```bash
+lapis export knowledge/lapis/STATE.md --out state.html
+```
+
+앱의 "자립 HTML 내보내기"와 **같은 조립기**를 쓴다(`previewExportDoc.ts`). 다른 것은
+**재료를 어디서 얻느냐**다:
+
+| | 앱 | CLI |
+|---|---|---|
+| 본문 | **라이브 DOM 복제** | `parseNote()` 의 HTML |
+| mermaid | 렌더된 `<svg>` | **코드 펜스 그대로** |
+| 토큰 값 | `getComputedStyle` | `app.css` + 설정에서 읽은 색 테마 |
+| 사용자 정의 CSS | 계산된 값에 녹아 있다 | **반영 안 된다** |
+| 이미지 | data URI | data URI (로컬만) |
+
+⚠️ 앱이 DOM을 복제하는 이유는 mermaid다 — 마운트 후 런타임에 `<svg>`가 된다. CLI에는
+브라우저가 없으니 그 단계가 없다. **이 차이를 모르면 한쪽을 버그로 읽는다.**
+
+⚠️ 이미지를 못 넣으면 **세어서 말한다.** 조용히 원본 경로를 남기면 "자립"이 거짓이 된다.
+원격(`http`) 이미지는 일부러 그대로 둔다 — 받아오려다 실패하면 그림이 통째로 사라지는데,
+URL을 남기면 온라인에서는 보인다.
 
 ### frontmatter 위생 — 무엇을 안 보는지가 요점이다
 
