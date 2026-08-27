@@ -16,6 +16,77 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [1.19.0] — 2026-08-27
+
+### Fixed
+- **A stale index answered confidently, and only one command said so** ([#228]). The CLI reads the
+  search index; it never builds one. So when the vault is newer than the index, answers can be out
+  of date. `mcp/README.md` documented the contract — report staleness, do not block — but **only
+  `lapis search` implemented it.**
+
+  `backlinks`, `list`, `links --broken`, `links --orphans`, `tag audit` and `replace` all stayed
+  silent. Running the audits right after adding notes returned no broken links and 1 orphan; after
+  a reindex the same vault had 3 orphans. The answer did not change — the first one was wrong, and
+  nothing suggested it might be.
+
+  Every read now reports it, in prose and as a `stale` field under `--json`. Reads are still never
+  blocked: a live vault goes stale within seconds of being edited, so failing hard would make the
+  tool unusable.
+
+  **Writes are treated differently and now stop.** `tag rename --apply` and `replace --apply` walk
+  the *indexed note list* while reading contents fresh from disk, so a stale list silently skips
+  every note created since the last index — while reporting that 2 notes were updated. Reproduced
+  on a throwaway vault: a note added after indexing kept its old text and nothing mentioned it.
+  Both commands now refuse on a stale index (exit 2) and point at `lapis index`; `--allow-stale`
+  forces it through. A stale read can be repeated; a partial write leaves a vault nobody can audit.
+- **Typing the name of a command did not bring that command to the top** ([#228]). In `⌘K`, typing
+  `위생` listed body-search results first and the matching command five rows down, even though the
+  label of that command starts with the word.
+
+  This was not a scoring problem. Commands were scored with a 1.2× boost, but the palette renders
+  fixed groups and the command group was always last, so the boost could never move anything.
+  The boost code reads correctly on its own — the file that decides position is a different one.
+
+  A command whose label (or any word in it) starts with what you typed is now promoted above the
+  results. Fuzzy-only matches stay where they were: a looser rule would push commands into every
+  note lookup, which is worse than the problem. Group order is otherwise unchanged — positions that
+  move around defeat muscle memory, and a mis-pick in the palette opens a note or a window.
+- **Three keyboard shortcuts in the README did not exist** ([#226]). `⌥B` is actually `⌘⌥B`,
+  `⌘←`/`⌘→` are actually `⌘⌃←`/`⌘⌃→`, and `⌘⇧B` (table view) was missing from the table entirely.
+  Pressing what was written did nothing, which reads as a broken app rather than a stale document.
+  The code was right; the README was not. The Development section now matches CI as well.
+
+### Added
+- **`lapis doctor`** ([#228]). Runs every audit at once — broken links, orphans, duplicate tags,
+  ambiguous names — plus the index freshness check that otherwise needs a fourth command.
+
+  The exit code carries meaning so it can be used from a hook or CI: `0` clean, `1` problems found,
+  `2` could not run. **`doctor` is the only command that gives `1` a meaning beyond error**, so it
+  is also the only one that reports an unusable vault as `2` — otherwise a mistyped path would be
+  reported as a hygiene finding.
+
+  Staleness is printed first, because how much to trust the numbers below depends on it, but it is
+  not counted as a problem: a live vault is almost always slightly stale, and a check that always
+  fails gets removed. Like the audits it wraps, `doctor` does not fix anything.
+
+### Internal
+- **Guards for the two drift classes above.** One reads the source of every handler and checks that
+  a command reading the index reports staleness in **both** its `--json` and human output — the
+  first version accepted either, and a canary showed that deleting the human-facing line still
+  passed while the JSON field remained. That is the worst shape of all: the script gets the field,
+  the person at the terminal sees a stale number with no warning. Another reads the palette
+  component and checks its render order matches the declared `GROUP_ORDER`; the absence of that
+  check is why score and position had been allowed to disagree.
+- **Screens that are awkward to reach by hand can be opened directly** ([#229], [#230]). The
+  vault-hygiene modal and the replace panel need real vault state before they show anything.
+  `npm run dev` then `/dev/preview` renders them from fixtures, without Tauri, with a surface and
+  theme switcher — for checking colour, spacing and alignment, which the DOM tests cannot see.
+- **Those screens are now covered by tests** ([#227]). The audit and replace logic were already
+  pinned as pure functions, and the CLI shares them, so the data was verified — what was not was
+  how the markup draws it. A flipped condition removes a warning with no error at all, and in the
+  replace panel those warnings are the last thing seen before an irreversible write. Icon
+  containers (`.icns`, `.ico`) are also checked byte-for-byte against the source PNGs.
+
 ## [1.18.0] — 2026-08-26
 
 ### Fixed
@@ -797,6 +868,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.19.0]: https://github.com/eren0315/lapis/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/eren0315/lapis/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/eren0315/lapis/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/eren0315/lapis/compare/v1.15.0...v1.16.0
@@ -835,6 +907,11 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#230]: https://github.com/eren0315/lapis/pull/230
+[#229]: https://github.com/eren0315/lapis/pull/229
+[#228]: https://github.com/eren0315/lapis/pull/228
+[#227]: https://github.com/eren0315/lapis/pull/227
+[#226]: https://github.com/eren0315/lapis/pull/226
 [#224]: https://github.com/eren0315/lapis/pull/224
 [#223]: https://github.com/eren0315/lapis/pull/223
 [#221]: https://github.com/eren0315/lapis/pull/221
