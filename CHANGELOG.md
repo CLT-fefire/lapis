@@ -16,26 +16,7 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
-### Fixed
-- **The CLI and the MCP launchers did not run on Windows** ([#249]). `cli/lapis` and
-  `mcp/lapis-*` are `#!/bin/sh` scripts. Typing `cli/lapis …` in PowerShell opens a **"choose an
-  app to open this file"** dialog — not an error, not a "not supported" message. Pick an editor
-  and you are looking at the shell script.
-
-  `cli/README.md` had ruled a Windows shim out: *"one more truth to maintain, and the main
-  development environment is macOS"*. That reasoning does not survive contact — Windows is a
-  first-class target here (the Rust CI job runs on both), and the fallback advice, "use Git
-  Bash", assumes something that is not true by default: a stock PowerShell `Path` has neither
-  `sh` nor `bash`.
-
-  Each shell wrapper now has a `.cmd` twin. The maintenance worry is paid for with a guard rather
-  than a rule: `scripts/launchers.test.ts` checks that every sh wrapper has a `.cmd` beside it,
-  that the two name **the same entry point**, and that both bundle runners keep the two contracts
-  they share (the `$lib` alias, the `LAPIS_REPO` handoff). A fifth wrapper added on one side only
-  turns it red.
-
-  ⚠️ `*.cmd` is pinned to CRLF in `.gitattributes`. The repo forces LF everywhere else, and
-  cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
+## [2.3.0] — 2026-08-27
 
 ### Added
 - **Transclusion** ([#254]). `![[Note]]` expands the whole note where you wrote it;
@@ -71,13 +52,6 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   ⚠️ Images that cannot be inlined are **counted and reported**. Leaving the original path in
   silently would make "self-contained" a lie. Remote images are deliberately left alone: fetching
   and failing loses the picture entirely, while the URL still works online.
-
-### Fixed
-- **A native path would have put the whole path in the exported title** ([#253]). `$lib` assumes
-  `/` separators — the `to_ui` contract — and the CLI sits outside that pipeline. Real calls pass a
-  cache path, which is already normalized, but a Windows path produced
-  `<title>C:\\Users\\…\\note</title>`: the document renders fine and only the tab name is wrong.
-  Normalized at the boundary now.
 - **Settings search** ([#252]). A box in the settings header that searches **across** categories —
   knowing which category holds a setting is exactly what you lack when you go looking. Each result
   names its category, and clicking one takes you there.
@@ -106,27 +80,6 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   outside the intersection shows up in one place and not the other. An unknown type is left as an
   ordinary blockquote on purpose: `[!QUESTION]` stays visible, so whoever wrote it can see why it
   did not take. Swallowing it silently would not tell them.
-
-### Fixed
-- **The rendered-body stylesheet was imported from a single route** ([#251]). It lived in the main
-  page component, so the component preview route rendered Markdown with **no styling at all** —
-  the five callouts came out identical, with no error anywhere. Exactly the shape of the custom-CSS
-  bug fixed in [#243]; the stylesheet import did not get moved at the same time. It is in the root
-  layout now, with a guard.
-
-  Found by reading computed colors out of a real browser. Every test passed while it was broken —
-  they check structure, and happy-dom has no layout engine.
-- **`--danger` is not readable as text** ([#251]). It measures 3.35:1 against the content
-  background, under the 4.5 threshold. The saturated red is right for fills and borders and wrong
-  for letters — the same shape as the `--n-700` fix in 2.1.0. `--danger-text` (5.54:1) joins the
-  palette and the caution callout uses it.
-
-  ⚠️ Eight existing places still set `color: var(--danger)`. They are being moved separately, with
-  eyes on them — changing them all at once would make it impossible to see what shifted.
-- **A callout titled with the accent color would have been unreadable in most themes** ([#251]).
-  On the default accent it measured 2.37:1 over its own tint, and the twenty-six color themes each
-  move `--accent` somewhere new, so the number is a lottery. `note` is neutral instead; the other
-  four use status colors, which themes do not touch. Measured: 4.65 to 11.48:1, all above AA.
 - **frontmatter hygiene — the fifth audit** ([#250]). Values that have split apart on an axis you
   can filter by. `lapis props audit`, a fifth tab in the vault hygiene panel, and a row in
   `lapis doctor`. The first four audits look at the link graph; this one looks at the axes.
@@ -151,6 +104,51 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
   Free-form values are not called errors. `status: 완료 — #232` is useful to a person. All the
   audit reports is that several values start the same way.
+
+### Fixed
+- **The CLI and the MCP launchers did not run on Windows** ([#249]). `cli/lapis` and
+  `mcp/lapis-*` are `#!/bin/sh` scripts. Typing `cli/lapis …` in PowerShell opens a **"choose an
+  app to open this file"** dialog — not an error, not a "not supported" message. Pick an editor
+  and you are looking at the shell script.
+
+  `cli/README.md` had ruled a Windows shim out: *"one more truth to maintain, and the main
+  development environment is macOS"*. That reasoning does not survive contact — Windows is a
+  first-class target here (the Rust CI job runs on both), and the fallback advice, "use Git
+  Bash", assumes something that is not true by default: a stock PowerShell `Path` has neither
+  `sh` nor `bash`.
+
+  Each shell wrapper now has a `.cmd` twin. The maintenance worry is paid for with a guard rather
+  than a rule: `scripts/launchers.test.ts` checks that every sh wrapper has a `.cmd` beside it,
+  that the two name **the same entry point**, and that both bundle runners keep the two contracts
+  they share (the `$lib` alias, the `LAPIS_REPO` handoff). A fifth wrapper added on one side only
+  turns it red.
+
+  ⚠️ `*.cmd` is pinned to CRLF in `.gitattributes`. The repo forces LF everywhere else, and
+  cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
+- **A native path would have put the whole path in the exported title** ([#253]). `$lib` assumes
+  `/` separators — the `to_ui` contract — and the CLI sits outside that pipeline. Real calls pass a
+  cache path, which is already normalized, but a Windows path produced
+  `<title>C:\\Users\\…\\note</title>`: the document renders fine and only the tab name is wrong.
+  Normalized at the boundary now.
+- **The rendered-body stylesheet was imported from a single route** ([#251]). It lived in the main
+  page component, so the component preview route rendered Markdown with **no styling at all** —
+  the five callouts came out identical, with no error anywhere. Exactly the shape of the custom-CSS
+  bug fixed in [#243]; the stylesheet import did not get moved at the same time. It is in the root
+  layout now, with a guard.
+
+  Found by reading computed colors out of a real browser. Every test passed while it was broken —
+  they check structure, and happy-dom has no layout engine.
+- **`--danger` is not readable as text** ([#251]). It measures 3.35:1 against the content
+  background, under the 4.5 threshold. The saturated red is right for fills and borders and wrong
+  for letters — the same shape as the `--n-700` fix in 2.1.0. `--danger-text` (5.54:1) joins the
+  palette and the caution callout uses it.
+
+  ⚠️ Eight existing places still set `color: var(--danger)`. They are being moved separately, with
+  eyes on them — changing them all at once would make it impossible to see what shifted.
+- **A callout titled with the accent color would have been unreadable in most themes** ([#251]).
+  On the default accent it measured 2.37:1 over its own tint, and the twenty-six color themes each
+  move `--accent` somewhere new, so the number is a lottery. `note` is neutral instead; the other
+  four use status colors, which themes do not touch. Measured: 4.65 to 11.48:1, all above AA.
 
 ## [2.2.0] — 2026-08-27
 
@@ -1286,6 +1284,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eren0315/lapis/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/eren0315/lapis/compare/v1.20.0...v2.0.0
