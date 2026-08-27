@@ -16,6 +16,91 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-08-27
+
+> **⚠️ Breaking — the light and system themes are gone.** There is one theme now, and it is dark.
+> Colour is changed through custom CSS instead. Any theme preference stored from an earlier
+> version is ignored.
+
+### Changed
+- **The interface follows Discord's visual grammar** ([#235], [#236], [#237]). The neutral ramp
+  was a blue-leaning slate; Discord's is a near-desaturated grey, and that accounts for most of
+  the difference in impression. The three shell surfaces now sit on Discord's own three:
+  rail `#1e1f22`, sidebar `#2b2d31`, content `#313338`.
+
+  The accent had already been Blurple since v1.x, so this is a continuation rather than a turn.
+
+  Corners went up where it counts — `--r-sm`, used in 43 places, moved from 4px to 6px. `--r-lg`
+  was raised to 16px and then put back: modals use it, and 16px made them rounder than Discord's
+  own. Wanting something to look like Discord is not the same as wanting it rounder.
+
+  Hover and active transitions get a separate easing curve from entrances. The existing curve
+  overshoots, which is right for a modal appearing and wrong for a colour change under a moving
+  cursor — it reads as a bounce.
+- **The global title bar is gone; the note has a header instead** ([#237]). Discord has no global
+  bar: the name of what you are looking at sits directly above it. Visit history, the note path
+  and the save badge moved into that header, and the word "Lapis" was dropped — an app has no
+  reason to display its own name at all times.
+- **Settings are split into categories** ([#239]). Appearance, Language, Vault, Advanced, in a
+  list on the left with the selected category's contents on the right. Seven sections in a single
+  column meant scrolling and re-reading to find anything. The version number now sits at the
+  bottom of the category list rather than in the window chrome.
+
+### Added
+- **Custom CSS** ([#238], [#239]). The design tokens in `app.css` and fifteen `data-lapis` hooks
+  are a documented, stable contract; internal class names explicitly are not. Drawing that line
+  narrowly is deliberate — a wide one turns the internal structure into a public API and freezes
+  it.
+
+  The editor lives under Advanced: syntax colouring, bracket matching, and real formatting, and
+  a failed format doubles as the syntax check. Saving is an explicit action, because saving on
+  every keystroke would make the app vanish somewhere in the middle of typing
+  `[data-lapis="app"] { display: none` — before the closing brace.
+
+  ⚠️ **Three ways back.** One line of CSS can hide the window and the settings with it.
+  `⌘⇧⌥C` (`Ctrl+Shift+Alt+C`) switches custom CSS off — a key handler runs regardless of what
+  the styling is doing, so it works on a blank screen. `lapis css --off` edits the settings file
+  from a terminal for when the app will not start at all; it disables the CSS without deleting
+  it. Failing those, removing the settings file resets everything.
+
+  A preview step is **not** one of those ways: `display: none` looks identical in a preview.
+  A safeguard that only works when you already noticed the mistake is not a safeguard.
+
+### Fixed
+- **The same colour was defined in three places** ([#235]). `app.css` carried the palette under
+  `:root`, again under `[data-theme="light"]`, and a third time inside a
+  `prefers-color-scheme` block — with a comment instructing whoever edited one to remember the
+  others. Nothing enforced it, and a drift there is invisible to anyone using dark. Removing the
+  light and system themes took 135 lines out of the file, and a guard now rejects a second
+  palette while still allowing the deliberate compact-density variant.
+- **The editor and the preview highlighted search matches differently** ([#236]). Both hardcoded
+  their own colours and the two had already drifted — 30% against 35% opacity, a different orange
+  for the current match. Moving between editing and reading changed how a match looked. They
+  share four tokens now.
+
+### Internal
+- **Guards for the contracts this release introduces** ([#235], [#238], [#239]). That a palette
+  stays single; that every `data-lapis` in the contract exists in the markup and every one in the
+  markup is in the contract; that the panic shortcut is checked before any other key handling;
+  that every settings row sits inside a category, since one outside is invisible while still
+  compiling and passing tests.
+
+  Two of them were wrong on the first attempt and only a canary showed it. One counted `{#if}`
+  depth with a plain counter, which nested conditionals inside a section drove negative — it
+  caught nothing. The other read a documentation comment as a real attribute.
+- **Formatting loads on demand** ([#239]). Bundled statically, prettier landed in an 852 KB chunk
+  the entry point pulled in immediately — every launch paid for it whether or not settings were
+  ever opened. Behind a dynamic import it splits into 156 KB and 82 KB, fetched the first time
+  Format is pressed. One press is slower; every launch is not.
+- **Three open measurement questions were closed without building anything** ([#240]). Whether to
+  index `aliases`, whether the `name` field earns its place, and whether the Korean bigram
+  tokenizer over-matches. None can be answered from this corpus: it contains no aliases at all,
+  its filenames are Latin while its titles are not, and the over-matching was observed on 19,225
+  notes where this vault has 71 — a match count cannot exceed the number of notes.
+
+  The limits are recorded in the harness itself, so the next attempt starts by looking at the
+  corpus rather than at the tool.
+
 ## [1.20.0] — 2026-08-27
 
 > **⚠️ This release reindexes once on first launch.** `CACHE_VERSION` goes 8 → 9 because the
@@ -936,6 +1021,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.0.0]: https://github.com/eren0315/lapis/compare/v1.20.0...v2.0.0
 [1.20.0]: https://github.com/eren0315/lapis/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/eren0315/lapis/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/eren0315/lapis/compare/v1.17.0...v1.18.0
@@ -976,6 +1062,12 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#240]: https://github.com/eren0315/lapis/pull/240
+[#239]: https://github.com/eren0315/lapis/pull/239
+[#238]: https://github.com/eren0315/lapis/pull/238
+[#237]: https://github.com/eren0315/lapis/pull/237
+[#236]: https://github.com/eren0315/lapis/pull/236
+[#235]: https://github.com/eren0315/lapis/pull/235
 [#233]: https://github.com/eren0315/lapis/pull/233
 [#232]: https://github.com/eren0315/lapis/pull/232
 [#230]: https://github.com/eren0315/lapis/pull/230
