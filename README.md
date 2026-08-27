@@ -165,6 +165,12 @@ cli/lapis links --broken
 cli/lapis status
 ```
 
+On Windows (PowerShell/cmd), call the `.cmd` twin:
+
+```powershell
+cli\lapis.cmd search "multi window" --min-rel 0.3
+```
+
 `--json` on any command prints the same shape the MCP tool returns, so scripts and agents do not
 have to learn a second format. The contract, exit codes and the layered plan for what is **not**
 built yet live in [`cli/README.md`](cli/README.md).
@@ -179,6 +185,13 @@ The search index Lapis builds is exposed through an MCP server. There is exactly
     "lapis": { "command": "/absolute/path/to/lapis/mcp/lapis-mcp" }
   }
 }
+```
+
+On Windows, point at the `.cmd` twin — the extensionless one is a shell script Windows cannot run,
+and the client only sees "the server won't start".
+
+```json
+{ "mcpServers": { "lapis": { "command": "C:\\path\\to\\lapis\\mcp\\lapis-mcp.cmd" } } }
 ```
 
 It answers structural queries (`doc_kind`, `topic`, `tag`, `backlinks_of`) and BM25 full-text in a single call. No LLM, no API key — the same arguments produce the same result.

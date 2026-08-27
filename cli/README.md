@@ -37,15 +37,42 @@ cli/lapis search "멀티 윈도우"
 호출 시점에 esbuild로 번들한다(약 30 ms). 커밋된 산출물이나 사전 빌드 단계를 두면
 소스와 어긋나도 아무 신호가 없다 — `mcp/lapis-mcp`가 같은 이유로 같은 방식을 쓴다.
 
-PATH에 두려면 심볼릭 링크를 건다:
+Windows(PowerShell·cmd)에서는 `.cmd` 짝을 부른다:
+
+```powershell
+cli\lapis.cmd search "멀티 윈도우"
+```
+
+PATH에 두려면:
 
 ```bash
 ln -s "$PWD/cli/lapis" /usr/local/bin/lapis
 ```
 
-> ⚠️ **Windows에서는 Git Bash가 필요하다.** 래퍼가 `#!/bin/sh` 스크립트다. `cmd.exe`·
-> PowerShell용 shim은 두지 않았다 — 유지할 진실이 하나 더 늘고, 이 저장소의 주 개발
-> 환경은 macOS다. Git Bash에서 `cli/lapis`를 그대로 부르면 된다.
+Windows는 `cli` 디렉터리를 `Path`에 넣으면 `lapis`로 부를 수 있다(cmd가 `.cmd`를 붙여 찾는다).
+
+### ⚠️ Windows shim — 안 두기로 했다가 뒤집었다
+
+예전 이 문서에는 이렇게 적혀 있었다:
+
+> `cmd.exe`·PowerShell용 shim은 두지 않았다 — 유지할 진실이 하나 더 늘고, 이 저장소의
+> 주 개발 환경은 macOS다. Git Bash에서 `cli/lapis`를 그대로 부르면 된다.
+
+**틀렸다.** Windows는 이 저장소의 1급 타깃이고(CI의 Rust 잡이 양쪽에서 돈다), 실제로
+PowerShell에서 `cli/lapis`를 치면 **"이 파일을 열 앱을 고르라"는 창이 뜬다.** 에러도
+아니고 지원 안 한다는 말도 없다 — 편집기를 고르면 셸 스크립트 내용이 보인다.
+
+"Git Bash를 쓰면 된다"도 실측에서 약했다. 이 머신의 PowerShell `Path`에는 `sh`도 `bash`도
+없다(Git for Windows 기본값이다). 그러면 `bash.exe`를 손으로 찾아 써야 한다.
+
+"유지할 진실이 하나 더"는 진짜 걱정이었고, 그건 **가드로 갚는다** —
+`scripts/launchers.test.ts`가 sh 래퍼마다 `.cmd` 짝이 있고 **둘이 같은 진입점을 부르는지**
+본다. 다섯 번째 래퍼를 sh만 만들면 빨개진다.
+
+번들 로직도 두 벌이지만(`bundle-run.sh` · `bundle-run.mjs`) **공유하는 계약은 둘뿐**이고
+같은 가드가 그것도 본다: esbuild의 `--alias:$lib`, 자식에게 넘기는 `LAPIS_REPO`. 나머지
+(node 탐색·임시 파일)는 플랫폼 사정이라 갈리는 게 맞다 — sh 쪽은 **최소 PATH로 뜨는 MCP
+클라이언트** 때문에 node를 손으로 찾아야 하지만, `.mjs`는 이미 node 안이다.
 
 ## 명령
 

@@ -18,6 +18,25 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Fixed
+- **CLI와 MCP 실행 래퍼가 Windows에서 안 돌았다** ([#249]). `cli/lapis`와 `mcp/lapis-*`는
+  `#!/bin/sh` 스크립트다. PowerShell에서 `cli/lapis …`를 치면 **"이 파일을 열 앱을 고르라"는
+  창**이 뜬다 — 에러도 아니고 지원 안 한다는 말도 없다. 편집기를 고르면 셸 스크립트 내용이
+  보인다.
+
+  `cli/README.md`는 Windows shim을 두지 않기로 적어 뒀었다 — *"유지할 진실이 하나 더 늘고,
+  주 개발 환경은 macOS다"*. 그 논리가 현실에서 버티지 못했다. Windows는 이 저장소의 1급
+  타깃이고(CI의 Rust 잡이 양쪽에서 돈다), 대안으로 제시한 "Git Bash를 쓰면 된다"도 기본값이
+  아닌 것을 전제한다 — 기본 PowerShell `Path`에는 `sh`도 `bash`도 없다.
+
+  이제 셸 래퍼마다 `.cmd` 짝이 있다. "유지할 진실이 하나 더"는 규칙이 아니라 **가드로**
+  갚는다: `scripts/launchers.test.ts`가 sh 래퍼마다 `.cmd`가 있는지, **둘이 같은 진입점을**
+  부르는지, 번들 러너 두 벌이 공유 계약 둘(`$lib` 별칭 · `LAPIS_REPO` 전달)을 지키는지 본다.
+  다섯 번째 래퍼를 한쪽만 만들면 빨개진다.
+
+  ⚠️ `.gitattributes`에 `*.cmd`를 CRLF로 못박았다. 저장소는 그 밖에서 전부 LF를 강제하는데,
+  cmd.exe는 LF만 있는 배치 파일에서 **티 안 나게** 이상하게 군다.
+
 ## [2.2.0] — 2026-08-27
 
 ### Added
@@ -1134,6 +1153,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#249]: https://github.com/eren0315/lapis/pull/249
 [#247]: https://github.com/eren0315/lapis/pull/247
 [#246]: https://github.com/eren0315/lapis/pull/246
 [#245]: https://github.com/eren0315/lapis/pull/245
