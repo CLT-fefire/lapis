@@ -149,7 +149,7 @@
   }
 
   .error {
-    color: var(--danger);
+    color: var(--danger-text);
     font-size: var(--fs-sm);
     padding: var(--sp-3) 0 0 88px;
   }

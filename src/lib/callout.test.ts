@@ -115,7 +115,9 @@ describe("⚠️ 내보낸 HTML에서도 색이 산다", () => {
 
   it("다섯 종의 색 토큰이 전부 추출된다", () => {
     const names = new Set(collectCssVarNames(CSS));
-    for (const t of ["--accent", "--success", "--violet", "--warning", "--danger"]) {
+    // ⚠️ caution 은 `--danger` 가 아니라 `--danger-text` 다 — 원래 값은 글자색으로
+    //    AA 미달이었다(`dangerText.test.ts`).
+    for (const t of ["--accent", "--success", "--violet", "--warning", "--danger-text"]) {
       expect(names.has(t), `${t} 가 rendered.css 에서 안 잡힌다`).toBe(true);
     }
   });

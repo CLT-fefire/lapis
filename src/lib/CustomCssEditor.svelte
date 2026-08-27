@@ -202,7 +202,7 @@
     color: var(--text-muted);
   }
   .css-msg.error {
-    color: var(--danger);
+    color: var(--danger-text);
     white-space: pre-wrap;
   }
   .css-msg.ok {

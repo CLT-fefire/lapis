@@ -16,6 +16,26 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Fixed
+- **`--danger` was still the text color in fifteen places** ([#256]). 2.3.0 measured the problem
+  and moved only the callout; the rest were left for a pass with eyes on them. This is that pass.
+
+  Measured against every surface the app puts text on, `--danger` lands between 3.35:1 and 4.37:1 —
+  under AA on all four. `--danger-text` lands between 5.54 and 7.22. Borders keep `--danger`: the
+  non-text threshold is 3:1 and it clears that.
+
+  ⚠️ The guard reads `app.css` and **resolves the real tokens** rather than restating hex values.
+  Writing them out by hand is how the first draft ended up measuring `--surface-content` as the
+  wrong ramp step and reporting a pass that was not one.
+- **Code blocks had no background** ([#256]). `.rendered pre` sets `--surface-sunken`, and the very
+  next rule — `.rendered .hljs { background: transparent }` — beat it on specificity for every
+  fence, because they all render as `<pre class="hljs">`. The comment directly above said the
+  background belongs to the `pre` rule; the code said otherwise, and only the border was left on
+  screen.
+
+  `transparent` is the idiom for cancelling a highlight.js **theme stylesheet**, and this
+  repository does not load one. It was guarding against something that is not there.
+
 ## [2.3.0] — 2026-08-27
 
 ### Added
@@ -1328,6 +1348,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#256]: https://github.com/eren0315/lapis/pull/256
 [#254]: https://github.com/eren0315/lapis/pull/254
 [#253]: https://github.com/eren0315/lapis/pull/253
 [#252]: https://github.com/eren0315/lapis/pull/252

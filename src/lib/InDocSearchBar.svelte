@@ -193,7 +193,7 @@
   }
 
   .count.none {
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   .opt {

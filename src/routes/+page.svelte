@@ -1663,7 +1663,7 @@ import { isPanicChord } from "$lib/userCss";
   }
 
   .save-badge.error {
-    color: var(--danger);
+    color: var(--danger-text);
     background: var(--danger-bg-subtle);
     border: 1px solid var(--danger-border);
   }
@@ -1698,12 +1698,12 @@ import { isPanicChord } from "$lib/userCss";
     background: var(--danger-bg-subtle);
     border-bottom: 1px solid var(--danger-border);
     font-weight: 600;
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   .conflict-icon {
     font-size: var(--fs-lg);
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   .conflict-body {
