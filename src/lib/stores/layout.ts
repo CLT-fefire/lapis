@@ -42,6 +42,19 @@ export function expandSidebar(): void {
   }
 }
 
+/**
+ * 펼쳐 있으면 접음. 접혀 있으면 no-op.
+ *
+ * ⚠️ `toggleSidebar` 와 다르다. 레일의 **활성 아이콘 재클릭**은 "접어라"이지 "뒤집어라"가
+ * 아니다 — 접힌 상태에서 그 아이콘을 누르면 펼쳐지는 것이 맞고, 토글이면 그게 안 된다.
+ */
+export function collapseSidebar(): void {
+  if (!get(sidebarCollapsed)) {
+    sidebarCollapsed.set(true);
+    persistSidebarCollapsed();
+  }
+}
+
 /** 읽기 ↔ 편집 교대. 가드가 필요 없다 — 어느 쪽이든 항상 하나는 떠 있다. */
 export function toggleMainPane(): void {
   mainPane.update((v) => (v === "preview" ? "editor" : "preview"));

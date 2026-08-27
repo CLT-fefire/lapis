@@ -1,102 +1,92 @@
 import { writable } from "svelte/store";
 
 /**
- * 사이드바 세로 아코디언 — 각 섹션 펼침/접힘 상태 (옵션 B, brainstorm sidebar-vertical-nav).
+ * 사이드바 — **한 번에 한 뷰**.
  *
- * 가로 탭(구 `sidebarTab`, 배타 선택)을 대체. 5섹션을 세로로 쌓고 **각각 개별 접기/펼치기**
- * (여러 개 동시 펼침 가능). 순수 reducer(vitest) + localStorage 영속.
+ * ## ⚠️ 아코디언에서 왜 바꿨나
  *
- * "접힘=아이콘 레일"은 별도 레벨로 `layout.sidebarCollapsed`(⌘B·SidebarRail)가 담당 —
- * 여기는 펼침 상태에서의 섹션 아코디언만.
+ * v2.0.0 은 섹션 넷을 세로로 쌓고 각각 개별로 접었다(여러 개 동시 펼침 + 높이 드래그).
+ * 260px 폭에 넷을 나눠 담으니 **어느 것도 제 높이를 못 가졌고**, 높이 드래그는 그 문제를
+ * 사용자에게 떠넘기는 장치였다.
+ *
+ * 3.0 은 레일이 뷰를 **고르고** 사이드바는 그 하나를 온전히 보여준다(VS Code 액티비티 바).
+ * 폭은 그대로인데 세로가 넷에서 하나로 줄어드니 목록이 실제로 읽힌다.
+ *
+ * ⚠️ **`sectionHeights` 와 그 리듀서는 버린다.** 뷰가 하나면 나눌 높이가 없다. 저장돼 있던
+ * 값은 마이그레이션에서 조용히 사라지는데, 그건 의미를 잃은 값이지 잃어버린 설정이 아니다.
  */
-// "outline"은 2026-08-05(PR-4)에 우측 컨텍스트 패널로 이전 — context.ts 소관.
-// 사이드바는 "vault 탐색", 컨텍스트 패널은 "현재 문서에 딸린 것"으로 역할이 갈린다.
-export type SidebarSectionKey = "files" | "tags" | "filters" | "favorites";
 
-export const SECTION_KEYS: readonly SidebarSectionKey[] = [
+/** 레일이 고를 수 있는 뷰. 순서가 레일의 세로 순서다. */
+export type SidebarViewKey =
+  | "files"
+  | "tags"
+  | "filters"
+  | "favorites"
+  | "table"
+  | "hygiene";
+
+export const VIEW_KEYS: readonly SidebarViewKey[] = [
   "files",
   "tags",
   "filters",
   "favorites",
+  "table",
+  "hygiene",
 ] as const;
 
 export interface SidebarNavState {
-  /** 각 섹션 펼침 여부. */
-  sectionOpen: Record<SidebarSectionKey, boolean>;
   /**
-   * 각 섹션의 고정 높이(px). null = 미설정 → 가용 공간 균등 분배(flex). 사용자가 리사이즈
-   * 핸들을 드래그한 섹션만 고정 px로 전환. 마지막 펼친 섹션은 항상 잔여 공간을 흡수(null 취급).
+   * 지금 보고 있는 뷰. `null` 이면 접힘(레일만 남는다).
+   *
+   * ⚠️ `layout.sidebarCollapsed` 와 **다른 것**이다. 저쪽은 "패널을 접었나"이고 이쪽은
+   * "무엇을 보고 있나"다. 레일에서 활성 아이콘을 다시 누르면 둘 다 접힘으로 간다.
    */
-  sectionHeights: Record<SidebarSectionKey, number | null>;
+  activeView: SidebarViewKey;
 }
 
 const STORAGE_KEY = "lapis.sidebar-sections";
 
-/** 리사이즈 높이 클램프 — 너무 작아 헤더만 남거나 과도하게 커지는 것 방지. */
-export const MIN_SECTION_HEIGHT = 72;
-export const MAX_SECTION_HEIGHT = 900;
-
 export function defaultSidebarNav(): SidebarNavState {
-  return {
-    // 첫 진입은 파일 트리만 펼침(주 콘텐츠).
-    sectionOpen: { files: true, tags: false, filters: false, favorites: false },
-    // 전부 미설정 — 첫 펼침은 균등 분배(기존 동작).
-    sectionHeights: { files: null, tags: null, filters: null, favorites: null },
-  };
+  return { activeView: "files" };
 }
 
-/** 섹션 개별 접기/펼치기 토글. */
-export function toggleSectionState(
-  state: SidebarNavState,
-  key: SidebarSectionKey,
-): SidebarNavState {
-  return {
-    ...state,
-    sectionOpen: { ...state.sectionOpen, [key]: !state.sectionOpen[key] },
-  };
-}
-
-/** 해당 섹션이 펼쳐지도록 보장(다른 섹션은 유지). 이미 열려 있으면 no-op. */
-export function ensureSectionOpenState(
-  state: SidebarNavState,
-  key: SidebarSectionKey,
-): SidebarNavState {
-  if (state.sectionOpen[key]) return state;
-  return { ...state, sectionOpen: { ...state.sectionOpen, [key]: true } };
+/** 옛 아코디언 상태의 모양 — 마이그레이션에서만 쓴다. */
+interface LegacyNavState {
+  sectionOpen?: Partial<Record<string, boolean>>;
 }
 
 /**
- * 섹션 고정 높이 설정(px) — 리사이즈 핸들 드래그 결과. null이면 미설정(균등 분배)으로 복귀.
- * px는 [MIN, MAX]로 클램프. 다른 섹션 높이는 유지.
+ * 저장된 상태 → 새 상태.
+ *
+ * ⚠️ **열려 있던 첫 섹션을 고른다.** 아무거나 고르면 사용자가 보던 것과 다른 화면으로
+ * 열리고, 그건 "설정이 날아갔다"로 읽힌다. 전부 닫혀 있었으면 파일 트리다.
  */
-export function setSectionHeightState(
-  state: SidebarNavState,
-  key: SidebarSectionKey,
-  height: number | null,
-): SidebarNavState {
-  const clamped =
-    height == null
-      ? null
-      : Math.max(MIN_SECTION_HEIGHT, Math.min(MAX_SECTION_HEIGHT, Math.round(height)));
-  return { ...state, sectionHeights: { ...state.sectionHeights, [key]: clamped } };
+export function migrateSidebarNav(raw: unknown): SidebarNavState {
+  const d = defaultSidebarNav();
+  if (!raw || typeof raw !== "object") return d;
+
+  const asNew = raw as Partial<SidebarNavState>;
+  if (typeof asNew.activeView === "string" && VIEW_KEYS.includes(asNew.activeView)) {
+    return { activeView: asNew.activeView };
+  }
+
+  const legacy = raw as LegacyNavState;
+  if (legacy.sectionOpen) {
+    const first = VIEW_KEYS.find((k) => legacy.sectionOpen?.[k] === true);
+    if (first) return { activeView: first };
+  }
+  return d;
 }
 
 // === store (localStorage 영속) ===
 
 function loadSidebarNav(): SidebarNavState {
-  const d = defaultSidebarNav();
-  if (typeof localStorage === "undefined") return d;
+  if (typeof localStorage === "undefined") return defaultSidebarNav();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return d;
-    const parsed = JSON.parse(raw) as Partial<SidebarNavState>;
-    // 키 누락/추가 방어 — 기본 위에 저장값 병합.
-    return {
-      sectionOpen: { ...d.sectionOpen, ...(parsed.sectionOpen ?? {}) },
-      sectionHeights: { ...d.sectionHeights, ...(parsed.sectionHeights ?? {}) },
-    };
+    return migrateSidebarNav(raw ? JSON.parse(raw) : null);
   } catch {
-    return d;
+    return defaultSidebarNav();
   }
 }
 
@@ -111,15 +101,7 @@ sidebarNav.subscribe((s) => {
   }
 });
 
-export function toggleSection(key: SidebarSectionKey): void {
-  sidebarNav.update((s) => toggleSectionState(s, key));
-}
-
-export function ensureSectionOpen(key: SidebarSectionKey): void {
-  sidebarNav.update((s) => ensureSectionOpenState(s, key));
-}
-
-/** 섹션 고정 높이 설정(px, null=균등 복귀). 리사이즈 핸들 드래그/더블클릭에서 호출. */
-export function setSectionHeight(key: SidebarSectionKey, height: number | null): void {
-  sidebarNav.update((s) => setSectionHeightState(s, key, height));
+/** 그 뷰로 전환한다. 이미 그 뷰면 아무 일도 없다 — 접기는 호출부가 판단한다. */
+export function showView(key: SidebarViewKey): void {
+  sidebarNav.update((s) => (s.activeView === key ? s : { activeView: key }));
 }

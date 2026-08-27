@@ -1158,11 +1158,11 @@ import { isPanicChord } from "$lib/userCss";
   // 두 열이 하나로 합쳐졌다(2026-08-10). 컨텍스트만 독립 접힘(36px 스트립 ↔ --context-w).
   const gridCols = $derived(
     `var(--rail-w, 52px) ` +
-      `${$sidebarCollapsed ? "0px" : "var(--sidebar-w, 260px)"} ` +
+      `${$sidebarCollapsed ? "var(--collapsed-strip-w, 34px)" : "var(--sidebar-w, 260px)"} ` +
       `${$sidebarCollapsed ? "0px" : "4px"} ` +
       `1fr ` +
       `${$contextCollapsed ? "0px" : "4px"} ` +
-      `${$contextCollapsed ? "36px" : "var(--context-w, 300px)"}`,
+      `${$contextCollapsed ? "var(--collapsed-strip-w, 34px)" : "var(--context-w, 300px)"}`,
   );
 
   // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
@@ -1266,13 +1266,10 @@ import { isPanicChord } from "$lib/userCss";
     style="--sidebar-w: {$sidebarWidth}px; --context-w: {$contextWidth}px; grid-template-columns: {gridCols};"
   >
     <SidebarRail />
-    {#if $sidebarCollapsed}
-      <!-- 폭 0 컬럼 자리지킴 — grid 컬럼 순서를 유지하면서 Sidebar는 언마운트해
-           12000노트 트리의 렌더 비용을 접힘 상태에서 물지 않는다. -->
-      <div class="sidebar-slot-empty" aria-hidden="true"></div>
-    {:else}
-      <Sidebar />
-    {/if}
+    <!-- ⚠️ 접혀도 **언마운트하지 않는다**(3.0). 폭 0 + 언마운트는 펼칠 때마다 트리를
+         새로 그려서, 12,000 노트에서 펼침이 눈에 띄게 느렸다. 접힘은 34px 스트립이고
+         무거운 내용은 `Sidebar` 안에서 조건 렌더한다. -->
+    <Sidebar />
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
@@ -1766,7 +1763,9 @@ import { isPanicChord } from "$lib/userCss";
     display: grid;
     /* grid-template-columns는 인라인 style의 gridCols(derived)로 지정 — collapse 조합 대응 */
     overflow: hidden;
-    transition: grid-template-columns 0.18s ease;
+    /* ⚠️ `grid-template-columns` **전체**를 트랜지션하지 않는다. 트랙 개수나 단위가
+       섞이면 브라우저가 보간을 포기하고 값이 툭 튄다 — 애니메이션이 없는 것보다 나쁘다.
+       움직이는 것은 아래 컬럼 폭 변수뿐이다. */
   }
 
   .sidebar-resizer {
@@ -1787,10 +1786,6 @@ import { isPanicChord } from "$lib/userCss";
     pointer-events: none;
   }
 
-  /* 사이드바 접힘 시 grid 컬럼 자리만 지키는 빈 슬롯(폭 0). */
-  .sidebar-slot-empty {
-    overflow: hidden;
-  }
 
   /* 우측 컨텍스트 패널 — 사이드바와 같은 크롬 계층이라 본문을 사이에 두고 좌우 대칭. */
   .context-pane {

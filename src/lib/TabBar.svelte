@@ -207,13 +207,16 @@
 {/if}
 
 <style>
+  /* ⚠️ 폴더형 칩에서 **밑줄형**으로(3.0). 칩은 활성 탭이 본문 면으로 갈아타면서
+     아래와 이어지는 효과를 노렸는데, 3.0 은 면끼리 명암차가 작아 그 이음매가 안 읽힌다.
+     밑줄은 면에 기대지 않는다. */
   .tab-bar {
     display: flex;
     align-items: stretch;
     gap: var(--sp-1);
-    padding: var(--sp-1) var(--sp-2) 0;
-    /* 크롬 계층 — 활성 탭만 본문 계층(--surface-content)으로 올라와 아래와 이어진다. */
-    background: var(--surface-panel);
+    height: var(--tabstrip-h);
+    padding: 0 var(--sp-2);
+    background: var(--surface-tabstrip);
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
@@ -224,24 +227,27 @@
     align-items: center;
     gap: var(--sp-1);
     max-width: 200px;
-    padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+    padding: 0 var(--sp-2) 0 var(--sp-3);
     background: transparent;
     border: none;
-    border-radius: var(--r-md) var(--r-md) 0 0;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: var(--fs-sm);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
+    transition:
+      background var(--dur-1) var(--ease-standard),
+      color var(--dur-1) var(--ease-standard),
+      box-shadow var(--dur-3) var(--ease-standard);
   }
 
   .tab:hover {
-    background: var(--surface-raised);
-    color: var(--text-primary);
+    background: var(--surface-hover);
+    color: var(--text-secondary);
   }
 
   .tab.active {
-    background: var(--surface-content);
+    box-shadow: inset 0 -2px 0 var(--accent);
     color: var(--text-primary);
     font-weight: 600;
   }

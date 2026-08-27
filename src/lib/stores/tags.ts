@@ -1,6 +1,6 @@
 import { writable } from "svelte/store";
 import type { LinkInfo } from "$lib/tauri/notes";
-import { ensureSectionOpen } from "./sidebar";
+import { showView } from "./sidebar";
 import { expandSidebar, expandContext } from "./layout";
 import { ensureContextSectionOpen } from "./context";
 
@@ -171,15 +171,15 @@ export function selectTag(tag: string | null, kind: SelectedTagKind = "leaf"): v
 }
 
 // 구 가로 탭(sidebarTab)을 세로 아코디언(sidebar.ts)으로 리다이렉트 — 호출처 무변경.
-// 사이드바가 접혀(아이콘 레일) 있으면 펼치고, 해당 섹션을 연다.
+// 사이드바가 접혀(레일만) 있으면 펼치고, 태그 뷰로 간다.
 export function showTagsTab(): void {
   expandSidebar();
-  ensureSectionOpen("tags");
+  showView("tags");
 }
 
 export function showFilesTab(): void {
   expandSidebar();
-  ensureSectionOpen("files");
+  showView("files");
 }
 
 /** 목차는 2026-08-05(PR-4)부터 우측 컨텍스트 패널 소속 — ⌘⇧O도 그쪽을 연다. */
@@ -190,7 +190,7 @@ export function showOutlineTab(): void {
 
 export function showFavoritesTab(): void {
   expandSidebar();
-  ensureSectionOpen("favorites");
+  showView("favorites");
 }
 
 export function clearTagIndex(): void {
