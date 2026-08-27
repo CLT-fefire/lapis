@@ -5,6 +5,7 @@ import SettingsModal from "$lib/SettingsModal.svelte";
 import { settingsOpen } from "$lib/stores/settings";
   import { buildIndex } from "$lib/linkIndex";
   import { parseNote } from "$lib/markdown";
+  import { fillEmbeds } from "$lib/embedFill";
   import { computeReplacePreview } from "$lib/replacePlan";
   import { linkIndex } from "$lib/stores/vault";
   import { brokenLinksOpen } from "$lib/stores/brokenLinks";
@@ -51,7 +52,7 @@ import { settingsOpen } from "$lib/stores/settings";
 
   const DEV = import.meta.env.DEV;
 
-  type Surface = "hygiene" | "replace" | "settings" | "rendered";
+  type Surface = "hygiene" | "replace" | "settings" | "rendered" | "embed";
   let surface = $state<Surface>("hygiene");
 
   const mkInfo = (path: string, extra: Partial<LinkInfo> = {}): LinkInfo => {
@@ -133,6 +134,43 @@ import { settingsOpen } from "$lib/stores/settings";
 
   const renderedHtml = parseNote(RENDER_SAMPLE).html;
 
+  /**
+   * 임베드 견본 — 자리표시자가 채워지는 것과 **실패가 자리에 남는 것**을 같이 본다.
+   * 픽스처 vault 라 IPC 를 안 탄다(`load` 를 맵으로 준다).
+   */
+  const EMBED_SAMPLE = [
+    "# 임베드",
+    "",
+    "![[알파]]",
+    "",
+    "![[베타#둘째]]",
+    "",
+    "![[없는것]]",
+    "",
+    "![[알파#없는헤딩]]",
+  ].join("\n");
+
+  const EMBED_BODIES: Record<string, string> = {
+    "/v/알파.md": "알파의 본문. 여기까지 당겨온다.",
+    "/v/베타.md": "# 베타\n첫째 본문\n\n## 둘째\n둘째 본문만 와야 한다.\n\n## 셋째\n셋째 본문",
+  };
+
+  let embedHost: HTMLElement | null = $state(null);
+
+  $effect(() => {
+    if (surface !== "embed" || !embedHost) return;
+    embedHost.innerHTML = parseNote(EMBED_SAMPLE).html;
+    void fillEmbeds(embedHost, {
+      index: buildIndex([
+        mkInfo("/v/알파.md"),
+        mkInfo("/v/베타.md"),
+        mkInfo("/v/여기.md"),
+      ]),
+      fromPath: "/v/여기.md",
+      load: async (p) => EMBED_BODIES[p] ?? "",
+    });
+  });
+
   function apply() {
     if (!DEV) return;
     // 테마는 다크 하나다(v2.0.0). 예전엔 여기 선택기가 있었는데, 테마가 줄어든 뒤에도
@@ -177,10 +215,15 @@ import { settingsOpen } from "$lib/stores/settings";
         <option value="replace">찾아 바꾸기</option>
         <option value="settings">설정</option>
         <option value="rendered">렌더 (콜아웃)</option>
+        <option value="embed">렌더 (임베드)</option>
       </select>
     </label>
     <span class="note">테마: dark 고정</span>
   </div>
+
+  {#if surface === "embed"}
+    <div class="rendered sample" bind:this={embedHost}></div>
+  {/if}
 
   {#if surface === "rendered"}
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->

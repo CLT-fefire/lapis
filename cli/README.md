@@ -377,7 +377,11 @@ lapis export knowledge/lapis/STATE.md --out state.html
 | mermaid | 렌더된 `<svg>` | **코드 펜스 그대로** |
 | 토큰 값 | `getComputedStyle` | `app.css` + 설정에서 읽은 색 테마 |
 | 사용자 정의 CSS | 계산된 값에 녹아 있다 | **반영 안 된다** |
+| 임베드 `![[…]]` | 렌더 후 DOM 채우기 | **문자열 치환 — 같은 규칙** |
 | 이미지 | data URI | data URI (로컬만) |
+
+⚠️ 임베드는 **양쪽 다 채운다.** 순회는 다르지만(DOM vs 문자열) 깊이·순환·실패 문구는
+`$lib/embed.ts` 하나를 공유한다 — 갈리면 같은 문서가 두 곳에서 다르게 보인다.
 
 ⚠️ 앱이 DOM을 복제하는 이유는 mermaid다 — 마운트 후 런타임에 `<svg>`가 된다. CLI에는
 브라우저가 없으니 그 단계가 없다. **이 차이를 모르면 한쪽을 버그로 읽는다.**

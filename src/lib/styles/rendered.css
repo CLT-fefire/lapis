@@ -177,6 +177,37 @@
   line-height: 1.5;
 }
 
+/* 임베드 — `![[노트]]`.
+
+   ⚠️ **테두리로 남의 글임을 표시한다.** 표시가 없으면 어디까지가 이 문서의 문장이고
+   어디부터가 당겨온 것인지 구별이 안 된다 — 인용 없이 붙여 넣은 것과 같아진다. */
+.rendered .embed {
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-overlay);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3) 14px;
+  margin: 1em 0;
+}
+
+/* 당겨온 조각의 첫 헤딩이 본문 헤딩처럼 커지면 문서 구조가 어긋나 보인다. */
+.rendered .embed :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1.05em;
+  border-bottom: none;
+  margin-top: 0;
+  padding-bottom: 0;
+}
+
+.rendered .embed > *:last-child {
+  margin-bottom: 0;
+}
+
+/* ⚠️ 실패는 눈에 띄어야 한다 — 조용히 비면 원래 뭐가 있었는지 모른다. */
+.rendered .embed-failed {
+  border-left-color: var(--warning);
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
 /* 콜아웃 — `> [!WARNING]`.
 
    ⚠️ 색은 **시맨틱 토큰만** 쓴다(`app.css`가 단일 출처). 여기서 하드코딩하면 색 테마

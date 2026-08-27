@@ -28,6 +28,7 @@ import { FRONTMATTER_YAML_SCHEMA } from "$lib/frontmatter";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
 import { calloutPlugin } from "$lib/markdownPlugins/callout";
+import { embedPlugin } from "$lib/markdownPlugins/embed";
 import {
   headingAnchorPlugin,
   type HeadingInfo,
@@ -109,6 +110,9 @@ const md = new MarkdownIt({
   },
 })
   .use(wikilinkPlugin)
+  // ⚠️ `embedPlugin` 이 `wikilink` **앞에** 끼어든다(`ruler.before`). 등록 순서가 아니라
+  //    그 인자가 순서를 정하므로, 여기 줄 순서를 바꿔도 안전하다.
+  .use(embedPlugin)
   .use(mermaidPlugin)
   .use(calloutPlugin)
   .use(headingAnchorPlugin);

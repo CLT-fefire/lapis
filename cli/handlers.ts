@@ -850,11 +850,13 @@ export function cmdExport(p: ParsedCommand, out: Out): void {
     );
   }
 
+  const vc = resolveVault(vaultOf(p));
   let result;
   try {
     result = runExport({
       notePath,
       repoRoot,
+      index: buildIndex(vc.infos),
       ...(pickColorTheme() !== undefined ? { colorTheme: pickColorTheme()! } : {}),
     });
   } catch (e) {

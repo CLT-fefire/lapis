@@ -12,6 +12,15 @@ import {
 } from "$lib/previewExportDoc";
 import { themeCss } from "$lib/colorThemes";
 import { normPath } from "../mcp/cache.ts";
+import { buildIndex } from "../mcp/entry.ts";
+import { resolveWikilink, type LinkIndex } from "$lib/linkIndex";
+import {
+  EMBED_MAX_DEPTH,
+  embedFailureText,
+  isCycle,
+  sliceSection,
+  type EmbedFailure,
+} from "$lib/embed";
 
 /**
  * `lapis export` — 노트 하나를 자립 HTML로.
@@ -41,6 +50,70 @@ export class ExportError extends Error {
   }
 }
 
+/** HTML 특수문자 이스케이프 — 실패 문구를 자리표시자에 넣을 때. */
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * 임베드 자리표시자를 채운다 — **CLI 쪽 순회**(문자열).
+ *
+ * ⚠️ 앱은 DOM을 훑고 여기는 문자열을 훑는다. 브라우저가 없어서다. **규칙은 공유한다** —
+ * 깊이·순환·실패 문구가 전부 `$lib/embed.ts` 에 있다. 갈리면 같은 문서가 앱과 CLI에서
+ * 다르게 보인다.
+ *
+ * ⚠️ 자리표시자는 **이 저장소가 만든 것**이라 모양을 안다(`markdownPlugins/embed.ts`).
+ * 임의의 HTML을 정규식으로 다루는 것과 다르다.
+ */
+function fillEmbeds(
+  html: string,
+  index: LinkIndex,
+  fromPath: string,
+  chain: readonly string[] = [],
+): string {
+  const SLOT =
+    /<div class="embed" data-embed-target="([^"]*)"(?: data-embed-anchor="([^"]*)")?>.*?<\/div>/g;
+  return html.replace(SLOT, (_whole, rawTarget: string, rawAnchor?: string) => {
+    const target = decodeAttr(rawTarget);
+    const anchor = rawAnchor === undefined ? null : decodeAttr(rawAnchor);
+    const label = anchor === null ? target : `${target}#${anchor}`;
+    const bad = (kind: EmbedFailure) =>
+      `<div class="embed embed-failed">${esc(embedFailureText(kind, label))}</div>`;
+
+    const hit = resolveWikilink(label, index, fromPath);
+    const notePath = hit.sameDoc ? fromPath : hit.path;
+    if (!notePath) return bad("unresolved");
+    if (isCycle(chain, notePath)) return bad("cycle");
+    if (chain.length >= EMBED_MAX_DEPTH) return bad("too-deep");
+
+    let body: string;
+    try {
+      body = readFileSync(notePath, "utf8");
+    } catch {
+      return bad("unresolved");
+    }
+
+    const parsed = parseNote(body);
+    let inner = parsed.html;
+    if (anchor !== null) {
+      const section = sliceSection(parsed.body, parsed.headings, anchor);
+      if (section === null) return bad("no-section");
+      inner = parseNote(section).html;
+    }
+    const filled = fillEmbeds(inner, index, notePath, [...chain, notePath]);
+    return `<div class="embed">${filled}</div>`;
+  });
+}
+
+/** markdown-it 이 넣은 HTML 엔티티를 되돌린다 — 자리표시자 속성에서만 쓴다. */
+function decodeAttr(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 export interface ExportOptions {
   /** 노트 절대 경로. */
   notePath: string;
@@ -48,6 +121,13 @@ export interface ExportOptions {
   repoRoot: string;
   /** 색 테마 id. 없으면 기본 팔레트. */
   colorTheme?: string;
+  /**
+   * 링크 인덱스. 주면 `![[…]]` 임베드를 채운다.
+   *
+   * ⚠️ 없으면 자리표시자가 그대로 남는다 — **빈 자리가 아니라 `![[노트]]` 원문**이
+   * 보인다. 뭐가 안 됐는지 알 수 있는 쪽이 낫다.
+   */
+  index?: LinkIndex;
 }
 
 export interface ExportResult {
@@ -139,7 +219,11 @@ export function runExport(opts: ExportOptions): ExportResult {
   }
 
   const parsed = parseNote(body);
-  const imgs = inlineImages(parsed.html, path.dirname(opts.notePath));
+  // ⚠️ 임베드를 **이미지 인라인보다 먼저** 채운다 — 당겨온 조각 안의 이미지도 넣어야 한다.
+  const expanded = opts.index
+    ? fillEmbeds(parsed.html, opts.index, normPath(opts.notePath))
+    : parsed.html;
+  const imgs = inlineImages(expanded, path.dirname(opts.notePath));
 
   const html = buildHtmlDocument({
     // ⚠️ `$lib` 쪽은 **`/` 구분자**를 전제한다(`to_ui` 계약). 실제 호출부는 캐시에서 온
