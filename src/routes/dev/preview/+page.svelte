@@ -1,6 +1,8 @@
 <script lang="ts">
   import VaultHygieneModal from "$lib/VaultHygieneModal.svelte";
   import GrepModal from "$lib/GrepModal.svelte";
+import SettingsModal from "$lib/SettingsModal.svelte";
+import { settingsOpen } from "$lib/stores/settings";
   import { buildIndex } from "$lib/linkIndex";
   import { computeReplacePreview } from "$lib/replacePlan";
   import { linkIndex } from "$lib/stores/vault";
@@ -48,7 +50,7 @@
 
   const DEV = import.meta.env.DEV;
 
-  type Surface = "hygiene" | "replace";
+  type Surface = "hygiene" | "replace" | "settings";
   let surface = $state<Surface>("hygiene");
 
   const mkInfo = (path: string, extra: Partial<LinkInfo> = {}): LinkInfo => {
@@ -118,6 +120,7 @@
     // 엔진 갈림 경고까지 보이게 — 이 줄이 실제로 뜨는 모습을 확인하기 어려워서 여기서 강제한다.
     replaceEngineSkew.set(1);
     brokenLinksOpen.set(surface === "hygiene");
+    settingsOpen.set(surface === "settings");
     grepOpen.set(surface === "replace");
   }
 
@@ -137,6 +140,7 @@
       <select bind:value={surface}>
         <option value="hygiene">vault 위생</option>
         <option value="replace">찾아 바꾸기</option>
+        <option value="settings">설정</option>
       </select>
     </label>
     <span class="note">테마: dark 고정</span>
@@ -144,6 +148,7 @@
 
   <VaultHygieneModal />
   <GrepModal />
+  <SettingsModal />
 {:else}
   <!-- 프로덕션에서는 아무것도 없다. -->
 {/if}
