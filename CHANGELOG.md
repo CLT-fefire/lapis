@@ -16,6 +16,74 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [1.20.0] — 2026-08-27
+
+> **⚠️ This release reindexes once on first launch.** `CACHE_VERSION` goes 8 → 9 because the
+> full-text index gained a field, so existing shards cannot be reused. Unlike the v1.17.0 cache
+> migration — which only renamed files — this one rebuilds. Large vaults will spend a moment on it.
+
+### Added
+- **A note's title is now its own search field** ([#233]). The full-text index carried only
+  `name` and `body`. `name` is the filename, which in these vaults is English kebab-case, so
+  `boost: { name: 3 }` did nothing at all for a Korean-language title query. The frontmatter
+  `title` had no field of its own — its text sat inside `body`, weighted like any other prose.
+
+  Measured on one vault with the index shape as the only variable (69 notes, 204 cases):
+
+  | fields | overall | title | **title, 2 words** | body | MRR |
+  |---|---:|---:|---:|---:|---:|
+  | `name`, `body` | 79.9% | 91.2% | **64.7%** | 83.8% | 0.870 |
+  | `name`, `title`, `body` | 89.7% | 98.5% | **85.3%** | 85.3% | 0.943 |
+
+  Two earlier attempts at this had failed — swapping the tokenizer moved it 1 point, and the
+  four-stage combination ladder moved it not at all.
+
+  ⚠️ **Read that number carefully.** The harness draws its queries from the frontmatter `title`,
+  so indexing that field separately is partly teaching to the test. Body queries, which owe
+  nothing to the title, went 83.8% → 85.3%. The honest claim is not "search got 10 points
+  better" but **"finding a note by a title you half-remember got much better"** — which is the
+  situation this harness was built to model.
+
+  No boost is applied to the field. Varying it from 0.01 to 100 changes nothing: clean queries
+  all resolve at the `AND` stage, which passes its search options explicitly, so a per-instance
+  boost never arrives. The gain comes from BM25 length normalisation — a term in a short title
+  field outweighs the same term buried in a long body. A number that does nothing would read as
+  a tuned value to whoever comes next.
+
+### Fixed
+- **The search-quality harness reported success having measured nothing** ([#232]). Running
+  `./mcp/lapis-eval --vault <path>` produced `0 cases`, every quality figure as `NaN%`, and a
+  final line reading pass, with exit code 0.
+
+  Three things had to line up. `Number("--vault")` is `NaN`, and `slice(0, NaN)` is an empty
+  array — no exception, no warning. `--vault` was never a supported option, yet nothing rejected
+  it, so it silently consumed the positional argument that was meant to be the sample size. And
+  the verdict at the end only ever checked the latency budget.
+
+  A measuring tool is what other decisions rest on. Change the tokenizer, run this, read "R@1
+  unchanged" — and nothing was ever compared. `mcp/benchRun.ts` had the same line, where
+  `Math.max(200, NaN)` is also `NaN`.
+
+  Both tools now parse arguments properly, support `--vault` and `--help`, and reject anything
+  unrecognised — the discipline `cli/README.md` already described and a sibling tool was not
+  following. Zero cases is now an error, not a pass.
+
+### Internal
+- **A guard ties the index shape to `CACHE_VERSION`** ([#233]). `CLAUDE.md` warned that
+  `fullTextOptions.ts` sits outside that version's protection, but nothing enforced it, and
+  forgetting means old shards are read by new query code with no error and quietly wrong results.
+  The guard fingerprints what actually determines the stored index — `fields`, `tokenize`,
+  `processTerm` — and pins it beside the version. Query-time values (`boost`, `bm25`, `fuzzy`)
+  are deliberately excluded: including them would force a full rebuild for every ranking tweak,
+  and a guard that noisy gets switched off.
+- **A duplicate `FullTextDoc` was removed** ([#233]). `searchIndex.ts` carried a second copy of
+  the interface and the app built its documents against that one while the index was configured
+  from the other. The two happened to agree, so nothing was wrong — until a field was added to
+  one of them. Each file stays internally consistent, so type checking never objects; only the
+  search results are wrong. Deleting the copy immediately revealed two more document-producing
+  sites, both on the incremental-update path, where only edited notes would have been indexed
+  in the other shape.
+
 ## [1.19.0] — 2026-08-27
 
 ### Fixed
@@ -868,6 +936,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[1.20.0]: https://github.com/eren0315/lapis/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/eren0315/lapis/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/eren0315/lapis/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/eren0315/lapis/compare/v1.16.0...v1.17.0
@@ -907,6 +976,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#233]: https://github.com/eren0315/lapis/pull/233
+[#232]: https://github.com/eren0315/lapis/pull/232
 [#230]: https://github.com/eren0315/lapis/pull/230
 [#229]: https://github.com/eren0315/lapis/pull/229
 [#228]: https://github.com/eren0315/lapis/pull/228
