@@ -18,6 +18,14 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [3.0.0-beta] — 2026-08-28
+
+> **프리릴리스.** 3.0 개편의 **셸**까지다 — 색 토대와 공간 골격. 팔레트 검색 모드,
+> 모달 세 종의 레이아웃, 모션 마감, 빈 상태는 v3.0.0 에 들어간다.
+>
+> ⚠️ 창 크롬(타이틀바 네이티브 장식 제거)은 **아직 안 들어갔다.** 네이티브 창을
+> 띄워보지 않고는 검증할 수 없는 변경이라 v3.0.0 에서 설정 스위치 뒤에 둔다.
+
 ### Changed
 - **사이드바가 한 번에 한 뷰를 보여준다** ([#265]). 세로로 쌓인 아코디언 넷이 레일이 고르는
   **단일 뷰**가 된다(VS Code 액티비티 바).
@@ -1385,7 +1393,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...main
+[3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
 [2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1

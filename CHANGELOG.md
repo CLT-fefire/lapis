@@ -16,6 +16,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.0.0-beta] — 2026-08-28
+
+> **Pre-release.** The 3.0 overhaul up to the **shell** — the color foundation and the spatial
+> skeleton. Palette search modes, the three modal layouts, motion polish, and empty states land
+> in v3.0.0.
+>
+> ⚠️ The window chrome (removing the native titlebar decorations) is **not in yet.** It cannot
+> be verified without driving a native window, so it goes behind a settings switch in v3.0.0.
+
 ### Changed
 - **The sidebar shows one view at a time** ([#265]). Four stacked accordion sections become a
   single view the rail selects, VS Code activity-bar style.
@@ -1466,7 +1475,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...main
+[3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
 [2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
