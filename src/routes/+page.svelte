@@ -1439,14 +1439,14 @@
 
   /* in-document search Preview 하이라이트 (Phase 5.0) — <mark> 삽입 방식 */
   :global(.preview-body mark.lapis-search-match) {
-    background-color: rgba(255, 200, 0, 0.35);
+    background-color: var(--match-bg);
     color: inherit;
     padding: 0;
     border-radius: var(--r-xs);
   }
 
   :global(.preview-body mark.lapis-search-current) {
-    background-color: rgba(255, 140, 0, 0.75);
+    background-color: var(--match-active-bg);
     color: inherit;
     padding: 0;
     border-radius: var(--r-xs);

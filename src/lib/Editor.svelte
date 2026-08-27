@@ -152,22 +152,26 @@
     { tag: t.strikethrough, textDecoration: "line-through" },
   ]);
 
-  // 검색 매치 시각화 override (노란 하이라이트는 라이트/다크 양쪽에서 동일하게 유효).
-  // selected 매치 안의 자식(syntax span 포함)을 어두운 글자로 강제 → 노란 배경 + 검정 대비.
+  // 검색 매치 시각화 override. selected 매치 안의 자식(syntax span 포함)을 어두운 글자로
+  // 강제 → 노란 배경 + 검정 대비.
+  //
+  // ⚠️ **미리보기(`+page.svelte`)와 같은 토큰을 쓴다.** 예전엔 양쪽이 각자 하드코딩했고
+  //    값이 이미 갈려 있었다(0.30 vs 0.35 · #ffc107 vs rgba(255,140,0,.75)). 같은 개념이
+  //    두 곳에 있으면 반드시 갈린다 — 편집기와 미리보기를 오가면 하이라이트가 달라 보였다.
   const searchHighlightTheme = EditorView.theme({
     ".cm-searchMatch": {
-      backgroundColor: "rgba(255, 200, 0, 0.30)",
+      backgroundColor: "var(--match-bg)",
       outline: "none",
-      borderRadius: "2px",
+      borderRadius: "var(--r-xs)",
     },
     ".cm-searchMatch.cm-searchMatch-selected": {
-      backgroundColor: "#ffc107",
-      outline: "1.5px solid #ff7a00",
-      borderRadius: "2px",
+      backgroundColor: "var(--match-active-bg)",
+      outline: "1.5px solid var(--match-active-outline)",
+      borderRadius: "var(--r-xs)",
     },
     ".cm-searchMatch.cm-searchMatch-selected, .cm-searchMatch.cm-searchMatch-selected *":
       {
-        color: "#1a1a1a !important",
+        color: "var(--match-active-fg) !important",
         fontWeight: "600",
       },
   });

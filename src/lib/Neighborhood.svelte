@@ -515,10 +515,10 @@
   }
 
   .dl-add {
-    color: var(--success, #2ea043);
+    color: var(--success);
   }
   .dl-del {
-    color: var(--danger, #d1242f);
+    color: var(--danger);
   }
   .dl-hunk {
     color: var(--accent);
