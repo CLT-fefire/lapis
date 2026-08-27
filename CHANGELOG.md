@@ -16,6 +16,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Fixed
+- **Windows builds died on pre-release versions.** The MSI bundler requires the pre-release
+  identifier to be **numeric** — it rejected `beta` in `3.0.0-beta` and the whole bundle step
+  failed. Windows now produces only the NSIS installer (`.exe`).
+
+  ⚠️ The target list is scoped to Windows via `tauri.windows.conf.json`. Touching `"all"` in
+  the shared `tauri.conf.json` would change the macOS artifacts too, and MSI is a
+  Windows-only target — there is nothing to remove there.
+
 ## [3.0.0-beta] — 2026-08-28
 
 > **Pre-release.** The 3.0 overhaul up to the **shell** — the color foundation and the spatial
