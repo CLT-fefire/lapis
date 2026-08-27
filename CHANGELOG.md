@@ -17,7 +17,7 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Changed
-- **The shell gets a title bar and a status bar** ([#265]). Two full-width rows the window owns,
+- **The shell gets a title bar and a status bar** ([#264]). Two full-width rows the window owns,
   rather than rows a note owns.
 
   v2.0.0 dissolved the global top bar into the note header because Discord has no global bar.
@@ -34,8 +34,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
   ⚠️ Watch state and note count used to live in the sidebar footer, so **collapsing the sidebar
   hid them** — as though collapsing a panel stopped the watcher.
-- **`data-lapis="titlebar"` joins the custom-CSS contract** ([#265]).
-- **The accent splits into three** ([#264]). One value cannot carry fills, text, and borders at
+- **`data-lapis="titlebar"` joins the custom-CSS contract** ([#264]).
+- **The accent splits into three** ([#263]). One value cannot carry fills, text, and borders at
   once — something always falls under threshold. The old Blurple was chosen for fills and measured
   **3.7:1 as text**, which is where links used it.
 
@@ -1488,7 +1488,6 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
-[#265]: https://github.com/eren0315/lapis/pull/265
 [#264]: https://github.com/eren0315/lapis/pull/264
 [#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261

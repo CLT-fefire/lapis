@@ -19,7 +19,7 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Changed
-- **셸에 상단바와 상태바가 생긴다** ([#265]). 창 폭을 가로지르는 두 줄이고, **노트가 아니라
+- **셸에 상단바와 상태바가 생긴다** ([#264]). 창 폭을 가로지르는 두 줄이고, **노트가 아니라
   창이 소유한다.**
 
   v2.0.0 은 디스코드에 전역 상단바가 없다는 이유로 그것을 노트 헤더에 합쳤다. 그런데
@@ -35,8 +35,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
   ⚠️ 감시 상태와 노트 수가 사이드바 푸터에 있어서 **사이드바를 접으면 같이 사라졌다** —
   패널을 접었다고 감시가 멈춘 것도 아닌데.
-- **`data-lapis="titlebar"` 가 사용자 CSS 계약에 들어간다** ([#265]).
-- **액센트가 셋으로 나뉜다** ([#264]). 한 값으로 채움·글자·보더를 다 감당하면 반드시 한쪽이
+- **`data-lapis="titlebar"` 가 사용자 CSS 계약에 들어간다** ([#264]).
+- **액센트가 셋으로 나뉜다** ([#263]). 한 값으로 채움·글자·보더를 다 감당하면 반드시 한쪽이
   기준 아래로 떨어진다. 옛 Blurple 은 채움에 맞춰 고른 값인데 **글자로 3.7:1** 이었고,
   링크가 그걸 쓰고 있었다.
 
@@ -1408,7 +1408,6 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
-[#265]: https://github.com/eren0315/lapis/pull/265
 [#264]: https://github.com/eren0315/lapis/pull/264
 [#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261
