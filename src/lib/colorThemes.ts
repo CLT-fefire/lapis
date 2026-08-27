@@ -66,6 +66,16 @@ export interface ColorTheme {
   tint?: string;
   /** 색조를 얼마나 얹나. 0이면 회색, 1이면 tint의 채도 그대로. 기본 0.22. */
   tintStrength?: number;
+  /**
+   * 채움용 액센트. 없으면 `accent` 에서 파생한다(L −12%).
+   *
+   * ⚠️ **26개 프리셋에 손으로 적지 않는다.** 값을 나열하면 새 프리셋을 더할 때 빼먹기
+   * 쉽고, 빼먹으면 그 테마만 링크가 딴 색으로 남는다 — 화면은 멀쩡하고 한 요소만 틀린다.
+   * 파생이 기본이고 이 필드는 **눈으로 보고 고칠 자리**다.
+   */
+  accentSolid?: string;
+  /** 글자용 액센트. 없으면 `accent` 에서 파생한다(L +14%). 위 주석과 같은 이유. */
+  accentText?: string;
 }
 
 // ─── 색 변환 ────────────────────────────────────────────────────────────────
@@ -219,13 +229,60 @@ export function findTheme(id: string): ColorTheme | undefined {
  * ⚠️ 기본에서 빈 문자열을 내는 이유: 아무것도 안 덮어쓰는 규칙 뭉치를 주입하면 devtools에서
  * "이 값이 어디서 왔나"를 볼 때 한 겹이 더 낀다. 안 바꿀 거면 아무것도 안 넣는 게 낫다.
  */
+/**
+ * 액센트 셋 — 채움 · 선/포커스 · 글자.
+ *
+ * ## ⚠️ 왜 하나로 안 되나
+ *
+ * 한 값으로 셋을 다 감당하면 반드시 한쪽이 대비에서 떨어진다. v2.x 의 Blurple 은 채움에
+ * 맞춰 고른 값이었는데 **링크에도 쓰여** 글자 대비 3.7:1 이었다.
+ *
+ * 파생 규칙은 밝기 한 축이다 — 채움은 12% 어둡게(흰 글자를 얹으므로), 글자는 14% 밝게
+ * (어두운 면에 얹으므로). 색상과 채도는 건드리지 않는다. **테마의 정체성은 색상이고,
+ * 그걸 파생이 흔들면 26종이 서로 닮아 간다.**
+ */
+export function accentTrio(t: ColorTheme): {
+  solid: string;
+  base: string;
+  text: string;
+} {
+  const [h, s, l] = rgbToHsl(hexToRgb(t.accent));
+  const shift = (d: number) => rgbToHex(hslToRgb([h, s, Math.min(0.94, Math.max(0.06, l + d))]));
+
+  /**
+   * 채움은 **여유가 생길 때까지** 어둡게 한다.
+   *
+   * ⚠️ 고정 −12% 로 두면 밝은 액센트(`teal`)에서 흰/검은 글자 중 나은 쪽이 4.4994:1 로
+   * **기준선에 걸린다.** v2.1.0 의 `--n-700`(4.505)과 같은 종류다 — 8비트 반올림만으로
+   * 아래로 내려가는 값을 남기지 않는다. 2%씩 더 어둡게 하며 여유 0.2 를 찾는다.
+   */
+  const solidWithHeadroom = (): string => {
+    for (let d = -0.12; d >= -0.34; d -= 0.02) {
+      const c = shift(d);
+      if (contrastRatio(accentForeground(c), c) >= 4.7) return c;
+    }
+    return shift(-0.34);
+  };
+
+  return {
+    solid: t.accentSolid ?? solidWithHeadroom(),
+    base: t.accent,
+    text: t.accentText ?? shift(0.14),
+  };
+}
+
 export function themeCss(id: string): string {
   const t = findTheme(id);
   if (!t || t.id === DEFAULT_THEME_ID) return "";
 
   const lines: string[] = [];
   const [ar, ag, ab] = hexToRgb(t.accent);
-  lines.push(`  --accent: ${t.accent};`);
+  const trio = accentTrio(t);
+  lines.push(`  --accent-solid: ${trio.solid};`);
+  lines.push(`  --accent: ${trio.base};`);
+  // ⚠️ 이걸 빼면 테마를 바꿔도 **링크만 기본 파랑으로 남는다.** 화면은 멀쩡하고
+  //    한 요소만 딴 색이라 눈치채기 어렵다.
+  lines.push(`  --accent-text: ${trio.text};`);
   // hover는 조금 밝게 — 다크에서 hover는 밝아진다(`app.css` 주석과 같은 규칙).
   const [h, s, l] = rgbToHsl([ar, ag, ab]);
   lines.push(`  --accent-hover: ${rgbToHex(hslToRgb([h, s, Math.min(0.92, l + 0.1)]))};`);

@@ -84,7 +84,7 @@
 }
 
 .rendered a {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .rendered code {
@@ -317,7 +317,7 @@
 
 /* Wikilink 스타일 (span 기반 — 안전한 navigation) */
 .rendered .wikilink {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: none;
   border-bottom: 1px dashed var(--accent-border);
   cursor: pointer;

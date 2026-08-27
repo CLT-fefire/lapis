@@ -264,7 +264,7 @@
   .clear-btn {
     background: transparent;
     border: none;
-    color: var(--accent);
+    color: var(--accent-text);
     cursor: pointer;
     font-family: inherit;
     font-size: var(--fs-xs);

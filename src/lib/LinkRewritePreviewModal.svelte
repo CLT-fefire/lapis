@@ -163,7 +163,7 @@
 
   .count {
     flex-shrink: 0;
-    color: var(--accent);
+    color: var(--accent-text);
     font-variant-numeric: tabular-nums;
     min-width: 32px;
     text-align: right;

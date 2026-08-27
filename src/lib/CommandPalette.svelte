@@ -599,7 +599,7 @@
     padding: var(--sp-4) 18px var(--sp-2);
     font-size: 10px;
     letter-spacing: 0.01em;
-    color: var(--accent);
+    color: var(--accent-text);
     font-weight: 600;
     z-index: 1;
   }

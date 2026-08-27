@@ -75,7 +75,7 @@
 
   /* 선택은 배경으로만 — 좌측 바는 레일의 어휘라 리스트에서는 쓰지 않는다. */
   .outline-item.active {
-    color: var(--accent);
+    color: var(--accent-text);
     background: var(--accent-bg-subtle);
   }
 

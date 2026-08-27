@@ -267,7 +267,7 @@
 
   .tab .dirty {
     flex-shrink: 0;
-    color: var(--accent);
+    color: var(--accent-text);
     font-size: var(--fs-xs);
   }
 
@@ -298,7 +298,7 @@
   .tab.pinned .pin-icon {
     opacity: 1;
     pointer-events: auto;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .tab .close {

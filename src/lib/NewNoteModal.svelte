@@ -103,7 +103,7 @@
     font-weight: 600;
     font-size: var(--fs-base);
     letter-spacing: 0.01em;
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .modal-body {

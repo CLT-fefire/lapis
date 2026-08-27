@@ -19,6 +19,22 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Changed
+- **액센트가 셋으로 나뉜다** ([#264]). 한 값으로 채움·글자·보더를 다 감당하면 반드시 한쪽이
+  기준 아래로 떨어진다. 옛 Blurple 은 채움에 맞춰 고른 값인데 **글자로 3.7:1** 이었고,
+  링크가 그걸 쓰고 있었다.
+
+  `--accent-solid` 가 채우고, `--accent` 가 포커스 링·보더를 그리고, `--accent-text` 가
+  글자다. `--danger`/`--danger-text` 와 같은 계약이고 가드도 같다 — `accentText.test.ts` 가
+  `color: var(--accent)` 를 어디서든 막는다.
+
+  ⚠️ 프리셋 26종은 나머지 둘을 **파생한다.** 테마마다 손으로 적으면 스물일곱 번째에서
+  빼먹고, 빼먹으면 그 테마만 링크가 기본 파랑으로 남는다 — 화면은 멀쩡하고 한 요소만
+  틀린다. 파생은 **밝기 한 축**만 움직인다. 색상은 테마의 정체성이라 그걸 흔들면 26종이
+  서로 닮아 간다.
+
+  ⚠️ 고정 −12% 로는 `teal` 이 **4.4994:1** 이었다 — 천분의 육으로 미달, 2.1.0 의
+  `--n-700` 과 같은 모양이다. 이제 여유가 생길 때까지 어둡게 한다. 26종 전부를 **그 테마의
+  물든 면 위에서** 잰다.
 - **새 색 토대 — Ink & Pyrite** ([#263]). 중립 램프가 무채색 9단에서 **아주 옅게 파랑으로
   기운 11단**이 되고, 셸 3계층과 카드와 hover 가 한 단계를 나눠 쓰던 자리에 두 단계를 더
   넣었다. 다크 단일 테마는 그대로다.
@@ -1375,6 +1391,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#264]: https://github.com/eren0315/lapis/pull/264
 [#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261
 [#259]: https://github.com/eren0315/lapis/pull/259

@@ -146,7 +146,7 @@
 
   .add-btn:hover {
     border-color: var(--accent);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .adding {

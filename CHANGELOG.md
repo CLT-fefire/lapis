@@ -17,6 +17,23 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Changed
+- **The accent splits into three** ([#264]). One value cannot carry fills, text, and borders at
+  once — something always falls under threshold. The old Blurple was chosen for fills and measured
+  **3.7:1 as text**, which is where links used it.
+
+  `--accent-solid` fills, `--accent` draws focus rings and borders, `--accent-text` is for letters.
+  Same contract as `--danger`/`--danger-text`, with the same guard: `accentText.test.ts` refuses
+  `color: var(--accent)` anywhere.
+
+  ⚠️ The twenty-six presets **derive** the other two rather than listing them. A hand-written value
+  per theme is a value you can forget on the twenty-seventh, and a forgotten one leaves that theme's
+  links the default blue while everything else moves — the screen looks fine and one element is
+  wrong. Derivation moves lightness only; hue is the theme's identity and shifting it would make
+  twenty-six themes resemble each other.
+
+  ⚠️ A fixed −12% left `teal` at **4.4994:1** — under by six ten-thousandths, the same shape as the
+  `--n-700` fix in 2.1.0. The fill now darkens until it has real headroom. All twenty-six are
+  measured per theme, on that theme's own tinted surface.
 - **New color foundation — Ink & Pyrite** ([#263]). The neutral ramp goes from nine flat greys to
   eleven steps tilted very slightly toward blue, and two steps are added where the shell's three
   layers, cards, and hover states had been sharing one. Dark stays the only theme.
@@ -1453,6 +1470,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#264]: https://github.com/eren0315/lapis/pull/264
 [#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261
 [#259]: https://github.com/eren0315/lapis/pull/259
