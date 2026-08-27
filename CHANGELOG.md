@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-08-27
+
 ### Added
 - **Wikilinks can point at a heading** ([#246]). `[[Note#Heading]]` opens the note and scrolls
   there; `[[#Heading]]` moves within the current document. Markdown links have always dropped the
@@ -1148,6 +1150,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eren0315/lapis/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/eren0315/lapis/compare/v1.20.0...v2.0.0
 [1.20.0]: https://github.com/eren0315/lapis/compare/v1.19.0...v1.20.0
