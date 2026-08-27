@@ -89,7 +89,7 @@
     toggleContext,
   } from "$lib/stores/layout";
   import ContextPanel from "$lib/ContextPanel.svelte";
-  import { onSystemThemeChange, restoreTheme, themeMode } from "$lib/stores/theme";
+  import { restoreTheme } from "$lib/stores/theme";
   import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
@@ -365,26 +365,12 @@
     afterPreviewRender((body) => renderMermaidIn(body));
   });
 
-  // 테마 전환 시 mermaid 재렌더 — SVG는 테마별로 baked되어 토큰처럼 자동 적응 못 함.
-  // $themeMode 변경을 추적해 렌더 가드를 풀고 현재 테마로 다시 그린다.
-  $effect(() => {
-    void $themeMode; // 의존성 — 테마가 바뀌면 다시 그린다. HTML 변경과는 무관하다.
-    afterPreviewRender((body) => {
-      resetMermaidHosts(body);
-      renderMermaidIn(body);
-    });
-  });
-
-  // "system" 모드에서 OS 외관이 런타임에 바뀌면 $themeMode는 "system" 그대로라
-  // 위 effect가 안 돌고 mermaid만 stale로 남는다. matchMedia 변경을 구독해
-  // 그때만 재렌더한다. (CSS는 prefers-color-scheme로 자동 적응)
-  $effect(() => {
-    return onSystemThemeChange(() => {
-      if (!previewBodyEl) return;
-      resetMermaidHosts(previewBodyEl);
-      renderMermaidIn(previewBodyEl);
-    });
-  });
+  // ⚠️ 예전엔 여기 테마 전환용 mermaid 재렌더 effect가 둘 있었다(모드 변경 추적 +
+  //    system 모드의 OS 외관 변경 구독). mermaid SVG는 테마별로 baked되어 토큰처럼
+  //    자동 적응을 못 하기 때문이었다.
+  //
+  //    테마가 다크 하나가 되면서 **둘 다 절대 안 도는 코드**가 됐다. 남겨 두면 다음
+  //    사람이 아직 테마 전환이 있는 줄 안다.
 
   // Preview 갱신 시 이미지 src 재작성 (상대 경로 → asset 프로토콜) — Phase 4.4.b
   $effect(() => {

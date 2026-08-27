@@ -11,7 +11,6 @@
     mcpEnabled,
     applyMcpEnabled,
   } from "$lib/stores/settings";
-  import { themeMode, setTheme, type ThemeMode } from "$lib/stores/theme";
   import { density, setDensity, type Density } from "$lib/stores/density";
   import {
     readingMeasureLimited,
@@ -25,11 +24,6 @@
 
   // ⚠️ `{#key $activeLocale}`(+layout)이 로케일 변경 시 컴포넌트를 재생성하므로
   // 이 const들도 다시 평가된다 — 그래서 최상위 const로 둬도 로케일을 따라온다.
-  const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-    { value: "system", label: m.settings_theme_system() },
-    { value: "light", label: m.settings_theme_light() },
-    { value: "dark", label: m.settings_theme_dark() },
-  ];
 
   const DENSITY_OPTIONS: { value: Density; label: string }[] = [
     { value: "default", label: m.settings_density_default() },
@@ -180,29 +174,6 @@
           </div>
         </section>
 
-        <section class="setting-row">
-          <div class="setting-label number">
-            <span class="label-text">
-              <span class="label-title">{m.settings_theme_title()}</span>
-              <span class="label-desc">{m.settings_theme_desc()}</span>
-            </span>
-          </div>
-          <div class="setting-control">
-            <div class="segmented" role="group" aria-label={m.settings_theme_aria()}>
-              {#each THEME_OPTIONS as opt (opt.value)}
-                <button
-                  type="button"
-                  class="segment"
-                  class:active={$themeMode === opt.value}
-                  aria-pressed={$themeMode === opt.value}
-                  onclick={() => setTheme(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </section>
 
         <section class="setting-row">
           <div class="setting-label number">

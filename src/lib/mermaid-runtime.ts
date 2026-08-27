@@ -10,7 +10,6 @@
  */
 
 import { m } from "$lib/paraglide/messages.js";
-import { resolveEffectiveTheme } from "$lib/stores/theme";
 
 type MermaidModule = typeof import("mermaid");
 
@@ -31,7 +30,8 @@ function loadMermaid(): Promise<MermaidModule> {
 function applyMermaidTheme(mermaid: MermaidModule["default"]): void {
   mermaid.initialize({
     startOnLoad: false,
-    theme: resolveEffectiveTheme() === "light" ? "default" : "dark",
+    // 테마가 다크 하나뿐이라 고정이다. 다시 늘어나면 여기가 갈라진다.
+    theme: "dark",
     securityLevel: "strict",
     // ⚠️ 반드시 true. false(기본값)면 mermaid가 파싱 실패 시 **자기 에러 그림**
     // ("Syntax error in text" 폭탄 아이콘)을 그리는데, 컨테이너를 넘기지 않는 render()는

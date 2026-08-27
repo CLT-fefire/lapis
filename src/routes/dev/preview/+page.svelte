@@ -50,7 +50,6 @@
 
   type Surface = "hygiene" | "replace";
   let surface = $state<Surface>("hygiene");
-  let theme = $state<"light" | "dark" | "system">("light");
 
   const mkInfo = (path: string, extra: Partial<LinkInfo> = {}): LinkInfo => {
     const segs = path.split("/").filter(Boolean);
@@ -99,7 +98,10 @@
 
   function apply() {
     if (!DEV) return;
-    document.documentElement.setAttribute("data-theme", theme);
+    // 테마는 다크 하나다(v2.0.0). 예전엔 여기 선택기가 있었는데, 테마가 줄어든 뒤에도
+    // 남아 있어서 `data-theme="light"`를 세우고 있었다 — 아무 일도 안 하는데 뭔가
+    // 하는 것처럼 보이는 표면이었다.
+    document.documentElement.setAttribute("data-theme", "dark");
     linkIndex.set(fixtureIndex);
     grepPattern.set("창");
     grepReplacement.set("창문");
@@ -120,9 +122,8 @@
   }
 
   $effect(() => {
-    // surface·theme가 바뀔 때마다 다시 세운다.
+    // surface가 바뀔 때마다 다시 세운다.
     void surface;
-    void theme;
     apply();
   });
 </script>
@@ -138,14 +139,7 @@
         <option value="replace">찾아 바꾸기</option>
       </select>
     </label>
-    <label>
-      테마
-      <select bind:value={theme}>
-        <option value="light">light</option>
-        <option value="dark">dark</option>
-        <option value="system">system</option>
-      </select>
-    </label>
+    <span class="note">테마: dark 고정</span>
   </div>
 
   <VaultHygieneModal />
