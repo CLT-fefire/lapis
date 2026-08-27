@@ -294,7 +294,7 @@
   }
 
   .hint.invalid {
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   .dropdown {

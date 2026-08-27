@@ -163,7 +163,7 @@
   }
 
   .context-menu button.danger {
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   .context-menu button.danger:hover {

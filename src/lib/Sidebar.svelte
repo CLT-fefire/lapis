@@ -821,7 +821,7 @@
   }
 
   .filter-clear:hover {
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   .filter-empty {

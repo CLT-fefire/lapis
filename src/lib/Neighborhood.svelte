@@ -518,7 +518,7 @@
     color: var(--success);
   }
   .dl-del {
-    color: var(--danger);
+    color: var(--danger-text);
   }
   .dl-hunk {
     color: var(--accent);

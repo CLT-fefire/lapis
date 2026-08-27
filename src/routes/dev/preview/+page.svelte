@@ -127,12 +127,27 @@ import { settingsOpen } from "$lib/stores/settings";
     "",
     "> 평범한 인용문. 이것도 그대로여야 한다.",
     "",
+    "위험색 확인용: [[없는노트]] (해소 안 되면 --danger-text)",
+    "",
+    "```ts",
+    "const x: number = 1; // 코드 펜스 배경을 눈으로 본다",
+    "```",
+    "",
+    "레이블 없는 펜스도:",
+    "",
+    "```",
+    "plain fence",
+    "```",
+    "",
     "| 표 | 도 |",
     "|---|---|",
     "| 같이 | 본다 |",
   ].join("\n");
 
-  const renderedHtml = parseNote(RENDER_SAMPLE).html;
+  const renderedHtml = parseNote(RENDER_SAMPLE).html.replace(
+    'class="wikilink"',
+    'class="wikilink unresolved"',
+  );
 
   /**
    * 임베드 견본 — 자리표시자가 채워지는 것과 **실패가 자리에 남는 것**을 같이 본다.

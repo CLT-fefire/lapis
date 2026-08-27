@@ -18,6 +18,24 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Fixed
+- **글자색 `--danger` 가 열다섯 곳에 남아 있었다** ([#256]). 2.3.0에서 문제를 재고 콜아웃만
+  옮겼고, 나머지는 눈으로 확인하며 갈 몫으로 남겼다. 이번이 그 차례다.
+
+  앱이 글자를 얹는 **네 면 전부**에서 재 보면 `--danger` 는 3.35:1 ~ 4.37:1 로 **넷 다 AA
+  미달**이다. `--danger-text` 는 5.54 ~ 7.22 다. 테두리는 `--danger` 를 그대로 쓴다 —
+  비문자 대비 기준은 3:1 이고 통과한다.
+
+  ⚠️ 가드는 값을 옮겨 적지 않고 **`app.css` 를 읽어 실제 토큰을 푼다.** 손으로 적었다가
+  `--surface-content` 를 엉뚱한 램프 단계로 알고 **통과가 아닌 것을 통과라고** 재고 있었다.
+- **코드 블록에 배경이 없었다** ([#256]). `.rendered pre` 가 `--surface-sunken` 을 주는데,
+  바로 다음 규칙 `.rendered .hljs { background: transparent }` 가 특이도로 이겼다 — 모든
+  코드 펜스가 `<pre class="hljs">` 로 나오기 때문이다. 바로 위 주석은 "배경은 `pre` 규칙이
+  담당"이라고 적고 있었다. 주석과 코드가 다른 말을 했고, 화면에는 테두리만 남았다.
+
+  `transparent` 는 highlight.js **테마 스타일시트**가 얹는 배경을 지우는 관용구인데 이
+  저장소는 그 테마를 안 쓴다. 없는 것을 막고 있었다.
+
 ## [2.3.0] — 2026-08-27
 
 ### Added
@@ -1259,6 +1277,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#256]: https://github.com/eren0315/lapis/pull/256
 [#254]: https://github.com/eren0315/lapis/pull/254
 [#253]: https://github.com/eren0315/lapis/pull/253
 [#252]: https://github.com/eren0315/lapis/pull/252

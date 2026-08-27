@@ -168,7 +168,7 @@
 .rendered .mermaid-error {
   background: var(--danger-bg-subtle);
   border: 1px solid var(--danger-border);
-  color: var(--danger);
+  color: var(--danger-text);
   padding: var(--sp-5);
   border-radius: var(--r-sm);
   white-space: pre-wrap;
@@ -329,7 +329,7 @@
 }
 
 .rendered .wikilink.unresolved {
-  color: var(--danger);
+  color: var(--danger-text);
   border-bottom-color: var(--danger-border);
   border-bottom-style: dotted;
 }
@@ -347,8 +347,15 @@
  * `.rendered` 하위로 한정한다 — 이 파일은 내보낸 HTML에도 그대로 들어가므로
  * 전역 `.hljs` 로 두면 범위가 불필요하게 넓어진다. (2026-08-03 app.css에서 이전)
  * ========================================================================== */
+/* ⚠️ **여기 `background`를 두지 않는다.** 예전엔 `background: transparent` 가 있었는데,
+   모든 코드 펜스가 `<pre class="hljs">` 로 나오는 탓에 특이도(0,2,0 > 0,1,1)로 위
+   `pre` 규칙의 `--surface-sunken` 을 **항상** 이겼다 — 바로 위 주석이 "배경은 pre 가
+   담당"이라고 적어 둔 그 규칙이다. 주석과 코드가 서로 다른 말을 하고 있었고, 화면에는
+   테두리만 남아서 아무도 이상하다고 못 느꼈다.
+
+   `transparent` 는 hljs **테마 CSS**가 얹는 배경을 지우려는 관용구인데, 이 저장소는
+   그 테마를 안 쓴다(위 주석). 없는 것을 막고 있었다. */
 .rendered .hljs {
-  background: transparent;
   color: var(--text-primary);
 }
 .rendered .hljs-comment,
@@ -406,7 +413,7 @@
   color: var(--text-primary);
 }
 .rendered .hljs-deletion {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .rendered .hljs-addition {
   color: var(--success);
