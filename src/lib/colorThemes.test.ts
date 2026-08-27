@@ -40,7 +40,9 @@ describe("램프 기준선", () => {
     for (const m of css.matchAll(/^\s+(--n-\d+):\s*(#[0-9a-f]{6});/gim)) {
       inCss[m[1]] = m[2].toLowerCase();
     }
-    expect(Object.keys(inCss).length, "app.css 에서 램프를 못 읽었다").toBe(13);
+    // ⚠️ 개수를 손으로 적지 않는다. 3.0에서 램프가 13 → 15단이 되면서 이 숫자가
+    //    먼저 깨졌는데, 정작 확인하려던 것은 "두 목록이 같은가"다.
+    expect(Object.keys(inCss).length, "app.css 에서 램프를 못 읽었다").toBeGreaterThan(8);
     expect(inCss).toEqual(BASE_RAMP);
   });
 });

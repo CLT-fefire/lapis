@@ -106,13 +106,18 @@ describe("대비", () => {
       expect(r, `${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
     });
 
-    /**
-     * ⚠️ 카나리아 — 원래 값이 실제로 미달이어야 이 분리가 뜻이 있다.
-     * 넷 다 미달이다(3.35 ~ 4.37). 채움·테두리에는 맞고 글자에는 안 맞는 채도다.
-     */
-    it(`--danger 는 ${surface} 에서 AA 미달이다`, () => {
-      const r = contrastRatio(DANGER, resolve(surface));
-      expect(r, `${r.toFixed(2)}:1`).toBeLessThan(AA);
-    });
   }
+
+  /**
+   * ⚠️ 카나리아 — 원래 값이 **글자를 가장 많이 얹는 면**에서 실제로 미달이어야
+   * 이 분리가 뜻이 있다.
+   *
+   * 면 전부를 걸지 않는 이유: 3.0에서 레일이 더 어두워지면서 `--danger` 가 거기서는
+   * 4.91 로 **통과**하게 됐다. "어디서나 미달"은 더는 사실이 아니고, 사실이 아닌 것을
+   * 가드에 적어 두면 다음에 팔레트를 만질 때 그 가드를 지우게 된다.
+   */
+  it("--danger 는 본문 면에서 AA 미달이다", () => {
+    const r = contrastRatio(DANGER, resolve("--surface-content"));
+    expect(r, `${r.toFixed(2)}:1`).toBeLessThan(AA);
+  });
 });

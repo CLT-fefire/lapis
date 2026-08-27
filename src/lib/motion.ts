@@ -10,9 +10,12 @@ import { cubicOut } from "svelte/easing";
  * 값은 app.css의 --dur-* 척도와 맞춘다(JS에서 CSS 변수를 읽는 비용을 피하려 상수로 둠).
  * 한쪽만 바꾸면 CSS 전환과 JS 전환의 속도가 어긋나므로 함께 고칠 것.
  */
-export const MOTION_FAST = 100; // --dur-fast
-export const MOTION_BASE = 150; // --dur-base
-export const MOTION_SLOW = 200; // --dur-slow
+// ⚠️ **CSS 와 짝이다.** `app.css` 의 `--dur-1..4` 와 같은 값이어야 한다 — 한쪽만 바꾸면
+//    같은 동작이 CSS 로 그려질 때와 Svelte transition 으로 그려질 때 속도가 어긋난다.
+//    옛 이름(`--dur-fast/base/slow`)은 CSS 에 별칭으로 한 릴리스만 남아 있다.
+export const MOTION_FAST = 90; // --dur-1
+export const MOTION_BASE = 140; // --dur-2
+export const MOTION_SLOW = 220; // --dur-3
 
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;

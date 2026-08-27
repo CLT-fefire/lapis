@@ -18,6 +18,27 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Changed
+- **새 색 토대 — Ink & Pyrite** ([#263]). 중립 램프가 무채색 9단에서 **아주 옅게 파랑으로
+  기운 11단**이 되고, 셸 3계층과 카드와 hover 가 한 단계를 나눠 쓰던 자리에 두 단계를 더
+  넣었다. 다크 단일 테마는 그대로다.
+
+  ⚠️ **보더가 불투명 회색에서 rgba 헤어라인으로 바뀐다.** 면끼리의 명암차가 이미 셸 영역을
+  가르므로, 보더는 **같은 면 안의** 카드·입력 구분에만 남는다. `--border-*` 위에 자기 색을
+  얹던 사용자 CSS 는 결과가 달라진다.
+
+  ⚠️ **오버레이 계층이 반전됐다.** 팝오버·모달이 배경보다 어두웠는데(디스코드 관용구),
+  스크림을 쓰는 이상 카드는 배경보다 **밝아야** 뜬다.
+
+  새 본문 면에서 잰 값: 본문 11.93:1 · 보조 8.53 · 흐림 5.74 · 액센트 글자 5.72 ·
+  위험 글자 6.29.
+- **모션 예산을 넓혔다** ([#263]). `--dur-fast/base/slow`(100/150/200) 가
+  `--dur-1..4`(90/140/220/320) 가 된다. 옛 이름은 **한 릴리스만** 별칭으로 남는다.
+
+  ⚠️ `motion.ts` 가 Svelte transition 용으로 같은 숫자를 든다. CSS 의
+  `prefers-reduced-motion` 이 거기까지 못 닿기 때문이다 — 한쪽만 바꾸면 같은 동작이
+  CSS 로 그려질 때와 JS 로 그려질 때 속도가 어긋난다.
+
 ## [2.4.1] — 2026-08-27
 
 ### Fixed
@@ -1354,6 +1375,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261
 [#259]: https://github.com/eren0315/lapis/pull/259
 [#258]: https://github.com/eren0315/lapis/pull/258

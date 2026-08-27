@@ -16,6 +16,27 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Changed
+- **New color foundation — Ink & Pyrite** ([#263]). The neutral ramp goes from nine flat greys to
+  eleven steps tilted very slightly toward blue, and two steps are added where the shell's three
+  layers, cards, and hover states had been sharing one. Dark stays the only theme.
+
+  ⚠️ **Borders are hairline rgba now, not opaque grey.** Contrast between surfaces already
+  separates the shell regions, so borders are left to divide cards and inputs *within* a surface.
+  Custom CSS that layered its own color over `--border-*` will land differently.
+
+  ⚠️ **Overlay layering is inverted.** Popovers and modals used to be darker than the page (the
+  Discord idiom). With a scrim in play a card has to be *lighter* to lift off the background.
+
+  Measured on the new content surface: body text 11.93:1, secondary 8.53, muted 5.74, accent text
+  5.72, danger text 6.29.
+- **Motion budget widened** ([#263]). `--dur-fast/base/slow` (100/150/200) become `--dur-1..4`
+  (90/140/220/320). The old names remain as aliases **for one release**.
+
+  ⚠️ `motion.ts` carries the same numbers for Svelte transitions, which CSS `prefers-reduced-motion`
+  cannot reach. Changing one side alone makes the same gesture run at two speeds depending on
+  whether CSS or JS draws it.
+
 ## [2.4.1] — 2026-08-27
 
 ### Fixed
@@ -1432,6 +1453,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#263]: https://github.com/eren0315/lapis/pull/263
 [#261]: https://github.com/eren0315/lapis/pull/261
 [#259]: https://github.com/eren0315/lapis/pull/259
 [#258]: https://github.com/eren0315/lapis/pull/258
