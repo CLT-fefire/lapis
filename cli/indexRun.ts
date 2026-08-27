@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { buildShards, type NoteContentIn } from "./indexBuild.ts";
 import { locateApp, locateRemedy } from "./appLocate.ts";
+import { CACHE_VERSION } from "../mcp/cache.ts";
 
 /**
  * `lapis index` 오케스트레이션 — 앱 실행파일을 **두 번** 부른다.
@@ -48,9 +49,53 @@ export interface IndexOutcome {
   commitMs: number;
   /** `--dry-run`이면 커밋하지 않았다는 뜻. */
   committed: boolean;
+  /**
+   * 앱의 캐시 버전이 이 CLI와 달라 `--allow-version-skew`로 통과했다는 뜻.
+   *
+   * ⚠️ 결과에 실어 보내는 이유는 **마지막 줄이 사람이 읽는 줄**이라서다. 진행 중에
+   * 낸 경고는 위로 스크롤돼 사라지고, 요약만 보면 평범한 성공으로 읽힌다.
+   */
+  versionSkew: boolean;
   appExe: string;
 }
 
+/**
+ * 앱이 쓰는 캐시 버전과 이 CLI가 읽는 버전을 맞춰 본다.
+ *
+ * - 같으면 `null`
+ * - 다르고 `allowSkew`면 **경고 문구**를 돌려준다(호출부가 낸다)
+ * - 다르고 아니면 `IndexError`
+ *
+ * ## ⚠️ 왜 기본이 거절인가
+ *
+ * 실측으로 걸린 자리다. 설치된 앱이 한 버전 낮아서 `lapis index`가 **v8 캐시를 커밋**하고
+ * `앱을 켜면 이 인덱스를 그대로 읽는다(재색인 없음)`이라고 출력했다. 그런데 같은 CLI의
+ * `doctor`는 그 캐시를 `version_skew`로 거부한다 — **방금 만든 것을 방금 만든 도구가
+ * 못 읽는다.** 그러고도 성공이라고 말했다.
+ *
+ * ⚠️ **그 캐시가 쓸모없는 건 아니다.** 그걸 쓴 구버전 앱은 잘 읽는다. 못 읽는 것은
+ * 이 CLI와 MCP다. 그래서 하드 실패가 아니라 **기본 거절 + 명시적 통과**로 둔다 —
+ * `--allow-stale`과 같은 태도다(막되 막다른 길로 만들지 않는다).
+ *
+ * ⚠️ 구버전 앱이 **인자를 무시하는** 경우는 `cache-info` 능력 확인이 이미 막는다.
+ * 여기서 보는 것은 **인자는 받는데 다른 버전을 쓰는** 경우다 — 그쪽이 더 조용하다.
+ */
+export function checkCacheVersion(
+  appVersion: number,
+  appExe: string,
+  allowSkew = false,
+): string | null {
+  if (appVersion === CACHE_VERSION) return null;
+  const seen = Number.isFinite(appVersion) ? `v${appVersion}` : "알 수 없음";
+  const what = `앱이 쓰는 캐시가 ${seen}, 이 CLI·MCP가 읽는 것은 v${CACHE_VERSION}: ${appExe}`;
+  if (allowSkew) return `⚠️  ${what} — 만든 캐시를 이 CLI와 MCP는 못 읽는다`;
+  throw new IndexError(
+    what,
+    Number.isFinite(appVersion) && appVersion < CACHE_VERSION
+      ? "앱을 최신으로 올려라. 구버전 앱만 쓸 거면 --allow-version-skew"
+      : "이 저장소를 최신으로 올려라. 알고 진행하려면 --allow-version-skew",
+  );
+}
 export class IndexError extends Error {
   constructor(
     message: string,
@@ -162,6 +207,8 @@ export interface RunIndexOptions {
   vault: string;
   /** 빌드까지만 하고 캐시에 커밋하지 않는다. */
   dryRun?: boolean;
+  /** 앱과 CLI의 `CACHE_VERSION`이 달라도 진행한다. 만든 캐시는 CLI·MCP가 못 읽는다. */
+  allowVersionSkew?: boolean;
   onProgress?: IndexProgress;
   env?: Record<string, string | undefined>;
   platform?: NodeJS.Platform;
@@ -215,6 +262,11 @@ export function runIndex(opts: RunIndexOptions): IndexOutcome {
       `노트 ${contents.length}개 · ${(statSync(exportFile).size / 1024 / 1024).toFixed(1)} MB · ${exportMs} ms`,
     );
 
+    // ⚠️ **shard를 만들기 전에** 버전을 본다. 커밋 직전으로 밀면 헛수고를 하고,
+    //    커밋 뒤로 밀면 이 CLI가 못 읽는 캐시가 남는다.
+    const skew = checkCacheVersion(Number(exported.cache_version), exe, opts.allowVersionSkew);
+    if (skew) say(skew);
+
     // ── ② shard 빌드 ─────────────────────────────────────────────────────────
     say("풀텍스트 인덱스를 만드는 중…");
     const t1 = Date.now();
@@ -226,6 +278,7 @@ export function runIndex(opts: RunIndexOptions): IndexOutcome {
     const built = buildShards(contents, titleByPath);
     const buildMs = Date.now() - t1;
     say(`shard ${built.shardCount}개 [${built.perShard.join(", ")}] · ${buildMs} ms`);
+
 
     const maxShards = Number(exported.max_shards);
     // Rust가 알려준 상한을 Node가 다시 정하지 않는다. 넘으면 여기서 멈춘다 — 커밋을
@@ -251,6 +304,7 @@ export function runIndex(opts: RunIndexOptions): IndexOutcome {
       buildMs,
       commitMs: 0,
       committed: false,
+      versionSkew: skew !== null,
       appExe: exe,
     };
 
