@@ -42,6 +42,13 @@ pub struct LapisSettings {
     /// 돌기 때문에 **화면이 안 보여도 듣는다.** 그게 1차 방어선이다.
     #[serde(default = "default_true")]
     pub custom_css_enabled: bool,
+
+    /// 색 테마 프리셋 id (`colorThemes.ts`의 `COLOR_THEMES`). 빈 값이면 기본.
+    ///
+    /// ⚠️ 값을 여기서 검증하지 않는다 — 목록이 프런트에 있고, 모르는 id는 프런트가
+    /// 기본으로 떨어뜨린다. Rust가 목록을 복제하면 둘이 갈린다.
+    #[serde(default)]
+    pub color_theme: String,
 }
 
 fn default_true() -> bool {
@@ -59,6 +66,7 @@ impl Default for LapisSettings {
             mcp_enabled: false,
             custom_css: String::new(),
             custom_css_enabled: true,
+            color_theme: String::new(),
         }
     }
 }

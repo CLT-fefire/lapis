@@ -1,6 +1,7 @@
 <script lang="ts">
   import ModalShell from "$lib/ModalShell.svelte";
   import CustomCssEditor from "$lib/CustomCssEditor.svelte";
+  import ColorThemePicker from "$lib/ColorThemePicker.svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import {
     settingsOpen,
@@ -221,6 +222,7 @@
 
         <div class="settings-body">
         {#if cat === "appearance"}
+          <ColorThemePicker />
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">

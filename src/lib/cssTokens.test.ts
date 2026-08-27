@@ -34,6 +34,24 @@ const RUNTIME_INJECTED = new Set([
 /** `var(--x)`가 문자열 조합으로 만들어지는 곳 — 정적 스캔으로 판정할 수 없다. */
 const DYNAMIC_PREFIXES = ["--cm-"];
 
+/**
+ * 그 파일이 **스스로 정의하는** 커스텀 프로퍼티.
+ *
+ * ⚠️ 컴포넌트 안에서만 쓰는 지역 토큰이 있다. `ColorThemePicker`가 스와치마다
+ * `style="--sw-accent: …"`로 값을 넣고 자기 CSS에서 `var(--sw-accent)`로 읽는 식이다.
+ * 이건 `app.css`에 있을 이유가 없고, 있으면 오히려 전역을 오염시킨다.
+ *
+ * 예전엔 이런 걸 `RUNTIME_INJECTED` 목록에 손으로 넣었다. **목록은 자란다** — 자라는
+ * 허용 목록은 결국 오타를 덮는 데 쓰이고, 그러면 이 테스트가 존재할 이유가 사라진다.
+ * "같은 파일이 정의했나"로 판정하면 손이 안 간다.
+ */
+function locallyDefined(text: string): Set<string> {
+  const out = new Set<string>();
+  // CSS 선언(`  --x: v;`)과 인라인 style(`style="--x: {v}"`) 둘 다 잡는다.
+  for (const m of text.matchAll(/(--[a-z0-9-]+)\s*:/g)) out.add(m[1]);
+  return out;
+}
+
 function collect(dir: string, out: Map<string, Set<string>>): void {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -44,8 +62,11 @@ function collect(dir: string, out: Map<string, Set<string>>): void {
     // 테스트 파일은 제외 — 픽스처가 가짜 토큰(`--a`, `--nope`)을 일부러 쓴다.
     if (!/\.(svelte|css)$/.test(e.name)) continue;
     const text = readFileSync(p, "utf8");
+    const local = locallyDefined(text);
     for (const m of text.matchAll(/var\((--[a-z0-9-]+)/g)) {
       const key = m[1];
+      // 같은 파일이 정의한 지역 토큰은 전역에 있을 이유가 없다.
+      if (local.has(key)) continue;
       if (!out.has(key)) out.set(key, new Set());
       out.get(key)!.add(p.split(path.sep).join("/"));
     }

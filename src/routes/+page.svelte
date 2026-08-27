@@ -95,7 +95,7 @@
   } from "$lib/stores/layout";
   import ContextPanel from "$lib/ContextPanel.svelte";
   import { restoreTheme } from "$lib/stores/theme";
-import { applyUserCss, isPanicChord } from "$lib/userCss";
+import { isPanicChord } from "$lib/userCss";
   import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
@@ -1114,9 +1114,6 @@ import { applyUserCss, isPanicChord } from "$lib/userCss";
   // ⚠️ 주석에 style 여는 태그를 문자 그대로 쓰면 Svelte 파서가 script 블록이 안 닫혔다고
   //    본다("<script> was left open"). 파일 끝을 가리켜서 원인이 안 보인다.
   // 요소를 다시 만들지 않고 내용만 바꾼다(순서 유지 · 타이핑 중 깜빡임 없음).
-  $effect(() => {
-    applyUserCss($customCss, $customCssEnabled);
-  });
 
   onMount(() => {
     restoreTheme();

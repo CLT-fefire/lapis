@@ -9,7 +9,7 @@
   import { m } from "$lib/paraglide/messages.js";
   import { customCss, customCssEnabled, applyCustomCss, setCustomCssEnabled } from "$lib/stores/settings";
   import { formatCss, CssFormatError } from "$lib/cssFormat";
-  import { LAPIS_HOOKS } from "$lib/userCss";
+  import { LAPIS_HOOKS, EXAMPLE_CSS } from "$lib/userCss";
 
   /**
    * 사용자 정의 CSS 편집기.
@@ -39,7 +39,9 @@
   ]);
 
   onMount(() => {
-    draft = $customCss;
+    // ⚠️ 저장된 값이 비었으면 **예시로 시작한다.** 저장된 기본값을 예시로 두지 않는
+    //    이유는 `EXAMPLE_CSS` 주석 참조 — "비어 있음"이 사라지면 안 된다.
+    draft = $customCss === "" ? EXAMPLE_CSS : $customCss;
     view = new EditorView({
       parent: host!,
       state: EditorState.create({
@@ -110,6 +112,9 @@
         {m.settings_css_enabled()}
       </label>
       <div class="css-actions">
+        <button class="btn btn--ghost btn--sm" onclick={() => setDoc(EXAMPLE_CSS)}>
+          {m.settings_css_example()}
+        </button>
         <button class="btn btn--ghost btn--sm" onclick={() => void onFormat()}>
           {m.settings_css_format()}
         </button>
