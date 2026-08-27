@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-08-27
+
 ### Added
 - **The MCP server can ask about vault hygiene** ([#259]). The audits stood at five in the app,
   five in the CLI, and **zero in MCP** — an assistant could search a vault but not ask what was
@@ -1350,6 +1352,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eren0315/lapis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eren0315/lapis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/eren0315/lapis/compare/v2.1.0...v2.2.0
