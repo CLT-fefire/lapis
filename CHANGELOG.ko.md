@@ -18,6 +18,15 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Fixed
+- **Windows 빌드가 프리릴리스 버전에서 죽던 것.** MSI 번들러는 프리릴리스 식별자가
+  **숫자여야** 한다 — `3.0.0-beta` 에서 `beta` 를 거부하고 번들 전체가 실패했다.
+  Windows 는 이제 NSIS(`.exe`) 만 만든다.
+
+  ⚠️ 타깃을 `tauri.windows.conf.json` 으로 **Windows 에만** 건다. 공용
+  `tauri.conf.json` 의 `"all"` 을 손대면 macOS 산출물까지 같이 바뀌는데, MSI 는
+  Windows 에만 있는 타깃이라 거기서 뺄 이유가 없다.
+
 ## [3.0.0-beta] — 2026-08-28
 
 > **프리릴리스.** 3.0 개편의 **셸**까지다 — 색 토대와 공간 골격. 팔레트 검색 모드,
