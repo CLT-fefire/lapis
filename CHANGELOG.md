@@ -38,6 +38,24 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
 
 ### Added
+- **Settings search** ([#252]). A box in the settings header that searches **across** categories —
+  knowing which category holds a setting is exactly what you lack when you go looking. Each result
+  names its category, and clicking one takes you there.
+
+  Splitting settings into categories in 2.0.0 took something away: a single scrolling list could be
+  searched with the browser's own find. This gives that back.
+
+  ⚠️ The search does not filter the categories in place, because they are not all rendered — an
+  inactive category is absent from the DOM, which is why the heavy CodeMirror editor only mounts
+  when Advanced is opened. Search swaps in a result list instead.
+
+  ⚠️ That means the list of settings lives in **two** places: the markup and a search index. Adding
+  a setting without indexing it makes one that exists but cannot be found — quiet, and easy to read
+  as "there is no such setting". A guard reads the markup and checks that every title appears in
+  the index under the right category.
+
+  Matching ignores whitespace, so "사용자정의css" finds "사용자 정의 CSS", and descriptions are
+  searched too — people do not remember names exactly.
 - **Callouts** ([#251]). `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`.
 
   Measured first: 41 of this vault's files carry 218 hand-rolled callouts written as `⚠️ **…**`.
@@ -1271,6 +1289,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#252]: https://github.com/eren0315/lapis/pull/252
 [#251]: https://github.com/eren0315/lapis/pull/251
 [#250]: https://github.com/eren0315/lapis/pull/250
 [#249]: https://github.com/eren0315/lapis/pull/249
