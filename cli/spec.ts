@@ -215,6 +215,11 @@ export const COMMANDS: CommandSpec[] = [
         kind: "boolean",
         desc: "만들어만 보고 캐시에 쓰지 않는다. 규모·시간 가늠용",
       },
+      {
+        name: "allow-version-skew",
+        kind: "boolean",
+        desc: "앱의 캐시 버전이 달라도 진행. 만든 캐시는 이 CLI와 MCP가 못 읽는다",
+      },
     ],
   },
 ];

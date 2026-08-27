@@ -59,6 +59,21 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   them too: 0.73 → 0.79 s on the same vault (+54 ms), and on a large vault this row dominates.
 
 ### Fixed
+- **`lapis index` committed a cache the same CLI refuses to read** ([#247]). The command drives the
+  installed app to write the cache. When that app is a version behind, it writes the older cache
+  format — and then prints `커밋했다. 앱을 켜면 이 인덱스를 그대로 읽는다(재색인 없음)`, while
+  `lapis doctor` on the same vault rejects it as `version_skew`. **What it just made, it cannot
+  read**, and it reported success.
+
+  Found by running the command against a scratch vault while working on something else. The
+  existing guard covers an old app that *ignores* the flags; this is an old app that accepts them
+  and writes a different version.
+
+  It stops before building shards now. Not a hard failure, because the cache is not worthless —
+  the app that wrote it reads it fine; the CLI and the MCP server are the ones locked out. So
+  `--allow-version-skew` is there, and taking it changes the last line to say who can read the
+  result. A warning during the run is not enough: that scrolls away, and the last line is the one
+  people read.
 - **Renaming a note dropped the anchor from wikilinks** ([#246]). `[[old#Heading]]` became
   `[[new]]`. Markdown links preserved anchors from the start; the wikilink pattern matched only
   `[[stem]]` and `[[stem|alias]]`. It never mattered while anchors did not resolve — now it would
@@ -1175,6 +1190,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#247]: https://github.com/eren0315/lapis/pull/247
 [#246]: https://github.com/eren0315/lapis/pull/246
 [#245]: https://github.com/eren0315/lapis/pull/245
 [#243]: https://github.com/eren0315/lapis/pull/243

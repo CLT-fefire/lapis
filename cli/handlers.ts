@@ -508,6 +508,7 @@ function cmdIndex(p: ParsedCommand, out: Out): void {
     result = runIndex({
       vault,
       dryRun,
+      allowVersionSkew: p.options["allow-version-skew"] === true,
       onProgress: out.json ? undefined : (m) => process.stderr.write(`  ${m}\n`),
     });
   } catch (e) {
@@ -534,6 +535,16 @@ function cmdIndex(p: ParsedCommand, out: Out): void {
     ]),
   );
   out.line("");
+  if (result.versionSkew) {
+    // ⚠️ 마지막 줄이 사람이 읽는 줄이다. "앱을 켜면 그대로 읽는다"만 남기면 어느 앱을
+    //    말하는지가 빠진 채로 성공으로 읽힌다.
+    out.line(
+      result.committed
+        ? `커밋했다 — 단, v${result.cacheVersion} 캐시라 이 CLI와 MCP는 못 읽는다. 그 앱만 읽는다.`
+        : `만들기만 했다 — 캐시는 그대로다. 만들었다면 v${result.cacheVersion}였다.`,
+    );
+    return;
+  }
   out.line(
     result.committed
       ? "커밋했다. 앱을 켜면 이 인덱스를 그대로 읽는다(재색인 없음)."
