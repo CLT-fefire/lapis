@@ -27,6 +27,7 @@ import http from "highlight.js/lib/languages/http";
 import { FRONTMATTER_YAML_SCHEMA } from "$lib/frontmatter";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
+import { calloutPlugin } from "$lib/markdownPlugins/callout";
 import {
   headingAnchorPlugin,
   type HeadingInfo,
@@ -109,6 +110,7 @@ const md = new MarkdownIt({
 })
   .use(wikilinkPlugin)
   .use(mermaidPlugin)
+  .use(calloutPlugin)
   .use(headingAnchorPlugin);
 
 export interface ParsedNote {

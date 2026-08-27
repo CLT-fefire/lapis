@@ -1,5 +1,15 @@
 <script lang="ts">
   import "../app.css";
+  /**
+   * 렌더된 본문 스타일 — HTML 내보내기와 공유하는 단일 진실(`previewExport.ts`가 `?raw`로
+   * 같은 파일을 인라인한다).
+   *
+   * ⚠️ **레이아웃에 있어야 한다.** `+page.svelte`에 있던 동안 `/dev/preview`에서 마크다운을
+   * 그려 보면 **스타일이 통째로 없었다** — 콜아웃 다섯 종이 전부 같은 색으로 나왔고,
+   * 에러는 없었다. 사용자 CSS 주입이 같은 자리에서 같은 이유로 틀렸던 것을 #243에서
+   * 고쳤는데, 스타일시트 import는 그때 같이 안 옮겼다.
+   */
+  import "$lib/styles/rendered.css";
   // ⚠️ import 자체가 `overwriteGetLocale()`를 건다 — 메시지가 그려지기 전이어야 한다.
   import { activeLocale } from "$lib/stores/locale";
   import { applyUserCss, applyColorThemeCss } from "$lib/userCss";

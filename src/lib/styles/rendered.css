@@ -177,6 +177,61 @@
   line-height: 1.5;
 }
 
+/* 콜아웃 — `> [!WARNING]`.
+
+   ⚠️ 색은 **시맨틱 토큰만** 쓴다(`app.css`가 단일 출처). 여기서 하드코딩하면 색 테마
+   26종이 이 블록만 못 물들인다 — 에러 없이 한 요소만 기본색으로 남는다.
+
+   다섯 종이 색을 셋으로 나눠 쓴다. GitHub도 note/tip/important를 서로 다른 색으로
+   구분하지만, 이 팔레트에는 보라·초록·파랑이 이미 다른 뜻을 갖고 있어(액센트=선택,
+   초록=성공) 뜻이 겹치는 쪽을 피했다. */
+.rendered .callout {
+  border-left: 3px solid var(--callout-border, var(--callout-color, var(--accent)));
+  background: var(--callout-bg, var(--accent-bg-subtle));
+  border-radius: var(--r-sm);
+  padding: var(--sp-3) 14px;
+  /* 인용문의 흐린 글자색을 물려받지 않는다 — 콜아웃은 눈에 띄라고 쓰는 것이다. */
+  color: var(--text-primary);
+}
+
+.rendered .callout-title {
+  font-weight: 600;
+  color: var(--callout-color, var(--accent));
+  margin-bottom: var(--sp-2);
+}
+
+.rendered .callout:last-child > *:last-child {
+  margin-bottom: 0;
+}
+
+/* ⚠️ note만 **중립**이다. 액센트를 쓰면 색 테마 26종마다 대비가 달라진다 — 기본
+   블러플은 액센트 틴트 위에서 2.37:1로 AA에 한참 못 미쳤다(브라우저에서 측정). 나머지
+   넷이 쓰는 상태색은 테마가 안 건드리므로 고정이다.
+
+   뜻으로도 맞는다 — NOTE는 다섯 중 가장 덜 급한 것이라 색이 없는 게 어울린다. */
+.rendered .callout-note {
+  --callout-color: var(--text-primary);
+  --callout-bg: var(--surface-overlay);
+  --callout-border: var(--border-strong);
+}
+.rendered .callout-tip {
+  --callout-color: var(--success);
+  --callout-bg: var(--success-bg-subtle);
+}
+.rendered .callout-important {
+  --callout-color: var(--violet);
+  --callout-bg: var(--violet-bg-subtle);
+}
+.rendered .callout-warning {
+  --callout-color: var(--warning);
+  --callout-bg: var(--warning-bg-subtle);
+}
+/* ⚠️ `--danger`가 아니라 `--danger-text`다. 원래 값은 이 틴트 위에서 3.03:1이었다. */
+.rendered .callout-caution {
+  --callout-color: var(--danger-text);
+  --callout-bg: var(--danger-bg-subtle);
+}
+
 .rendered blockquote {
   border-left: 3px solid var(--accent);
   margin: 1em 0;

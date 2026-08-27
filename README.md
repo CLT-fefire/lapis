@@ -41,6 +41,7 @@ Your files live only on your local filesystem. No accounts, no cloud sync, no te
 
 - **Wikilinks** — jump with `[[Note name]]`. `[[...]]` inside fenced code blocks and inline code is **not** treated as a link (e.g. `[[String: Any]]` is code, not a link).
 - **Point at a heading** — `[[Note#Heading]]` opens the note and scrolls to that heading. `[[#Heading]]` moves within the current document. If the heading is not there, the note opens and stays put.
+- **Callouts** — `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`. The same five GitHub supports, and only those, so a document looks the same in both places. An unknown type stays an ordinary blockquote, and on tools without callouts the whole thing degrades to one.
   - A note whose *name* contains `#` (`C#.md`) wins: the whole target is looked up first, and only a miss is read as an anchor.
 - **Backlinks panel** — every document pointing at this one. Reverse references are the primary way to navigate.
 - **Frontmatter cross-refs** — `related`, `amends`, and `superseded_by` are indexed separately, **preserving the relation type**. "The document that corrected this one" doesn't get mixed in with "merely related".
