@@ -1,6 +1,12 @@
 import { lapisQuery, resolveNotePath, vaultTimeOf, type QueryArgs } from "../mcp/query.ts";
 import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
-import { resolveVault, checkStale } from "../mcp/cache.ts";
+import {
+  resolveVault,
+  checkStale,
+  type VaultCache,
+  type Staleness,
+  LapisError,
+} from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
 import { findOrphans, findTagIssues, findAmbiguousNames } from "$lib/vaultAudit";
@@ -43,6 +49,60 @@ export interface Out {
   line(text: string): void;
   json_(value: unknown): void;
   fail(kind: string, message: string, remedy: string | undefined, code: number): never;
+}
+
+/**
+ * 인덱스가 vault보다 낡았을 때 내는 한 줄.
+ *
+ * ## ⚠️ 왜 질의 명령 **전부**에 붙나
+ *
+ * 예전에는 `cmdSearch` **하나에만** 있었다. 그래서 `links --orphans`나 `tag audit`이 낡은
+ * 인덱스로 **자신 있게 틀린 숫자**를 냈다 — 실제로 그것 때문에 "vault가 깨끗하다"는 잘못된
+ * 결론이 나온 적이 있다. 인덱싱 후 다시 돌리니 답이 달랐다.
+ *
+ * 답이 바뀐 게 아니라 **처음 답이 틀렸던 것**이고, 그걸 알려주는 신호가 없었다.
+ *
+ * 막지 않는 이유는 기존 계약 그대로다 — 살아 있는 vault는 몇 초 사이에도 낡으므로,
+ * 읽기를 하드 실패시키면 도구를 못 쓴다.
+ */
+const STALE_LINE = "(캐시가 vault보다 낡았다 — 'lapis index' 로 갱신)";
+
+/** 질의 핵을 안 거치는 명령(감사·치환)용. 낡았으면 한 줄 낸다. */
+function reportStale(out: Out, vc: VaultCache): void {
+  if (checkStale(vc).changed) out.line(STALE_LINE);
+}
+
+/** `--json` 출력에 실을 낡음 정보. 낡지 않았으면 아무 키도 안 넣는다. */
+function staleField(vc: VaultCache): { stale?: Staleness } {
+  const st = checkStale(vc);
+  return st.changed ? { stale: st } : {};
+}
+
+/**
+ * 쓰기 전에 인덱스가 신선한지 확인한다. 낡았으면 **거절**한다.
+ *
+ * ## ⚠️ 읽기와 다르게 대하는 이유
+ *
+ * `replace`와 `tag rename`은 **인덱스의 노트 목록**을 훑는다(`vc.infos`). 내용은 디스크에서
+ * 새로 읽지만 **목록이 낡았으면 마지막 인덱싱 뒤에 만든 노트가 조용히 빠진다.**
+ * 그런데 보고는 `노트 12개 · 34건`이라고 한다 — 무엇이 빠졌는지는 어디에도 안 나온다.
+ *
+ * 읽기가 조금 낡으면 다시 읽으면 된다. 쓰기가 조금 낡으면 **일부만 바뀐 vault가 남고**
+ * 무엇이 빠졌는지는 아무도 모른다. 값이 다르므로 기본값도 달라야 한다.
+ *
+ * `--allow-stale`로 길은 남긴다 — 자동화에서 인덱싱을 이미 보장했을 수 있다.
+ * **막되 막다른 길로 만들지는 않는다.**
+ */
+function requireFreshIndex(out: Out, vc: VaultCache, p: ParsedCommand): void {
+  if (p.options["allow-stale"] === true) return;
+  const st = checkStale(vc);
+  if (!st.changed) return;
+  out.fail(
+    "stale_index",
+    `인덱스가 vault보다 낡았다 (노트 ${st.total}개 중 ${st.newer_count}개가 새롭다)`,
+    "먼저 `lapis index` 를 돌려라 — 지금 쓰면 새 노트가 조용히 빠진다. 알면서 진행하려면 --allow-stale",
+    2,
+  );
 }
 
 /** 공통 옵션을 `QueryArgs`로. 명령별 핸들러가 자기 것만 얹는다. */
@@ -93,7 +153,7 @@ export function cmdSearch(p: ParsedCommand, out: Out): void {
   // ⚠️ 자른 게 있으면 **말한다.** 조용히 자르면 "이게 전부"로 읽힌다.
   if (res.truncated) out.line("\n(상한에 걸려 잘림 — --limit 으로 늘릴 수 있다)");
   // 낡았다고 막지 않는다. 보고만 한다 — `mcp/README.md`와 같은 태도다.
-  if (res.stale) out.line("(캐시가 vault보다 낡았다 — 'lapis status' 참조)");
+  if (res.stale) out.line(STALE_LINE);
 }
 
 export function cmdBacklinks(p: ParsedCommand, out: Out): void {
@@ -102,6 +162,7 @@ export function cmdBacklinks(p: ParsedCommand, out: Out): void {
   if (res.list !== undefined) return out.line(renderFacet(res.values));
   out.line(renderResults(res.results));
   if (res.truncated) out.line("\n(상한에 걸려 잘림)");
+  if (res.stale) out.line(STALE_LINE);
 }
 
 export function cmdList(p: ParsedCommand, out: Out): void {
@@ -117,6 +178,7 @@ export function cmdList(p: ParsedCommand, out: Out): void {
   if (res.list === undefined) return out.line(renderResults(res.results));
   out.line(renderFacet(res.values));
   if (res.truncated) out.line(`\n(${res.total_distinct}개 중 ${res.returned}개만 표시 — --limit)`);
+  if (res.stale) out.line(STALE_LINE);
 }
 
 export function cmdLinks(p: ParsedCommand, out: Out): void {
@@ -174,6 +236,7 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
     if (out.json) {
       return out.json_({
         vault: vc.root,
+        ...staleField(vc),
         orphans: shown.length,
         notes: shown,
         ...(since !== undefined
@@ -193,6 +256,7 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
         `(${axis} 기준으로 ${droppedOlder}건이 기간 밖, ${droppedNoTime}건은 시간 값이 없어 제외)`,
       );
     }
+    reportStale(out, vc);
     return;
   }
 
@@ -203,6 +267,7 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
   if (out.json) {
     return out.json_({
       vault: vc.root,
+      ...staleField(vc),
       targets: groups.length,
       links: countBrokenLinks(groups),
       groups,
@@ -212,6 +277,7 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
   if (groups.length > 0) {
     out.line(`\n대상 ${groups.length}개 · 링크 ${countBrokenLinks(groups)}개`);
   }
+  reportStale(out, vc);
 }
 
 export function cmdStatus(p: ParsedCommand, out: Out): void {
@@ -291,10 +357,13 @@ export async function cmdTag(p: ParsedCommand, out: Out): Promise<void> {
 
   const preview = computeTagRewritePreview(notes, oldTag, newTag, known);
   const apply = p.options.apply === true;
+  // ⚠️ 쓰기 직전에만 막는다. 미리보기는 낡아도 보여준다 — 무엇이 걸리는지 보는 게 목적이고,
+  //    거기서 막으면 "먼저 인덱싱하라"는 말을 보려고 인덱싱을 해야 한다.
+  if (apply) requireFreshIndex(out, vc, p);
 
   if (!apply) {
     if (out.json) {
-      return out.json_({ vault: vc.root, dry_run: true, ...preview });
+      return out.json_({ vault: vc.root, dry_run: true, ...staleField(vc), ...preview });
     }
     out.line(
       renderTagPreview(
@@ -306,6 +375,7 @@ export async function cmdTag(p: ParsedCommand, out: Out): Promise<void> {
       ),
     );
     if (preview.items.length > 0) out.line("\n미리보기다 — 실제로 쓰려면 --apply");
+    reportStale(out, vc);
     return;
   }
 
@@ -344,7 +414,12 @@ function cmdTagAudit(p: ParsedCommand, out: Out): void {
   }));
 
   if (out.json) {
-    return out.json_({ vault: vc.root, tag_issues: issues, ambiguous_names: ambiguous });
+    return out.json_({
+      vault: vc.root,
+      ...staleField(vc),
+      tag_issues: issues,
+      ambiguous_names: ambiguous,
+    });
   }
   out.line(renderTagIssues(issues));
   out.line("");
@@ -353,6 +428,7 @@ function cmdTagAudit(p: ParsedCommand, out: Out): void {
     out.line("");
     out.line("`lapis tag rename <이전> <새이름>` 으로 합칠 수 있다 (기본은 미리보기).");
   }
+  reportStale(out, vc);
 }
 
 /**
@@ -473,12 +549,15 @@ export async function cmdReplace(p: ParsedCommand, out: Out): Promise<void> {
 
   const rows = preview.items.map((i) => ({ path: rel(i.path), occurrences: i.occurrences }));
   const apply = p.options.apply === true;
+  // ⚠️ 쓰기 직전에만 막는다 — `tag rename`과 같은 이유.
+  if (apply) requireFreshIndex(out, vc, p);
 
   if (!apply) {
     if (out.json) {
       return out.json_({
         vault: vc.root,
         dry_run: true,
+        ...staleField(vc),
         pattern,
         replacement,
         total_occurrences: preview.totalOccurrences,
@@ -494,6 +573,7 @@ export async function cmdReplace(p: ParsedCommand, out: Out): Promise<void> {
       }),
     );
     if (rows.length > 0) out.line("\n미리보기다 — 실제로 쓰려면 --apply");
+    reportStale(out, vc);
     return;
   }
 
@@ -533,8 +613,108 @@ export async function cmdReplace(p: ParsedCommand, out: Out): Promise<void> {
  * ⚠️ `spec.ts`의 `COMMANDS`와 **키가 정확히 같아야 한다.** 한쪽에만 있으면 도움말에는
  * 보이는데 부르면 아무 일도 안 일어나거나, 그 반대가 된다. 테스트가 이걸 고정한다.
  */
+/**
+ * `lapis doctor` — vault 건강 검진을 한 번에.
+ *
+ * ## 왜 있나
+ *
+ * 감사가 셋으로 흩어져 있고(`links --broken` · `links --orphans` · `tag audit`) 인덱스가
+ * 낡았는지는 **넷째 명령**(`status`)이다. "내 vault 괜찮나"를 물으려면 넷을 따로 쳐야 했고,
+ * 그러다 인덱스 확인을 빼먹으면 나머지 셋이 **자신 있게 틀린 답**을 낸다.
+ *
+ * ## ⚠️ 종료 코드에 뜻이 있다
+ *
+ * | 0 | 문제 없음 |
+ * | 1 | 문제를 찾았다 |
+ * | 2 | 돌리지 못했다 (vault 없음 · 인덱스 없음) — `resolveVault`가 던진다 |
+ *
+ * **"문제 있음"과 "못 돌렸음"을 가른다.** 섞으면 CI에서 vault 경로 오타가 위생 문제로
+ * 보고된다. `grep` 관례와 같은 이유다.
+ *
+ * ## ⚠️ 고치지 않는다
+ *
+ * 이름이 고칠 것처럼 들리지만 "판단하지 않는다" 원칙은 그대로다. 되돌릴 수 없는 실행은
+ * `tag rename` · `replace`가 맡고, 둘 다 미리보기를 거친다.
+ *
+ * **낡음은 문제로 세지 않는다.** 살아 있는 vault는 몇 초 사이에도 낡으므로, 세면 doctor가
+ * 상시 1을 내며 훅에서 못 쓰게 된다. 대신 **맨 위에** 낸다 — 아래 숫자를 얼마나 믿을지가
+ * 거기 달렸기 때문이다.
+ */
+export function cmdDoctor(p: ParsedCommand, out: Out): void {
+  // ⚠️ **"문제 있음"(1)과 "못 돌렸음"(2)을 가른다.**
+  //
+  // 다른 명령은 `LapisError`가 그냥 1로 나간다 — 거기엔 "문제 있음"이라는 뜻이 없어서
+  // 헷갈릴 일이 없기 때문이다. doctor는 1을 이미 쓰므로 같이 둘 수 없다. 섞으면 CI에서
+  // **vault 경로 오타가 위생 문제로 보고된다.**
+  let vc: VaultCache;
+  try {
+    vc = resolveVault(vaultOf(p));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const remedy = e instanceof LapisError ? e.remedy : "`lapis status` 로 vault와 캐시를 확인하라";
+    out.fail(e instanceof LapisError ? e.kind : "internal", msg, remedy, 2);
+  }
+  const rel = relativizer(vc.root);
+  const index = buildIndex(vc.infos);
+  const st = checkStale(vc);
+
+  const broken = findBrokenLinks(index).map((g) => ({
+    ...g,
+    sources: g.sources.map((src) => ({ ...src, path: rel(src.path) })),
+  }));
+  const orphans = findOrphans(index).map((o) => ({ ...o, path: rel(o.path) }));
+  const tagIssues = findTagIssues(vc.infos);
+  const ambiguous = findAmbiguousNames(index).map((a) => ({ ...a, paths: a.paths.map(rel) }));
+
+  const problems = broken.length + orphans.length + tagIssues.length + ambiguous.length;
+
+  if (out.json) {
+    out.json_({
+      vault: vc.root,
+      ok: problems === 0,
+      problems,
+      stale: st,
+      broken_links: { targets: broken.length, links: countBrokenLinks(broken), groups: broken },
+      orphans: { count: orphans.length, notes: orphans },
+      tag_issues: tagIssues,
+      ambiguous_names: ambiguous,
+    });
+    // ⚠️ `json_`는 출력만 한다. 종료 코드는 여기서 정해야 한다.
+    if (problems > 0) process.exitCode = 1;
+    return;
+  }
+
+  // 낡음을 **맨 위에** 낸다 — 아래 숫자를 얼마나 믿을지가 여기 달렸다.
+  if (st.changed) {
+    out.line(`⚠️  ${STALE_LINE}`);
+    out.line(`   노트 ${st.total}개 중 ${st.newer_count}개가 캐시보다 새롭다.`);
+    out.line("   아래 숫자는 마지막 인덱싱 시점의 vault를 본 것이다.\n");
+  }
+
+  out.line(
+    table([
+      ["검사", "결과"],
+      ["끊긴 링크", broken.length === 0 ? "없음" : `대상 ${broken.length}개`],
+      ["고아 노트", orphans.length === 0 ? "없음" : `${orphans.length}개`],
+      ["태그 중복", tagIssues.length === 0 ? "없음" : `${tagIssues.length}묶음`],
+      ["모호한 이름", ambiguous.length === 0 ? "없음" : `${ambiguous.length}개`],
+    ]),
+  );
+
+  if (problems === 0) {
+    out.line("\n문제 없음.");
+    return;
+  }
+  out.line("\n자세히 보려면:");
+  if (broken.length > 0) out.line("  lapis links --broken");
+  if (orphans.length > 0) out.line("  lapis links --orphans");
+  if (tagIssues.length > 0 || ambiguous.length > 0) out.line("  lapis tag audit");
+  process.exitCode = 1;
+}
+
 export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Promise<void>> = {
   search: cmdSearch,
+  doctor: cmdDoctor,
   backlinks: cmdBacklinks,
   list: cmdList,
   links: cmdLinks,
