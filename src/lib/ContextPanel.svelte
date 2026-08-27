@@ -33,7 +33,7 @@
   );
 </script>
 
-<aside class="context-panel" aria-label={m.ctxpanel_aria()}>
+<aside class="context-panel" data-lapis="context-panel" aria-label={m.ctxpanel_aria()}>
   <SidebarSection
     icon={FileCode2}
     label={m.ctxpanel_properties()}

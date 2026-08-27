@@ -271,7 +271,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="virtual-container" bind:this={containerEl} onscroll={onScroll}>
+<div class="virtual-container" data-lapis="file-tree" bind:this={containerEl} onscroll={onScroll}>
   {#if topPaddingPx > 0}
     <div class="spacer" style="height: {topPaddingPx}px"></div>
   {/if}

@@ -114,6 +114,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="tab-bar"
+    data-lapis="tabs"
     role="tablist"
     tabindex="-1"
     bind:this={barEl}

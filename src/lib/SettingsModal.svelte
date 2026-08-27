@@ -143,7 +143,13 @@
 
 {#if $settingsOpen}
   <ModalShell onClose={closeSettings} label={m.settings_title()}>
-    <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div
+      class="settings-modal"
+      data-lapis="settings"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
       <header class="settings-head">
         <h2 id="settings-title">{m.settings_title()}</h2>
         <button class="btn btn--icon btn--sm btn--plain" aria-label={m.settings_close()} onclick={closeSettings}>×</button>

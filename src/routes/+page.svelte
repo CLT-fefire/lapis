@@ -30,7 +30,12 @@
     readingMeasureLimited,
     readingMeasureEm,
   } from "$lib/stores/reading";
-  import { restoreSettings } from "$lib/stores/settings";
+  import {
+    restoreSettings,
+    customCss,
+    customCssEnabled,
+    setCustomCssEnabled,
+  } from "$lib/stores/settings";
   import { requestRename } from "$lib/stores/tree-ui";
   import { parseNote } from "$lib/markdown";
   import { computeTextStats, readingTimeLabel } from "$lib/textStats";
@@ -90,6 +95,7 @@
   } from "$lib/stores/layout";
   import ContextPanel from "$lib/ContextPanel.svelte";
   import { restoreTheme } from "$lib/stores/theme";
+import { applyUserCss, isPanicChord } from "$lib/userCss";
   import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
   import { getBacklinks, resolveTarget } from "$lib/linkIndex";
@@ -930,6 +936,15 @@
   // 단축키 **목록**은 `keymap.ts`가 단일 진실이다(여기 중복 기재하지 말 것 — 어긋난다).
   // 모달이 이미 열려 있을 때는 CommandPalette 내부 핸들러가 ESC/화살표 등 처리.
   function handleGlobalKey(e: KeyboardEvent) {
+    // ⚠️ **패닉 키가 가장 먼저다.** 사용자 CSS가 화면을 못 쓰게 만들었을 때 되돌리는
+    //    1차 방어선이라, 아래 어떤 분기도 거치지 않는다. `inEditing` 판정조차 안 본다 —
+    //    그 판정이 의존하는 DOM이 CSS로 가려져 있을 수도 있다.
+    if (isPanicChord(e)) {
+      e.preventDefault();
+      void setCustomCssEnabled(false);
+      return;
+    }
+
     // 입력/편집 영역 안에서는 (일부) 단축키를 가로채지 않음
     // (CodeMirror는 contenteditable, FileTree 인라인 rename은 INPUT)
     const target = e.target as HTMLElement | null;
@@ -1095,6 +1110,14 @@
   let isDebug = $state(false);
   let unlistenCliOpen: (() => void) | null = null;
 
+  // 사용자 정의 CSS 주입 — store가 바뀔 때마다 head 끝의 user-css style 요소를 갱신한다.
+  // ⚠️ 주석에 style 여는 태그를 문자 그대로 쓰면 Svelte 파서가 script 블록이 안 닫혔다고
+  //    본다("<script> was left open"). 파일 끝을 가리켜서 원인이 안 보인다.
+  // 요소를 다시 만들지 않고 내용만 바꾼다(순서 유지 · 타이핑 중 깜빡임 없음).
+  $effect(() => {
+    applyUserCss($customCss, $customCssEnabled);
+  });
+
   onMount(() => {
     restoreTheme();
     restoreDensity();
@@ -1173,7 +1196,7 @@
   </div>
 {/if}
 
-<div class="app">
+<div class="app" data-lapis="app">
   <GitBanner />
 
   <div
@@ -1204,7 +1227,7 @@
     <!-- 본문 페인 — Editor와 Preview가 **교대**한다(2026-08-10, split 제거).
          TabBar와 pane-title은 모드 밖에 있다. 예전엔 TabBar가 Editor 펼침 분기 안에
          있어서 Editor를 접으면 탭이 통째로 사라졌다 — 그 결함도 여기서 같이 사라진다. -->
-    <section class="pane main-pane">
+    <section class="pane main-pane" data-lapis="note-body">
       <TabBar />
       <div class="pane-title">
       <!--
@@ -1217,7 +1240,7 @@
         ⚠️ 버전과 DEBUG 배지는 **버리지 않고 옮겼다.** 설정 화면에 버전이 없어서,
         그냥 지우면 앱 버전을 볼 곳이 사라진다(D단계에서 설정 하단으로 옮긴다).
       -->
-      <div class="note-head">
+      <div class="note-head" data-lapis="note-header">
         <div class="nav-history">
         <button
         class="btn btn--icon btn--sm"
@@ -1338,7 +1361,7 @@
           onClosed={editorOnClosed}
           onOptionsChanged={editorOnOptionsChanged}
         />
-        <div class="pane-body">
+        <div class="pane-body" data-lapis="editor">
           <!-- CodeMirror(~550KB)는 **편집 모드에 들어갈 때** 로드한다. 정적 import면
                읽기만 하는 세션에서도 시작할 때마다 파싱되는데, Lapis의 주 용도가
                읽기·탐색이라 그게 시작 payload의 절반이었다(1089 → 543KB).
@@ -1370,6 +1393,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="pane-body preview-body"
+          data-lapis="preview"
           bind:this={previewBodyEl}
           onclick={handlePreviewClick}
           onscroll={handlePreviewScroll}

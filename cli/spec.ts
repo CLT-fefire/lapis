@@ -149,6 +149,18 @@ export const COMMANDS: CommandSpec[] = [
     ],
   },
   {
+    name: "css",
+    desc: "사용자 정의 CSS를 끈다 — 앱이 안 뜰 때의 탈출구",
+    positional: [],
+    options: [
+      {
+        name: "off",
+        kind: "boolean",
+        desc: "적용을 끈다. CSS 내용은 지우지 않는다",
+      },
+    ],
+  },
+  {
     name: "doctor",
     desc: "vault 건강 검진 — 끊긴 링크 · 고아 · 태그 중복 · 인덱스 낡음을 한 번에",
     positional: [],

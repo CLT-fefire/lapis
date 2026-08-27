@@ -8,7 +8,7 @@
  * MCP는 **인덱스를 만들지 않는다.** 생산자는 앱이다 → stale이면 실패시키고 앱을 켜라고 한다.
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -108,6 +108,50 @@ export function readMcpGate(): GateState {
     }
   }
   return { enabled: false, reason: "settings_absent" };
+}
+
+/**
+ * 설정 파일 경로 후보. `readMcpGate`와 **같은 규칙**으로 찾는다.
+ *
+ * ⚠️ 경로를 직접 조립하지 말 것 — `cacheDirs()`에서 파생시켜야 릴리즈/dev가 안 어긋난다.
+ */
+export function settingsFileCandidates(): string[] {
+  return cacheDirs().map((d) => path.join(path.dirname(d), SETTINGS_FILENAME));
+}
+
+/**
+ * 사용자 정의 CSS를 끈다 — **앱이 아예 안 뜰 때의 탈출구**.
+ *
+ * `[data-lapis="app"] { display: none }` 한 줄이면 앱 안에서는 되돌릴 수 없다.
+ * 패닉 단축키가 1차 방어선이고, 이건 그것도 못 누를 때(앱이 안 뜰 때)를 위한 것이다.
+ *
+ * ⚠️ **CSS 내용은 지우지 않는다.** 끄기만 한다 — 사용자가 쓴 것을 도구가 말없이
+ * 날리면 안 된다. 고쳐서 다시 켜는 것이 정상 흐름이다.
+ *
+ * @returns 실제로 고친 파일들. 빈 배열이면 설정 파일이 없다는 뜻이다.
+ */
+export function disableCustomCss(): string[] {
+  const touched: string[] = [];
+  for (const file of settingsFileCandidates()) {
+    let raw: string;
+    try {
+      raw = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      // 손상된 설정을 덮어쓰면 다른 설정까지 날린다. 건너뛰고 사실대로 보고한다.
+      continue;
+    }
+    if (parsed.custom_css_enabled === false) continue; // 이미 꺼져 있다
+    parsed.custom_css_enabled = false;
+    writeFileSync(file, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+    touched.push(file);
+  }
+  return touched;
 }
 
 /** 게이트가 닫혔을 때의 실패. 조치가 둘로 갈려서 remedy를 나눈다. */

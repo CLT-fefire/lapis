@@ -20,9 +20,16 @@ export const linkRewriteBackupKeep = writable<number>(LINK_REWRITE_BACKUP_KEEP_D
 export const MCP_ENABLED_DEFAULT = false;
 export const mcpEnabled = writable<boolean>(MCP_ENABLED_DEFAULT);
 
+export const CUSTOM_CSS_DEFAULT = "";
+export const customCss = writable<string>(CUSTOM_CSS_DEFAULT);
+/** 사용자 CSS 적용 여부. 패닉 단축키가 이걸 끈다. */
+export const customCssEnabled = writable<boolean>(true);
+
 export const SETTINGS_DEFAULTS: LapisSettings = {
   link_rewrite_backup_keep: LINK_REWRITE_BACKUP_KEEP_DEFAULT,
   mcp_enabled: MCP_ENABLED_DEFAULT,
+  custom_css: CUSTOM_CSS_DEFAULT,
+  custom_css_enabled: true,
 };
 
 export function clampBackupKeep(n: number): number {
@@ -75,9 +82,19 @@ export async function restoreSettings(): Promise<void> {
     const s = await settingsRead();
     const keep = clampBackupKeep(s.link_rewrite_backup_keep);
     const mcp = s.mcp_enabled === true;
-    snapshot = { link_rewrite_backup_keep: keep, mcp_enabled: mcp };
+    const css = typeof s.custom_css === "string" ? s.custom_css : CUSTOM_CSS_DEFAULT;
+    // 없는 필드는 켜진 것으로 읽는다 — 예전 설정 파일에는 이 키가 없다.
+    const cssOn = s.custom_css_enabled !== false;
+    snapshot = {
+      link_rewrite_backup_keep: keep,
+      mcp_enabled: mcp,
+      custom_css: css,
+      custom_css_enabled: cssOn,
+    };
     linkRewriteBackupKeep.set(keep);
     mcpEnabled.set(mcp);
+    customCss.set(css);
+    customCssEnabled.set(cssOn);
   } catch (e) {
     console.warn("[settings] restore 실패 → 기본값 유지", e);
   } finally {
@@ -97,4 +114,27 @@ export async function applyBackupKeep(n: number): Promise<number> {
 export async function applyMcpEnabled(v: boolean): Promise<void> {
   await patchSettings({ mcp_enabled: v });
   mcpEnabled.set(v);
+}
+
+/** 사용자 정의 CSS 저장 — 백엔드 JSON + store. */
+export async function applyCustomCss(css: string): Promise<void> {
+  await patchSettings({ custom_css: css });
+  customCss.set(css);
+}
+
+/**
+ * 사용자 CSS 적용 on/off.
+ *
+ * ⚠️ **store를 먼저 세우고 저장은 뒤에 한다.** 화면이 새까매진 상태에서 패닉 단축키를
+ * 눌렀는데 저장(IPC)이 늦거나 실패하면, 기다리는 동안 화면이 그대로다. 화면을 되살리는
+ * 것이 급하고 영속은 그다음이다.
+ */
+export async function setCustomCssEnabled(on: boolean): Promise<void> {
+  customCssEnabled.set(on);
+  try {
+    await patchSettings({ custom_css_enabled: on });
+  } catch (e) {
+    // 저장에 실패해도 화면은 이미 돌아왔다. 다음 기동에 다시 켜질 뿐이다.
+    console.warn("[settings] 사용자 CSS 토글 저장 실패", e);
+  }
 }
