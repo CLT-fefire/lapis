@@ -283,6 +283,22 @@ cargo check --all-targets --locked
 cargo test --locked
 ```
 
+### Previewing hard-to-reach screens
+
+Some surfaces need real vault state before they show anything — the vault-hygiene modal, and the
+find-and-replace panel inside `⌘⇧G`. To look at them without building that state by hand:
+
+```bash
+npm run dev
+```
+
+Then open `/dev/preview`. It runs **without Tauri** — every value is a fixture — and lets you
+switch surface and theme. Useful for checking colour, spacing and alignment, which the DOM tests
+cannot see (happy-dom has no layout engine).
+
+> The fixtures deliberately fill every tab and trigger every warning at once. A screen with one
+> section populated hides whether the others render at all.
+
 Builds:
 
 ```bash
