@@ -16,6 +16,51 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-08-27
+
+### Added
+- **Twenty-six colour themes** ([#243]). Dark is still the one theme; these sit on top of it,
+  fourteen changing only the accent and twelve tinting the background as well. Settings →
+  Appearance. Custom CSS still overrides individual tokens on top of whichever is selected.
+
+  They are data, not a second palette in `app.css` — that duplication was removed in 2.0.0 and a
+  guard keeps it out. A preset is injected at runtime, between the stylesheet and custom CSS.
+
+  ⚠️ **None of them was colour-matched by eye.** Doing that by hand across twenty-six themes
+  guarantees a few unreadable ones, and an unreadable theme is not an error — it is just a bad
+  screen, seen only by whoever picked it. Instead a tint preserves the **WCAG relative luminance**
+  of every step it touches, by construction: contrast ratios depend on luminance alone, so
+  holding it constant holds legibility constant. Measured across themes, body text lands between
+  9.29 and 9.41 against a default of 9.36.
+
+  An accent cannot inherit that — its colour is the whole point — so the text placed on it is
+  computed instead, black or white by whichever contrasts more. Amber and Ember get black text
+  without anyone deciding that.
+- **The custom CSS editor opens with a worked example** ([#243]). Every rule in it is commented
+  out; uncommenting one and saving changes the app. An example that only describes the hooks
+  does not show what can be grabbed.
+
+  It is shown, not stored. Seeding it as the saved default would erase the difference between
+  "nothing configured" and "configured to nothing", and then clearing it would either bring it
+  back or lose it for good.
+
+### Fixed
+- **The text-muted token had no contrast headroom** ([#243]). At `#949ba4` it measured exactly
+  4.505:1 against the content background — over the 4.5 threshold by four thousandths. Rounding
+  a tinted variant to 8 bits was enough to push it under. It is now `#989fa8` (4.73:1), which is
+  not visibly different and leaves room to move. This was a latent fragility in the default theme,
+  not only in the new ones.
+- **Custom CSS was injected from a single route** ([#243]). The effect lived in the main page
+  component, so anything rendered outside it — the component preview route, for one — took the
+  stored CSS and theme but never applied them. It runs from the root layout now.
+
+### Internal
+- **The CSS token guard no longer objects to component-local properties** ([#243]). A custom
+  property set inline on an element and read by that same component's stylesheet has no business
+  in `app.css`, but the guard counted it as undefined. Previously such cases went into a
+  hand-maintained allowlist; the guard now asks whether the same file defines the property.
+  A list that grows every time it is wrong ends up excusing the typos it exists to catch.
+
 ## [2.0.0] — 2026-08-27
 
 > **⚠️ Breaking — the light and system themes are gone.** There is one theme now, and it is dark.
@@ -1021,6 +1066,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v1.16.0...main
+[2.1.0]: https://github.com/eren0315/lapis/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/eren0315/lapis/compare/v1.20.0...v2.0.0
 [1.20.0]: https://github.com/eren0315/lapis/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/eren0315/lapis/compare/v1.18.0...v1.19.0
@@ -1062,6 +1108,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#243]: https://github.com/eren0315/lapis/pull/243
 [#240]: https://github.com/eren0315/lapis/pull/240
 [#239]: https://github.com/eren0315/lapis/pull/239
 [#238]: https://github.com/eren0315/lapis/pull/238
