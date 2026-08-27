@@ -26,6 +26,26 @@ pub struct LapisSettings {
     /// 동작이지만(기본 OFF), 업그레이드 직후 쓰던 `lapis_query`가 멈춘다.
     #[serde(default)]
     pub mcp_enabled: bool,
+
+    /// 사용자 정의 CSS. 앱이 `<style data-lapis="user-css">`로 head 끝에 넣는다.
+    ///
+    /// ⚠️ **여기 있는 이유가 안전장치다.** 사용자가 `[data-lapis="app"] { display: none }`
+    /// 한 줄을 쓰면 앱이 안 보이고 설정에도 못 들어간다. 그때 되돌리는 길이 셋인데
+    /// 둘이 이 파일에 의존한다 — `lapis css --off`가 이 JSON을 직접 고치고, 최후에는
+    /// 파일을 지우면 초기화된다. localStorage에 뒀으면 앱 밖에서 손댈 방법이 없다.
+    #[serde(default)]
+    pub custom_css: String,
+
+    /// 사용자 정의 CSS 적용 여부. **기본 true** — 비어 있으면 어차피 아무 일도 없다.
+    ///
+    /// 화면이 새까매졌을 때 패닉 단축키가 이 값을 끈다. 키 핸들러는 CSS와 무관하게
+    /// 돌기 때문에 **화면이 안 보여도 듣는다.** 그게 1차 방어선이다.
+    #[serde(default = "default_true")]
+    pub custom_css_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_backup_keep() -> u32 {
@@ -37,6 +57,8 @@ impl Default for LapisSettings {
         Self {
             link_rewrite_backup_keep: default_backup_keep(),
             mcp_enabled: false,
+            custom_css: String::new(),
+            custom_css_enabled: true,
         }
     }
 }

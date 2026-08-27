@@ -300,6 +300,7 @@
   <div class="backdrop" onclick={onBackdrop} transition:fade={backdropFade()}>
     <div
       class="modal"
+      data-lapis="palette"
       role="dialog"
       aria-modal="true"
       aria-label={m.palette_aria()}

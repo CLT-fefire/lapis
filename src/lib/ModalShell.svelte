@@ -106,7 +106,7 @@
 >
   <!-- 카드는 consumer의 snippet이라 여기서 직접 transition을 걸 수 없다. 래퍼를 하나 두고
        backdrop의 가로 정렬을 이 래퍼가 이어받는다(세로 정렬은 backdrop이 유지). -->
-  <div class="ms-card-wrap" transition:scale={cardPop()}>
+  <div class="ms-card-wrap" data-lapis="modal" transition:scale={cardPop()}>
     {@render children()}
   </div>
 </div>

@@ -249,7 +249,7 @@
   }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" data-lapis="sidebar">
   <header class="sidebar-header">
     {#if $vaultPath}
       <!-- Discord 서버 헤더 — 이름 전체가 트리거이고 액션은 메뉴 안으로 접는다.
@@ -443,7 +443,7 @@
          어렵다"는 과거 피드백을 되돌리게 된다. 진입 경로는 레일 ⚙(툴팁 있음) ·
          vault 메뉴 m.sidebar_menu_settings() · ⌘K 로 이미 셋이다. -->
     {#if $vaultPath}
-      <div class="vault-status" title={$vaultPath}>
+      <div class="vault-status" data-lapis="statusbar" title={$vaultPath}>
         <span
           class="status-dot"
           class:ok={vaultStatus.tone === "ok"}

@@ -10,6 +10,16 @@ export interface LapisSettings {
    * MCP 클라이언트(Claude Code/Desktop)가 띄운다. 이 값은 "질의를 받아줄지"만 정한다.
    */
   mcp_enabled: boolean;
+  /**
+   * 사용자 정의 CSS. 앱이 `<style data-lapis="user-css">`로 head 끝에 넣는다.
+   *
+   * ⚠️ localStorage가 아니라 **백엔드 JSON**에 있는 것이 안전장치다. 화면을 못 쓰게
+   * 만드는 CSS를 쓰면 앱 안에서는 되돌릴 수 없는데, 파일이면 `lapis css --off`가
+   * 고치거나 지우면 초기화된다.
+   */
+  custom_css: string;
+  /** 적용 여부. 기본 true. 패닉 단축키가 이걸 끈다. */
+  custom_css_enabled: boolean;
 }
 
 export async function settingsRead(): Promise<LapisSettings> {

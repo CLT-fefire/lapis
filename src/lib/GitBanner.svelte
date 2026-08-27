@@ -12,7 +12,7 @@
 </script>
 
 {#if $gitBannerVisible}
-  <div class="git-banner" role="region" aria-label={m.git_banner_aria()}>
+  <div class="git-banner" data-lapis="banner" role="region" aria-label={m.git_banner_aria()}>
     <span class="icon" aria-hidden="true"><GitBranch size={15} /></span>
     <span class="msg">
       {m.git_banner_body()}

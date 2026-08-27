@@ -50,7 +50,7 @@
   }
 </script>
 
-<nav class="rail" aria-label={m.rail_aria()}>
+<nav class="rail" data-lapis="rail" aria-label={m.rail_aria()}>
   <button
     class="rail-btn"
     aria-label={$sidebarCollapsed ? m.rail_expand() : m.rail_collapse()}

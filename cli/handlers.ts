@@ -5,6 +5,8 @@ import {
   checkStale,
   type VaultCache,
   type Staleness,
+  disableCustomCss,
+  settingsFileCandidates,
   LapisError,
 } from "../mcp/cache.ts";
 import { buildIndex } from "../mcp/entry.ts";
@@ -712,7 +714,44 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   process.exitCode = 1;
 }
 
+/**
+ * `lapis css --off` — 사용자 정의 CSS를 끈다.
+ *
+ * ## 왜 CLI에 있나
+ *
+ * `[data-lapis="app"] { display: none }` 한 줄이면 앱이 안 보이고 설정에도 못 들어간다.
+ * 앱 안의 패닉 단축키가 1차 방어선이고, **이건 그것도 못 누를 때**(앱이 아예 안 뜰 때)를
+ * 위한 것이다.
+ *
+ * ⚠️ **내용은 지우지 않는다.** 끄기만 한다 — 사용자가 쓴 것을 도구가 말없이 날리면 안 된다.
+ *
+ * ⚠️ vault가 필요 없다. 앱 설정은 vault와 무관하고, 애초에 앱이 망가진 상황이라
+ * vault 해소가 되는지도 기댈 수 없다.
+ */
+export function cmdCss(p: ParsedCommand, out: Out): void {
+  if (p.options.off !== true) {
+    out.fail(
+      "no_criteria",
+      "무엇을 할지 지정하지 않았다",
+      "--off 로 사용자 정의 CSS 적용을 끈다",
+      2,
+    );
+  }
+  const touched = disableCustomCss();
+  if (out.json) return out.json_({ disabled: touched.length > 0, files: touched });
+  if (touched.length === 0) {
+    // 설정 파일이 없거나 이미 꺼져 있다. **오류가 아니다** — 원하는 상태가 이미 그것이다.
+    out.line("고칠 것이 없다 (설정 파일이 없거나 이미 꺼져 있다).");
+    for (const f of settingsFileCandidates()) out.line(`  찾아본 곳: ${f}`);
+    return;
+  }
+  out.line("사용자 정의 CSS 적용을 껐다. 내용은 그대로 남아 있다.");
+  for (const f of touched) out.line(`  ${f}`);
+  out.line("\n앱을 다시 켜면 반영된다. 설정에서 고쳐 다시 켤 수 있다.");
+}
+
 export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Promise<void>> = {
+  css: cmdCss,
   search: cmdSearch,
   doctor: cmdDoctor,
   backlinks: cmdBacklinks,
