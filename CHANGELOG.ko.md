@@ -37,6 +37,31 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
   ⚠️ `.gitattributes`에 `*.cmd`를 CRLF로 못박았다. 저장소는 그 밖에서 전부 LF를 강제하는데,
   cmd.exe는 LF만 있는 배치 파일에서 **티 안 나게** 이상하게 군다.
 
+### Added
+- **frontmatter 위생 — 감사 계열의 다섯째** ([#250]). **거를 수 있는 축**의 값이 갈린 곳을
+  찾는다. `lapis props audit` · vault 위생의 다섯째 탭 · `lapis doctor` 행. 앞의 넷은 링크
+  그래프를 보고, 이건 축을 본다.
+
+  ⚠️ **조용하다.** 질의가 에러를 내는 게 아니라 **절반만 찾는다.** 지금 실제 vault가 그렇다 —
+  `doc_kind`에 `todo`와 `todos`가 같이 있고, `status`는 열두 종으로 갈렸다(`반영됨` 18 ·
+  `완료` 2 · `해결됨` 1 · 그리고 `완료 — #232` 같은 자유 서술 여섯).
+
+  판정 셋은 태그 감사가 태그에 하던 것과 같은 모양이다: 대소문자만 다름 · 단수/복수 ·
+  앞부분이 같음.
+
+  ⚠️ **무엇을 안 보는지가 요점이다.** 이름으로 빼는 필드는 둘뿐이다 — `tags`(태그 감사가
+  본다)와 `aliases`(값이 이름이라 갈리는 게 정상이다). 나머지는 **모양으로** 거른다: 값이
+  거의 반복되지 않는 필드는 자유 서술이지 열거형이 아니고, 값이 **노트로 해소되는** 필드는
+  값이 아니라 상호참조다.
+
+  마지막 규칙은 실측이 만들었다. 넣기 전 실제 vault 목록의 절반이 `related`였다 — `feeds` ·
+  `feeds-excerpt-only` · `feeds-settings-hardening`. 셋은 **서로 다른 문서**고, 이름이 비슷한
+  것은 문서 제목의 자연스러운 성질이다. 필드 이름 목록을 손으로 두었다면 새 필드가 생길
+  때마다 고쳐야 했겠지만, **인덱스에 "이 값이 노트로 해소되나"를 묻는 것**은 그럴 필요가 없다.
+
+  자유 서술을 오류라 부르지 않는다. `status: 완료 — #232`는 사람에게 유용하다. 감사가
+  말하는 것은 **같은 접두사로 시작하는 값이 여럿**이라는 사실뿐이다.
+
 ## [2.2.0] — 2026-08-27
 
 ### Added
@@ -1153,6 +1178,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#250]: https://github.com/eren0315/lapis/pull/250
 [#249]: https://github.com/eren0315/lapis/pull/249
 [#247]: https://github.com/eren0315/lapis/pull/247
 [#246]: https://github.com/eren0315/lapis/pull/246

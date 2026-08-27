@@ -37,6 +37,32 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   ⚠️ `*.cmd` is pinned to CRLF in `.gitattributes`. The repo forces LF everywhere else, and
   cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
 
+### Added
+- **frontmatter hygiene — the fifth audit** ([#250]). Values that have split apart on an axis you
+  can filter by. `lapis props audit`, a fifth tab in the vault hygiene panel, and a row in
+  `lapis doctor`. The first four audits look at the link graph; this one looks at the axes.
+
+  ⚠️ **It is quiet.** A query does not error — it finds half of what it should. On the real
+  vault today: `doc_kind` holds both `todo` and `todos`, and `status` has split into twelve values
+  (`반영됨` 18, `완료` 2, `해결됨` 1, plus six free-form variants like `완료 — #232`).
+
+  Three checks, the same shapes the tag audit already looks for on tags: case-only, singular/plural,
+  and shared prefix.
+
+  ⚠️ **What it does *not* look at is the point.** Only two fields are excluded by name — `tags`
+  (the tag audit has it) and `aliases` (those are names, splitting is normal). Everything else is
+  filtered by shape: a field whose values barely repeat is free-form, not an enum; a field whose
+  values **resolve to notes** is a cross-reference, not a value.
+
+  That last rule came out of measurement. Before it, half the findings on the real vault were
+  `related`: `feeds`, `feeds-excerpt-only`, `feeds-settings-hardening`. Those are three different
+  documents — similar names are a normal property of document titles, not a defect. A hand-kept
+  list of field names would have needed editing every time a new field appeared; asking the index
+  "does this value resolve to a note?" does not.
+
+  Free-form values are not called errors. `status: 완료 — #232` is useful to a person. All the
+  audit reports is that several values start the same way.
+
 ## [2.2.0] — 2026-08-27
 
 ### Added
@@ -1214,6 +1240,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#250]: https://github.com/eren0315/lapis/pull/250
 [#249]: https://github.com/eren0315/lapis/pull/249
 [#247]: https://github.com/eren0315/lapis/pull/247
 [#246]: https://github.com/eren0315/lapis/pull/246

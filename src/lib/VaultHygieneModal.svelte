@@ -10,7 +10,9 @@
     findTagIssues,
     findAmbiguousNames,
     findUnlinkedMentions,
+    findFrontmatterIssues,
     type TagIssueKind,
+    type FrontmatterIssueKind,
     type UnlinkedMention,
   } from "$lib/vaultAudit";
 
@@ -35,7 +37,7 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab = "broken" | "orphans" | "tags" | "unlinked";
+  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props";
   let tab = $state<Tab>("broken");
 
   /**
@@ -55,6 +57,7 @@
   const orphans = $derived(idx ? findOrphans(idx) : []);
   const tagIssues = $derived(idx ? findTagIssues([...idx.byPath.values()]) : []);
   const ambiguous = $derived(idx ? findAmbiguousNames(idx) : []);
+  const fmIssues = $derived(idx ? findFrontmatterIssues(idx) : []);
 
   // 모달을 닫으면 버린다 — 다음에 열 때 vault가 그대로라는 보장이 없다.
   // 감사 셋이 캐시를 안 두는 것과 같은 이유다(무효화 경로를 둘로 만들지 않는다).
@@ -88,6 +91,12 @@
     }
   }
 
+  const FM_LABEL: Record<FrontmatterIssueKind, () => string> = {
+    "case-only": () => m.hygiene_props_case_only(),
+    plural: () => m.hygiene_props_plural(),
+    prefix: () => m.hygiene_props_prefix(),
+  };
+
   const TAG_LABEL: Record<TagIssueKind, () => string> = {
     "same-leaf": () => m.hygiene_tags_same_leaf(),
     "case-only": () => m.hygiene_tags_case_only(),
@@ -101,6 +110,7 @@
     tags: tagIssues.length + ambiguous.length,
     // null = 아직 안 셌다. 0을 띄우면 안 본 것을 깨끗하다고 말하게 된다.
     unlinked: unlinked === null ? null : unlinked.length,
+    props: fmIssues.length,
   });
 
   const TABS = $derived<[Tab, string][]>([
@@ -108,6 +118,7 @@
     ["orphans", m.hygiene_tab_orphans()],
     ["tags", m.hygiene_tab_tags()],
     ["unlinked", m.hygiene_tab_unlinked()],
+    ["props", m.hygiene_tab_props()],
   ]);
 
   async function go(path: string) {
@@ -235,7 +246,7 @@
             {/if}
           {/if}
           <p class="hint">{m.hygiene_tags_hint()}</p>
-        {:else}
+        {:else if tab === "unlinked"}
           {#if unlinkedBusy}
             <!-- `loading` 은 테스트가 "읽는 중"과 "읽었더니 없다"를 문구 없이 가르는 표식이다. -->
             <p class="empty loading">{m.hygiene_unlinked_loading()}</p>
@@ -275,6 +286,25 @@
             </ul>
           {/if}
           <p class="hint">{m.hygiene_unlinked_hint()}</p>
+        {:else}
+          {#if fmIssues.length === 0}
+            <p class="empty">{m.hygiene_props_empty()}</p>
+          {:else}
+            {#each fmIssues as issue, i (issue.field + issue.kind + i)}
+              <div class="group">
+                <div class="group-label">{issue.field} · {FM_LABEL[issue.kind]()}</div>
+                <ul class="rows">
+                  {#each issue.values as v (v.value)}
+                    <li>
+                      <span class="value">{v.value}</span>
+                      <span class="count">{v.count}</span>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/each}
+          {/if}
+          <p class="hint">{m.hygiene_props_hint()}</p>
         {/if}
       {/if}
     </div>
@@ -364,6 +394,11 @@
   }
 
   /* 미리보기 — 한 줄로 자른다. 여러 줄이 되면 목록이 훑기 어려워진다. */
+  /* 값은 자유 서술이 섞여 길 수 있다 — 자르지 않고 접는다. 잘라내면 왜 걸렸는지가 안 보인다. */
+  .value {
+    overflow-wrap: anywhere;
+  }
+
   .preview {
     display: block;
     font-size: 0.75rem;
@@ -405,6 +440,8 @@
   /* 탭 — 셋을 한 화면에 모았으니 어디에 무엇이 있는지 숫자로 보인다. */
   .tabs {
     display: flex;
+    /* 탭이 다섯이라 560px에서 넘칠 수 있다. 줄이지 말고 접는다 — 줄이면 라벨이 잘린다. */
+    flex-wrap: wrap;
     gap: 2px;
     padding: 0 16px;
     border-bottom: 1px solid var(--border-subtle);
