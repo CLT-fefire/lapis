@@ -54,6 +54,25 @@ import {
   resolveVault,
   type VaultCache,
 } from "./cache.ts";
+import { findBrokenLinks } from "$lib/brokenLinks";
+import {
+  findOrphans,
+  findTagIssues,
+  findAmbiguousNames,
+  findFrontmatterIssues,
+  findUnlinkedMentions,
+} from "$lib/vaultAudit";
+
+/**
+ * vault 상대 경로로. **응답 경로는 전부 상대다** — `lapisQuery` 의 기존 계약과 같다.
+ *
+ * ⚠️ `$lib` 쪽 순수 함수는 절대 경로를 낸다(앱이 그걸로 노트를 연다). 자르는 건
+ * 표면의 몫이고, 여기가 그 표면이다.
+ */
+function relativize(root: string, abs: string): string {
+  const cut = root.endsWith("/") ? root.length : root.length + 1;
+  return abs.startsWith(root) ? abs.slice(cut) : abs;
+}
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
@@ -108,9 +127,34 @@ export interface FacetListResponse extends ResponseBase {
   values: { value: string; count: number }[];
 }
 
+/**
+ * ⚠️ 감사 응답을 **먼저 걸러 내는** 좁히기 도우미.
+ *
+ * 소비자(테스트 포함)가 `list`·`returned` 를 읽으려 할 때 `AuditResponse` 가 섞여 있으면
+ * 타입이 막는다. 그건 옳지만, 매번 손으로 좁히면 실수한다.
+ */
+export function isAudit(r: QueryResponse): r is AuditResponse {
+  return "audit" in r && r.audit !== undefined;
+}
+
+/** 쓸 수 있는 감사. **앱·CLI와 같은 다섯**이다 — 여기만 다르면 답이 갈린다. */
+export const AUDIT_KINDS = ["broken", "orphans", "unlinked", "tags", "props"] as const;
+export type AuditKind = (typeof AUDIT_KINDS)[number];
+
+export interface AuditResponse extends ResponseBase {
+  /** 판별자 — `list`·검색 응답과 구별한다. */
+  audit: AuditKind;
+  /** 몇 건인가. 종류마다 세는 단위가 달라 `unit` 이 같이 온다. */
+  count: number;
+  /** `count` 가 무엇의 개수인지 — `대상`·`노트`·`이름`·`묶음`. */
+  unit: string;
+  rows: unknown[];
+}
+
 export interface SearchResponse extends ResponseBase {
-  /** 판별자 — `list` 응답과 구별한다. */
+  /** 판별자 — `list`·감사 응답과 구별한다. */
   list?: undefined;
+  audit?: undefined;
   used: Record<string, unknown>[];
   resolved_target?: string;
   /** 실제로 실린 행 수. 항상 `limit` 이하. */
@@ -125,7 +169,7 @@ export interface SearchResponse extends ResponseBase {
 }
 
 /** `list` 인자를 주면 `FacetListResponse`, 아니면 `SearchResponse`. */
-export type QueryResponse = FacetListResponse | SearchResponse;
+export type QueryResponse = FacetListResponse | SearchResponse | AuditResponse;
 
 export interface QueryArgs {
   vault?: string;
@@ -135,6 +179,14 @@ export interface QueryArgs {
   tag?: string;
   backlinks_of?: string;
   list?: "topics" | "tags" | "doc_kinds";
+  /**
+   * vault 위생 감사 하나. 앱과 CLI가 쓰는 **같은 순수 함수**를 부른다.
+   *
+   * ⚠️ 왜 `all` 이 없나 — `unlinked` 만 **본문을 전부 읽는다**(나머지는 인덱스로 된다).
+   * `all` 에 넣으면 값싼 넷을 물을 때마다 그 비용을 문다. 넣지 않으면서 `all` 이라
+   * 부르면 거짓말이다. 한 번에 하나씩 고르게 한다.
+   */
+  audit?: AuditKind;
   sources?: ("bm25" | "structural")[];
   exclude?: string[];
   include_archive?: boolean;
@@ -414,6 +466,68 @@ function timeSource(st: Loaded, axis: "mtime" | "date"): TimeOf {
   }
   return (abs) => times.get(abs) ?? null;
 }
+/**
+ * 감사 하나를 돌린다.
+ *
+ * ## ⚠️ 앱·CLI와 **같은 순수 함수**를 부른다
+ *
+ * `$lib/brokenLinks` · `$lib/vaultAudit` 하나뿐이다. MCP가 자기 판정을 따로 두면 AI가 보는
+ * vault 상태와 사람이 보는 상태가 갈린다 — 그러면 둘 중 누가 맞는지 아무도 모른다.
+ *
+ * ⚠️ `unlinked` 만 **본문을 전부 읽는다.** 그래서 `all` 을 안 둔다(위 `audit` 주석).
+ */
+function runAudit(
+  st: Loaded,
+  kind: AuditKind,
+  cap: number,
+): { audit: AuditKind; count: number; unit: string; rows: unknown[]; truncated: boolean } {
+  const rel = (p: string) => relativize(st.vc.root, p);
+  const cut = <T>(rows: T[]) => ({ rows: rows.slice(0, cap), truncated: rows.length > cap });
+
+  switch (kind) {
+    case "broken": {
+      const all = findBrokenLinks(st.link).map((g) => ({
+        target: g.target,
+        sources: g.sources.map((s) => ({ ...s, path: rel(s.path) })),
+      }));
+      return { audit: kind, count: all.length, unit: "대상", ...cut(all) };
+    }
+    case "orphans": {
+      const all = findOrphans(st.link).map((o) => ({ ...o, path: rel(o.path) }));
+      return { audit: kind, count: all.length, unit: "노트", ...cut(all) };
+    }
+    case "tags": {
+      const issues = findTagIssues(st.vc.infos);
+      const ambiguous = findAmbiguousNames(st.link).map((a) => ({
+        ...a,
+        paths: a.paths.map(rel),
+      }));
+      const all = [...issues, ...ambiguous.map((a) => ({ kind: "ambiguous" as const, ...a }))];
+      return { audit: kind, count: all.length, unit: "묶음", ...cut(all) };
+    }
+    case "props": {
+      const all = findFrontmatterIssues(st.link);
+      return { audit: kind, count: all.length, unit: "묶음", ...cut(all) };
+    }
+    case "unlinked": {
+      const bodies = new Map<string, string>();
+      for (const info of st.vc.infos) {
+        try {
+          bodies.set(info.source_path, readFileSync(info.source_path, "utf8"));
+        } catch {
+          // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
+        }
+      }
+      const all = findUnlinkedMentions(st.link, bodies).map((r) => ({
+        ...r,
+        target: rel(r.target),
+        sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
+      }));
+      return { audit: kind, count: all.length, unit: "이름", ...cut(all) };
+    }
+  }
+}
+
 export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const {
     vault,
@@ -423,6 +537,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     tag,
     backlinks_of,
     list,
+    audit,
     sources,
     exclude = [],
     include_archive = false,
@@ -434,12 +549,13 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   } = args;
 
   const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of);
-  if (!list && !text && !wantsStructural) {
+  if (!list && !audit && !text && !wantsStructural) {
     throw new LapisError(
       "no_criteria",
       "조건이 하나도 없다.",
       "text · doc_kind · topic · tag · backlinks_of 중 최소 하나를 채우거나, " +
-        "list:\"topics\"|\"tags\"|\"doc_kinds\"로 쓸 수 있는 값부터 확인하라.",
+        "list:\"topics\"|\"tags\"|\"doc_kinds\"로 쓸 수 있는 값부터 확인하거나, " +
+        `audit:"${AUDIT_KINDS.join('"|"')}"로 vault 위생을 물어라.`,
     );
   }
 
@@ -481,7 +597,9 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     );
   }
 
-  if (!list) {
+  // ⚠️ `list` 와 `audit` 은 **팔을 안 쓴다.** 이 검사에 걸리면 감사 요청이
+  //    "sources 가 인자를 잘라냈다"로 죽는다 — 실제로 그랬다.
+  if (!list && !audit) {
     const effective =
       (text && allow.has("bm25")) || (wantsStructural && allow.has("structural"));
     if (!effective) {
@@ -511,6 +629,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   };
 
   if (list) return { ...base, ...listFacet(st, list, cap, ex) };
+  if (audit) return { ...base, ...runAudit(st, audit, cap) };
 
   const used: Record<string, unknown>[] = [];
   const via = new Map<string, string[]>();

@@ -1,7 +1,11 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
   import ModalShell from "$lib/ModalShell.svelte";
-  import { brokenLinksOpen, closeBrokenLinks } from "$lib/stores/brokenLinks";
+  import {
+    brokenLinksOpen,
+    closeBrokenLinks,
+    hygieneInitialTab,
+  } from "$lib/stores/brokenLinks";
   import { linkIndex, selectNote, vaultPath } from "$lib/stores/vault";
   import { readVaultBundle } from "$lib/tauri/notes";
   import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
@@ -39,6 +43,12 @@
 
   type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props";
   let tab = $state<Tab>("broken");
+
+  // 열릴 때 팔레트가 지정한 탭으로 간다. ⚠️ **열릴 때만** — 열려 있는 동안 store 가
+  //    바뀌어도 사용자가 고른 탭을 빼앗지 않는다.
+  $effect(() => {
+    if ($brokenLinksOpen) tab = $hygieneInitialTab;
+  });
 
   /**
    * ⚠️ 넷째 탭만 **본문**이 있어야 한다. 나머지 셋은 인덱스만으로 되고, 앱은 본문을

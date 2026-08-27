@@ -107,6 +107,26 @@ export const BUILTIN_COMMANDS: Command[] = [
       openBrokenLinks();
     },
   },
+  /**
+   * ⚠️ 감사가 다섯이 되고 나서 나머지 넷에 **직행할 길이 없었다.** 팔레트에서 위생을
+   * 열고 탭을 두 번 넘겨야 "속성"에 닿았다. 하나마다 항목을 두는 대신 위 명령 하나로
+   * 두면 목적지를 말할 방법이 없다.
+   */
+  ...(["orphans", "tags", "unlinked", "props"] as const).map((tab) => ({
+    id: `audit-${tab}`,
+    get label() {
+      return {
+        orphans: m.cmd_audit_orphans(),
+        tags: m.cmd_audit_tags(),
+        unlinked: m.cmd_audit_unlinked(),
+        props: m.cmd_audit_props(),
+      }[tab];
+    },
+    disabled: () => !get(vaultPath),
+    run() {
+      openBrokenLinks(tab);
+    },
+  })),
   {
     id: "open-vault",
     get label() {

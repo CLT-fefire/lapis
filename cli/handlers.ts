@@ -1,4 +1,10 @@
-import { lapisQuery, resolveNotePath, vaultTimeOf, type QueryArgs } from "../mcp/query.ts";
+import {
+  lapisQuery,
+  isAudit,
+  resolveNotePath,
+  vaultTimeOf,
+  type QueryArgs,
+} from "../mcp/query.ts";
 import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
 import {
   resolveVault,
@@ -21,7 +27,7 @@ import {
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
 import { runIndex, IndexError } from "./indexRun.ts";
@@ -176,6 +182,9 @@ export function cmdSearch(p: ParsedCommand, out: Out): void {
     ...(Array.isArray(o.exclude) ? { exclude: o.exclude } : {}),
   });
   if (out.json) return out.json_(res);
+  // ⚠️ CLI 는 `audit` 을 안 준다. 그래도 좁힌다 — 유니온이 자랐고, "지금은 안 준다"는
+  //    타입이 아니라 관습이다. 관습은 다음 사람이 깬다.
+  if (isAudit(res)) return out.fail("internal", "감사 응답이 왔다", "저장소 버그다", 1);
   if (res.list !== undefined) return out.line(renderFacet(res.values));
 
   out.line(renderResults(res.results));
@@ -188,6 +197,9 @@ export function cmdSearch(p: ParsedCommand, out: Out): void {
 export function cmdBacklinks(p: ParsedCommand, out: Out): void {
   const res = lapisQuery({ ...baseArgs(p), backlinks_of: p.positional[0] });
   if (out.json) return out.json_(res);
+  // ⚠️ CLI 는 `audit` 을 안 준다. 그래도 좁힌다 — 유니온이 자랐고, "지금은 안 준다"는
+  //    타입이 아니라 관습이다. 관습은 다음 사람이 깬다.
+  if (isAudit(res)) return out.fail("internal", "감사 응답이 왔다", "저장소 버그다", 1);
   if (res.list !== undefined) return out.line(renderFacet(res.values));
   out.line(renderResults(res.results));
   if (res.truncated) out.line("\n(상한에 걸려 잘림)");
@@ -204,6 +216,9 @@ export function cmdList(p: ParsedCommand, out: Out): void {
   const kind = facet === "doc-kinds" ? "doc_kinds" : facet;
   const res = lapisQuery({ ...baseArgs(p), list: kind as "topics" | "tags" | "doc_kinds" });
   if (out.json) return out.json_(res);
+  // ⚠️ CLI 는 `audit` 을 안 준다. 그래도 좁힌다 — 유니온이 자랐고, "지금은 안 준다"는
+  //    타입이 아니라 관습이다. 관습은 다음 사람이 깬다.
+  if (isAudit(res)) return out.fail("internal", "감사 응답이 왔다", "저장소 버그다", 1);
   if (res.list === undefined) return out.line(renderResults(res.results));
   out.line(renderFacet(res.values));
   if (res.truncated) out.line(`\n(${res.total_distinct}개 중 ${res.returned}개만 표시 — --limit)`);
@@ -812,6 +827,62 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
 }
 
 /**
+ * `lapis export --all --out-dir <디렉터리>` — vault 전체.
+ *
+ * ⚠️ **vault 구조를 그대로 만든다.** 평평하게 펴면 `a/노트.md` 와 `b/노트.md` 가 같은
+ * 파일 이름을 놓고 다투고, 나중 것이 앞의 것을 **말없이 덮는다.**
+ *
+ * ⚠️ 출력 경로는 vault 상대 경로에서만 만든다 — 밖으로 새지 않는다. 그래도 한 번 더
+ * 검사한다(`safeWrite` 와 같은 태도: 경로 이탈은 조용히 틀리는 부류다).
+ */
+function exportAll(p: ParsedCommand, out: Out, outDir: string): void {
+  const vc = resolveVault(vaultOf(p));
+  const repoRoot = process.env.LAPIS_REPO;
+  if (!repoRoot) {
+    out.fail("internal", "LAPIS_REPO 가 없다", "cli/lapis 로 실행하라", 2);
+  }
+  const index = buildIndex(vc.infos);
+  const theme = pickColorTheme();
+  const rel = relativizer(vc.root);
+  const destRoot = nodePath.resolve(outDir);
+
+  let written = 0;
+  const failed: { note: string; why: string }[] = [];
+  for (const info of vc.infos) {
+    const relPath = rel(info.source_path);
+    const dest = nodePath.resolve(destRoot, relPath.replace(/\.(md|mmd|markdown)$/i, ".html"));
+    // ⚠️ 경로 이탈 검사. vault 상대 경로에서 만들었으니 새면 안 되지만, 새면 조용하다.
+    if (!dest.startsWith(destRoot + nodePath.sep)) {
+      failed.push({ note: relPath, why: "출력 디렉터리 밖" });
+      continue;
+    }
+    try {
+      mkdirSync(nodePath.dirname(dest), { recursive: true });
+      const r = runExport({
+        notePath: info.source_path,
+        repoRoot,
+        index,
+        ...(theme !== undefined ? { colorTheme: theme } : {}),
+      });
+      writeFileSync(dest, r.html, "utf8");
+      written++;
+    } catch (e) {
+      failed.push({ note: relPath, why: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  if (out.json) {
+    out.json_({ vault: vc.root, out_dir: destRoot, written, failed, ...staleField(vc) });
+  } else {
+    out.line(`${written}장을 ${destRoot} 에 썼다.`);
+    // ⚠️ 실패를 세어서 말한다. 조용히 빠지면 "전부 나왔다"로 읽힌다.
+    for (const f of failed) out.line(`⚠️  ${f.note}: ${f.why}`);
+    reportStale(out, vc);
+  }
+  if (failed.length > 0) process.exitCode = 1;
+}
+
+/**
  * 설정 파일에서 고른 색 테마를 읽는다. 없으면 `undefined`(기본 팔레트).
  *
  * ⚠️ 읽기 실패를 **삼킨다.** 테마를 못 읽어서 내보내기 전체를 막을 이유가 없다 —
@@ -838,6 +909,21 @@ function pickColorTheme(): string | undefined {
  * `exportRun.ts` 헤더와 `cli/README.md`에 표로 있다.
  */
 export function cmdExport(p: ParsedCommand, out: Out): void {
+  const all = p.options.all === true;
+  const outDir = typeof p.options["out-dir"] === "string" ? p.options["out-dir"] : undefined;
+  if (all && !outDir) {
+    out.fail(
+      "no_criteria",
+      "--all 은 --out-dir 가 있어야 한다",
+      "수백 장을 표준출력으로 이어 붙이면 쓸 수 없는 문서가 된다",
+      2,
+    );
+  }
+  if (!all && !p.positional[0]) {
+    out.fail("no_criteria", "노트를 지정하지 않았다", "노트 이름 또는 --all", 2);
+  }
+  if (all) return exportAll(p, out, outDir!);
+
   const target = p.positional[0];
   const { path: notePath } = resolveNotePath(target, vaultOf(p));
   const repoRoot = process.env.LAPIS_REPO;

@@ -52,6 +52,17 @@ Desktop은 `/usr/bin:/bin:/usr/sbin:/sbin` 정도만 준다. homebrew node(`/opt
 설정은 앱 데이터 루트의 `lapis-settings.json` `mcp_enabled` 필드다.
 
 ```
+
+⚠️ **v2.4.0부터 `audit` 인자로 vault 위생을 물을 수 있다.** 앱·CLI와 **같은 판정 함수**를
+부른다 — MCP가 자기 판정을 따로 두면 AI가 보는 상태와 사람이 보는 상태가 갈리고, 그러면
+누가 맞는지 아무도 모른다.
+
+```
+audit: "broken" | "orphans" | "unlinked" | "tags" | "props"
+```
+
+⚠️ `all` 을 두지 않았다. `unlinked` 만 **본문을 전부 읽어서**, `all` 에 넣으면 값싼 넷을
+물을 때마다 그 비용을 문다. 넣지 않으면서 `all` 이라 부르면 거짓말이다.
 lapis-settings.json  { "mcp_enabled": true }   ← 앱이 쓴다
 search-cache/                                   ← 같은 루트 하위
 ```

@@ -90,6 +90,7 @@ PowerShell에서 `cli/lapis`를 치면 **"이 파일을 열 앱을 고르라"는
 | `tag audit` | 태그 중복 후보 + 모호한 이름 |
 | `props audit` | frontmatter 값이 갈린 곳. **거를 수 있는 축**만 본다 |
 | `export <노트>` | 자립 HTML 한 장. `--out` 없으면 표준출력 |
+| `export --all --out-dir <디렉터리>` | vault 전체. **구조를 그대로** 만든다 |
 | `links --unlinked` | 다른 노트의 이름을 말했는데 링크는 안 건 자리. **본문을 전부 읽는다** |
 | `replace <패턴> <치환>` | vault 전체 찾아 바꾸기. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
 | `doctor` | 위 감사 다섯 + 인덱스 낡음을 **한 번에**. 종료 코드로 답한다 |
@@ -366,6 +367,7 @@ Rust는 **어느 창이 어느 vault를 열었는지 모른다**(창별 localSto
 
 ```bash
 lapis export knowledge/lapis/STATE.md --out state.html
+lapis export --all --out-dir ./site        # 87장, vault 구조 그대로
 ```
 
 앱의 "자립 HTML 내보내기"와 **같은 조립기**를 쓴다(`previewExportDoc.ts`). 다른 것은
@@ -385,6 +387,12 @@ lapis export knowledge/lapis/STATE.md --out state.html
 
 ⚠️ 앱이 DOM을 복제하는 이유는 mermaid다 — 마운트 후 런타임에 `<svg>`가 된다. CLI에는
 브라우저가 없으니 그 단계가 없다. **이 차이를 모르면 한쪽을 버그로 읽는다.**
+
+⚠️ `--all` 은 **평평하게 펴지 않는다.** `a/노트.md` 와 `b/노트.md` 를 한 디렉터리에 두면
+같은 이름을 놓고 다투고 **나중 것이 앞의 것을 말없이 덮는다.**
+
+⚠️ `--all` 에 `--out-dir` 이 없으면 거절한다. 수백 장을 표준출력으로 이어 붙이면 쓸 수 없는
+문서가 되고, 그걸 조용히 하느니 멈춘다.
 
 ⚠️ 이미지를 못 넣으면 **세어서 말한다.** 조용히 원본 경로를 남기면 "자립"이 거짓이 된다.
 원격(`http`) 이미지는 일부러 그대로 둔다 — 받아오려다 실패하면 그림이 통째로 사라지는데,

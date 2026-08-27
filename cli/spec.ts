@@ -161,13 +161,23 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "export",
-    desc: "노트를 자립 HTML 한 장으로. 앱 내보내기와 차이가 있다 — README 참조",
-    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
+    desc: "노트를 자립 HTML 로. 앱 내보내기와 차이가 있다 — README 참조",
+    positional: [{ name: "노트", required: false, desc: "경로 · 노트 이름. --all 이면 생략" }],
     options: [
       {
         name: "out",
         kind: "string",
         desc: "쓸 파일. 없으면 표준출력으로 낸다",
+      },
+      {
+        name: "all",
+        kind: "boolean",
+        desc: "vault 전체. --out-dir 가 있어야 한다",
+      },
+      {
+        name: "out-dir",
+        kind: "string",
+        desc: "--all 의 출력 디렉터리. vault 구조를 그대로 만든다",
       },
     ],
   },

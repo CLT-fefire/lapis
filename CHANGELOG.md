@@ -17,6 +17,24 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **The MCP server can ask about vault hygiene** ([#259]). The audits stood at five in the app,
+  five in the CLI, and **zero in MCP** — an assistant could search a vault but not ask what was
+  broken in it. `lapis_query` takes `audit: "broken" | "orphans" | "unlinked" | "tags" | "props"`.
+
+  It calls **the same pure functions** the app and the CLI call. A separate judgement here would
+  mean the state an assistant sees and the state a person sees can disagree, with no way to tell
+  which is right.
+
+  ⚠️ There is no `all`. Only `unlinked` reads every note body, so folding it into `all` charges
+  that cost to the four cheap ones — and leaving it out while calling the argument `all` is a lie.
+- **`lapis export --all --out-dir <dir>`** ([#259]). The whole vault, **mirroring its directory
+  structure**. Flattening would put `a/Note.md` and `b/Note.md` in one directory to fight over a
+  filename, and the loser disappears without a word.
+
+  `--all` without `--out-dir` is refused: hundreds of documents concatenated onto stdout is not a
+  document, and doing that quietly is worse than stopping.
+- **The palette reaches all five audits** ([#259]). One command opened the hygiene panel on its
+  first tab; getting to "properties" took two more clicks. Each audit has its own entry now.
 - **Heading autocomplete in wikilinks** ([#258]). Typing `[[Note#` now offers that note's headings.
 
   ⚠️ Before this, it did the opposite of nothing — the trigger treated `#` as part of the name, so
@@ -1377,6 +1395,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#259]: https://github.com/eren0315/lapis/pull/259
 [#258]: https://github.com/eren0315/lapis/pull/258
 [#256]: https://github.com/eren0315/lapis/pull/256
 [#254]: https://github.com/eren0315/lapis/pull/254

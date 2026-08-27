@@ -19,6 +19,23 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 ## [Unreleased]
 
 ### Added
+- **MCP 가 vault 위생을 물을 수 있다** ([#259]). 감사가 앱에 다섯 · CLI에 다섯 ·
+  **MCP에 0개**였다 — 도우미가 vault를 검색은 하는데 **무엇이 깨졌는지**는 못 물었다.
+  `lapis_query` 가 `audit: "broken" | "orphans" | "unlinked" | "tags" | "props"` 를 받는다.
+
+  앱·CLI가 부르는 **같은 순수 함수**를 부른다. 여기에 판정을 따로 두면 도우미가 보는 상태와
+  사람이 보는 상태가 갈리고, 그러면 누가 맞는지 알 방법이 없다.
+
+  ⚠️ `all` 은 없다. `unlinked` 만 본문을 전부 읽어서, `all` 에 넣으면 값싼 넷을 물을 때마다
+  그 비용을 문다 — 넣지 않으면서 `all` 이라 부르면 거짓말이다.
+- **`lapis export --all --out-dir <디렉터리>`** ([#259]). vault 전체를 **구조 그대로** 낸다.
+  평평하게 펴면 `a/노트.md` 와 `b/노트.md` 가 한 디렉터리에서 같은 이름을 놓고 다투고,
+  진 쪽은 말없이 사라진다.
+
+  `--out-dir` 없는 `--all` 은 거절한다. 수백 장을 표준출력으로 이어 붙인 것은 문서가 아니고,
+  그걸 조용히 하느니 멈추는 편이 낫다.
+- **팔레트가 감사 다섯에 전부 닿는다** ([#259]). 명령 하나가 위생 화면을 첫 탭으로 열어서,
+  "속성"까지 가려면 클릭이 둘 더 들었다. 이제 감사마다 항목이 있다.
 - **위키링크 헤딩 자동완성** ([#258]). `[[노트#` 를 치면 그 노트의 헤딩이 뜬다.
 
   ⚠️ 그 전에는 아무것도 안 하는 정도가 아니라 **반대로** 동작했다 — 트리거가 `#` 을 이름의
@@ -1304,6 +1321,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#259]: https://github.com/eren0315/lapis/pull/259
 [#258]: https://github.com/eren0315/lapis/pull/258
 [#256]: https://github.com/eren0315/lapis/pull/256
 [#254]: https://github.com/eren0315/lapis/pull/254
