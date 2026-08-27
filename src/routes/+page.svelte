@@ -100,6 +100,8 @@ import { isPanicChord } from "$lib/userCss";
   import { restoreDensity } from "$lib/stores/density";
   import { get } from "svelte/store";
   import { getBacklinks, resolveWikilink, type LinkIndex } from "$lib/linkIndex";
+  import { fillEmbeds } from "$lib/embedFill";
+  import { readNote } from "$lib/tauri/notes";
   import type { HeadingInfo } from "$lib/markdownPlugins/headingAnchor";
   import { groupRelations, type RelationGroup } from "$lib/relations";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
@@ -382,6 +384,26 @@ import { isPanicChord } from "$lib/userCss";
         a.classList.toggle("resolved", resolved);
         a.classList.toggle("unresolved", !resolved);
       }
+    });
+  });
+
+  /**
+   * 임베드 자리표시자 채우기 — `![[노트]]` · `![[노트#헤딩]]`.
+   *
+   * ⚠️ 다른 노트를 **읽어야** 해서 렌더 후에 한다(markdown-it은 동기, 노트 읽기는 IPC).
+   * 깊이·순환 규칙은 `$lib/embed.ts` 한 곳에 있고 CLI도 같은 것을 쓴다.
+   *
+   * ⚠️ 실패는 **자리에 남는다.** 빈 네모로 두면 문장이 끊긴 것을 눈치채기 어렵다.
+   */
+  $effect(() => {
+    trackPreviewHtml();
+    const idx = $linkIndex;
+    const from = $currentNotePath ?? "";
+    if (!idx) return;
+    afterPreviewRender((body) => {
+      void fillEmbeds(body, { index: idx, fromPath: from, load: readNote }).catch((e) =>
+        console.warn("fillEmbeds failed", e),
+      );
     });
   });
 

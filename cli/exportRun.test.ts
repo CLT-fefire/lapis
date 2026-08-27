@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runExport, ExportError } from "./exportRun.ts";
+import { buildIndex } from "$lib/linkIndex";
+import type { LinkInfo } from "$lib/tauri/notes";
 
 /**
  * `lapis export` — **자립**이 이 명령의 전부다.
@@ -126,5 +128,90 @@ describe("색 테마", () => {
     const note = tmpNote("# x");
     const base = runExport({ notePath: note, repoRoot: REPO }).html;
     expect(runExport({ notePath: note, repoRoot: REPO, colorTheme: "없는테마" }).html).toBe(base);
+  });
+});
+
+describe("임베드 — 앱과 같은 규칙", () => {
+  const info = (p: string): LinkInfo => ({
+    source_path: p,
+    source_name: p.split("/").pop()!.replace(/\.md$/i, ""),
+    title: null,
+    aliases: [],
+    tags: [],
+    doc_kind: null,
+    topic: null,
+    related: [],
+    targets: [],
+    props: {},
+  });
+
+  /** 실제 파일을 만든다 — CLI 쪽은 디스크에서 읽으므로 가짜 로더가 없다. */
+  function vault(files: Record<string, string>): { dir: string; index: ReturnType<typeof buildIndex> } {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "lapis-embed-"));
+    const infos: LinkInfo[] = [];
+    for (const [name, body] of Object.entries(files)) {
+      const abs = path.join(dir, name).split(path.sep).join("/");
+      writeFileSync(abs, body, "utf8");
+      infos.push(info(abs));
+    }
+    return { dir, index: buildIndex(infos) };
+  }
+
+  it("임베드를 채운다", () => {
+    const v = vault({ "main.md": "![[bit]]", "bit.md": "당겨온 본문" });
+    const r = runExport({
+      notePath: path.join(v.dir, "main.md").split(path.sep).join("/"),
+      repoRoot: REPO,
+      index: v.index,
+    });
+    expect(r.html).toContain("당겨온 본문");
+    expect(r.html).not.toContain("![[bit]]");
+  });
+
+  it("앵커가 있으면 그 절만", () => {
+    const v = vault({
+      "main.md": "![[bit#둘째]]",
+      "bit.md": "# 제목\n첫째\n\n## 둘째\n둘째 본문",
+    });
+    const r = runExport({
+      notePath: path.join(v.dir, "main.md").split(path.sep).join("/"),
+      repoRoot: REPO,
+      index: v.index,
+    });
+    expect(r.html).toContain("둘째 본문");
+    expect(r.html).not.toContain("첫째");
+  });
+
+  /** ⚠️ 앱과 **같은 문구**여야 한다. 갈리면 같은 문서가 두 곳에서 다르게 읽힌다. */
+  it("없는 노트는 자리에 이름을 남긴다", () => {
+    const v = vault({ "main.md": "![[없는것]]" });
+    const r = runExport({
+      notePath: path.join(v.dir, "main.md").split(path.sep).join("/"),
+      repoRoot: REPO,
+      index: v.index,
+    });
+    expect(r.html).toContain("embed-failed");
+    expect(r.html).toContain("없는것");
+  });
+
+  /** ⚠️ 이게 없으면 내보내기가 **끝나지 않는다.** 테스트가 끝나는 것 자체가 단언이다. */
+  it("순환을 끊는다", () => {
+    const v = vault({ "main.md": "![[a]]", "a.md": "A\n\n![[b]]", "b.md": "B\n\n![[a]]" });
+    const r = runExport({
+      notePath: path.join(v.dir, "main.md").split(path.sep).join("/"),
+      repoRoot: REPO,
+      index: v.index,
+    });
+    expect(r.html).toContain("돌아온다");
+  });
+
+  /** 인덱스를 안 주면 원문이 남는다 — 빈 자리보다 낫다. */
+  it("인덱스가 없으면 자리표시자 원문이 남는다", () => {
+    const v = vault({ "main.md": "![[bit]]", "bit.md": "x" });
+    const r = runExport({
+      notePath: path.join(v.dir, "main.md").split(path.sep).join("/"),
+      repoRoot: REPO,
+    });
+    expect(r.html).toContain("![[bit]]");
   });
 });

@@ -38,6 +38,27 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
 
 ### Added
+- **Transclusion** ([#254]). `![[Note]]` expands the whole note where you wrote it;
+  `![[Note#Heading]]` expands just that section — heading line included, down to the next heading
+  at the same or higher level.
+
+  This is what [#246] was groundwork for: anchors had to resolve before a slice could be addressed.
+
+  ⚠️ **A failure stays in its place.** An embed is part of a sentence's surroundings, so an empty
+  gap is hard to notice — nothing says what used to be there. A missing note, a missing heading, a
+  cycle, a chain too deep: each leaves a line naming what could not be pulled in.
+
+  ⚠️ **Cycles and depth are both cut, on purpose.** A cycle alone would be caught by the depth
+  limit and vice versa, but they say different things. Turning either one off in a canary still
+  terminated — the other caught it — while producing the wrong message.
+
+  The app fills placeholders by walking the DOM after render (reading a note is IPC, and
+  markdown-it is synchronous); the CLI walks the string. **The rules are shared** — depth, cycle
+  detection, and the failure wording all live in one module, because a split there would make the
+  same document read differently in the two places.
+
+  ⚠️ An embed on a line of its own is what this assumes. The placeholder is a block element
+  emitted from an inline rule, so text sharing its line ends up outside the paragraph.
 - **`lapis export <note>`** ([#253]). One self-contained HTML file, from the terminal. The app has
   had this since 2.0; the CLI is where the other headless consumers live, and it did not.
 
@@ -1308,6 +1329,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#254]: https://github.com/eren0315/lapis/pull/254
 [#253]: https://github.com/eren0315/lapis/pull/253
 [#252]: https://github.com/eren0315/lapis/pull/252
 [#251]: https://github.com/eren0315/lapis/pull/251
