@@ -29,6 +29,7 @@ import MiniSearch from "minisearch";
 import { readFileSync } from "node:fs";
 import { resolveVault } from "./cache.ts";
 import { deterministicShuffle } from "./searchEval.ts";
+import { readDevArgs } from "./devArgs.ts";
 import { FULLTEXT_OPTIONS, type FullTextDoc } from "./entry.ts";
 
 /**
@@ -60,8 +61,12 @@ import { FULLTEXT_OPTIONS, type FullTextDoc } from "./entry.ts";
  */
 const BUDGET = { jsonBytesPerNote: 2750, buildMsPer1k: 700, growth: 2.6 };
 
-const sample = Math.max(200, Number(process.argv[2] ?? 3000));
-const vc = resolveVault();
+// ⚠️ 예전엔 `Math.max(200, Number(process.argv[2] ?? 3000))` 한 줄이었다. `--vault` 같은
+//    옵션이 오면 `Number()`가 `NaN`이고 `Math.max(200, NaN)`도 **NaN**이라, 표본이 조용히
+//    비어 버린다. `lapis-eval`이 정확히 그 경로로 0건을 재고 ✅를 냈다.
+const args = readDevArgs(process.argv.slice(2), { defaultSample: 3000, name: "lapis-bench" });
+const sample = Math.max(200, args.sample);
+const vc = resolveVault(args.vault);
 // ⚠️ 품질 하네스의 `shuffledPool`을 쓰지 않는다 — 그건 아카이브를 걸러내는데, 이 vault에서
 // 아카이브가 **94%**다. 빌드 비용은 앱이 실제로 인덱싱하는 **전량** 기준이어야 한다.
 const picked = deterministicShuffle(vc.infos, 12345).slice(0, sample);
