@@ -1,0 +1,228 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mount, unmount, flushSync } from "svelte";
+import VaultHygieneModal from "./VaultHygieneModal.svelte";
+import { buildIndex } from "./linkIndex";
+import { linkIndex } from "$lib/stores/vault";
+import { brokenLinksOpen } from "$lib/stores/brokenLinks";
+import type { LinkInfo } from "$lib/tauri/notes";
+
+/**
+ * vault 위생 모달이 **실제로 그리는 것**을 본다.
+ *
+ * ## 왜 이 테스트가 있나
+ *
+ * 감사 로직(`$lib/vaultAudit`)은 순수 함수라 `vaultAudit.test.ts`가 이미 고정하고 있고,
+ * 같은 함수를 CLI(`lapis links --orphans` · `lapis tag audit`)도 쓴다. **데이터는 검증돼
+ * 있었다.** 검증이 안 닿은 곳은 정확히 하나 — 그 데이터를 **Svelte 마크업이 어떻게
+ * 그리는가**였다.
+ *
+ * 그 틈이 위험한 이유: 순수 함수가 맞는 답을 내도 마크업이 엉뚱한 필드를 그리거나
+ * 탭 하나가 통째로 비면 **아무 에러도 안 난다.** 앱은 멀쩡히 뜨고 화면만 비어 있다.
+ *
+ * ⚠️ 여기서 고정하는 것은 **구조와 숫자**지 문구가 아니다. 라벨 문자열을 박으면 i18n
+ * 메시지를 고칠 때마다 테스트가 깨져서, 결국 아무도 안 읽고 지워 버린다.
+ */
+
+const mkInfo = (path: string, extra: Partial<LinkInfo> = {}): LinkInfo => {
+  const segs = path.split("/").filter(Boolean);
+  return {
+    source_path: path,
+    source_name: (segs[segs.length - 1] ?? path).replace(/\.md$/i, ""),
+    title: null,
+    aliases: [],
+    tags: [],
+    doc_kind: null,
+    topic: null,
+    related: [],
+    targets: [],
+    props: {},
+    ...extra,
+  };
+};
+
+/**
+ * 세 탭이 **동시에** 뭔가를 갖도록 만든 vault.
+ *
+ * - 끊긴 링크: `hub` → `[[없는문서]]`
+ * - 고아: `lonely`(들어오는 링크 0) — `hub`도 고아지만 나가는 링크가 2다
+ * - 태그: `Tech`/`tech`(대소문자만 다름), `a/note`·`b/note`(같은 잎)
+ * - 모호한 이름: `x/dup` · `y/dup`
+ */
+function fixture() {
+  return buildIndex([
+    mkInfo("/v/hub.md", { targets: ["없는문서", "seen"], tags: ["Tech", "a/note"] }),
+    mkInfo("/v/seen.md", { tags: ["tech", "b/note"] }),
+    mkInfo("/v/lonely.md"),
+    mkInfo("/v/x/dup.md"),
+    mkInfo("/v/y/dup.md"),
+  ]);
+}
+
+let host: HTMLDivElement;
+let comp: Record<string, unknown> | null = null;
+
+function render() {
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  comp = mount(VaultHygieneModal, { target: host });
+  flushSync();
+}
+
+/** 탭 버튼을 라벨이 아니라 **위치**로 고른다 — 문구에 묶이지 않기 위해서다. */
+function tabs(): HTMLButtonElement[] {
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+}
+
+function clickTab(i: number) {
+  tabs()[i].click();
+  flushSync();
+}
+
+const textOf = (sel: string) =>
+  [...document.querySelectorAll(sel)].map((e) => e.textContent?.trim() ?? "");
+
+beforeEach(() => {
+  linkIndex.set(fixture());
+  brokenLinksOpen.set(true);
+  render();
+});
+
+afterEach(() => {
+  if (comp) unmount(comp);
+  comp = null;
+  host?.remove();
+  brokenLinksOpen.set(false);
+  linkIndex.set(null);
+});
+
+describe("탭 바", () => {
+  it("탭이 셋이고 각각 숫자를 단다", () => {
+    const badges = textOf(".tab .badge");
+    expect(badges).toHaveLength(3);
+    // 끊긴 링크 1(없는문서) · 고아 4(hub·lonely·dup 둘) · 태그 2묶음 + 모호한 이름 1 = 3
+    expect(badges).toEqual(["1", "4", "3"]);
+  });
+
+  /**
+   * ⚠️ **카나리아.** 숫자가 전부 0이면 위 단언은 통과할 수 있어도 화면은 빈 것이다.
+   * 픽스처가 실제로 셋 다 채웠는지 따로 못 박는다 — 그래야 아래 탭 테스트가
+   * "빈 목록을 확인하며 통과"하지 않는다.
+   */
+  it("픽스처가 세 탭을 전부 채웠다", () => {
+    expect(textOf(".tab .badge").every((n) => Number(n) > 0)).toBe(true);
+  });
+
+  it("첫 탭이 선택된 채로 열린다", () => {
+    expect(tabs()[0].getAttribute("aria-selected")).toBe("true");
+    expect(tabs().filter((t) => t.getAttribute("aria-selected") === "true")).toHaveLength(1);
+  });
+
+  it("탭을 누르면 선택이 옮겨간다", () => {
+    clickTab(1);
+    expect(tabs()[1].getAttribute("aria-selected")).toBe("true");
+    expect(tabs()[0].getAttribute("aria-selected")).toBe("false");
+  });
+});
+
+describe("고아 탭", () => {
+  beforeEach(() => clickTab(1));
+
+  /** 경로 오름차순이다. 동명이인(`dup` 둘)이 있어도 순서가 흔들리지 않아야 한다. */
+  it("고아 노트를 이름으로, 경로 순서대로 낸다", () => {
+    expect(textOf(".rows .src")).toEqual(["hub", "lonely", "dup", "dup"]);
+  });
+
+  /**
+   * **나가는 링크 수가 같이 보여야 한다.** 이게 허브(진입점)와 떨어진 섬을 가르는
+   * 유일한 단서다 — HOME처럼 들어오는 링크가 없어도 정상인 문서가 있기 때문이다.
+   * 이름만 그리면 목록이 판단을 못 돕는다.
+   */
+  it("행마다 나가는 링크 수가 함께 나온다", () => {
+    const counts = textOf(".rows .count");
+    expect(counts).toHaveLength(4);
+    // 문구(로케일)에 묶이지 않도록 숫자만 본다.
+    expect(counts.map((c) => c.match(/\d+/)?.[0])).toEqual(["1", "0", "0", "0"]);
+  });
+
+  /**
+   * ⚠️ **끊긴 링크는 나가는 링크로 세지 않는다.** `hub`의 `targets`는 둘인데
+   * (`없는문서` · `seen`) 화면에는 **1**이 뜬다 — 해소되지 않는 링크는 밖으로 나가는
+   * 길이 아니고, 그건 끊긴 링크 탭의 몫이기 때문이다.
+   *
+   * 이걸 못 박아 두는 이유: 화면만 보면 "링크를 두 개 썼는데 왜 1이지"로 읽혀서,
+   * 나중에 누군가 `targets.length`로 "고치기" 쉽다. 그러면 끊긴 링크만 잔뜩 단 노트가
+   * 허브로 보인다.
+   */
+  it("끊긴 링크는 나가는 링크 수에 안 들어간다", () => {
+    const hubTargets = 2; // 없는문서 · seen
+    expect(textOf(".rows .count")[0].match(/\d+/)?.[0]).toBe("1");
+    expect(hubTargets).toBeGreaterThan(1);
+  });
+
+  it("경로는 title 속성으로 남는다 — 목록에는 이름만 그린다", () => {
+    const first = document.querySelector<HTMLButtonElement>(".rows .src");
+    expect(first?.getAttribute("title")).toBe("/v/hub.md");
+  });
+});
+
+describe("태그 탭", () => {
+  beforeEach(() => clickTab(2));
+
+  it("종류별 묶음마다 라벨과 칩이 있다", () => {
+    const groups = [...document.querySelectorAll(".group")];
+    // 태그 문제 2묶음 + 모호한 이름 1묶음
+    expect(groups).toHaveLength(3);
+    for (const g of groups) {
+      expect(g.querySelector(".group-label")?.textContent?.trim()).toBeTruthy();
+    }
+  });
+
+  it("칩이 태그 이름과 건수를 같이 낸다", () => {
+    const chips = textOf(".chips .chip");
+    expect(chips.length).toBeGreaterThan(0);
+    // `Tech`와 `tech`가 둘 다 칩으로 나온다 — 대소문자만 다른 쌍이 핵심이다.
+    expect(chips.some((c) => c.startsWith("Tech"))).toBe(true);
+    expect(chips.some((c) => c.startsWith("tech"))).toBe(true);
+  });
+
+  it("모호한 이름은 후보 경로를 전부 편다", () => {
+    const names = textOf(".group .target code");
+    expect(names).toContain("dup");
+    const paths = [...document.querySelectorAll<HTMLButtonElement>(".group .sources .src")].map(
+      (b) => b.getAttribute("title"),
+    );
+    expect(paths).toEqual(["/v/x/dup.md", "/v/y/dup.md"]);
+  });
+});
+
+describe("끊긴 링크 탭", () => {
+  it("끊긴 대상과 그것을 가리키는 노트를 낸다", () => {
+    expect(textOf(".targets .target code")).toEqual(["[[없는문서]]"]);
+    expect(textOf(".targets .sources .src")).toEqual(["hub"]);
+  });
+});
+
+describe("빈 상태", () => {
+  /**
+   * 깨끗한 vault에서 **탭이 사라지지 않는지** 본다. 숫자 0을 보여주는 것이
+   * 이 화면의 값이다 — 목록이 비면 탭까지 없애는 구현이면 "왜 안 보이지"가 된다.
+   */
+  it("문제가 없어도 탭 셋과 0이 남는다", () => {
+    // 서로 가리키는 두 노트 — 어느 쪽도 고아가 아니고 끊긴 링크도 없다.
+    linkIndex.set(
+      buildIndex([mkInfo("/v/a.md", { targets: ["b"] }), mkInfo("/v/b.md", { targets: ["a"] })]),
+    );
+    flushSync();
+    expect(textOf(".tab .badge")).toEqual(["0", "0", "0"]);
+    expect(document.querySelector(".empty")).not.toBeNull();
+  });
+});
+
+describe("vault가 없을 때", () => {
+  it("탭 대신 안내만 낸다", () => {
+    linkIndex.set(null);
+    flushSync();
+    expect(tabs()).toHaveLength(0);
+    expect(document.querySelector(".empty")).not.toBeNull();
+  });
+});
