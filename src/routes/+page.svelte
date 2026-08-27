@@ -1174,88 +1174,6 @@
 {/if}
 
 <div class="app">
-  <header class="topbar">
-    <span class="brand" class:debug={isDebug}>Lapis</span>
-    {#if isDebug}
-      <span class="debug-badge" title={m.page_debug_badge()}>DEBUG</span>
-    {/if}
-    {#if appVersion}
-      <span class="phase">v{appVersion}</span>
-    {/if}
-    <div class="nav-history">
-      <button
-        class="btn btn--icon btn--sm"
-        title={m.page_nav_back()}
-        aria-label={m.page_nav_back_aria()}
-        disabled={!$canGoBack}
-        onclick={() => void goBackNote()}
-      >◀</button>
-      <button
-        class="btn btn--icon btn--sm"
-        title={m.page_nav_forward()}
-        aria-label={m.page_nav_forward_aria()}
-        disabled={!$canGoForward}
-        onclick={() => void goForwardNote()}
-      >▶</button>
-      <button
-        class="btn btn--icon btn--sm nav-history-toggle"
-        class:active={historyMenuOpen}
-        title={m.page_nav_history()}
-        aria-label={m.page_nav_history_aria()}
-        aria-expanded={historyMenuOpen}
-        disabled={!($canGoBack || $canGoForward)}
-        onclick={() => (historyMenuOpen = !historyMenuOpen)}
-      >▾</button>
-      <NavHistoryMenu open={historyMenuOpen} onClose={() => (historyMenuOpen = false)} />
-    </div>
-    <span class="meta">
-      {#if $currentNotePath}
-        <!-- 표시는 마지막 2 segment지만 복사되는 건 **절대 경로**다.
-             ⋯ 메뉴의 "경로 복사"와 같은 경로(copyCurrentPath)를 탄다 — 매번 메뉴를
-             열지 않아도 되게 하려는 것. -->
-        <button
-          class="meta-path"
-          class:copied={pathCopied}
-          title={pathCopied
-            ? m.page_path_copied()
-            : m.page_path_copy_title({ path: $currentNotePath })}
-          onclick={() => void copyCurrentPath()}
-        >
-          {pathCopied ? "✓ " : ""}{noteDisplayName($currentNotePath)}
-        </button>
-        {#if $isSaving}
-          <span class="save-badge saving">saving…</span>
-        {:else if $lastSaveError}
-          <span class="save-badge error" title={$lastSaveError}>save failed</span>
-        {:else if $isDirty}
-          <span class="save-badge dirty" title={m.page_unsaved()}>● modified</span>
-        {/if}
-      {:else if $vaultPath}
-        {m.page_pick_a_note()}
-      {:else}
-        Welcome
-      {/if}
-    </span>
-    {#if $currentNotePath}
-      <span class="doc-stats" title={m.page_stats_title()}>
-        {m.page_doc_stats({
-          words: docStats.words.toLocaleString(),
-          chars: docStats.charsNoSpaces.toLocaleString(),
-          time: readingTimeLabel(docStats.readingMinutes),
-        })}
-      </span>
-    {/if}
-    <div class="topbar-actions">
-      <!-- watcher 상태 점은 사이드바 하단 상태 줄로 통합(2026-08-05 PR-10) —
-           흩어진 상태 신호를 한 곳에서 읽게 하려는 것. -->
-      <button
-        class="btn btn--icon btn--sm"
-        title="Command palette (Cmd+K)"
-        onclick={() => openPalette("all")}
-      >🔎</button>
-    </div>
-  </header>
-
   <GitBanner />
 
   <div
@@ -1289,34 +1207,126 @@
     <section class="pane main-pane">
       <TabBar />
       <div class="pane-title">
-        <div class="pane-switch" role="group" aria-label={m.page_mode_group()}>
-          <button
-            class="switch-opt"
-            class:active={$mainPane === "preview"}
-            aria-pressed={$mainPane === "preview"}
-            title={m.page_mode_read_title()}
-            onclick={() => void switchMainPane("preview")}
-          >
-            {m.page_mode_read()}
-          </button>
-          <button
-            class="switch-opt"
-            class:active={$mainPane === "editor"}
-            aria-pressed={$mainPane === "editor"}
-            title={m.page_mode_edit_title()}
-            onclick={() => void switchMainPane("editor")}
-          >
-            {m.page_mode_edit()}
-          </button>
+      <!--
+        노트 헤더 — 디스코드의 **채널 헤더** 자리다.
+
+        v2.0.0 B단계에서 전역 `<header class="topbar">`를 해체해 여기로 합쳤다.
+        디스코드에는 전역 상단바가 없고, 지금 보고 있는 것의 이름은 그 내용 바로 위에
+        붙는다. 브랜드("Lapis")는 버렸다 — 자기 앱 이름을 상시 표시할 이유가 없다.
+
+        ⚠️ 버전과 DEBUG 배지는 **버리지 않고 옮겼다.** 설정 화면에 버전이 없어서,
+        그냥 지우면 앱 버전을 볼 곳이 사라진다(D단계에서 설정 하단으로 옮긴다).
+      -->
+      <div class="note-head">
+        <div class="nav-history">
+        <button
+        class="btn btn--icon btn--sm"
+        title={m.page_nav_back()}
+        aria-label={m.page_nav_back_aria()}
+        disabled={!$canGoBack}
+        onclick={() => void goBackNote()}
+        >◀</button>
+        <button
+        class="btn btn--icon btn--sm"
+        title={m.page_nav_forward()}
+        aria-label={m.page_nav_forward_aria()}
+        disabled={!$canGoForward}
+        onclick={() => void goForwardNote()}
+        >▶</button>
+        <button
+        class="btn btn--icon btn--sm nav-history-toggle"
+        class:active={historyMenuOpen}
+        title={m.page_nav_history()}
+        aria-label={m.page_nav_history_aria()}
+        aria-expanded={historyMenuOpen}
+        disabled={!($canGoBack || $canGoForward)}
+        onclick={() => (historyMenuOpen = !historyMenuOpen)}
+        >▾</button>
+        <NavHistoryMenu open={historyMenuOpen} onClose={() => (historyMenuOpen = false)} />
         </div>
-        <div class="pane-actions">
-          {#if $mainPane === "preview"}
-            <ReadingControls />
-            <PaneMenu label={m.page_preview_more()} items={previewMenuItems} />
-          {:else}
-            <PaneMenu label={m.page_editor_more()} items={editorMenuItems} />
+        <span class="meta">
+        {#if $currentNotePath}
+        <!-- 표시는 마지막 2 segment지만 복사되는 건 **절대 경로**다.
+        ⋯ 메뉴의 "경로 복사"와 같은 경로(copyCurrentPath)를 탄다 — 매번 메뉴를
+        열지 않아도 되게 하려는 것. -->
+        <button
+        class="meta-path"
+        class:copied={pathCopied}
+        title={pathCopied
+        ? m.page_path_copied()
+        : m.page_path_copy_title({ path: $currentNotePath })}
+        onclick={() => void copyCurrentPath()}
+        >
+        {pathCopied ? "✓ " : ""}{noteDisplayName($currentNotePath)}
+        </button>
+        {#if $isSaving}
+        <span class="save-badge saving">saving…</span>
+        {:else if $lastSaveError}
+        <span class="save-badge error" title={$lastSaveError}>save failed</span>
+        {:else if $isDirty}
+        <span class="save-badge dirty" title={m.page_unsaved()}>● modified</span>
+        {/if}
+        {:else if $vaultPath}
+        {m.page_pick_a_note()}
+        {:else}
+        Welcome
+        {/if}
+        </span>
+      </div>
+
+      <div class="pane-switch" role="group" aria-label={m.page_mode_group()}>
+      <button
+      class="switch-opt"
+      class:active={$mainPane === "preview"}
+      aria-pressed={$mainPane === "preview"}
+      title={m.page_mode_read_title()}
+      onclick={() => void switchMainPane("preview")}
+      >
+      {m.page_mode_read()}
+      </button>
+      <button
+      class="switch-opt"
+      class:active={$mainPane === "editor"}
+      aria-pressed={$mainPane === "editor"}
+      title={m.page_mode_edit_title()}
+      onclick={() => void switchMainPane("editor")}
+      >
+      {m.page_mode_edit()}
+      </button>
+      </div>
+      <div class="pane-actions">
+          <!-- 좌: 지금 보는 노트 / 우: 그것에 대한 것들 — 디스코드 채널 헤더와 같은 배치 -->
+          {#if $currentNotePath}
+          <span class="doc-stats" title={m.page_stats_title()}>
+          {m.page_doc_stats({
+          words: docStats.words.toLocaleString(),
+          chars: docStats.charsNoSpaces.toLocaleString(),
+          time: readingTimeLabel(docStats.readingMinutes),
+          })}
+          </span>
           {/if}
-        </div>
+          <div class="topbar-actions">
+          <!-- watcher 상태 점은 사이드바 하단 상태 줄로 통합(2026-08-05 PR-10) —
+          흩어진 상태 신호를 한 곳에서 읽게 하려는 것. -->
+          <button
+          class="btn btn--icon btn--sm"
+          title="Command palette (Cmd+K)"
+          onclick={() => openPalette("all")}
+          >🔎</button>
+          </div>
+          {#if isDebug}
+            <span class="debug-badge" title={m.page_debug_badge()}>DEBUG</span>
+          {/if}
+          {#if appVersion}
+            <span class="phase">v{appVersion}</span>
+          {/if}
+      {#if $mainPane === "preview"}
+      <ReadingControls />
+      <PaneMenu label={m.page_preview_more()} items={previewMenuItems} />
+      {:else}
+      <PaneMenu label={m.page_editor_more()} items={editorMenuItems} />
+      {/if}
+      </div>
       </div>
 
       {#if $mainPane === "editor"}
@@ -1460,28 +1470,18 @@
     height: 100vh;
   }
 
-  .topbar {
+  /* 노트 헤더 왼쪽 — 방문 이력 + 지금 보는 노트의 이름.
+     디스코드 채널 헤더가 채널 이름을 왼쪽에 두는 것과 같은 배치다.
+
+     ⚠️ 전역 `.topbar`가 있던 자리다(v2.0.0 B단계에서 해체). 브랜드("Lapis")와
+     그 디버그 색 변형도 같이 지웠다 — 자기 앱 이름을 상시 표시할 이유가 없고,
+     디버그 신호는 `.debug-badge`가 이미 따로 낸다. */
+  .note-head {
     display: flex;
     align-items: center;
-    gap: var(--sp-5);
-    /* 세로 여백을 --sp-3으로 줄여 크롬을 얇게 — 컨트롤 높이가 실질 높이를 정한다
-       (default 24+12=36px, compact 20+8=28px). */
-    padding: var(--sp-3) var(--sp-6);
-    /* 크롬 계층 — 아래 본문(--surface-content)보다 어두워 보더 없이 분리된다. */
-    background: var(--surface-panel);
-    font-size: var(--fs-base);
-  }
-
-  .brand {
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: var(--accent);
-  }
-
-  /* 디버그 빌드 — 앱 이름 자체를 액센트(Blurple)에서 warning으로 바꿔 **색만 보고도**
-     릴리즈 창과 구분되게 한다. 배지를 못 보고 지나쳐도 이름 색이 먼저 눈에 띈다. */
-  .brand.debug {
-    color: var(--warning);
+    gap: var(--sp-4);
+    min-width: 0;
+    flex: 1;
   }
 
   .debug-badge {
