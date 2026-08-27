@@ -10,50 +10,66 @@
 
 /* --- 테마 무관 스케일 + 다크(기본) 색상 ----------------------------------- */
 :root {
-  /* 원시 중립 슬레이트 램프 */
-  --n-0: #0b0d11;
-  --n-50: #0f1115;
-  --n-100: #171a21;
-  --n-150: #1c2129;
-  --n-200: #222834;
-  --n-300: #2a313f;
-  --n-400: #3a4354;
-  --n-500: #566072;
-  --n-600: #828c9e;
-  --n-700: #9aa3b2;
-  --n-800: #c3c9d4;
-  --n-900: #e6e9ef;
-  --n-1000: #f5f7fa;
+  /* 원시 중립 램프 — 디스코드 계열 (v2.0.0 A단계)
+   * 예전엔 파란기 도는 슬레이트(#0f1115·#171a21…)였다. 디스코드는 **채도가 거의 없는
+   * 회색**이고 그게 인상 차이의 대부분이다. 시맨틱 매핑은 그대로 두고 램프만 갈면
+   * 151곳이 따라온다 — 그러라고 램프를 분리해 둔 구조다. */
+  --n-0: #060607;
+  --n-50: #111214;
+  --n-100: #1e1f22;
+  --n-150: #232428;
+  --n-200: #2b2d31;
+  --n-300: #313338;
+  --n-400: #3f4147;
+  --n-500: #4e5058;
+  --n-600: #80848e;
+  --n-700: #949ba4;
+  --n-800: #b5bac1;
+  --n-900: #dbdee1;
+  --n-1000: #f2f3f5;
 
-  /* 시맨틱 — Surface */
-  --surface-base: var(--n-50);
-  --surface-raised: var(--n-100);
+  /* 시맨틱 — Surface
+   * ⚠️ 램프를 갈면서 **한 칸씩 올렸다.** 그대로 뒀으면 앱 전체가 디스코드의 팝오버
+   * 밝기(#111214)로 내려앉는다. 지금은 base=#2b2d31(채널 목록), raised=#313338(대화창)이라
+   * 디스코드의 실제 두 면과 같다.
+   *
+   * ⚠️ `overlay`와 `sunken`이 base보다 **어둡다.** 고전적 elevation(위로 갈수록 밝게)과
+   * 반대인데, 디스코드가 실제로 그렇다 — 팝오버와 입력 우물이 배경보다 어둡다. */
+  --surface-base: var(--n-200);
+  --surface-raised: var(--n-300);
   --surface-overlay: var(--n-150);
-  --surface-sunken: var(--n-200);
+  --surface-sunken: var(--n-100);
 
   /* 시맨틱 — Surface 3계층 (셸 영역 분리용; 바깥으로 갈수록 어둡게)
    * 1px 보더 대신 "명암차"로 영역을 나누기 위한 축. 레일 < 패널 < 본문 순으로 밝아진다.
    * ⚠️ 계층 간 차이가 인지 가능해야 하므로 램프 스텝을 그대로 쓰지 않고 rail만 별도 값.
    * 적용은 PR-2(하드보더 제거)에서 — 여기선 정의만 한다. */
-  --surface-rail: #090b0f;
-  --surface-panel: var(--n-50);
-  --surface-content: var(--n-100);
+  --surface-rail: var(--n-100);
+  --surface-panel: var(--n-200);
+  --surface-content: var(--n-300);
 
   /* 툴팁 — Discord는 **라이트 테마에서도 어두운** 말풍선을 쓴다(macOS 네이티브 툴팁과
      반대). 테마별 오버라이드에서도 어둡게 유지할 것. */
-  --tooltip-bg: #111318;
-  --tooltip-fg: #e6e9ef;
+  --tooltip-bg: var(--n-50);
+  --tooltip-fg: var(--n-900);
 
   /* 시맨틱 — Border */
   --border-subtle: var(--n-200);
   --border-default: var(--n-300);
   --border-strong: var(--n-400);
 
-  /* 시맨틱 — Text */
+  /* 시맨틱 — Text
+   * ⚠️ 램프를 갈면서 **한 칸 위로 올렸다.** 그대로 뒀으면 `--text-muted`가 디스코드의
+   * `channels-default`(#80848e)에 앉는데, Lapis는 그 토큰을 **읽어야 하는 힌트 문구**에
+   * 쓴다(`.hint` 등 7곳). 새 본문 배경(#313338)에서 대비가 3.38:1로 AA(4.5) 미달이었다.
+   *
+   * 지금은 `--text-muted`가 디스코드의 `text-muted`(#949ba4)에 앉아 4.5:1이다 —
+   * **의미로 보면 이쪽이 오히려 디스코드에 더 맞다.** 대비 측정값은
+   * `reference/discord-ui-tokens.md`. */
   --text-primary: var(--n-900);
-  --text-secondary: var(--n-700);
-  --text-muted: var(--n-600);
-  --text-disabled: var(--n-500);
+  --text-secondary: var(--n-800);
+  --text-muted: var(--n-700);
+  --text-disabled: var(--n-600);
 
   /* 시맨틱 — Accent (Discord Blurple, 2026-08-05 전환)
    * 컴포넌트 151곳이 이 5개 토큰만 참조하므로 여기만 바꾸면 전부 따라온다.
@@ -66,15 +82,17 @@
   --accent-border: rgba(88, 101, 242, 0.42);
 
   /* 시맨틱 — 상태색 */
-  --danger: #f47174;
-  --danger-bg-subtle: rgba(244, 113, 116, 0.12);
-  --danger-border: rgba(244, 113, 116, 0.35);
-  --warning: #f5c451;
-  --warning-bg-subtle: rgba(245, 196, 81, 0.12);
-  --warning-border: rgba(245, 196, 81, 0.3);
-  --success: #58d089;
-  --success-bg-subtle: rgba(88, 208, 137, 0.12);
-  --success-border: rgba(88, 208, 137, 0.3);
+  /* 디스코드 상태색. ⚠️ 대비를 브라우저에서 재고 채택했다 — 색만 맞추고 본문에서
+   * 안 읽히면 바꾼 의미가 없다. 측정값은 `reference/discord-ui-tokens.md`. */
+  --danger: #f23f43;
+  --danger-bg-subtle: rgba(242, 63, 67, 0.12);
+  --danger-border: rgba(242, 63, 67, 0.35);
+  --warning: #f0b232;
+  --warning-bg-subtle: rgba(240, 178, 50, 0.12);
+  --warning-border: rgba(240, 178, 50, 0.3);
+  --success: #2dc770;
+  --success-bg-subtle: rgba(45, 199, 112, 0.12);
+  --success-border: rgba(45, 199, 112, 0.3);
   --info: var(--accent);
 
   /* 확장 팔레트 — 분류용 색 (memory/AI = violet+teal, 태그 heat = lime) */
@@ -86,6 +104,16 @@
   --teal-border: rgba(73, 216, 196, 0.35);
   --lime: #c3d96b;
   --lime-bg-subtle: rgba(212, 232, 142, 0.12);
+
+  /* 검색 매치 하이라이트 — **팔레트 밖 색이다.**
+   * 배경이 어떤 면이든 눈에 띄어야 해서 중립 램프를 안 쓴다.
+   * ⚠️ 예전엔 편집기(`Editor.svelte`)와 미리보기(`+page.svelte`)가 **각자 하드코딩**했고
+   * 값이 이미 갈려 있었다(0.30 vs 0.35, #ffc107 vs rgba(255,140,0,.75)). 같은 개념이
+   * 두 곳에 있으면 반드시 갈린다. */
+  --match-bg: rgba(255, 200, 0, 0.32);
+  --match-active-bg: #ffc107;
+  --match-active-fg: #1a1a1a;
+  --match-active-outline: #ff7a00;
 
   /* Focus */
   --focus-ring: var(--accent);
@@ -126,9 +154,15 @@
   --sp-8: 24px;
   --sp-10: 32px;
 
-  /* --- Radius (2026-08-05 상향: md 6→8, lg 10→12 — 컨테이너 기본을 md로 승격) --- */
-  --r-xs: 3px;
-  --r-sm: 4px;
+  /* --- Radius ---
+   * v2.0.0 A단계 상향. 가장 많이 쓰이는 `--r-sm`(43곳)이 4px이라 앱 전체가 각져 보였다.
+   * 디스코드는 8px 위주고 작은 것도 4px 아래로 안 내려간다.
+   *
+   * ⚠️ `--r-lg`는 16px로 올렸다가 **되돌렸다.** 모달이 `--r-lg`를 쓰는데, 브라우저에서
+   * 재 보니 16px은 디스코드 모달(8px대)보다 오히려 더 둥글었다. "디스코드처럼"이
+   * "더 둥글게"는 아니다. 인상의 대부분은 43곳이 쓰는 `--r-sm`에서 온다. */
+  --r-xs: 4px;
+  --r-sm: 6px;
   --r-md: 8px;
   --r-lg: 12px;
   --r-full: 9999px;
@@ -186,7 +220,12 @@
   --dur-fast: 100ms;
   --dur-base: 150ms;
   --dur-slow: 200ms;
+  /* 등장/퇴장 — 살짝 오버슈트하는 곡선. 모달·팝오버가 튀어나오는 느낌을 만든다. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 상태 전환(호버·활성) — 오버슈트 없는 표준 곡선.
+   * ⚠️ 호버에 `--ease-out`을 쓰면 커서를 빠르게 움직일 때 색이 **되튀어 보인다.**
+   * 디스코드 호버가 차분한 이유가 이 구분이다. */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* --- Elevation (그림자, 다크 기본) --- */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
