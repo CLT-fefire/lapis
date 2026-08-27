@@ -37,9 +37,11 @@ const notes = (o: Record<string, string>) => new Map(Object.entries(o));
 /** grep이 파일을 찾은 상태 — 패널은 결과가 있을 때만 나온다. */
 function grepFound(paths: string[]): GrepResult {
   return {
+    // ⚠️ `GrepHit`에 `name`은 없다. 예전엔 넣어 뒀는데 `.map` 결과라 **초과 프로퍼티
+    //    검사를 빠져나가** 타입 검사가 통과했다. 픽스처가 실제 타입과 갈리면 테스트가
+    //    실제와 다른 모양을 검증하게 된다.
     hits: paths.map((path, i) => ({
       path,
-      name: path.split("/").pop() ?? path,
       line: i + 1,
       text: "x",
       col: 0,
