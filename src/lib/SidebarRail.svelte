@@ -165,9 +165,18 @@
     outline-offset: -2px;
   }
 
-  /* Discord식 툴팁 — 아이콘 오른쪽에서 살짝 밀려 나오는 어두운 말풍선.
-     CSS transition이라 app.css의 prefers-reduced-motion 전역 규칙이 그대로 적용된다
-     (Svelte transition과 달리 motion.ts를 거칠 필요가 없다). */
+  /**
+   * 툴팁 — 아이콘 오른쪽에서 밀려 나오는 어두운 말풍선.
+   *
+   * CSS transition 이라 `app.css` 의 reduced-motion 규칙이 그대로 적용된다
+   * (Svelte transition 과 달리 `motion.ts` 를 거칠 필요가 없다).
+   *
+   * ⚠️ **등장에만 250ms 지연을 준다**(hover-intent). 없으면 레일을 스쳐 지나가는 것만으로
+   * 말풍선이 여섯 개 연달아 튄다 — 아무것도 읽을 시간이 없는데 화면만 시끄럽다.
+   *
+   * ⚠️ **퇴장에는 지연을 주지 않는다.** 여기 base 규칙이 곧 퇴장이라, 지연을 base 에
+   * 쓰면 마우스가 떠난 뒤 250ms 동안 말풍선이 남는다.
+   */
   .rail-tip {
     position: absolute;
     left: calc(100% + var(--sp-4));
@@ -185,9 +194,10 @@
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    transform: translateY(-50%) translateX(-4px);
-    transition: opacity var(--dur-fast) var(--ease-out),
-      transform var(--dur-fast) var(--ease-out);
+    transform: translateY(-50%) translateX(-6px);
+    transition:
+      opacity var(--dur-2) var(--ease-out),
+      transform var(--dur-2) var(--ease-out);
     z-index: var(--z-context-menu);
   }
 
@@ -206,6 +216,17 @@
   .rail-btn:focus-visible .rail-tip {
     opacity: 1;
     transform: translateY(-50%) translateX(0);
+    transition:
+      opacity var(--dur-2) var(--ease-out) 250ms,
+      transform var(--dur-2) var(--ease-out) 250ms;
+  }
+
+  /* ⚠️ 키보드 포커스에는 지연을 두지 않는다. 스쳐 지나가는 일이 없고, 기다림이 곧
+     "안 뜬다"로 읽힌다. */
+  .rail-btn:focus-visible .rail-tip {
+    transition:
+      opacity var(--dur-2) var(--ease-out),
+      transform var(--dur-2) var(--ease-out);
   }
 
   .rail-spacer {

@@ -32,6 +32,8 @@ export interface SettingsEntry {
 export const SETTINGS_INDEX: readonly SettingsEntry[] = [
   { key: "settings_theme_color_title", cat: "appearance" },
   { key: "settings_density_title", cat: "appearance" },
+  { key: "settings_motion_label", cat: "appearance" },
+  { key: "settings_chrome_label", cat: "appearance" },
   { key: "settings_measure_title", cat: "appearance" },
   { key: "settings_language_title", cat: "language" },
   { key: "settings_backup_title", cat: "vault" },

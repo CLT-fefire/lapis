@@ -47,7 +47,12 @@
     findHeadingByAnchor,
     jumpToHeading,
   } from "$lib/stores/outline";
-  import { paletteOpen, openPalette, closePalette } from "$lib/stores/palette";
+  import {
+    paletteOpen,
+    openPalette,
+    openPaletteAtLastMode,
+    closePalette,
+  } from "$lib/stores/palette";
   import { openNewNote } from "$lib/stores/tree-ui";
   import {
     vaultPath,
@@ -99,6 +104,8 @@
   import { restoreTheme } from "$lib/stores/theme";
 import { isPanicChord } from "$lib/userCss";
   import { restoreDensity } from "$lib/stores/density";
+  import { restoreMotionPref } from "$lib/stores/motionPref";
+  import { restoreChromeMode } from "$lib/stores/chrome";
   import { get } from "svelte/store";
   import { getBacklinks, resolveWikilink, type LinkIndex } from "$lib/linkIndex";
   import { fillEmbeds } from "$lib/embedFill";
@@ -138,6 +145,7 @@ import { isPanicChord } from "$lib/userCss";
     type PaneAnchor,
   } from "$lib/paneAnchor";
   import { welcomeDoc } from "$lib/welcomeDoc";
+  import VaultEmptyState from "$lib/VaultEmptyState.svelte";
 
 
   // vault 미선택 상태에서만 welcomeDoc() 사용. 노트 선택 후엔 editor store가 진실의 원천.
@@ -899,6 +907,26 @@ import { isPanicChord } from "$lib/userCss";
    * 편집에서 나갈 때 **저장을 플러시**한다 — autosave 디바운스가 끝나기 전에
    * Editor가 언마운트되면 마지막 타이핑이 유실될 수 있다.
    */
+  let paneSwitchEl: HTMLDivElement | null = $state(null);
+  let switchThumb = $state({ x: 0, w: 0 });
+
+  /**
+   * 읽기↔편집 세그먼트 썸의 자리.
+   *
+   * ⚠️ 두 라벨의 폭이 언어마다 다르다("읽기/편집" vs "Read/Edit"). 50% 로 박으면
+   * 영어에서 어긋나는데, **어긋나도 에러가 없다.**
+   */
+  function measureSwitchThumb() {
+    if (!paneSwitchEl) return;
+    const el = paneSwitchEl.querySelector<HTMLElement>(".switch-opt.active");
+    switchThumb = el ? { x: el.offsetLeft, w: el.offsetWidth } : { x: 0, w: 0 };
+  }
+
+  $effect(() => {
+    void $mainPane;
+    void tick().then(measureSwitchThumb);
+  });
+
   async function switchMainPane(to?: "preview" | "editor") {
     const next = to ?? (get(mainPane) === "preview" ? "editor" : "preview");
     if (next === get(mainPane)) return;
@@ -1040,9 +1068,10 @@ import { isPanicChord } from "$lib/userCss";
         return;
       }
       case "palette":
+        // 마지막으로 쓰던 모드로 — 전문 검색을 하던 중이었으면 거기서 이어진다.
         e.preventDefault();
         if ($paletteOpen) closePalette();
-        else openPalette("all");
+        else openPaletteAtLastMode();
         return;
       case "quick-open":
         // 잠깐 보기 — 활성 탭을 갈아끼워 탭이 무한히 쌓이지 않게 한다.
@@ -1156,13 +1185,24 @@ import { isPanicChord } from "$lib/userCss";
   //
   // rail / sidebar / rz / main / rz2 / context — **6열**. Editor·Preview가 교대하면서
   // 두 열이 하나로 합쳐졌다(2026-08-10). 컨텍스트만 독립 접힘(36px 스트립 ↔ --context-w).
-  const gridCols = $derived(
-    `var(--rail-w, 52px) ` +
-      `${$sidebarCollapsed ? "var(--collapsed-strip-w, 34px)" : "var(--sidebar-w, 260px)"} ` +
-      `${$sidebarCollapsed ? "0px" : "4px"} ` +
-      `1fr ` +
-      `${$contextCollapsed ? "0px" : "4px"} ` +
-      `${$contextCollapsed ? "var(--collapsed-strip-w, 34px)" : "var(--context-w, 300px)"}`,
+  /**
+   * 접힘 스트립 폭. `app.css` 의 `--collapsed-strip-w` 와 **같은 값이어야 한다** —
+   * 갈라지면 접힌 사이드바 폭과 스트립 버튼 폭이 어긋나는데, 둘 다 34 근처라 눈에 잘
+   * 안 띈다.
+   */
+  const COLLAPSED_STRIP = 34;
+
+  /**
+   * 컬럼 폭 — **등록된 커스텀 속성**(`app.css` 의 `@property`)에 px 값을 준다.
+   *
+   * 예전엔 `grid-template-columns` 전체를 문자열로 만들어 인라인에 박았다. 값만 넘기고
+   * 트랙 목록은 CSS 에 두는 편이 읽기 쉽다 — 트랙이 몇 개인지가 한 곳에만 있다.
+   */
+  const gridVars = $derived(
+    `--sidebar-col: ${$sidebarCollapsed ? COLLAPSED_STRIP : $sidebarWidth}px; ` +
+      `--context-col: ${$contextCollapsed ? COLLAPSED_STRIP : $contextWidth}px; ` +
+      `--rz-left: ${$sidebarCollapsed ? 0 : 4}px; ` +
+      `--rz-right: ${$contextCollapsed ? 0 : 4}px;`,
   );
 
   // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
@@ -1182,6 +1222,10 @@ import { isPanicChord } from "$lib/userCss";
   onMount(() => {
     restoreTheme();
     restoreDensity();
+    restoreMotionPref();
+    // ⚠️ 크롬은 **런타임에** 적용한다. `tauri.conf.json` 에 `decorations: false` 를 박으면
+    //    프런트가 못 뜨는 상황에서도 장식 없는 창이 떠 — 옮길 수도 닫을 수도 없어진다.
+    restoreChromeMode();
     void restoreSettings();
     restorePaneState();
     // ⚠️ vault 복원이 여기 안으로 들어갔다. `lapis open`으로 뜬 창은 마지막 vault를
@@ -1261,9 +1305,19 @@ import { isPanicChord } from "$lib/userCss";
   <Titlebar />
   <GitBanner />
 
+  <!--
+    ⚠️ vault 가 없으면 **화면 전체**가 빈 상태다(3.0 PR-10). v2 는 사이드바 안에만 문구를
+    두고 나머지(탭 스트립 · 노트 헤더 · 컨텍스트 패널)를 평소대로 그렸는데, 빈 사이드바
+    하나만 다른 화면은 "아직 안 골랐다"가 아니라 **"뭔가 안 불러와졌다"**로 읽힌다.
+
+    ⚠️ `welcomeDoc()` 흐름은 그대로다 — vault 를 열면 그 안내 노트가 뜬다.
+  -->
+  {#if !$vaultPath}
+    <VaultEmptyState />
+  {:else}
   <div
     class="workspace"
-    style="--sidebar-w: {$sidebarWidth}px; --context-w: {$contextWidth}px; grid-template-columns: {gridCols};"
+    style="--sidebar-w: {$sidebarWidth}px; --context-w: {$contextWidth}px; {gridVars}"
   >
     <SidebarRail />
     <!-- ⚠️ 접혀도 **언마운트하지 않는다**(3.0). 폭 0 + 언마운트는 펼칠 때마다 트리를
@@ -1347,7 +1401,15 @@ import { isPanicChord } from "$lib/userCss";
         </span>
       </div>
 
-      <div class="pane-switch" role="group" aria-label={m.page_mode_group()}>
+      <div class="pane-switch" role="group" aria-label={m.page_mode_group()} bind:this={paneSwitchEl}>
+      <!-- ⚠️ 활성 표시를 버튼 배경이 아니라 **요소 하나**로 옮긴다(모션 명세 A4). 배경으로
+           그리면 전환이 "꺼지고 켜진다"가 되는데, 세그먼트는 미끄러져야 두 상태가 한
+           축 위에 있다고 읽힌다. `w: 0` 이면 안 그린다 — 측정 실패는 틀린 자리보다 낫다. -->
+      <span
+        class="switch-thumb"
+        aria-hidden="true"
+        style="transform: translateX({switchThumb.x}px); width: {switchThumb.w}px"
+      ></span>
       <button
       class="switch-opt"
       class:active={$mainPane === "preview"}
@@ -1504,6 +1566,7 @@ import { isPanicChord } from "$lib/userCss";
       {/if}
     </section>
   </div>
+  {/if}
 
   <Statusbar
     docStats={$currentNotePath
@@ -1761,11 +1824,21 @@ import { isPanicChord } from "$lib/userCss";
   .workspace {
     flex: 1;
     display: grid;
-    /* grid-template-columns는 인라인 style의 gridCols(derived)로 지정 — collapse 조합 대응 */
     overflow: hidden;
-    /* ⚠️ `grid-template-columns` **전체**를 트랜지션하지 않는다. 트랙 개수나 단위가
-       섞이면 브라우저가 보간을 포기하고 값이 툭 튄다 — 애니메이션이 없는 것보다 나쁘다.
-       움직이는 것은 아래 컬럼 폭 변수뿐이다. */
+    /**
+     * 컬럼 폭은 인라인 변수 넷이 정한다(`gridVars`).
+     *
+     * ⚠️ **트랜지션을 걸지 않는다.** 두 방법 다 실측으로 실패했다 — `app.css` 의
+     * "패널 폭" 블록에 무엇이 어떻게 실패했는지 적어 뒀다. 다시 시도한다면 부드러움보다
+     * **최종값에 도달하는지**를 먼저 본다.
+     */
+    grid-template-columns:
+      var(--rail-w, 52px)
+      var(--sidebar-col)
+      var(--rz-left)
+      1fr
+      var(--rz-right)
+      var(--context-col);
   }
 
   .sidebar-resizer {
@@ -1837,6 +1910,21 @@ import { isPanicChord } from "$lib/userCss";
     padding: 2px;
     background: var(--surface-sunken);
     border-radius: var(--r-md);
+    position: relative;
+  }
+
+  /* 180ms — 모션 명세 A4. `transform` 이라 본문 렌더를 기다리지 않는다. */
+  .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    bottom: 2px;
+    background: var(--surface-content);
+    border-radius: var(--r-sm);
+    pointer-events: none;
+    transition:
+      transform 180ms var(--ease-panel),
+      width 180ms var(--ease-panel);
   }
 
   .switch-opt {
@@ -1859,9 +1947,14 @@ import { isPanicChord } from "$lib/userCss";
     color: var(--text-secondary);
   }
 
+  /* 배경은 `.switch-thumb` 이 그린다 — 여기서 또 칠하면 미끄러지는 것이 안 보인다. */
   .switch-opt.active {
-    background: var(--surface-content);
     color: var(--text-primary);
+  }
+
+  .switch-opt {
+    position: relative;
+    z-index: 1;
   }
 
   /* 접힌 pane의 세로 띠 — 클릭하면 다시 펼침.
@@ -1904,6 +1997,46 @@ import { isPanicChord } from "$lib/userCss";
     font-weight: 600;
     letter-spacing: 0.04em;
     user-select: none;
+  }
+
+  /**
+   * 읽기↔편집 교체 — 140ms 크로스페이드(모션 명세 A4).
+   *
+   * ⚠️ **편집 페인에는 y 이동을 주지 않는다.** `transform` 이 걸린 조상은 새 containing
+   * block 을 만들어 CodeMirror 의 커서·툴팁 좌표가 그 동안 어긋난다. 읽기 페인만 움직인다.
+   *
+   * ⚠️ 앵커 복원(`switchMainPane` 의 `scrollTop` 대입)은 이 애니메이션과 무관하다 —
+   * CSS 애니메이션은 스크롤 위치를 건드리지 않고, 대입은 `tick()` 직후에 이미 끝난다.
+   */
+  @keyframes pane-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes pane-swap {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .pane-body {
+    animation: pane-fade var(--dur-2) var(--ease-out) both;
+  }
+
+  /* ⚠️ `data-lapis="preview"` 로 잡지 않는다. 그 속성은 **사용자 CSS 계약**이고,
+     `userCssHooks.test.ts` 가 훅 하나당 한 곳만 허용한다 — 우리 스타일이 훅을 쓰면
+     "이 훅이 어디에 붙어 있나"가 두 답을 갖게 된다. 클래스로 잡는다. */
+  .pane-body.preview-body {
+    animation-name: pane-swap;
   }
 
   .pane-body {

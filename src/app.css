@@ -366,11 +366,55 @@ body {
   cursor: default;
 }
 
-/* --- 접근성: reduced-motion ----------------------------------------------- */
+/* --- 패널 폭 — **애니메이션하지 않는다** -----------------------------------
+ *
+ * 3.0 모션 명세(A1)는 접힘/펼침을 220ms 로 움직이라고 정했다. 두 가지로 시도했고
+ * **둘 다 실측으로 실패**했다(Chromium/WebView2, 2026-08-28):
+ *
+ * 1. `transition: grid-template-columns` — 보간이 시작은 하는데 **최종값에 도달하지
+ *    못하고 멈춘다.** 인라인 스타일은 34px 인데 computed 는 260px 에 남았다. 사이드바가
+ *    접혔는데 폭은 그대로다 — 에러 없이.
+ * 2. `@property` 로 `<length>` 등록 후 그 값을 트랜지션 — 값이 **즉시 튄다.** 갓 만든
+ *    빈 div 에서도 같았으므로 우리 마크업 문제가 아니다.
+ *
+ * 그래서 폭은 즉시 바뀐다. 대신 **내용 페이드**(`Sidebar.svelte` 의 `.sidebar-body`)는
+ * 넣었다 — A1 이 폭 애니메이션으로 풀려던 문제("글자가 찌그러진다")를 실제로 푸는 쪽은
+ * 그것이다.
+ *
+ * ⚠️ 다시 시도한다면 **최종값에 도달하는지부터** 확인한다. 부드러움은 그 다음이다.
+ * -------------------------------------------------------------------------- */
+
+/* --- 테마 전환 — 스냅샷 크로스페이드 -------------------------------------
+ *
+ * ⚠️ **토큰에 `transition` 을 걸지 않는다.** 151곳에 걸면 hover 하나에도 색이 늦게
+ * 따라오고, WKWebView 에서 프레임이 떨어진다. 대신 브라우저가 전환 직전/직후 화면을
+ * 스냅샷으로 떠 주는 View Transition 한 장만 320ms 로 겹친다.
+ *
+ * ⚠️ 지원 안 하는 환경에서는 이 규칙이 **아무 데도 안 붙고** 색이 즉시 바뀐다 —
+ * 그게 안전한 실패다. `settings.ts` 의 `startViewTransition` 이 짝이다.
+ * -------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-4);
+  animation-timing-function: var(--ease-standard);
+}
+
+/* --- 접근성: reduced-motion -----------------------------------------------
+ *
+ * 세 갈래다 — 시스템(`prefers-reduced-motion`) · 설정 "최소" · 설정 "전체".
+ *
+ * ⚠️ **설정이 시스템보다 세다.** `[data-motion="full"]` 은 시스템이 줄이라고 해도 켠다.
+ * 그래서 아래 미디어 쿼리가 `full` 을 빼고 건다 — 안 그러면 "전체"를 고른 사람에게
+ * 설정 화면만 바뀌고 화면은 그대로다.
+ *
+ * ⚠️ **기능 요소 복원 목록이 두 곳에 있다.** CSS 에는 조건을 합칠 방법이 없어
+ * 미디어 쿼리와 `minimal` 블록이 같은 목록을 든다. 한쪽만 늘리면 그 상태에서
+ * 스피너가 **멈춘 것처럼** 보인다 — `motionReset.test.ts` 가 둘을 대조한다.
+ * -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -381,6 +425,12 @@ body {
      계속 돌아야 한다.
      ⚠️ **새 애니메이션 클래스를 추가하면 이 목록도 늘려야 한다.** 안 그러면
      위 `*` 리셋이 무한 루프를 1회·0.01ms로 죽여 "멈춘 것처럼" 보인다. */
+  /* ⚠️ 위 `*` 리셋은 **duration 만** 죽인다. 지연은 그대로 남는데, `animation-fill-mode:
+     both` 와 만나면 그 시간 동안 요소가 **안 보인다.** 팔레트 결과 stagger 가 그렇다. */
+  [data-lapis="palette"] .result {
+    animation-delay: 0ms !important;
+  }
+
   .spinner {
     animation-duration: 0.9s !important;
     animation-iteration-count: infinite !important;
@@ -389,28 +439,32 @@ body {
     animation-duration: 1.1s !important;
     animation-iteration-count: infinite !important;
   }
-  .progress-fill {
-    animation-duration: 1.2s !important;
-    animation-iteration-count: infinite !important;
-  }
-  .mirror-dot.syncing {
-    animation-duration: 1.1s !important;
-    animation-iteration-count: infinite !important;
-  }
-  .loading-spinner {
-    animation-duration: 0.9s !important;
-    animation-iteration-count: infinite !important;
-  }
 }
 
-/* 사용자가 명시적으로 고른 값이 시스템 설정을 덮는다 (설정 → 모양 → 애니메이션).
-   ⚠️ `motion.ts`의 `prefersReducedMotion()`도 이 속성을 함께 읽어야 한다 —
-   matchMedia만 보면 "최소"를 고른 사용자에게 Svelte 전환이 그대로 남는다. */
+/* 사용자가 명시적으로 고른 "최소" — 시스템이 조용해도 끈다 (설정 → 모양 → 애니메이션).
+   ⚠️ `motion.ts` 의 `dur()` 도 같은 속성을 읽어야 한다(`motionPref.ts`) —
+   matchMedia 만 보면 "최소"를 고른 사용자에게 **Svelte 전환만** 그대로 남는다. */
 :root[data-motion="minimal"] *,
 :root[data-motion="minimal"] *::before,
 :root[data-motion="minimal"] *::after {
   transition-duration: 0.01ms !important;
   animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+/* ⚠️ 위 미디어 쿼리와 **같은 복원 목록**이어야 한다. 빠뜨리면 "최소"에서 스피너와
+   진행 바가 멈춰 보이고, 멈춘 인디케이터는 "작업이 끝났다"로 읽힌다. */
+:root[data-motion="minimal"] [data-lapis="palette"] .result {
+  animation-delay: 0ms !important;
+}
+:root[data-motion="minimal"] .spinner {
+  animation-duration: 0.9s !important;
+  animation-iteration-count: infinite !important;
+}
+:root[data-motion="minimal"] .progress-shimmer {
+  animation-duration: 1.1s !important;
+  animation-iteration-count: infinite !important;
 }
 
 /* =============================================================================

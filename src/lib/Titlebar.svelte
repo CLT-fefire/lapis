@@ -13,8 +13,10 @@
   import { buildProgress } from "$lib/stores/search";
   import { revealInFinder } from "$lib/tauri/reveal";
   import { openSettings } from "$lib/stores/settings";
-  import { openPalette } from "$lib/stores/palette";
+  import { openPaletteAtLastMode } from "$lib/stores/palette";
   import { contextCollapsed, toggleContext } from "$lib/stores/layout";
+  import { chromeMode, needsCaptionButtons } from "$lib/stores/chrome";
+  import CaptionButtons from "./CaptionButtons.svelte";
 
   /**
    * 상단바 — 창 폭 전체를 가로지르는 셸의 첫 줄.
@@ -33,8 +35,13 @@
    * ## 드래그 영역
    *
    * ⚠️ `data-tauri-drag-region` 은 **빈 공간에만** 준다. 컨트롤에 주면 클릭이 드래그로
-   * 먹혀 버튼이 안 눌린다. 지금은 OS 크롬을 쓰므로 실효가 없지만, 크롬을 끄면 이 영역이
-   * 유일한 이동 수단이 된다.
+   * 먹혀 버튼이 안 눌린다. 크롬을 끄면(`chromeMode = "custom"`) 이 영역이 **유일한
+   * 이동 수단**이 된다.
+   *
+   * ## 캡션 버튼
+   *
+   * ⚠️ Windows 에서만 그린다. macOS 는 신호등이 오버레이로 남으므로 우리가 그리면 두
+   * 벌이 된다 — 대신 왼쪽에 신호등 자리(78px)를 비운다.
    */
 
   const vaultMenuItems: PaneMenuItem[] = [
@@ -101,7 +108,7 @@
 
   <!-- ⚠️ 가운데는 드래그 영역을 겸한다. 커맨드바 자체는 버튼이라 드래그를 안 먹는다. -->
   <div class="tb-center" data-tauri-drag-region>
-    <button class="commandbar" title={m.titlebar_command_title()} onclick={() => openPalette("all")}>
+    <button class="commandbar" title={m.titlebar_command_title()} onclick={() => openPaletteAtLastMode()}>
       <Search size={13} strokeWidth={2.2} aria-hidden="true" />
       <span class="cb-label">{m.titlebar_command_label()}</span>
     </button>
@@ -116,7 +123,12 @@
             {progress.done.toLocaleString()} / {progress.total.toLocaleString()}
           </span>
           <span class="pill-track">
-            <span class="pill-fill" style="width: {progress.pct}%"></span>
+            <span class="pill-fill" style="width: {progress.pct}%">
+              <!-- ⚠️ shimmer 는 **진행과 다른 것**을 말한다. 폭은 "얼마나 왔나"이고
+                   이 반짝임은 "아직 돌고 있나"다. 인덱스 빌드가 메인 스레드를 잡으면
+                   폭이 한동안 멈추는데, 그때 멈춘 것과 끝난 것을 가르는 게 이것이다. -->
+              <span class="progress-shimmer" aria-hidden="true"></span>
+            </span>
           </span>
         {:else}
           <span class="pill-text">{m.sidebar_status_indexing()}</span>
@@ -132,6 +144,10 @@
     >
       <PanelRight size={15} strokeWidth={2} aria-hidden="true" />
     </button>
+
+    {#if needsCaptionButtons($chromeMode)}
+      <CaptionButtons />
+    {/if}
   </div>
 </header>
 
@@ -244,5 +260,37 @@
     height: 100%;
     background: var(--accent-text);
     transition: width var(--dur-2) var(--ease-standard);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /**
+   * ⚠️ 이름이 `progress-shimmer` 인 것은 우연이 아니다. `app.css` 의 reduced-motion
+   * 복원 목록이 **이 이름으로** 되살린다 — "작업 중"을 알리는 기능 요소는 동작을 줄인
+   * 상태에서도 돌아야 하기 때문이다. 이름을 바꾸면 조용히 멈춘다.
+   *
+   * ⚠️ `will-change: transform` 로 합성 승격 — 인덱스 빌드가 메인 스레드를 잡고 있을 때
+   * 멈추지 않기 위해서다. 이게 없으면 "살아 있음"을 말하려던 것이 정확히 반대를 말한다.
+   */
+  .progress-shimmer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--surface-content) 55%, transparent),
+      transparent
+    );
+    animation: pill-shimmer 1.1s linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes pill-shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(420%);
+    }
   }
 </style>

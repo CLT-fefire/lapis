@@ -30,12 +30,14 @@ Your files live only on your local filesystem. No accounts, no cloud sync, no te
 
 ### Reading-first workflow
 
+- **One view at a time** — the left rail picks files, tags, filters, or favorites. Clicking the active icon collapses the sidebar (`⌘B` still works).
 - **One toggle, `⌘E`** — preview (markdown-it) ↔ editor (CodeMirror 6). Not two modes; one toggle.
 - **Adjustable measure** — 40–88em via the Aa popover, narrowing long documents to a comfortable column width.
 - **Your reading position carries over** — move between editor and preview and you stay in the section you were reading.
 - **Outline** (`⌘⇧O`) — jump within a document through its heading list.
-- **Context panel** (`⌘⌥B`) — keeps frontmatter properties and backlinks beside the body.
-- **Themes** — light / dark / follow system.
+- **Context panel** (`⌘⌥B`) — properties, outline, relations, and assets as segmented tabs beside the body.
+- **Color** — one dark palette with 26 accent presets. Beyond that, override the tokens with custom CSS in settings.
+- **Density and animation** — three steps each under Settings → Appearance (cozy/default/compact, system/minimal/full). Density changes spacing only; text size stays put.
 
 ### Connections between documents
 
@@ -114,7 +116,7 @@ Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository d
 
 ## Getting started
 
-1. Use **Open Vault…** at the top of the left sidebar to pick a folder containing `.md` files. An empty folder is fine.
+1. Use **Open Vault…** on the start screen to pick a folder containing `.md` files. An empty folder is fine. Vaults you have opened stay in the **Recent** list on that screen.
 2. The first index build runs. It creates links, tags, and full-text in one pass — a few seconds at around 1,000 notes. It **does not block the file tree**, so you can open documents while it works.
 3. `⌘P` finds files by name, `⌘⇧F` by content.
 4. Write `[[Another note]]` in any note, then check that note's **Backlinks** to see the reverse reference appear.
@@ -124,7 +126,7 @@ Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository d
 
 | Shortcut | Action |
 |---|---|
-| `⌘K` | Command Palette — search every command |
+| `⌘K` | Command palette — opens in the mode you used last; `⇥` cycles All · Files · Content · Commands |
 | `⌘P` | Quick File Open (filename fuzzy) — replaces the active tab |
 | `⌘⇧F` / `⌘⇧P` | Full-text search |
 | `⌘⇧G` | Search the whole vault by literal text or regex |

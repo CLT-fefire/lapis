@@ -17,6 +17,13 @@
     applyMcpEnabled,
   } from "$lib/stores/settings";
   import { density, setDensity, type Density } from "$lib/stores/density";
+  import { motionPref, setMotionPref, type MotionPref } from "$lib/stores/motionPref";
+  import {
+    chromeMode,
+    setChromeMode,
+    chromeSwitchable,
+    type ChromeMode,
+  } from "$lib/stores/chrome";
   import {
     readingMeasureLimited,
     setReadingMeasureLimited,
@@ -90,9 +97,22 @@
       .catch(() => (appVersion = ""));
   });
 
+  /** ⚠️ 순서가 화면 순서다 — 여유에서 조밀로. `DENSITIES` 와 같아야 한다. */
   const DENSITY_OPTIONS: { value: Density; label: string }[] = [
+    { value: "cozy", label: m.settings_density_cozy() },
     { value: "default", label: m.settings_density_default() },
     { value: "compact", label: m.settings_density_compact() },
+  ];
+
+  const MOTION_OPTIONS: { value: MotionPref; label: string }[] = [
+    { value: "system", label: m.settings_motion_system() },
+    { value: "minimal", label: m.settings_motion_minimal() },
+    { value: "full", label: m.settings_motion_full() },
+  ];
+
+  const CHROME_OPTIONS: { value: ChromeMode; label: string }[] = [
+    { value: "custom", label: m.settings_chrome_custom() },
+    { value: "native", label: m.settings_chrome_native() },
   ];
 
   const MEASURE_OPTIONS: { value: boolean; label: string }[] = [
@@ -324,6 +344,61 @@
             </div>
           </div>
         </section>
+
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_motion_label()}</span>
+              <span class="label-desc">{m.settings_motion_hint()}</span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label={m.settings_motion_label()}>
+              {#each MOTION_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$motionPref === opt.value}
+                  aria-pressed={$motionPref === opt.value}
+                  onclick={() => setMotionPref(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+
+        <!-- ⚠️ macOS 에서는 이 행을 안 그린다. 거기서 이 스위치는 아무 일도 못 하는데
+             (`stores/chrome.ts` 참조), 눌리는데 아무 일도 안 일어나는 컨트롤은
+             고장과 구별이 안 된다. -->
+        {#if chromeSwitchable()}
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_chrome_label()}</span>
+              <span class="label-desc">{m.settings_chrome_hint()}</span>
+              <span class="label-desc">{m.settings_chrome_restart()}</span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label={m.settings_chrome_label()}>
+              {#each CHROME_OPTIONS as opt (opt.value)}
+                <button
+                  type="button"
+                  class="segment"
+                  class:active={$chromeMode === opt.value}
+                  aria-pressed={$chromeMode === opt.value}
+                  onclick={() => setChromeMode(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </section>
+        {/if}
+
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">
