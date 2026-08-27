@@ -2,6 +2,7 @@
   import ModalShell from "$lib/ModalShell.svelte";
   import CustomCssEditor from "$lib/CustomCssEditor.svelte";
   import ColorThemePicker from "$lib/ColorThemePicker.svelte";
+  import { searchSettings, type SettingsCatId } from "$lib/settingsIndex";
   import { getVersion } from "@tauri-apps/api/app";
   import {
     settingsOpen,
@@ -44,6 +45,37 @@
 
   type CatId = (typeof CATEGORIES)[number]["id"];
   let cat = $state<CatId>("appearance");
+
+  /**
+   * 설정 검색.
+   *
+   * ⚠️ 카테고리를 **가로지른다** — 그게 요점이다. 항목이 어느 카테고리에 있는지
+   * 알면 검색할 이유가 없다. 그래서 결과에 카테고리 이름을 같이 낸다.
+   *
+   * ⚠️ 카테고리 내용을 필터하지 않고 **결과 목록으로 갈아 끼운다.** 안 보는
+   * 카테고리는 `{#if}` 라서 DOM에 없고, 그 덕에 무거운 CodeMirror가 그 탭을 열
+   * 때만 뜬다. 검색 하나 때문에 그걸 포기하지 않는다.
+   */
+  let query = $state("");
+  const results = $derived(searchSettings(query, (k) => label(k)));
+
+  /**
+   * 메시지 키 → 표시 문자열. paraglide는 키별 함수라 동적 조회가 안 된다 —
+   * ⚠️ 없는 키를 `m[k]`로 부르면 **런타임에 죽는 게 아니라 undefined 호출**이다.
+   * 가드(`settingsSearch.test.ts`)가 색인의 키가 실재하는지 본다.
+   */
+  function label(key: string): string {
+    const fn = (m as unknown as Record<string, (() => string) | undefined>)[key];
+    return typeof fn === "function" ? fn() : "";
+  }
+
+  const CAT_LABEL = (id: SettingsCatId) =>
+    CATEGORIES.find((c) => c.id === id)?.label() ?? id;
+
+  function goTo(id: SettingsCatId) {
+    cat = id as CatId;
+    query = "";
+  }
   const activeLabel = $derived(
     () => CATEGORIES.find((c) => c.id === cat)?.label() ?? m.settings_title(),
   );
@@ -213,6 +245,13 @@
       <div class="settings-pane">
         <header class="settings-head">
           <h2 id="settings-title">{activeLabel()}</h2>
+          <input
+            class="settings-search"
+            type="search"
+            bind:value={query}
+            placeholder={m.settings_search_placeholder()}
+            aria-label={m.settings_search_aria()}
+          />
           <button
             class="btn btn--icon btn--sm btn--plain"
             aria-label={m.settings_close()}
@@ -221,6 +260,22 @@
         </header>
 
         <div class="settings-body">
+        {#if query.trim()}
+          {#if results.length === 0}
+            <p class="search-empty">{m.settings_search_empty()}</p>
+          {:else}
+            <ul class="search-results">
+              {#each results as r (r.key)}
+                <li>
+                  <button type="button" class="search-hit" onclick={() => goTo(r.cat)}>
+                    <span class="hit-title">{label(r.key)}</span>
+                    <span class="hit-cat">{CAT_LABEL(r.cat)}</span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {:else}
         {#if cat === "appearance"}
           <ColorThemePicker />
         <section class="setting-row">
@@ -405,6 +460,7 @@
           <!-- 사용자 정의 CSS 는 아래 CustomCssEditor 가 담당한다. -->
           <CustomCssEditor />
         {/if}
+        {/if}
         </div>
 
         <footer class="settings-foot">
@@ -502,6 +558,64 @@
      `.setting-row`가 배경·보더·라운드를 가진 카드인데 컨테이너에 `gap`이 없어서
      카드들이 딱 붙어 한 덩어리로 보였다. 카드에 `margin`을 주는 대신 컨테이너가
      간격을 쥐어야 첫/마지막 카드에 여백이 새지 않는다. */
+  /* 검색 — 헤더에 둔다. 카테고리 목록 쪽에 두면 "이 카테고리 안에서 찾는다"로 읽힌다. */
+  .settings-search {
+    margin-left: auto;
+    margin-right: var(--sp-3);
+    min-width: 0;
+    width: 180px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 0.85rem;
+  }
+
+  .settings-search::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .search-hit {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: var(--r-sm);
+    padding: var(--sp-3);
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .search-hit:hover {
+    background: var(--surface-sunken);
+  }
+
+  /* ⚠️ 카테고리 이름이 결과의 절반이다 — 어디로 가는지 모르면 눌러도 길을 잃는다. */
+  .hit-cat {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .search-empty {
+    color: var(--text-muted);
+    padding: var(--sp-3);
+  }
+
   .settings-body {
     display: flex;
     flex-direction: column;
