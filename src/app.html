@@ -10,14 +10,21 @@
       // 중에서 골랐고, 그 값에 따라 app.css가 팔레트를 세 벌 갖고 있었다.
       // 색을 바꾸는 길은 이제 사용자 정의 CSS다. (theme.ts 참조)
       document.documentElement.dataset.theme = "dark";
-      // 레이아웃 점프 방지 — first-paint 전에 밀도 속성 적용 (density.ts와 키 동기화)
+      // 레이아웃 점프 방지 — first-paint 전에 밀도·모션 속성 적용
+      // (density.ts · motionPref.ts 와 키를 맞춘다. 여기서 빠지면 첫 프레임이 기본값으로
+      //  그려졌다가 튄다 — 에러는 없고 눈에만 보인다.)
       (function () {
-        try {
-          var d = localStorage.getItem("lapis.density");
-          document.documentElement.dataset.density = d === "compact" ? "compact" : "default";
-        } catch (e) {
-          document.documentElement.dataset.density = "default";
+        var el = document.documentElement;
+        function pick(key, allowed, fallback) {
+          try {
+            var v = localStorage.getItem(key);
+            return allowed.indexOf(v) >= 0 ? v : fallback;
+          } catch (e) {
+            return fallback;
+          }
         }
+        el.dataset.density = pick("lapis.density", ["cozy", "default", "compact"], "default");
+        el.dataset.motion = pick("lapis.motion", ["system", "minimal", "full"], "system");
       })();
     </script>
     %sveltekit.head%

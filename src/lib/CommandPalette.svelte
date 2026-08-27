@@ -1,10 +1,16 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
-  import { fade, scale } from "svelte/transition";
-  import { backdropFade, cardPop } from "$lib/motion";
+  import { fade } from "svelte/transition";
+  import { backdropFade, cardIn, cardOut } from "$lib/motion";
   import { formatShortcut } from "$lib/shortcutLabel";
-  import { paletteOpen, paletteHintMode, paletteIntent, closePalette } from "$lib/stores/palette";
+  import {
+    paletteOpen,
+    paletteHintMode,
+    paletteIntent,
+    closePalette,
+    setPaletteMode,
+  } from "$lib/stores/palette";
   import {
     fullTextIndexReady,
     indexBuilding,
@@ -15,8 +21,13 @@
     unifiedSearch,
     groupResults,
     isGroupVisible,
+    CYCLE_MODES,
+    cycleMode,
+    folderChips,
+    relScore,
     type PaletteResult,
     type PaletteEntry,
+    type PaletteMode,
   } from "$lib/palette";
   import { selectNote, ensureFullTextIndex } from "$lib/stores/vault";
   import { selectTag, showTagsTab } from "$lib/stores/tags";
@@ -26,6 +37,11 @@
   let listEl: HTMLDivElement | null = $state(null);
   let query = $state("");
   let activeIndex = $state(0);
+  /**
+   * 전문 모드의 폴더 칩. 빈 문자열은 **vault 루트 폴더**이므로 "필터 없음"과 다르다 —
+   * 없음은 `null` 이다. 하나로 합치면 루트를 고를 수 없다.
+   */
+  let folderFilter = $state<string | null>(null);
 
   /** 검색 디바운스(ms) — 빠른 타이핑 시 키 입력마다 풀검색(searchQuick 12k + readNote×N) 방지. */
   const SEARCH_DEBOUNCE_MS = 90;
@@ -41,6 +57,7 @@
     if ($paletteOpen) {
       query = "";
       activeIndex = 0;
+      folderFilter = null;
       keyboardNavMode = false;
       lastMouseXY = { x: -1, y: -1 };
       tick().then(() => inputEl?.focus());
@@ -99,7 +116,42 @@
     };
   });
 
-  const groups = $derived(groupResults(results));
+  /**
+   * 폴더 칩은 **거르기 전** 결과에서 뽑는다. 거른 뒤에서 뽑으면 칩을 하나 고르는 순간
+   * 나머지 칩이 사라져 **다른 폴더로 옮겨갈 수가 없다** — 되돌아올 길이 없는 필터다.
+   */
+  const chips = $derived($paletteHintMode === "fulltext" ? folderChips(results) : []);
+
+  /** ⚠️ 칩이 하나면 안 그린다 — 거를 것이 없는 필터는 자리만 먹고 아무 질문에도 답하지 않는다. */
+  const showFolderChips = $derived(chips.length > 1);
+
+  /** 고른 폴더가 지금 결과에 없으면 필터를 놓는다. 아무것도 없는 화면은 고장과 구별이 안 된다. */
+  $effect(() => {
+    if (folderFilter === null) return;
+    if (!chips.some((c) => c.path === folderFilter)) folderFilter = null;
+  });
+
+  const visibleResults = $derived.by<PaletteResult[]>(() => {
+    if (folderFilter === null) return results;
+    const want = folderFilter;
+    return results.filter((r) => {
+      if (r.entry.kind !== "content") return true;
+      const at = r.entry.path.lastIndexOf("/");
+      return (at < 0 ? "" : r.entry.path.slice(0, at)) === want;
+    });
+  });
+
+  const groups = $derived(groupResults(visibleResults));
+
+  /**
+   * 본문 결과의 최고점 — `rel` 의 분모.
+   *
+   * ⚠️ **거르기 전** 결과에서 잡는다. 거른 뒤로 잡으면 폴더를 고를 때마다 같은 문서의
+   * `rel` 이 올라가고, 그러면 이 숫자가 "질의 안에서의 순위"라는 뜻을 잃는다.
+   */
+  const topContentScore = $derived(
+    results.reduce((mx, r) => (r.entry.kind === "content" && r.score > mx ? r.score : mx), 0),
+  );
 
   // 화면 그리는 순서대로 평면화한 배열. activeIndex는 이 배열의 인덱스(시각적 순서)를 사용해야
   // ↑/↓ 탐색이 자연스럽게 동작한다. results(점수 순)와 다름에 주의.
@@ -166,6 +218,9 @@
   const placeholder = $derived.by(() => {
     if ($paletteHintMode === "files") return m.palette_ph_names();
     if ($paletteHintMode === "fulltext") return m.palette_ph_content();
+    // ⚠️ 모드로 들어온 명령 모드도 여기서 잡는다. 접두사만 보면 `⇥` 로 온 경우 빈 입력에서
+    //    "통합 검색" 이 뜨고, 화면은 명령만 보여준다 — 안내와 결과가 어긋난다.
+    if ($paletteHintMode === "command") return m.palette_ph_commands();
     if (query.startsWith(">")) return m.palette_ph_commands();
     if (query.startsWith("#")) return m.palette_ph_tags();
     if (query.startsWith(":")) return m.palette_ph_facets();
@@ -211,13 +266,22 @@
       closePalette();
       return;
     }
-    if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
+    /**
+     * ⚠️ `Tab` 이 3.0 에서 **모드 순환**으로 바뀐다. v2 까지는 `ArrowDown` 의 별칭이었다 —
+     * 화살표가 이미 그 일을 하므로 잃는 것은 없지만, 손이 기억하는 키라 CHANGELOG 에 적는다.
+     */
+    if (e.key === "Tab") {
+      e.preventDefault();
+      switchMode(cycleMode($paletteHintMode, e.shiftKey ? -1 : 1));
+      return;
+    }
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       keyboardNavMode = true;
       activeIndex = Math.min(activeIndex + 1, Math.max(0, displayList.length - 1));
       return;
     }
-    if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
+    if (e.key === "ArrowUp") {
       e.preventDefault();
       keyboardNavMode = true;
       activeIndex = Math.max(activeIndex - 1, 0);
@@ -227,6 +291,34 @@
       e.preventDefault();
       void execute(activeIndex);
       return;
+    }
+  }
+
+  /**
+   * 모드를 갈아탄다.
+   *
+   * ⚠️ 접두사를 벗긴다. `#tag` 를 치던 중 `⇥` 를 누르면 모드는 `files` 가 되는데 입력에
+   * `#` 이 남아 있으면 그 글자가 파일명 질의가 된다 — 모드는 바뀌었는데 결과가 안 바뀌는
+   * 것처럼 보인다.
+   */
+  function switchMode(mode: PaletteMode) {
+    setPaletteMode(mode);
+    if (/^[>#:]/.test(query)) query = query.slice(1);
+    folderFilter = null;
+    activeIndex = 0;
+    inputEl?.focus();
+  }
+
+  function modeLabel(mode: PaletteMode): string {
+    switch (mode) {
+      case "files":
+        return m.palette_mode_files();
+      case "fulltext":
+        return m.palette_mode_fulltext();
+      case "command":
+        return m.palette_mode_command();
+      default:
+        return m.palette_mode_all();
     }
   }
 
@@ -304,7 +396,7 @@
       role="dialog"
       aria-modal="true"
       aria-label={m.palette_aria()}
-      transition:scale={cardPop()}
+      in:cardIn out:cardOut
     >
       <input
         bind:this={inputEl}
@@ -316,6 +408,46 @@
         autocomplete="off"
         spellcheck="false"
       />
+
+      <div class="modes" role="tablist" aria-label={m.palette_mode_aria()}>
+        {#each CYCLE_MODES as mode (mode)}
+          <button
+            type="button"
+            class="mode"
+            class:active={$paletteHintMode === mode}
+            role="tab"
+            aria-selected={$paletteHintMode === mode}
+            onclick={() => switchMode(mode)}
+          >
+            {modeLabel(mode)}
+          </button>
+        {/each}
+      </div>
+
+      {#if showFolderChips}
+        <div class="folders" aria-label={m.palette_folder_aria()}>
+          <button
+            type="button"
+            class="folder"
+            class:active={folderFilter === null}
+            onclick={() => { folderFilter = null; activeIndex = 0; }}
+          >
+            {m.palette_folder_clear()}
+          </button>
+          {#each chips as c (c.path)}
+            <button
+              type="button"
+              class="folder"
+              class:active={folderFilter === c.path}
+              title={c.path || m.palette_folder_root()}
+              onclick={() => { folderFilter = c.path; activeIndex = 0; }}
+            >
+              <span class="folder-name">{c.path || m.palette_folder_root()}</span>
+              <span class="folder-count">{c.count}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
 
       {#if showContentBuildingHint}
         <div class="status">{m.palette_status_building()}</div>
@@ -438,7 +570,12 @@
                 onclick={() => execute(gi)}
                 onmouseenter={() => { if (!keyboardNavMode) activeIndex = gi; }}
               >
-                <div class="title">{e.name}</div>
+                <div class="title">
+                  {e.name}
+                  <span class="rel" title={m.palette_rel_title()}>
+                    {relScore(r.score, topContentScore).toFixed(2)}
+                  </span>
+                </div>
                 <div class="snippet">{e.snippet}</div>
               </button>
             {/if}
@@ -518,6 +655,7 @@
 
       <footer class="palette-foot">
         <span>{m.palette_key_navigate()}</span>
+        <span>{m.palette_key_mode()}</span>
         <span>{m.palette_key_run()}</span>
         <span>{m.palette_key_close()}</span>
       </footer>
@@ -564,6 +702,95 @@
 
   .palette-input::placeholder {
     color: var(--text-muted);
+  }
+
+  /* === 모드 칩 === */
+
+  .modes {
+    display: flex;
+    gap: 2px;
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
+    flex: none;
+  }
+
+  .mode {
+    padding: 0 var(--sp-3);
+    height: var(--control-h-sm);
+    background: none;
+    border: none;
+    border-radius: var(--r-sm);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease-standard),
+      color var(--dur-1) var(--ease-standard);
+  }
+
+  .mode:hover {
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+  }
+
+  .mode.active {
+    background: var(--accent-bg-subtle);
+    color: var(--accent-text);
+  }
+
+  /* === 폴더 칩 (전문 모드) === */
+
+  .folders {
+    display: flex;
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
+    flex: none;
+    /* 경로가 길면 줄이지 말고 가로로 흘린다. */
+    overflow-x: auto;
+  }
+
+  .folder {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    max-width: 220px;
+    padding: 0 var(--sp-2);
+    height: var(--control-h-sm);
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-sm);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .folder:hover {
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+  }
+
+  .folder.active {
+    background: var(--accent-bg-subtle);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+
+  .folder-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .folder-count {
+    color: var(--text-disabled);
+  }
+
+  .folder.active .folder-count {
+    color: inherit;
   }
 
   .status {
@@ -622,6 +849,57 @@
   .result.active {
     background: var(--accent-bg-subtle);
     box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  /**
+   * 결과 등장 — **앞 8행만** 24ms 씩 밀린다.
+   *
+   * 자리는 `data-idx` 로 잡는다. `:nth-child` 는 그룹 헤더까지 세기 때문에 화면의 몇
+   * 번째 행인지와 어긋난다.
+   *
+   * ⚠️ 9행부터는 지연 0 이다. 전부 밀면 아래쪽 결과가 늦게 나타나는데, 스크롤해서
+   * 내려간 사람 눈에는 **비어 있는 목록**으로 보인다.
+   */
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(7px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 160ms 는 `--dur-*` 넷에 없다. 모션 명세가 stagger 24ms 와 짝으로 정한 값이라
+     척도를 늘리지 않고 여기서만 쓴다(`motion.ts` 의 `MOTION_ROW` 와 같은 값). */
+  .result {
+    animation: row-in 160ms var(--ease-out) both;
+  }
+
+  .result[data-idx="1"] { animation-delay: 24ms; }
+  .result[data-idx="2"] { animation-delay: 48ms; }
+  .result[data-idx="3"] { animation-delay: 72ms; }
+  .result[data-idx="4"] { animation-delay: 96ms; }
+  .result[data-idx="5"] { animation-delay: 120ms; }
+  .result[data-idx="6"] { animation-delay: 144ms; }
+  .result[data-idx="7"] { animation-delay: 168ms; }
+
+  /**
+   * 본문 결과의 질의 내 상대 점수. MCP·CLI 의 `rel` 과 같은 값이다.
+   *
+   * ⚠️ raw BM25 를 그대로 내면 안 된다 — 질의마다 스케일이 달라("63 vs 1,494") 읽는
+   * 사람이 질의를 가로질러 비교하게 된다.
+   */
+  .rel {
+    margin-left: var(--sp-2);
+    color: var(--text-disabled);
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .result.active .rel {
+    color: var(--text-muted);
   }
 
   .title {

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "모든 창에 적용. main = 시동 창, w2/w3… = new_window가 만든 보조 창(라벨은 빈 번호 재사용). 여기서 main만 남기면 새 창은 권한이 0이라 dialog·opener가 런타임에 조용히 거부된다. window-state는 창 위치·크기 복원(모든 창).",
+  "description": "모든 창에 적용. main = 시동 창, w2/w3… = new_window가 만든 보조 창(라벨은 빈 번호 재사용). 여기서 main만 남기면 새 창은 권한이 0이라 dialog·opener가 런타임에 조용히 거부된다. window-state는 창 위치·크기 복원(모든 창). 3.0: 상단바가 타이틀바를 겸할 수 있어 창 조작(장식 끄기·드래그·최소화·최대화·닫기) 권한이 필요하다 — 없으면 캡션 버튼이 런타임에 조용히 거부된다.",
   "windows": [
     "main",
     "w*"
@@ -13,6 +13,11 @@
     "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "dialog:allow-open",
-    "window-state:default"
+    "window-state:default",
+    "core:window:allow-set-decorations",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close"
   ]
 }

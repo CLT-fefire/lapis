@@ -5,8 +5,8 @@
 
 <script lang="ts">
   import { onMount, onDestroy, tick, type Snippet } from "svelte";
-  import { fade, scale } from "svelte/transition";
-  import { backdropFade, cardPop } from "$lib/motion";
+  import { fade } from "svelte/transition";
+  import { backdropFade, cardIn, cardOut } from "$lib/motion";
 
   interface Props {
     /** ESC / backdrop 클릭 시 호출. */
@@ -106,7 +106,7 @@
 >
   <!-- 카드는 consumer의 snippet이라 여기서 직접 transition을 걸 수 없다. 래퍼를 하나 두고
        backdrop의 가로 정렬을 이 래퍼가 이어받는다(세로 정렬은 backdrop이 유지). -->
-  <div class="ms-card-wrap" data-lapis="modal" transition:scale={cardPop()}>
+  <div class="ms-card-wrap" data-lapis="modal" in:cardIn out:cardOut>
     {@render children()}
   </div>
 </div>

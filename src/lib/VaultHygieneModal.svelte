@@ -123,12 +123,30 @@
     props: fmIssues.length,
   });
 
-  const TABS = $derived<[Tab, string][]>([
-    ["broken", m.hygiene_tab_broken()],
-    ["orphans", m.hygiene_tab_orphans()],
-    ["tags", m.hygiene_tab_tags()],
-    ["unlinked", m.hygiene_tab_unlinked()],
-    ["props", m.hygiene_tab_props()],
+  /**
+   * 좌측 목록 — **무엇에서 나온 감사인가**로 묶는다.
+   *
+   * 가로 탭 다섯은 순서 말고는 아무 관계도 말하지 않았다. 다섯이 나란히 있으면 읽는
+   * 사람이 "이것들이 다 같은 종류구나" 하고 읽는데, 실제로는 두 종류다.
+   *
+   * - **그래프에서** — 링크가 만든 구조를 보는 넷. 끊긴 링크 · 고아 · 태그 · 안 걸린 언급
+   * - **거를 수 있는 축** — 프론트매터. `stores/filters.ts` 가 거르는 것이 정확히 이것
+   *   (doc_kind · topic)이라, 이 감사는 "거르기가 제대로 되나"를 묻는다
+   */
+  const TAB_GROUPS = $derived<{ label: string; tabs: [Tab, string][] }[]>([
+    {
+      label: m.hygiene_group_graph(),
+      tabs: [
+        ["broken", m.hygiene_tab_broken()],
+        ["orphans", m.hygiene_tab_orphans()],
+        ["tags", m.hygiene_tab_tags()],
+        ["unlinked", m.hygiene_tab_unlinked()],
+      ],
+    },
+    {
+      label: m.hygiene_group_axis(),
+      tabs: [["props", m.hygiene_tab_props()]],
+    },
   ]);
 
   async function go(path: string) {
@@ -152,22 +170,27 @@
       {#if !idx}
         <p class="empty">{m.brokenlinks_no_vault()}</p>
       {:else}
-        <div class="tabs" role="tablist">
-          {#each TABS as [id, label] (id)}
-            <button
-              role="tab"
-              class="tab"
-              class:active={tab === id}
-              aria-selected={tab === id}
-              onclick={() => (tab = id)}
-            >
-              {label}
-              <!-- 안 센 것은 0이 아니라 – 로 — 0은 "봤는데 없다"는 뜻이다. -->
-              <span class="badge">{counts[id] ?? "–"}</span>
-            </button>
+        <div class="split">
+        <div class="tabs" role="tablist" aria-label={m.hygiene_title()}>
+          {#each TAB_GROUPS as group (group.label)}
+            <div class="tab-group-label">{group.label}</div>
+            {#each group.tabs as [id, label] (id)}
+              <button
+                role="tab"
+                class="tab"
+                class:active={tab === id}
+                aria-selected={tab === id}
+                onclick={() => (tab = id)}
+              >
+                <span class="tab-label">{label}</span>
+                <!-- 안 센 것은 0이 아니라 – 로 — 0은 "봤는데 없다"는 뜻이다. -->
+                <span class="badge">{counts[id] ?? "–"}</span>
+              </button>
+            {/each}
           {/each}
         </div>
 
+        <div class="pane">
         {#if tab === "broken"}
           {#if targets.length === 0}
             <p class="empty">{m.brokenlinks_empty()}</p>
@@ -316,6 +339,8 @@
           {/if}
           <p class="hint">{m.hygiene_props_hint()}</p>
         {/if}
+        </div>
+        </div>
       {/if}
     </div>
   </ModalShell>
@@ -327,7 +352,9 @@
     color: var(--text-primary);
     border: 1px solid var(--border-default);
     border-radius: var(--r-lg);
-    width: 560px;
+    /* 좌측 목록이 생기면서 본문 폭이 그만큼 줄었다 — 감사 표는 원래도 560px 에서
+       빠듯했다. `--modal-w-xl` 이 그 자리를 위해 있는 토큰이다. */
+    width: var(--modal-w-xl, 680px);
     max-width: calc(100vw - 40px);
     max-height: calc(100vh - 80px);
     display: flex;
@@ -447,34 +474,74 @@
     line-height: 1.5;
   }
 
-  /* 탭 — 셋을 한 화면에 모았으니 어디에 무엇이 있는지 숫자로 보인다. */
+  /**
+   * 좌측 목록 + 본문.
+   *
+   * ⚠️ `min-height: 0` 두 곳 — 없으면 긴 표가 모달을 밀어내고 화면 밖으로 나간다.
+   * 스크롤은 본문(`.pane`) 안에서 일어나야 한다.
+   */
+  .split {
+    display: grid;
+    grid-template-columns: 176px 1fr;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    border-left: 1px solid var(--border-subtle);
+  }
+
   .tabs {
     display: flex;
-    /* 탭이 다섯이라 560px에서 넘칠 수 있다. 줄이지 말고 접는다 — 줄이면 라벨이 잘린다. */
-    flex-wrap: wrap;
-    gap: 2px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border-subtle);
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--sp-2);
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .tab-group-label {
+    padding: var(--sp-3) var(--sp-3) var(--sp-1);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
   }
 
   .tab {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
     background: none;
     border: none;
-    border-bottom: 2px solid transparent;
-    padding: 8px 10px;
+    border-radius: var(--r-sm);
+    padding: 0 var(--sp-3);
+    height: var(--control-h-md);
     color: var(--text-secondary);
     font-size: 0.8rem;
+    text-align: left;
     cursor: pointer;
   }
+
+  .tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .tab:hover {
+    background: var(--surface-hover);
     color: var(--text-primary);
   }
   .tab.active {
-    color: var(--text-primary);
-    border-bottom-color: var(--accent);
+    background: var(--accent-bg-subtle);
+    color: var(--accent-text);
   }
 
   .badge {

@@ -381,9 +381,31 @@
 </aside>
 
 <style>
-  /* 접힘 스트립 — 폭은 `.workspace` grid 가 준다. 여기서는 내용만 감춘다. */
+  /**
+   * 접힘 스트립 — 폭은 `.workspace` grid 가 준다. 여기서는 내용만 감춘다.
+   *
+   * ⚠️ `display: none` 이었는데 그건 **트랜지션이 안 걸린다.** 모션 명세(A1)가
+   * "내용은 폭보다 **먼저 빠지고 나중에 들어온다**"고 정한 이유는 글자가 좁아지는 폭에
+   * 눌려 찌그러지는 것을 피하기 위해서다.
+   *
+   * - 퇴장: 지연 0 — 폭이 줄기 전에 이미 사라져 있다
+   * - 등장: 40ms 지연 — 폭이 어느 정도 벌어진 뒤에 들어온다
+   *
+   * `visibility` 로 접근성 트리에서도 빼고, 지연을 줘서 **페이드가 끝난 뒤** 사라지게 한다.
+   */
+  .sidebar-body {
+    transition:
+      opacity 120ms var(--ease-standard) 40ms,
+      visibility 0s linear 0s;
+  }
+
   .sidebar-body.hidden {
-    display: none;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 120ms var(--ease-standard),
+      visibility 0s linear 120ms;
   }
 
   .sidebar {

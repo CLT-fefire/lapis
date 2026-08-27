@@ -1,5 +1,6 @@
 import { m } from "$lib/paraglide/messages.js";
 import { writable, get } from "svelte/store";
+import { rememberVault } from "$lib/stores/recentVaults";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   listNotes,
@@ -159,6 +160,9 @@ export async function openVault(path: string): Promise<void> {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(vaultStorageKey(), path);
   }
+  // ⚠️ 최근 목록은 **창 접미사가 없는** 키다. 창별로 갈리면 창 A 에서 연 vault 를
+  //    창 B 의 빈 화면에서 고를 수 없어 목록이 하는 일이 없어진다.
+  rememberVault(path);
   currentNotePath.set(null);
   currentNoteContent.set("");
   // 이전 vault의 인덱스는 새 vault엔 무효 → 명시적으로 비워 이 vault의 첫 빌드를

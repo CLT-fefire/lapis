@@ -1,4 +1,5 @@
 import { cubicOut } from "svelte/easing";
+import { shouldReduceMotion } from "$lib/stores/motionPref";
 
 /**
  * 전환(등장/퇴장) 모션의 단일 소스 (2026-08-05 PR-8).
@@ -16,29 +17,76 @@ import { cubicOut } from "svelte/easing";
 export const MOTION_FAST = 90; // --dur-1
 export const MOTION_BASE = 140; // --dur-2
 export const MOTION_SLOW = 220; // --dur-3
+export const MOTION_XSLOW = 320; // --dur-4
+
+/**
+ * 척도에 없는 값들 — 모션 명세가 이유와 함께 따로 정한 것만 둔다.
+ *
+ * ⚠️ 새 상수를 여기 늘리기 전에 `--dur-*` 넷 중 하나로 되는지 본다. 척도가 늘어나면
+ * "왜 이 값인가"를 아무도 답할 수 없게 된다.
+ */
+/** 스크림 — 카드보다 먼저 깔리고 카드보다 오래 남지 않는다. */
+export const MOTION_SCRIM = 120;
+/** 탭 밑줄 · 읽기↔편집 세그먼트 슬라이드. */
+export const MOTION_SLIDE = 180;
+/** 검색 결과 행 등장. stagger 24ms 와 짝이다. */
+export const MOTION_ROW = 160;
 
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** reduced-motion이면 0, 아니면 그대로. 모든 Svelte transition duration은 이걸 거친다. */
+/**
+ * reduced-motion이면 0, 아니면 그대로. 모든 Svelte transition duration은 이걸 거친다.
+ *
+ * ⚠️ **설정(`data-motion`)이 시스템보다 세다.** 시스템만 보면 "이 앱에서만 줄이고 싶다"와
+ * "시스템에서는 줄여 뒀지만 여기서는 보고 싶다"를 둘 다 표현할 수 없다.
+ */
 export function dur(ms: number): number {
-  return prefersReducedMotion() ? 0 : ms;
+  return shouldReduceMotion(prefersReducedMotion()) ? 0 : ms;
 }
 
-/** 모달·팔레트 backdrop — fade 전용. 카드보다 살짝 빠르게 빠진다. */
+/** 모달·팔레트 스크림 — fade 전용. 카드보다 먼저 깔린다. */
 export function backdropFade() {
-  return { duration: dur(MOTION_FAST) };
+  return { duration: dur(MOTION_SCRIM) };
 }
 
 /**
- * 모달 카드 — scale+fade "pop". Discord 모달의 어휘(작게 시작해 제자리로).
- * start를 0.96보다 낮추면 과장돼 보이므로 이 값을 유지할 것.
+ * 모달 카드 — scale + y + fade.
+ *
+ * ⚠️ **등장과 퇴장의 길이가 다르다**(220 / 140). 닫는 동작이 기다림이 되면 안 된다.
+ * Svelte 의 `transition:` 하나로는 양방향 길이를 못 가르므로 호출부가 `in:`/`out:` 을
+ * 따로 쓴다.
+ *
+ * ⚠️ `scale` 내장 전환을 못 쓴다 — y 이동이 필요한데 그쪽은 배율만 다룬다. 여기서
+ * 직접 `transform` 을 만든다.
  */
-export function cardPop() {
-  return { duration: dur(MOTION_BASE), start: 0.96, easing: cubicOut, opacity: 0 };
+interface CardConfig {
+  duration: number;
+  easing: (t: number) => number;
+  css: (t: number) => string;
 }
+
+/**
+ * ⚠️ Svelte 는 전환 함수를 `(node, params)` 로 부른다. 인자를 안 받게 쓰면
+ * `Expected 0 arguments, but got 1` 로 **컴파일 단계에서** 걸린다 — 다행히 조용하지 않다.
+ * 여기서는 노드가 필요 없지만 시그니처는 맞춰 둔다.
+ */
+function cardMotion(ms: number, fromY: number, fromScale: number) {
+  return (_node?: Element, _params?: unknown): CardConfig => ({
+    duration: dur(ms),
+    easing: cubicOut,
+    css: (t: number) =>
+      `opacity: ${t}; transform: translateY(${(1 - t) * fromY}px) scale(${fromScale + (1 - fromScale) * t})`,
+  });
+}
+
+/** 등장 — 220ms, 위에서 8px 내려오며 .97 → 1. */
+export const cardIn = cardMotion(MOTION_SLOW, -8, 0.97);
+
+/** 퇴장 — 140ms, 더 짧은 거리로 되돌아간다. */
+export const cardOut = cardMotion(MOTION_BASE, -4, 0.985);
 
 /**
  * 드롭다운·컨텍스트 메뉴 — 더 빠르고 더 작게 시작한다.

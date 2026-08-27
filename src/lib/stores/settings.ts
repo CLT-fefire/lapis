@@ -171,12 +171,35 @@ export async function setCustomCssEnabled(on: boolean): Promise<void> {
   }
 }
 
+/**
+ * 있으면 View Transition 으로 감싸고, 없으면 그냥 부른다.
+ *
+ * 반환값을 안 기다린다 — 저장(`patchSettings`)이 애니메이션 끝을 기다릴 이유가 없다.
+ */
+function startViewTransition(apply: () => void): void {
+  const d = typeof document === "undefined" ? null : (document as Document & {
+    startViewTransition?: (cb: () => void) => unknown;
+  });
+  if (!d?.startViewTransition) {
+    apply();
+    return;
+  }
+  d.startViewTransition(apply);
+}
+
 /** 색 테마 프리셋 적용 — 백엔드 JSON + store. */
 export async function applyColorTheme(id: string): Promise<void> {
   const safe = findTheme(id) ? id : DEFAULT_THEME_ID;
   // `setCustomCssEnabled`와 같은 순서 — store를 먼저 세워 화면이 바로 따라오게 하고,
   // 저장은 뒤에 한다. 색을 고르는 조작은 즉시 보이는 것이 전부다.
-  colorTheme.set(safe);
+  //
+  // ⚠️ **토큰에 `transition` 을 걸지 않는다.** 151곳에 걸면 hover 하나에도 색이 늦게
+  //    따라오고, WKWebView 에서 프레임이 떨어진다. 대신 브라우저가 뜬 **스냅샷 한 장**을
+  //    크로스페이드한다 — 리페인트는 한 번, 애니메이션 대상은 요소 하나다.
+  //
+  // ⚠️ `startViewTransition` 이 없는 환경(구형 WebView·테스트)에서는 그냥 즉시 바뀐다.
+  //    여기서 없다고 던지면 색을 아예 못 고르게 된다.
+  startViewTransition(() => colorTheme.set(safe));
   try {
     await patchSettings({ color_theme: safe });
   } catch (e) {

@@ -16,7 +16,94 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-08-28
+
+> The shell redesign (title bar, status bar, single-view sidebar, segmented tabs, underlined
+> tabs) and the color foundation are in the **[3.0.0-beta]** section below. This section covers
+> what landed on top of it.
+
+### Added
+- **The palette has four modes** ([#268]). `⌘P` (files), `⌘⇧F` (content), and `⌘K` open
+  **different modes of the same palette**. **The shortcuts are unchanged.**
+
+  `⌘K` opens in **the mode you used last**. `⇥` cycles All · Files · Content · Commands.
+
+  ⚠️ **`⇥` moved from list navigation to mode cycling.** Through v2 it was an alias for `↓`.
+  The arrow keys still do that job, so nothing is lost — but it is a key your hands remember.
+
+  ⚠️ `tag` (`#`) and `facet` (`:`) are **not** in the cycle; prefixes are the only way in, and
+  `⌘K` does not remember them. Remembering them would reopen a palette showing tags with an
+  empty input.
+- **Folder chips and `rel` scores in content mode** ([#268]). `rel` is the value the CLI and
+  MCP already emit — relevance within the query, where the top hit is `1.00`.
+
+  ⚠️ Raw BM25 is not shown. Its scale differs per query (63 vs 1,494), which invites readers to
+  compare across queries.
+
+  ⚠️ Chips come from the results **before** filtering. Derived after, picking one chip would
+  make the others vanish, leaving no way to move to another folder.
+- **Three animation settings** ([#268]). Settings → Appearance → System / Minimal / Full.
+
+  ⚠️ **The setting beats the system.** Reading only `prefers-reduced-motion` cannot express
+  "quiet in this app alone" or "reduced system-wide but not here".
+
+  ⚠️ **Spinners and progress bars keep moving on Minimal.** They report work in progress; a
+  stopped indicator reads as "finished".
+- **Three density steps** ([#268]). Cozy / Default / Compact, up from two in v2.0.0.
+
+  ⚠️ **Text size is identical across all three.** Legibility is not a density concern. Shell
+  dimensions and window buttons do not follow density either — they answer to OS convention.
+- **A full-screen empty state** ([#268]). The no-vault screen moved out of the sidebar. A
+  **recent vaults list** (up to 5) shortens the path when you open a different vault per window.
+
+  ⚠️ v2 kept the message inside the sidebar while the rest of the screen — tab strip, note
+  header, context panel — rendered as usual. One empty panel among full ones reads as "something
+  failed to load", not "nothing is selected yet".
+- **A window chrome switch on Windows** ([#268]). Settings → Appearance → Title bar. When on,
+  the app bar doubles as the title bar and draws its own caption buttons (46×40, close hover
+  `#c42b1c`).
+
+  ⚠️ **It is applied at runtime, not written into `tauri.conf.json`.** Putting
+  `decorations: false` in the config would produce an undecorated window even when the frontend
+  fails to boot — and then the window can be neither moved nor closed, because whatever would
+  draw the caption buttons is dead.
+
+  ⚠️ **The switch does not appear on macOS.** There, `setDecorations(false)` removes the traffic
+  lights too, leaving ⌘Q as the only way out. What macOS wants is `titleBarStyle: "Overlay"`,
+  which is a build-time setting and cannot be toggled at runtime. A control that does nothing is
+  indistinguishable from a broken one.
+
+### Changed
+- **Modals enter in 220ms and leave in 140ms** ([#268]). Closing is stepping away, not waiting
+  for a result; at equal length it *feels* slow. Cards now add `y −8→0` to `scale .97→1`.
+- **Tab underline and the read/edit segment slide** ([#268]). 180ms. The underline is **one
+  element for the whole strip**, moved with `transform` — it does not wait on body rendering.
+
+  ⚠️ Its position is measured (tabs reorder by drag and scroll horizontally). If measurement
+  fails it draws **nothing**, which beats leaving a line in the wrong place.
+- **Theme switching is a snapshot crossfade** ([#268]). No `transition` on the 151 token sites —
+  that would make color lag behind every hover. A browser View Transition snapshot crossfades
+  over 320ms instead. Where it is unsupported, colors change instantly.
+- **250ms hover-intent delay on rail tooltips** ([#268]). Without it, brushing past the rail pops
+  six bubbles in a row. **There is no delay on exit**, and none for keyboard focus.
+- **A shimmer on the indexing pill** ([#268]). Width says how far along; the shimmer says still
+  running. When an index build holds the main thread the width stalls, and this is what separates
+  stalled from finished.
+- **The vault hygiene modal uses a left list** ([#268]). Five horizontal tabs split into two
+  groups — **from the graph** (broken links, orphans, tags, unlinked mentions) and **filterable
+  axes** (frontmatter). Five in a row read as one kind of thing; there are two.
+- **The custom CSS example uses the new tokens** ([#268]). The accent example now sets **all
+  three** — overriding one leaves the other two at their old values, so only links come out wrong.
+
 ### Fixed
+- **Spinners froze under "Animation: Minimal"** ([#268]). The `[data-motion="minimal"]` reset was
+  missing the restore list for functional indicators entirely.
+
+  Measuring that turned up something else: four of the five restored class names **did not exist
+  anywhere in the app** — leftovers from the old infinite sliding bar. Dead names tell the next
+  reader "this is being maintained" while maintaining nothing. `motionReset.test.ts` now checks
+  both that the two lists agree and that every name has a referent.
+
 - **Windows builds died on pre-release versions.** The MSI bundler requires the pre-release
   identifier to be **numeric** — it rejected `beta` in `3.0.0-beta` and the whole bundle step
   failed. Windows now produces only the NSIS installer (`.exe`).
@@ -24,6 +111,40 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   ⚠️ The target list is scoped to Windows via `tauri.windows.conf.json`. Touching `"all"` in
   the shared `tauri.conf.json` would change the macOS artifacts too, and MSI is a
   Windows-only target — there is nothing to remove there.
+
+### Not done
+- **Animating panel collapse/expand width.** Two approaches, both measured and both failed:
+  `transition: grid-template-columns` **never reached its final value** (collapsed state, old
+  width), and a length registered with `@property` snapped instantly — the same on a freshly
+  created bare element.
+
+  Width changes instantly. What did land is the **content fade** (120ms, 40ms delay on enter),
+  which is what actually solves the problem the width animation was for (text squashing as the
+  column narrows). Details in the "panel width" block of `app.css`.
+
+### Token renames (affects custom CSS)
+
+| Old | New | Note |
+|---|---|---|
+| `--dur-fast` | `--dur-1` | 90ms. The old name stays as an alias for **one release** |
+| `--dur-base` | `--dur-2` | 140ms |
+| `--dur-slow` | `--dur-3` | 220ms |
+| — | `--dur-4` | 320ms, new |
+| `--border-*` | unchanged | values went from opaque grey to rgba hairlines |
+| — | `--accent-solid` · `--accent-text` | new |
+| — | `--n-250` · `--n-350` | new ramp steps |
+| — | `--titlebar-h` · `--statusbar-h` · `--collapsed-strip-w` | new shell dimensions |
+
+Custom CSS that used `--accent` as a text color should move to `--accent-text`.
+The `data-lapis` hooks went from fifteen to **seventeen** (`titlebar`, `vault-empty`).
+
+### Unchanged
+
+The shortcut table, the single dark theme, "vault hygiene does not judge", file-granular replace,
+indexing only frontmatter `tags:`, `mcp_enabled` off by default, one index producer in Rust.
+
+⚠️ **`CACHE_VERSION` is unchanged (7). This release does not trigger a re-index.** A UI overhaul
+has no reason to invalidate the cache.
 
 ## [3.0.0-beta] — 2026-08-28
 
@@ -1484,7 +1605,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.0...main
+[3.0.0]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...v3.0.0
 [3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
 [2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eren0315/lapis/compare/v2.3.1...v2.4.0
@@ -1533,6 +1655,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#268]: https://github.com/eren0315/lapis/pull/268
+[#267]: https://github.com/eren0315/lapis/pull/267
 [#265]: https://github.com/eren0315/lapis/pull/265
 [#264]: https://github.com/eren0315/lapis/pull/264
 [#263]: https://github.com/eren0315/lapis/pull/263

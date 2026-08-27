@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
+  import { tick } from "svelte";
   import { slide } from "svelte/transition";
   import { tabChip } from "$lib/motion";
   import { openTabs } from "$lib/stores/tabs";
@@ -108,6 +109,45 @@
     e.stopPropagation(); // 탭 활성화와 분리
     togglePin(path);
   }
+
+  /**
+   * 활성 탭 밑줄의 자리. `w: 0` 이면 안 그린다.
+   *
+   * ⚠️ `scrollLeft` 를 빼야 한다. 밑줄은 스트립 안에서 같이 흐르는 요소라 스크롤이
+   * 이미 반영돼 있고, 여기서 또 빼면 스크롤할 때마다 밑줄이 두 배로 움직인다.
+   */
+  let underline = $state({ x: 0, w: 0 });
+
+  function measureUnderline() {
+    if (!barEl) return;
+    const el = barEl.querySelector<HTMLElement>(".tab.active");
+    if (!el) {
+      underline = { x: 0, w: 0 };
+      return;
+    }
+    underline = { x: el.offsetLeft, w: el.offsetWidth };
+  }
+
+  /**
+   * 탭 목록·활성 탭·dirty 표시가 바뀌면 다시 잰다.
+   *
+   * ⚠️ `tick()` 뒤에 재야 한다. 이 effect 가 도는 시점에는 새 탭이 아직 DOM 에 없어서
+   * `offsetLeft` 가 옛 자리를 낸다 — 밑줄이 **한 박자 늦게** 따라온다.
+   */
+  $effect(() => {
+    void $openTabs;
+    void $currentNotePath;
+    void $isDirty;
+    void tick().then(measureUnderline);
+  });
+
+  /** 창 크기·스트립 스크롤이 바뀌어도 자리는 유지돼야 한다. */
+  $effect(() => {
+    if (!barEl) return;
+    const ro = new ResizeObserver(() => measureUnderline());
+    ro.observe(barEl);
+    return () => ro.disconnect();
+  });
 </script>
 
 {#if $openTabs.length > 0}
@@ -121,6 +161,21 @@
     ondragover={onBarDragOver}
     ondrop={onBarDrop}
   >
+    <!--
+      ⚠️ 밑줄은 **탭마다 하나씩이 아니라 전체에 하나**다. 탭마다 `box-shadow` 로 그리면
+      전환이 "꺼지고 켜진다"가 되는데, 모션 명세(A3)는 밑줄이 **미끄러진다**고 정한다 —
+      본문은 즉시 바뀌고 인상만 밑줄이 만든다는 설계다.
+
+      ⚠️ 자리는 측정해서 잡는다. 탭이 드래그로 재정렬되고 가로로 스크롤되므로 CSS 만으로는
+      활성 탭의 x 를 알 수 없다. 측정에 실패하면 `width: 0` 이라 **아무것도 안 그린다** —
+      틀린 자리에 줄이 남는 것보다 낫다.
+    -->
+    <span
+      class="underline"
+      aria-hidden="true"
+      style="transform: translateX({underline.x}px); width: {underline.w}px"
+    ></span>
+
     {#each $openTabs as path, i (path)}
       <div
         class="tab"
@@ -220,6 +275,30 @@
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
+    /* 밑줄이 `position: absolute` 로 이 안에 산다. */
+    position: relative;
+  }
+
+  /**
+   * 활성 탭 밑줄 — 자리를 **transform 으로** 옮긴다.
+   *
+   * ⚠️ `left` 를 애니메이션하면 매 프레임 레이아웃이 다시 돈다. `transform` 은 합성
+   * 단계에서 끝나므로 본문 렌더를 기다리지 않는다 — 모션 명세(A3)가 "본문은 즉시 바꾸고
+   * 밑줄만 움직인다"고 한 이유다.
+   *
+   * ⚠️ `width` 는 transform 이 아니라 어쩔 수 없이 레이아웃 속성이다. 탭 폭이 제각각이라
+   * 대안이 없고, 요소 하나뿐이라 비용이 작다.
+   */
+  .underline {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    pointer-events: none;
+    transition:
+      transform 180ms var(--ease-panel),
+      width 180ms var(--ease-panel);
   }
 
   .tab {
@@ -246,8 +325,8 @@
     color: var(--text-secondary);
   }
 
+  /* 밑줄은 공용 `.underline` 이 그린다 — 여기서 또 그리면 두 줄이 된다. */
   .tab.active {
-    box-shadow: inset 0 -2px 0 var(--accent);
     color: var(--text-primary);
     font-weight: 600;
   }

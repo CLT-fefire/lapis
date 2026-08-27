@@ -24,6 +24,25 @@ import { noteMtimes } from "$lib/stores/mtimes";
  */
 export type PaletteMode = "all" | "command" | "tag" | "facet" | "files" | "fulltext";
 
+/**
+ * `Tab` 이 도는 모드. **접두사로만 들어가는 `tag`·`facet` 은 여기 없다** — 그 둘은
+ * `#`/`:` 를 치면 바로 가는 곳이라 순환에 넣으면 같은 자리를 두 경로로 들르게 된다.
+ */
+export const CYCLE_MODES = ["all", "files", "fulltext", "command"] as const;
+
+/**
+ * 다음(또는 이전) 모드.
+ *
+ * ⚠️ 순환 밖(`tag`·`facet`)에서는 **`all` 에 있었던 것처럼** 움직인다. 그냥 두면
+ * `Tab` 이 죽은 키가 되는데, 죽은 키는 고장과 구별이 안 된다.
+ */
+export function cycleMode(current: PaletteMode, dir: 1 | -1): PaletteMode {
+  const at = (CYCLE_MODES as readonly PaletteMode[]).indexOf(current);
+  const from = at < 0 ? 0 : at;
+  const n = CYCLE_MODES.length;
+  return CYCLE_MODES[(from + dir + n) % n];
+}
+
 export type PaletteEntry =
   | { kind: "note"; path: string; label: string; subtitle?: string }
   | { kind: "content"; path: string; name: string; snippet: string }
@@ -60,6 +79,15 @@ export function parseInput(raw: string, hint: PaletteMode = "all"): ParsedInput 
   // hint가 "files"/"fulltext"면 prefix 무시하고 그 모드 유지 (Cmd+P/Cmd+Shift+F 호환)
   if (hint === "files" || hint === "fulltext") {
     return { mode: hint, query: raw.trim() };
+  }
+  /**
+   * ⚠️ 명령 모드도 힌트를 존중해야 한다. 3.0 의 `Tab` 순환이 접두사 없이 이 모드로
+   * 보내기 때문이다 — 여기서 빠지면 `Tab` 을 눌러도 **아무 일도 안 일어난다.**
+   * 사용자가 `>` 를 또 쳤을 때 그 글자가 질의에 남지 않도록 한 번 벗긴다.
+   */
+  if (hint === "command") {
+    const q = raw.trim();
+    return { mode: "command", query: (q.startsWith(">") ? q.slice(1) : q).trim() };
   }
   if (raw.startsWith(">")) return { mode: "command", query: raw.slice(1).trim() };
   if (raw.startsWith("#")) return { mode: "tag", query: raw.slice(1).trim() };
@@ -531,4 +559,47 @@ export function isGroupVisible(mode: PaletteMode, group: GroupName): boolean {
     case "commands":
       return mode === "all" || mode === "command";
   }
+}
+
+/**
+ * 질의 **내** 상대 점수 `[0, 1]` — top-1 이 1.0.
+ *
+ * MCP `ResultRow.rel` 과 같은 뜻으로 맞춰 둔다. raw 점수는 질의마다 스케일이 달라
+ * ("63점 vs 1,494점") 행 간 비교밖에 안 되는데, 화면에 그 숫자를 그대로 내면 읽는
+ * 사람이 질의를 가로질러 비교하게 된다.
+ *
+ * ⚠️ `top` 이 0 이면 NaN 이 화면에 나온다. 숫자가 아닌 것은 숫자보다 나쁘다.
+ */
+export function relScore(score: number, top: number): number {
+  if (!(top > 0)) return 0;
+  return Math.max(0, score / top);
+}
+
+/** 폴더 칩 하나. `path` 가 빈 문자열이면 vault 루트다. */
+export interface FolderChip {
+  path: string;
+  count: number;
+}
+
+/**
+ * 본문 결과가 **어느 폴더에 몰려 있나**.
+ *
+ * ⚠️ `kind: "content"` 만 센다. 최근·바뀐 그룹도 경로를 들고 전문 모드에서 함께
+ * 보이지만 그것들은 **질의가 찾아낸 것이 아니다** — 섞으면 칩이 질의와 무관해지고,
+ * 무관한 필터는 결과를 지우면서 이유를 안 알려준다.
+ *
+ * 동점을 경로순으로 가르는 것도 중요하다. 안 그러면 같은 질의가 매번 다른 순서를 낸다.
+ */
+export function folderChips(results: readonly PaletteResult[], limit = 6): FolderChip[] {
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    if (r.entry.kind !== "content") continue;
+    const at = r.entry.path.lastIndexOf("/");
+    const dir = at < 0 ? "" : r.entry.path.slice(0, at);
+    counts.set(dir, (counts.get(dir) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([path, count]) => ({ path, count }))
+    .sort((a, b) => b.count - a.count || a.path.localeCompare(b.path))
+    .slice(0, limit);
 }
