@@ -1,10 +1,33 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import VaultHygieneModal from "./VaultHygieneModal.svelte";
 import { buildIndex } from "./linkIndex";
 import { linkIndex } from "$lib/stores/vault";
 import { brokenLinksOpen } from "$lib/stores/brokenLinks";
+import { vaultPath } from "$lib/stores/vault";
 import type { LinkInfo } from "$lib/tauri/notes";
+
+/**
+ * ⚠️ 넷째 탭만 **본문**을 읽는다(`read_vault_bundle`). 나머지 셋은 인덱스만 본다.
+ * 여기서 목을 두는 이유는 그 비대칭 자체가 이 탭의 설계라서다 — 목이 없으면 탭이
+ * 조용히 "실패" 상태로 떨어지고, 그건 빈 화면과 구별이 안 된다.
+ */
+const bundleBodies = vi.fn<() => Record<string, string>>(() => ({}));
+let bundleFails = false;
+vi.mock("$lib/tauri/notes", () => ({
+  readVaultBundle: async () => {
+    if (bundleFails) throw new Error("read failed");
+    return {
+      links: [],
+      contents: Object.entries(bundleBodies()).map(([path, body]) => ({
+        path,
+        name: path,
+        body,
+      })),
+      stats: { walk_ms: 0, read_ms: 0, file_count: 0 },
+    };
+  },
+}));
 
 /**
  * vault 위생 모달이 **실제로 그리는 것**을 본다.
@@ -82,6 +105,9 @@ const textOf = (sel: string) =>
   [...document.querySelectorAll(sel)].map((e) => e.textContent?.trim() ?? "");
 
 beforeEach(() => {
+  bundleBodies.mockReturnValue({});
+  bundleFails = false;
+  vaultPath.set("/v");
   linkIndex.set(fixture());
   brokenLinksOpen.set(true);
   render();
@@ -93,14 +119,24 @@ afterEach(() => {
   host?.remove();
   brokenLinksOpen.set(false);
   linkIndex.set(null);
+  vaultPath.set(null);
 });
 
 describe("탭 바", () => {
-  it("탭이 셋이고 각각 숫자를 단다", () => {
+  it("탭이 넷이고 각각 숫자를 단다", () => {
     const badges = textOf(".tab .badge");
-    expect(badges).toHaveLength(3);
+    expect(badges).toHaveLength(4);
     // 끊긴 링크 1(없는문서) · 고아 4(hub·lonely·dup 둘) · 태그 2묶음 + 모호한 이름 1 = 3
-    expect(badges).toEqual(["1", "4", "3"]);
+    // 넷째는 아직 안 셌다 — 본문을 읽어야 알 수 있고, 탭을 열기 전에는 안 읽는다.
+    expect(badges).toEqual(["1", "4", "3", "–"]);
+  });
+
+  /**
+   * ⚠️ **0이 아니라 – 여야 한다.** 0은 "봤는데 없다"는 뜻이라, 아무것도 안 읽고 0을
+   * 띄우면 깨끗하지 않은 vault를 깨끗하다고 말하게 된다. 조용히 틀리는 종류다.
+   */
+  it("안 센 탭의 배지는 0이 아니다", () => {
+    expect(textOf(".tab .badge")[3]).not.toBe("0");
   });
 
   /**
@@ -108,8 +144,8 @@ describe("탭 바", () => {
    * 픽스처가 실제로 셋 다 채웠는지 따로 못 박는다 — 그래야 아래 탭 테스트가
    * "빈 목록을 확인하며 통과"하지 않는다.
    */
-  it("픽스처가 세 탭을 전부 채웠다", () => {
-    expect(textOf(".tab .badge").every((n) => Number(n) > 0)).toBe(true);
+  it("픽스처가 인덱스만으로 되는 세 탭을 전부 채웠다", () => {
+    expect(textOf(".tab .badge").slice(0, 3).every((n) => Number(n) > 0)).toBe(true);
   });
 
   it("첫 탭이 선택된 채로 열린다", () => {
@@ -207,13 +243,13 @@ describe("빈 상태", () => {
    * 깨끗한 vault에서 **탭이 사라지지 않는지** 본다. 숫자 0을 보여주는 것이
    * 이 화면의 값이다 — 목록이 비면 탭까지 없애는 구현이면 "왜 안 보이지"가 된다.
    */
-  it("문제가 없어도 탭 셋과 0이 남는다", () => {
+  it("문제가 없어도 탭 넷과 0이 남는다", () => {
     // 서로 가리키는 두 노트 — 어느 쪽도 고아가 아니고 끊긴 링크도 없다.
     linkIndex.set(
       buildIndex([mkInfo("/v/a.md", { targets: ["b"] }), mkInfo("/v/b.md", { targets: ["a"] })]),
     );
     flushSync();
-    expect(textOf(".tab .badge")).toEqual(["0", "0", "0"]);
+    expect(textOf(".tab .badge")).toEqual(["0", "0", "0", "–"]);
     expect(document.querySelector(".empty")).not.toBeNull();
   });
 });
@@ -224,5 +260,53 @@ describe("vault가 없을 때", () => {
     flushSync();
     expect(tabs()).toHaveLength(0);
     expect(document.querySelector(".empty")).not.toBeNull();
+  });
+});
+
+describe("안 걸린 언급 탭", () => {
+  /** ⚠️ 다른 셋과 달리 탭을 **열 때** 본문을 읽는다. 앱은 본문을 들고 있지 않다. */
+  const settle = async () => {
+    await vi.waitFor(() => {
+      flushSync();
+      // ⚠️ 문구가 아니라 **표식**으로 기다린다. 문구로 기다리면 i18n을 고칠 때
+      //    조용히 "읽는 중" 화면을 검사하게 된다 — 실제로 한 번 그랬다.
+      expect(document.querySelector(".empty.loading")).toBeNull();
+    });
+  };
+
+  it("탭을 열면 그때 읽어서 목록을 낸다", async () => {
+    bundleBodies.mockReturnValue({
+      "/v/hub.md": "여기서도 seen 을 말한다",
+      "/v/seen.md": "본문",
+      "/v/lonely.md": "여기서 seen 을 말한다",
+      "/v/x/dup.md": "본문",
+      "/v/y/dup.md": "본문",
+    });
+    clickTab(3);
+    await settle();
+    // hub 는 이미 `seen` 으로 링크가 있다 — 같은 말을 해도 간선은 이미 있다.
+    expect(textOf(".targets .target .src")).toEqual(["seen"]);
+    expect(textOf(".targets .sources .src")).toEqual(["lonely:1"]);
+    expect(textOf(".preview")).toEqual(["여기서 seen 을 말한다"]);
+  });
+
+  it("배지가 – 에서 실제 숫자로 바뀐다", async () => {
+    bundleBodies.mockReturnValue({ "/v/lonely.md": "여기서 seen 을 말한다" });
+    expect(textOf(".tab .badge")[3]).toBe("–");
+    clickTab(3);
+    await settle();
+    expect(textOf(".tab .badge")[3]).toBe("1");
+  });
+
+  /**
+   * ⚠️ 읽기 실패를 빈 목록으로 삼키면 **"깨끗하다"로 보인다.** 이 감사에서 가장
+   * 조용한 고장이라 따로 못 박는다.
+   */
+  it("본문을 못 읽으면 비었다고 하지 않는다", async () => {
+    bundleFails = true;
+    clickTab(3);
+    await settle();
+    expect(textOf(".empty")).toEqual([expect.not.stringMatching(/^$/)]);
+    expect(textOf(".tab .badge")[3]).toBe("–");
   });
 });

@@ -2,15 +2,26 @@
   import { m } from "$lib/paraglide/messages.js";
   import ModalShell from "$lib/ModalShell.svelte";
   import { brokenLinksOpen, closeBrokenLinks } from "$lib/stores/brokenLinks";
-  import { linkIndex, selectNote } from "$lib/stores/vault";
+  import { linkIndex, selectNote, vaultPath } from "$lib/stores/vault";
+  import { readVaultBundle } from "$lib/tauri/notes";
   import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
-  import { findOrphans, findTagIssues, findAmbiguousNames, type TagIssueKind } from "$lib/vaultAudit";
+  import {
+    findOrphans,
+    findTagIssues,
+    findAmbiguousNames,
+    findUnlinkedMentions,
+    type TagIssueKind,
+    type UnlinkedMention,
+  } from "$lib/vaultAudit";
 
   /**
-   * vault 위생 — 끊긴 링크 · 고아 노트 · 태그 중복을 한 화면에 모은다.
+   * vault 위생 — 끊긴 링크 · 고아 노트 · 태그 중복 · 안 걸린 언급을 한 화면에 모은다.
    *
-   * 셋을 따로 두지 않는 이유: 전부 "vault를 정비하려고 여는" 화면이고, 팔레트 항목을
-   * 셋으로 늘리면 자주 안 쓰는 것이 목록을 셋이나 차지한다.
+   * 따로 두지 않는 이유: 전부 "vault를 정비하려고 여는" 화면이고, 팔레트 항목을 넷으로
+   * 늘리면 자주 안 쓰는 것이 목록을 넷이나 차지한다.
+   *
+   * 네 감사는 같은 그래프를 각기 다른 각도에서 본다 — 가리켰는데 없다 · 아무도 안
+   * 가리킨다 · 이름이 갈린다 · **말했는데 안 가리킨다.**
    *
    * ## ⚠️ 판단하지 않는다
    *
@@ -24,8 +35,19 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab = "broken" | "orphans" | "tags";
+  type Tab = "broken" | "orphans" | "tags" | "unlinked";
   let tab = $state<Tab>("broken");
+
+  /**
+   * ⚠️ 넷째 탭만 **본문**이 있어야 한다. 나머지 셋은 인덱스만으로 되고, 앱은 본문을
+   * 들고 있지 않다(기동 때 인덱스를 짓고 버린다). 그래서 이 탭은 열 때 한 번 읽는다.
+   *
+   * `null`은 "아직 안 셌다"이고 `[]`는 "세었더니 없다"이다. 둘을 합치면 배지가 0을
+   * 띄우는데, 그건 **아무것도 안 봤으면서 깨끗하다고 말하는 것**이다.
+   */
+  let unlinked = $state<UnlinkedMention[] | null>(null);
+  let unlinkedBusy = $state(false);
+  let unlinkedFailed = $state(false);
 
   const idx = $derived($brokenLinksOpen ? $linkIndex : null);
   const targets = $derived(idx ? findBrokenLinks(idx) : []);
@@ -34,6 +56,38 @@
   const tagIssues = $derived(idx ? findTagIssues([...idx.byPath.values()]) : []);
   const ambiguous = $derived(idx ? findAmbiguousNames(idx) : []);
 
+  // 모달을 닫으면 버린다 — 다음에 열 때 vault가 그대로라는 보장이 없다.
+  // 감사 셋이 캐시를 안 두는 것과 같은 이유다(무효화 경로를 둘로 만들지 않는다).
+  $effect(() => {
+    if (!$brokenLinksOpen) {
+      unlinked = null;
+      unlinkedFailed = false;
+    }
+  });
+
+  $effect(() => {
+    if (tab === "unlinked" && unlinked === null && !unlinkedBusy && !unlinkedFailed) {
+      void loadUnlinked();
+    }
+  });
+
+  async function loadUnlinked(): Promise<void> {
+    const root = $vaultPath;
+    const index = $linkIndex;
+    if (!root || !index) return;
+    unlinkedBusy = true;
+    try {
+      const bundle = await readVaultBundle(root);
+      const bodies = new Map(bundle.contents.map((c) => [c.path, c.body]));
+      unlinked = findUnlinkedMentions(index, bodies);
+    } catch {
+      // 읽기 실패를 빈 목록으로 삼키면 "깨끗하다"로 보인다.
+      unlinkedFailed = true;
+    } finally {
+      unlinkedBusy = false;
+    }
+  }
+
   const TAG_LABEL: Record<TagIssueKind, () => string> = {
     "same-leaf": () => m.hygiene_tags_same_leaf(),
     "case-only": () => m.hygiene_tags_case_only(),
@@ -41,11 +95,20 @@
   };
 
   /** 탭 옆의 숫자 — 열기 전에 어디를 봐야 할지 알려준다. */
-  const counts = $derived({
+  const counts = $derived<Record<Tab, number | null>>({
     broken: targets.length,
     orphans: orphans.length,
     tags: tagIssues.length + ambiguous.length,
+    // null = 아직 안 셌다. 0을 띄우면 안 본 것을 깨끗하다고 말하게 된다.
+    unlinked: unlinked === null ? null : unlinked.length,
   });
+
+  const TABS = $derived<[Tab, string][]>([
+    ["broken", m.hygiene_tab_broken()],
+    ["orphans", m.hygiene_tab_orphans()],
+    ["tags", m.hygiene_tab_tags()],
+    ["unlinked", m.hygiene_tab_unlinked()],
+  ]);
 
   async function go(path: string) {
     closeBrokenLinks();
@@ -69,16 +132,17 @@
         <p class="empty">{m.brokenlinks_no_vault()}</p>
       {:else}
         <div class="tabs" role="tablist">
-          {#each [["broken", m.hygiene_tab_broken()], ["orphans", m.hygiene_tab_orphans()], ["tags", m.hygiene_tab_tags()]] as const as [id, label] (id)}
+          {#each TABS as [id, label] (id)}
             <button
               role="tab"
               class="tab"
               class:active={tab === id}
               aria-selected={tab === id}
-              onclick={() => (tab = id as Tab)}
+              onclick={() => (tab = id)}
             >
               {label}
-              <span class="badge">{counts[id as Tab]}</span>
+              <!-- 안 센 것은 0이 아니라 – 로 — 0은 "봤는데 없다"는 뜻이다. -->
+              <span class="badge">{counts[id] ?? "–"}</span>
             </button>
           {/each}
         </div>
@@ -128,7 +192,7 @@
             </ul>
           {/if}
           <p class="hint">{m.hygiene_orphans_hint()}</p>
-        {:else}
+        {:else if tab === "tags"}
           {#if tagIssues.length === 0 && ambiguous.length === 0}
             <p class="empty">{m.hygiene_tags_empty()}</p>
           {:else}
@@ -171,6 +235,46 @@
             {/if}
           {/if}
           <p class="hint">{m.hygiene_tags_hint()}</p>
+        {:else}
+          {#if unlinkedBusy}
+            <!-- `loading` 은 테스트가 "읽는 중"과 "읽었더니 없다"를 문구 없이 가르는 표식이다. -->
+            <p class="empty loading">{m.hygiene_unlinked_loading()}</p>
+          {:else if unlinkedFailed}
+            <p class="empty">{m.hygiene_unlinked_failed()}</p>
+          {:else if unlinked !== null && unlinked.length === 0}
+            <p class="empty">{m.hygiene_unlinked_empty()}</p>
+          {:else if unlinked !== null}
+            <p class="summary">
+              {m.hygiene_unlinked_summary({
+                names: unlinked.length,
+                mentions: unlinked.reduce((n, r) => n + r.total, 0),
+              })}
+            </p>
+            <ul class="targets">
+              {#each unlinked as u (u.target + "|" + u.name)}
+                <li>
+                  <div class="target">
+                    <button class="src" title={u.target} onclick={() => go(u.target)}>
+                      {u.name}
+                    </button>
+                    <span class="count">{m.hygiene_unlinked_where({ count: u.total })}</span>
+                  </div>
+                  <ul class="sources">
+                    {#each u.sources as s (s.path)}
+                      <li>
+                        <button class="src" title={s.path} onclick={() => go(s.path)}>
+                          {s.name}:{s.line}
+                        </button>
+                        <!-- 미리보기가 있어야 진짜 그 노트를 말한 건지 판단할 수 있다. -->
+                        <span class="preview">{s.preview}</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <p class="hint">{m.hygiene_unlinked_hint()}</p>
         {/if}
       {/if}
     </div>
@@ -257,6 +361,16 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     white-space: nowrap;
+  }
+
+  /* 미리보기 — 한 줄로 자른다. 여러 줄이 되면 목록이 훑기 어려워진다. */
+  .preview {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .sources {

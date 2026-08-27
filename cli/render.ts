@@ -205,6 +205,33 @@ export function renderOrphans(rows: readonly OrphanRow[]): string {
   ]);
 }
 
+export interface UnlinkedRow {
+  name: string;
+  target: string;
+  total: number;
+  sources: { path: string; line: number; count: number; preview: string }[];
+}
+
+/**
+ * 링크 안 걸린 언급 — 대상별로 묶고 출처를 편다.
+ *
+ * ⚠️ 미리보기를 같이 낸다. 이름과 경로만 보여 주면 **그게 진짜 그 노트를 말한 건지**
+ * 판단할 수 없고, 판단 못 하는 목록은 안 본다.
+ */
+export function renderUnlinked(rows: readonly UnlinkedRow[]): string {
+  if (rows.length === 0) return "링크 안 걸린 언급 없음";
+  const out: string[] = [];
+  for (const r of rows) {
+    out.push(`${r.name}  (${r.total}곳 → ${r.target})`);
+    for (const s of r.sources) {
+      const n = s.count > 1 ? ` ×${s.count}` : "";
+      out.push(`    ${s.path}:${s.line}${n}`);
+      out.push(`      ${s.preview}`);
+    }
+  }
+  return out.join("\n");
+}
+
 export interface TagIssueRow {
   kind: string;
   tags: { tag: string; count: number }[];
