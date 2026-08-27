@@ -1340,9 +1340,14 @@ import { applyUserCss, isPanicChord } from "$lib/userCss";
           {#if isDebug}
             <span class="debug-badge" title={m.page_debug_badge()}>DEBUG</span>
           {/if}
-          {#if appVersion}
-            <span class="phase">v{appVersion}</span>
-          {/if}
+          <!--
+            ⚠️ 버전은 여기 없다. **설정 카테고리 목록 하단**이 유일한 자리다
+            (D단계 #239, 디스코드가 버전을 두는 곳). 노트를 볼 때마다 보일 이유가
+            없는 정보다.
+
+            DEBUG 배지는 남는다 — 그건 참고 정보가 아니라 "지금 보는 창이 어느
+            빌드인가"라서, 릴리즈 창과 나란히 띄웠을 때 상시 보여야 한다.
+          -->
       {#if $mainPane === "preview"}
       <ReadingControls />
       <PaneMenu label={m.page_preview_more()} items={previewMenuItems} />
@@ -1520,9 +1525,6 @@ import { applyUserCss, isPanicChord } from "$lib/userCss";
     user-select: none;
   }
 
-  .phase {
-    color: var(--text-secondary);
-  }
 
   .nav-history {
     position: relative;
