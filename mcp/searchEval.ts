@@ -179,6 +179,15 @@ export function shuffledPool(vc: VaultCache, seed: number): VaultCache["infos"] 
 
 /** 평가 케이스 생성 — 문서 1건당 `title` · `title-short` · `body` 3종. */
 export function buildCases(vc: VaultCache, sampleSize: number, seed = 12345): EvalCase[] {
+  // ⚠️ **`NaN`이 들어오면 조용히 빈 배열이 된다.** 마지막 줄의 `slice(0, sampleSize * 3)`가
+  //    `slice(0, NaN)`이 되고, JS는 그걸 `slice(0, 0)`으로 읽는다. 예외도 경고도 없다.
+  //
+  //    실제로 `Number(process.argv[2])` 한 줄 때문에 하네스가 **0건을 재고 ✅를 냈다.**
+  //    호출부에서 인자를 검증하게 고쳤지만, 조용히 틀리는 지점은 **여기**다 — 다른 호출부가
+  //    생겨도 같은 함정에 안 빠지도록 이 자리에서 막는다.
+  if (!Number.isInteger(sampleSize) || sampleSize <= 0) {
+    throw new RangeError(`buildCases: sampleSize는 양의 정수여야 한다 (받은 값: ${sampleSize})`);
+  }
   const cases: EvalCase[] = [];
   for (const info of shuffledPool(vc, seed)) {
     if (cases.length >= sampleSize * 3) break;

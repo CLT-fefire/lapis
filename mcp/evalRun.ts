@@ -23,6 +23,7 @@ import {
   summarize,
   type CaseResult,
 } from "./searchEval.ts";
+import { readDevArgs } from "./devArgs.ts";
 import { unionRankDetailed } from "./entry.ts";
 
 /**
@@ -60,8 +61,32 @@ const BUDGET = {
 const PROBE_WORDS = [16, 32] as const;
 const PROBE_COUNT = 30;
 
-const vc = resolveVault();
-const clean = buildCases(vc, Number(process.argv[2] ?? 150));
+const args = readDevArgs(process.argv.slice(2), { defaultSample: 150, name: "lapis-eval" });
+const vc = resolveVault(args.vault);
+const clean = buildCases(vc, args.sample);
+
+/**
+ * ⚠️ **잰 것이 없으면 통과라고 말하지 않는다.**
+ *
+ * 예전엔 `Number(process.argv[2])`가 `NaN`이면 `slice(0, NaN)`이 빈 배열이 되어 **케이스
+ * 0건**으로 돌았고, 품질 칸이 전부 `NaN%`인 채 마지막 줄에 ✅를 내며 0으로 끝났다.
+ * `./mcp/lapis-eval --vault <경로>` 한 번으로 그 상태가 된다.
+ *
+ * 측정 도구는 다른 판단의 근거다. 여기서 통과라고 말하면 **아무것도 비교하지 않은 결론**이
+ * 근거로 쓰인다.
+ *
+ * ⚠️ 0보다 큰 임계값은 두지 않는다. "50건 미만이면 실패" 같은 규칙은 작은 vault에서 도구를
+ * 못 쓰게 만들고, 그러면 사람이 임계값을 낮추다 결국 지운다. 가려야 하는 것은 **"적다"와
+ * "없다"** 뿐이고, 적을 때의 판단 근거는 첫 줄의 케이스 수다.
+ */
+if (clean.length === 0) {
+  process.stderr.write(
+    `lapis-eval: 평가 케이스를 하나도 못 만들었다 (vault ${vc.infos.length} 노트).\n` +
+      `  → 케이스는 frontmatter title(2어절 이상)과 산문 줄이 있는 노트에서만 나온다.\n` +
+      `  → 샘플 수와 --vault 를 확인하라.\n`,
+  );
+  process.exit(2);
+}
 const DIST = ["고양이", "냉장고", "화요일", "젤리", "우산"];
 const noisy = clean.map((c, i) => ({ ...c, query: `${c.query} ${DIST[i % DIST.length]}` }));
 
