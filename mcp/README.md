@@ -27,6 +27,17 @@ MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같�
 }
 ```
 
+⚠️ **Windows에서는 `.cmd` 짝을 가리킨다.** 확장자 없는 쪽은 `#!/bin/sh` 스크립트라
+Windows가 실행할 줄 모른다 — 클라이언트에는 "서버가 안 뜬다"로만 보인다.
+
+```json
+{
+  "mcpServers": {
+    "lapis": { "command": "C:\\절대\\경로\\lapis\\mcp\\lapis-mcp.cmd" }
+  }
+}
+```
+
 ⚠️ **PATH에 의존하지 않는다.** 클라이언트는 서버를 **최소 환경**으로 띄운다 — Claude
 Desktop은 `/usr/bin:/bin:/usr/sbin:/sbin` 정도만 준다. homebrew node(`/opt/homebrew/bin/node`)를
 바로 못 찾아 `exec: node: not found`로 **조용히 죽는 게** 기본값이라, 래퍼가 후보 경로를

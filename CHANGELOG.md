@@ -16,6 +16,27 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Fixed
+- **The CLI and the MCP launchers did not run on Windows** ([#249]). `cli/lapis` and
+  `mcp/lapis-*` are `#!/bin/sh` scripts. Typing `cli/lapis …` in PowerShell opens a **"choose an
+  app to open this file"** dialog — not an error, not a "not supported" message. Pick an editor
+  and you are looking at the shell script.
+
+  `cli/README.md` had ruled a Windows shim out: *"one more truth to maintain, and the main
+  development environment is macOS"*. That reasoning does not survive contact — Windows is a
+  first-class target here (the Rust CI job runs on both), and the fallback advice, "use Git
+  Bash", assumes something that is not true by default: a stock PowerShell `Path` has neither
+  `sh` nor `bash`.
+
+  Each shell wrapper now has a `.cmd` twin. The maintenance worry is paid for with a guard rather
+  than a rule: `scripts/launchers.test.ts` checks that every sh wrapper has a `.cmd` beside it,
+  that the two name **the same entry point**, and that both bundle runners keep the two contracts
+  they share (the `$lib` alias, the `LAPIS_REPO` handoff). A fifth wrapper added on one side only
+  turns it red.
+
+  ⚠️ `*.cmd` is pinned to CRLF in `.gitattributes`. The repo forces LF everywhere else, and
+  cmd.exe misbehaves on LF-only batch files in ways that do not announce themselves.
+
 ## [2.2.0] — 2026-08-27
 
 ### Added
@@ -1193,6 +1214,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#249]: https://github.com/eren0315/lapis/pull/249
 [#247]: https://github.com/eren0315/lapis/pull/247
 [#246]: https://github.com/eren0315/lapis/pull/246
 [#245]: https://github.com/eren0315/lapis/pull/245

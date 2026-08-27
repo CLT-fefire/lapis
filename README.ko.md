@@ -163,6 +163,12 @@ cli/lapis links --broken
 cli/lapis status
 ```
 
+Windows(PowerShell·cmd)에서는 `.cmd` 짝을 부릅니다:
+
+```powershell
+cli\lapis.cmd search "멀티 윈도우" --min-rel 0.3
+```
+
 아무 명령에나 `--json`을 붙이면 MCP 도구가 돌려주는 것과 **같은 모양**이 나옵니다 —
 스크립트와 에이전트가 형식을 두 번 배우지 않아도 됩니다. 계약·종료 코드, 그리고 아직
 만들지 **않은** 것들의 층별 계획은 [`cli/README.md`](cli/README.md)에 있습니다.
@@ -177,6 +183,13 @@ Lapis가 만든 검색 인덱스를 MCP 서버로 노출합니다. 도구는 **�
     "lapis": { "command": "/절대/경로/lapis/mcp/lapis-mcp" }
   }
 }
+```
+
+Windows에서는 `.cmd` 짝을 가리킵니다 — 확장자 없는 쪽은 셸 스크립트라 Windows가 실행하지 못하고,
+클라이언트에는 "서버가 안 뜬다"로만 보입니다.
+
+```json
+{ "mcpServers": { "lapis": { "command": "C:\\경로\\lapis\\mcp\\lapis-mcp.cmd" } } }
 ```
 
 구조 질의(`doc_kind` · `topic` · `tag` · `backlinks_of`)와 BM25 풀텍스트를 한 번에 냅니다. LLM도 API 키도 없습니다 — 같은 인자를 주면 같은 결과가 나옵니다.

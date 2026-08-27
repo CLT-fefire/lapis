@@ -9,9 +9,14 @@
 * text=auto eol=lf
 
 # 셸 래퍼 — 확장자가 없어 자동 판별에 기대지 않고 명시한다. LF가 깨지면 실행 자체가 안 된다.
+cli/lapis       text eol=lf
 mcp/lapis-mcp   text eol=lf
 mcp/lapis-bench text eol=lf
 mcp/lapis-eval  text eol=lf
+
+# ⚠️ Windows 짝은 **반대**다. cmd.exe는 LF만 있는 배치 파일에서 조용히 이상하게 군다
+# (레이블·다중 줄 구문이 있으면 특히). 위 전역 `eol=lf`가 여기까지 오면 안 된다.
+*.cmd   text eol=crlf
 
 # 바이너리 — 개행 변환 대상이 아니다.
 *.png   binary
