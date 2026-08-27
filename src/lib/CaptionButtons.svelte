@@ -116,7 +116,12 @@
     align-items: stretch;
     /* 상단바의 오른쪽 여백을 먹고 창 모서리까지 붙는다 — OS 버튼이 그 자리에 있었다. */
     margin-right: calc(-1 * var(--sp-3));
-    height: 100%;
+    /**
+     * ⚠️ `height: 100%` 에 기대지 않는다. 부모가 `align-items: center` 면 백분율이
+     * **내용 높이**를 기준으로 풀려 버튼이 절반 크기가 된다 — 실제로 그렇게 나왔고,
+     * 그러면 46×40 이라는 OS 관례가 깨진다. `stretch` 는 부모 정렬과 무관하게 채운다.
+     */
+    align-self: stretch;
     flex: none;
   }
 

@@ -16,6 +16,36 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.0.1] — 2026-08-28
+
+### Fixed
+- **The window would not move and caption buttons would not click under the custom title bar**
+  ([#269]). Caught on a real Windows window. Two causes, and **both fail without an error**.
+
+  1. **There was effectively no drag region.** A bare `data-tauri-drag-region` only responds to
+     **direct clicks on that element** — anywhere a child covers is not draggable, and on a 40px
+     strip almost nothing is uncovered. It was also only on the center track. The whole title bar
+     is now `deep`.
+
+     ⚠️ No hand-written no-drag exceptions on controls — Tauri already blocks **interactive roles**
+     like buttons and links. Writing them by hand means forgetting one per new button, and the
+     forgotten one is the only button that stops working.
+
+  2. **Caption buttons were half height.** `.titlebar` used `align-items: center`, so the three
+     sections were only as tall as their content (~28px), and buttons sized with `height: 100%`
+     resolved against that. The Windows convention is 46×40; it was rendering 46×28. Now it is
+     46×40 and the close button reaches the window's right edge.
+
+  Double-click to maximize failed for cause 1 as well — with no surface to grab, the double-click
+  never lands on one.
+- **Opening the vault menu from the title bar dragged the window** ([#269]). `deep` covers the
+  whole subtree, so the popup now marks itself `data-tauri-drag-region="false"`. Its items are
+  buttons and Tauri blocks those, but the empty space in the `<ul>` and `<li>` is not.
+
+`titlebarChrome.test.ts` pins four things: that the region is `deep`, that no bare attribute
+remains, that sections stretch, and that the button width is a 46px literal (a density token
+would shrink the hit target in compact mode).
+
 ## [3.0.0] — 2026-08-28
 
 > The shell redesign (title bar, status bar, single-view sidebar, segmented tabs, underlined
@@ -1605,7 +1635,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.1...main
+[3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...v3.0.0
 [3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
 [2.4.1]: https://github.com/eren0315/lapis/compare/v2.4.0...v2.4.1
@@ -1655,6 +1686,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#269]: https://github.com/eren0315/lapis/pull/269
 [#268]: https://github.com/eren0315/lapis/pull/268
 [#267]: https://github.com/eren0315/lapis/pull/267
 [#265]: https://github.com/eren0315/lapis/pull/265
