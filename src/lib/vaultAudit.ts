@@ -240,11 +240,21 @@ function isPrefixOf(short: string, long: string): boolean {
  *
  * - `tags` — `findTagIssues`가 이미 본다. 두 목록에 같은 것이 나오면 둘 다 덜 믿게 된다
  * - `aliases` — 값이 이름이라 열거형이 아니다. 갈리는 게 정상이다
+ * - `doc_kind`·`topic` — **타입 있는 필드로 이미 센다.** props 에도 있어서 두 번 세게 된다
  *
  * ⚠️ 목록이 이 둘로 끝나는 것이 요점이다. 나머지는 **모양으로** 거른다 — 목록이 자라기
  * 시작하면 그건 판정이 틀렸다는 신호지, 목록이 짧다는 신호가 아니다.
  */
-const FM_AUDIT_SKIP = new Set(["tags", "aliases"]);
+const FM_AUDIT_SKIP = new Set([
+  "tags",
+  "aliases",
+  // ⚠️ **타입 있는 필드는 props 에도 들어 있다.** Rust 가 frontmatter 의 모든 키를 담기
+  //    때문이다. 아래에서 typed 로 이미 세므로 여기서 또 세면 **개수가 두 배**가 된다.
+  //    실제 vault 에서 `todo 6 · todos 4` 로 나왔는데 진짜는 `3 · 2` 였다 — 어느 값이
+  //    갈렸는지는 맞았지만 숫자가 거짓말이었다.
+  "doc_kind",
+  "topic",
+]);
 
 /** 필드 → 값 → 노트 수. 한 노트가 같은 값을 두 번 적어도 한 번만 센다. */
 function fieldValueCounts(infos: readonly LinkInfo[]): Map<string, Map<string, number>> {
@@ -446,6 +456,13 @@ export function maskNonProse(body: string): string {
   out = out.replace(/^[ \t]*```[\s\S]*?^[ \t]*```/gm, blank);
   // 인라인 코드
   out = out.replace(/`[^`\n]*`/g, blank);
+  // ⚠️ **본문 첫 h1은 그 노트 자신의 이름이다.** 다른 노트의 제목과 같은 낱말이어도
+  //    그건 남을 말한 게 아니라 자기를 말한 것이다.
+  //
+  //    실측: slate 의 `autonomous-loop` 은 frontmatter title 이 다른데 h1 이 lapis 쪽
+  //    title 과 같아서, 자기 제목 줄이 "lapis 문서를 언급했다"로 보고됐다. frontmatter 를
+  //    덮는 것과 같은 이유다 — `title:` 과 h1 은 같은 것의 두 표기다.
+  out = out.replace(/^# [^\n]*/m, blank);
   // 이미 걸린 링크 — 위키링크와 마크다운 링크의 **표시 텍스트까지** 덮는다.
   out = out.replace(/\[\[[^\]\n]*\]\]/g, blank);
   out = out.replace(/\[[^\]\n]*\]\([^)\n]*\)/g, blank);

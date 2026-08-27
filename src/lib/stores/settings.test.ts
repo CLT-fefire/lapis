@@ -27,7 +27,12 @@ const write = vi.mocked(settingsWrite);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  write.mockResolvedValue(undefined);
+  // ⚠️ **쓴 것이 읽히게** 한다. `patchSettings` 는 쓰고 나서 다시 읽어 값이 남았는지
+  //    확인하기 때문이다(#261). 고정 값을 돌려주는 목이면 그 확인이 항상 실패한다 —
+  //    실제로 이 두 건이 그렇게 빨개졌다.
+  write.mockImplementation(async (next) => {
+    read.mockResolvedValue(next);
+  });
 });
 
 describe("SETTINGS_DEFAULTS", () => {

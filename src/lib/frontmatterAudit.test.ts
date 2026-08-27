@@ -201,3 +201,33 @@ describe("⚠️ 상호참조 필드 — 실측으로 걸러낸 오탐", () => {
     expect(out).toEqual([]);
   });
 });
+
+describe("⚠️ 두 번 세지 않는다", () => {
+  /**
+   * Rust 는 frontmatter 의 **모든 키**를 `props` 에 담는다 — 타입 있는 `doc_kind`·`topic`
+   * 도 거기 같이 들어간다. 그래서 둘을 다 세면 **개수가 두 배**가 된다.
+   *
+   * 실제 vault 에서 걸렸다: 감사가 `todo 6 · todos 4` 라고 했는데 frontmatter 를 직접
+   * 세면 `todo 3 · todos 2` 였다. 어느 값이 갈렸는지는 맞았지만 **숫자가 거짓말**이었다.
+   */
+  it("typed 필드가 props 에도 있으면 한 번만 센다", () => {
+    const out = audit([
+      mk("/v/a.md", { doc_kind: "todo", props: { doc_kind: ["todo"] } }),
+      mk("/v/b.md", { doc_kind: "todos", props: { doc_kind: ["todos"] } }),
+      mk("/v/c.md", { doc_kind: "todos", props: { doc_kind: ["todos"] } }),
+    ]);
+    const row = out.find((r) => r.kind === "plural")!;
+    expect(row.values).toEqual([
+      { value: "todo", count: 1 },
+      { value: "todos", count: 2 },
+    ]);
+  });
+
+  it("topic 도 마찬가지다", () => {
+    const out = audit([
+      mk("/v/a.md", { topic: "Search", props: { topic: ["Search"] } }),
+      mk("/v/b.md", { topic: "search", props: { topic: ["search"] } }),
+    ]);
+    expect(out[0].values.every((v) => v.count === 1)).toBe(true);
+  });
+});

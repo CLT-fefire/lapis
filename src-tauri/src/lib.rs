@@ -274,6 +274,7 @@ pub fn run() {
             watcher::unwatch_vault,
             settings::settings_read,
             settings::settings_write,
+            settings::settings_paths,
         ])
         .build(context)
         .expect("error while building tauri application");

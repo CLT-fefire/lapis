@@ -3,6 +3,7 @@
   import CustomCssEditor from "$lib/CustomCssEditor.svelte";
   import ColorThemePicker from "$lib/ColorThemePicker.svelte";
   import { searchSettings, type SettingsCatId } from "$lib/settingsIndex";
+  import { settingsPaths, type SettingsPaths } from "$lib/tauri/settings";
   import { getVersion } from "@tauri-apps/api/app";
   import {
     settingsOpen,
@@ -114,8 +115,30 @@
 
   let mcpHint = $state<string>("");
 
+  /**
+   * MCP 게이트가 **실제로 읽는 파일**.
+   *
+   * ⚠️ dev 빌드는 `-dev` 파일에 쓰는데 게이트는 릴리즈를 먼저 본다. 그러면 여기서
+   * 켜도 MCP 에는 안 닿는다 — 결함이 아닌데 결함과 똑같이 보인다. 실제로 그 구분에
+   * 시간을 썼다. 경로를 눈에 보이게 두는 것이 그 시간을 없앤다.
+   */
+  let paths = $state<SettingsPaths | null>(null);
+  $effect(() => {
+    if (!$settingsOpen) return;
+    void settingsPaths()
+      .then((p) => (paths = p))
+      // 못 읽으면 줄을 안 띄운다 — 틀린 경로를 보여주는 것보다 낫다.
+      .catch(() => (paths = null));
+  });
+
+  /**
+   * ⚠️ **같은 값이어도 쓴다.** 예전에는 `if ($mcpEnabled === v) return;` 로 걸렀는데,
+   * store 와 디스크가 어긋나면 **되돌릴 유일한 조작이 아무 일도 안 하고 아무 말도
+   * 안 했다.** "허용을 눌렀는데 안 켜진다"의 정체가 그것이다.
+   *
+   * 같은 값을 다시 쓰는 비용은 파일 하나이고, 그 대신 화면과 디스크가 다시 맞는다.
+   */
   async function setMcp(v: boolean) {
-    if ($mcpEnabled === v) return;
     try {
       await applyMcpEnabled(v);
       mcpHint = "";
@@ -436,6 +459,16 @@
               <span class="label-desc">{@html m.settings_mcp_desc()}</span>
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               <span class="label-hint">{@html m.settings_mcp_warn()}</span>
+              {#if paths}
+                <span class="label-hint" class:split={!paths.same}>
+                  {paths.same
+                    ? m.settings_mcp_paths_same({ path: paths.writes })
+                    : m.settings_mcp_paths_split({
+                        writes: paths.writes,
+                        reads: paths.mcp_reads,
+                      })}
+                </span>
+              {/if}
               {#if mcpHint}
                 <span class="label-hint">{mcpHint}</span>
               {/if}
@@ -609,6 +642,11 @@
     color: var(--text-muted);
     font-size: 0.8rem;
     white-space: nowrap;
+  }
+
+  /* ⚠️ 경로가 갈렸다는 것은 힌트가 아니라 경고다 — 회색으로 두면 안 읽힌다. */
+  .label-hint.split {
+    color: var(--warning);
   }
 
   .search-empty {

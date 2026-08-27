@@ -24,6 +24,8 @@
   "settings_mcp_title": "MCP 질의",
   "settings_mcp_desc": "Claude Code·Desktop에서 <code>lapis_query</code>로 이 vault의 인덱스를 질의할 수 있게 합니다. <strong>기본은 차단</strong>이라 켜야 동작합니다.",
   "settings_mcp_warn": "⚠️ 서버 프로세스는 Claude 클라이언트가 띄웁니다 — 여기서 차단하면 질의만 거부되고 기동 자체는 막지 못합니다. 완전히 막으려면 <code>~/.claude.json</code>의 <code>mcpServers.lapis</code>를 제거하세요.",
+  "settings_mcp_paths_same": "설정 파일: {path}",
+  "settings_mcp_paths_split": "⚠️ 이 빌드는 {writes} 에 쓰는데 MCP 는 {reads} 를 읽습니다. 여기서 켜도 MCP 에는 안 닿습니다.",
   "settings_mcp_aria": "MCP 질의 허용 여부",
   "settings_mcp_allow": "허용",
   "settings_mcp_block": "차단",

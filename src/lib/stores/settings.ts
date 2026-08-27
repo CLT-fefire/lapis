@@ -61,10 +61,35 @@ export function mergeSettings(
 /** 백엔드 JSON의 현재 스냅샷 — `mergeSettings`의 기준. `restoreSettings`가 채운다. */
 let snapshot: LapisSettings = { ...SETTINGS_DEFAULTS };
 
-/** 부분 갱신 → 전체 객체로 병합해 저장. 설정을 쓰는 유일한 경로. */
+/**
+ * 부분 갱신 → 전체 객체로 병합해 저장. 설정을 쓰는 유일한 경로.
+ *
+ * ## ⚠️ 쓰고 나서 **다시 읽어 확인한다**
+ *
+ * 예전에는 `settingsWrite` 가 던지지 않으면 성공으로 봤다. 그런데 "MCP 질의를 켰는데
+ * 파일이 안 바뀌었다"가 실제로 났고, 화면은 켜진 것으로 보였다 — 되돌아온 것이 없으니
+ * 앱이 알 방법이 없었다.
+ *
+ * 쓰기가 **다른 파일에 성공**하는 경우가 있다(dev/릴리즈 분기). 그건 예외가 아니라
+ * 정상 종료라서, 확인은 예외 처리가 아니라 **읽어 보는 것**으로만 된다.
+ *
+ * ⚠️ 다시 읽는 비용은 설정 저장 때 한 번이다. 이 경로는 사람이 클릭할 때만 돈다.
+ */
 async function patchSettings(partial: Partial<LapisSettings>): Promise<void> {
   const next = mergeSettings(snapshot, partial);
   await settingsWrite(next);
+
+  const after = await settingsRead();
+  const missed = (Object.keys(partial) as (keyof LapisSettings)[]).filter(
+    (k) => after[k] !== next[k],
+  );
+  if (missed.length > 0) {
+    // ⚠️ store 를 갱신하지 않는다. 갱신하면 화면만 바뀌고 디스크는 그대로인,
+    //    바로 그 상태가 된다.
+    throw new Error(
+      `설정이 저장되지 않았다: ${missed.join(", ")} — 쓴 뒤 다시 읽으니 값이 달랐다`,
+    );
+  }
   snapshot = next;
 }
 

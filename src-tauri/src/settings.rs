@@ -124,6 +124,25 @@ pub fn save(app: &AppHandle, next: &LapisSettings) -> Result<(), String> {
     Ok(())
 }
 
+/// 설정 파일이 **어디에 있고 MCP는 어디를 보는지**.
+///
+/// ## ⚠️ 왜 필요한가
+///
+/// dev 빌드에서 "MCP 질의"를 켜면 `com.lapis.dev-dev/` 만 바뀌는데 MCP 게이트는
+/// **릴리즈를 먼저** 본다. 그러면 앱은 켰다고 하고 MCP는 꺼져 있다 — 결함이 아닌데
+/// 결함과 똑같이 보인다. 실제로 그 구분에 시간을 썼다.
+///
+/// 화면이 두 경로를 나란히 보여줄 수 있게 여기서 낸다. 판정은 프런트가 한다.
+#[derive(Debug, Clone, Serialize)]
+pub struct SettingsPaths {
+    /// 이 빌드가 **쓰는** 파일.
+    pub writes: String,
+    /// MCP 게이트가 **읽을** 파일 — 릴리즈 우선.
+    pub mcp_reads: String,
+    /// 둘이 같은가. 다르면 화면이 그렇게 말해야 한다.
+    pub same: bool,
+}
+
 // ─── Tauri commands ─────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -134,4 +153,17 @@ pub fn settings_read(app: AppHandle) -> Result<LapisSettings, String> {
 #[tauri::command]
 pub fn settings_write(app: AppHandle, next: LapisSettings) -> Result<(), String> {
     save(&app, &next)
+}
+
+#[tauri::command]
+pub fn settings_paths(app: AppHandle) -> Result<SettingsPaths, String> {
+    let writes = settings_path(&app)?;
+    let mcp_reads = crate::paths::release_data_root(&app)?.join(SETTINGS_FILENAME);
+    let same = writes == mcp_reads;
+    Ok(SettingsPaths {
+        // ⚠️ 프런트로 나가는 경로는 항상 `/` 구분자다(`uipath::to_ui`).
+        writes: crate::uipath::to_ui(&writes),
+        mcp_reads: crate::uipath::to_ui(&mcp_reads),
+        same,
+    })
 }

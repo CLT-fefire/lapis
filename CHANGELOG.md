@@ -16,6 +16,37 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Fixed
+- **Turning on MCP queries could do nothing, silently** ([#261]). Two defects, either of which
+  produces "I switched it on and it did not take":
+
+  `setMcp` returned early when the new value equaled the store's — so if the store and the file
+  ever disagreed, **the one control that could fix it neither wrote nor said anything**, and the UI
+  already showed the desired option as active.
+
+  And nothing checked whether the write landed. `settingsWrite` not throwing was treated as
+  success, but a write can **succeed into a different file** (the dev/release split), which is not
+  an exception — it is a normal return. That can only be caught by reading back, so `patchSettings`
+  now does, and throws when the value is not there. ⚠️ It leaves the store alone in that case:
+  updating it would produce exactly the state being diagnosed, where the screen changed and the
+  disk did not.
+- **The settings screen shows which file MCP actually reads** ([#261]). A dev build writes to the
+  `-dev` directory while the MCP gate looks at the release file first, so switching MCP on in a dev
+  build cannot reach MCP. That is correct behavior producing an identical symptom to a real bug,
+  and the two were indistinguishable. The MCP row now names both paths, in warning color when they
+  differ.
+- **The property audit counted everything twice** ([#261]). Rust puts every frontmatter key into
+  `props`, including the typed `doc_kind` and `topic`, and the audit counted both sides. It
+  reported `todo 6 · todos 4` where the truth was `3 · 2`. Which values had split was right and
+  only the numbers lied — which is why nobody doubted them.
+- **A note's own H1 was read as a mention of another note** ([#261]). Two projects keeping a
+  document each on the same concept end up with the same title; one note's H1 then matches the
+  other's frontmatter title, and the unlinked-mentions audit called that a mention. A body's first
+  H1 is the note's own name — masked now, for the same reason `title:` is.
+
+  That makes three false-positive classes this audit has shed from measurement rather than from
+  reasoning about it.
+
 ## [2.4.0] — 2026-08-27
 
 ### Added
@@ -1398,6 +1429,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#261]: https://github.com/eren0315/lapis/pull/261
 [#259]: https://github.com/eren0315/lapis/pull/259
 [#258]: https://github.com/eren0315/lapis/pull/258
 [#256]: https://github.com/eren0315/lapis/pull/256
