@@ -107,6 +107,7 @@ import {
  * 연다**(2026-08-10 실제 발생). 호출 시점에 계산한다.
  */
 const VAULT_KEY_BASE = "lapis.last-vault-path";
+import { logError, logWarn } from "$lib/stores/usage";
 const vaultStorageKey = () => scopedKey(VAULT_KEY_BASE);
 
 export const vaultPath = writable<string | null>(null);
@@ -227,7 +228,7 @@ export async function openVault(path: string): Promise<void> {
     const { startWatching } = await import("./watcher");
     await startWatching();
   } catch (e) {
-    console.warn("[vault] startWatching failed", e);
+    logWarn("stores/vault", "[vault] startWatching failed", e);
   }
 
   // git 버전관리 상태 갱신(repo 여부 + "시작?" 배너 판단). lazy import로 circular 회피.
@@ -235,7 +236,7 @@ export async function openVault(path: string): Promise<void> {
     const { refreshGitStatus } = await import("./git");
     await refreshGitStatus(path);
   } catch (e) {
-    console.warn("[vault] refreshGitStatus failed", e);
+    logWarn("stores/vault", "[vault] refreshGitStatus failed", e);
   }
 }
 
@@ -270,7 +271,7 @@ function scheduleLazyFullTextLoad(): void {
   const run = () => {
     lazyLoadScheduled = false;
     void buildFullTextFromPending().catch((e) => {
-      console.warn("[search] lazy fulltext load failed", e);
+      logWarn("stores/vault", "[search] lazy fulltext load failed", e);
     });
   };
   // requestIdleCallback이 있으면 idle 진입 시점, 없으면 fallback 50ms.
@@ -349,7 +350,7 @@ async function tryDeltaReindex(
       const info = await scanLinkSingle(root, path);
       infosMap.set(info.source_path, info);
     } catch (e) {
-      console.warn("[delta] scanLinkSingle 실패 — 풀 빌드로 넘긴다", path, e);
+      logWarn("stores/vault", "[delta] scanLinkSingle 실패 — 풀 빌드로 넘긴다", path, e);
       return false;
     }
   }
@@ -416,7 +417,7 @@ async function applyFullTextPatch(
       await workerRemoveDoc(computeShardId(path, shardCount), path);
     } catch (e) {
       failed++;
-      console.warn("[delta] removeDoc 실패", path, e);
+      logWarn("stores/vault", "[delta] removeDoc 실패", path, e);
     }
   }
 
@@ -435,7 +436,7 @@ async function applyFullTextPatch(
       });
     } catch (e) {
       failed++;
-      console.warn("[delta] updateDoc 실패", path, e);
+      logWarn("stores/vault", "[delta] updateDoc 실패", path, e);
     }
   }
 
@@ -452,7 +453,7 @@ async function applyFullTextPatch(
   // 읽고 낡음이 영구화된다. 커밋을 걸러 두면 옛 meta가 남아 다음 기동이 같은 델타를
   // 다시(또는 풀 빌드로) 처리한다 — 헛일이지만 스스로 낫는다.
   if (failed > 0) {
-    console.warn(`[delta] 패치 ${failed}건 실패 — 캐시 재커밋 생략(다음 기동이 다시 시도)`);
+    logWarn("stores/vault", `[delta] 패치 ${failed}건 실패 — 캐시 재커밋 생략(다음 기동이 다시 시도)`);
     return;
   }
 
@@ -461,7 +462,7 @@ async function applyFullTextPatch(
   const infos = idx ? Array.from(idx.byPath.values()) : [];
   setTimeout(() => {
     void saveSearchCache(vault, infos, shardCount, patch.fingerprint, patch.fileStats).catch(
-      (e) => console.warn("[delta] 캐시 재커밋 실패", e),
+      (e) => logWarn("stores/vault", "[delta] 캐시 재커밋 실패", e),
     );
   }, 0);
 }
@@ -492,7 +493,7 @@ async function buildFullTextFromPending(): Promise<void> {
       const t0 = perf ? performance.now() : 0;
       const json = await readSearchCacheShard(vault, i, fingerprint);
       if (!json) {
-        console.warn(`[search-cache] shard${i} 부재 또는 거부(skew/id 불일치) — 풀텍스트 캐시 폐기`);
+        logWarn("stores/vault", `[search-cache] shard${i} 부재 또는 거부(skew/id 불일치) — 풀텍스트 캐시 폐기`);
         complete = false;
         break;
       }
@@ -520,17 +521,17 @@ async function buildFullTextFromPending(): Promise<void> {
       // 재빌드해 스스로 복구한다. ⚠️ **1회 제한** — 재빌드가 또 실패하면 무한 루프다.
       if (!fullTextRecoveryTried) {
         fullTextRecoveryTried = true;
-        console.warn("[search-cache] shard 결손/skew — 강제 재빌드로 복구 시도(1회)");
+        logWarn("stores/vault", "[search-cache] shard 결손/skew — 강제 재빌드로 복구 시도(1회)");
         // finally가 pending/loading을 정리한 뒤 재빌드가 돌아야 한다 → microtask로 미룬다.
         void Promise.resolve().then(() =>
-          forceReindex().catch((e) => console.warn("[search-cache] 복구 재빌드 실패", e)),
+          forceReindex().catch((e) => logWarn("stores/vault", "[search-cache] 복구 재빌드 실패", e)),
         );
         return;
       }
-      console.warn("[search-cache] 복구 재빌드 후에도 풀텍스트 미준비 — 포기");
+      logWarn("stores/vault", "[search-cache] 복구 재빌드 후에도 풀텍스트 미준비 — 포기");
     }
   } catch (e) {
-    console.warn("[search-cache] worker loadShard failed", e);
+    logWarn("stores/vault", "[search-cache] worker loadShard failed", e);
     fullTextIndexReady.set(false);
     await workerReset().catch(() => {});
   } finally {
@@ -606,7 +607,7 @@ async function reloadNotesInner(force = false): Promise<void> {
     notes.set(list);
     noteCount = list.length;
   } catch (e) {
-    console.error("list_notes failed", e);
+    logError("stores/vault", "list_notes failed", e);
     notes.set([]);
   } finally {
     treeLoading.set(false);
@@ -671,7 +672,7 @@ async function reloadNotesInner(force = false): Promise<void> {
     // `fullTextIndexReady`가 영구 false로 굳어 **풀텍스트가 무증상 사망**한다.
     // → 전체 miss로 강등해 풀 빌드가 둘 다 복구하게 한다(자기치유).
     if (appliedFromCache && shardCountFromMeta === 0) {
-      console.warn("[search-cache] meta HIT but shard_count=0 — 풀텍스트 복구를 위해 full rebuild");
+      logWarn("stores/vault", "[search-cache] meta HIT but shard_count=0 — 풀텍스트 복구를 위해 full rebuild");
       appliedFromCache = false;
       cacheMode = "miss";
     }
@@ -728,11 +729,11 @@ async function reloadNotesInner(force = false): Promise<void> {
           shardCount,
           snapshot.fingerprint,
           snapshot.files,
-        ).catch((e) => console.warn("[search-cache] write failed", e));
+        ).catch((e) => logWarn("stores/vault", "[search-cache] write failed", e));
       }, 0);
     }
   } catch (e) {
-    console.error("link/search index build failed", e);
+    logError("stores/vault", "link/search index build failed", e);
     linkIndex.set(null);
     clearTagIndex();
     clearIndexes();
@@ -789,7 +790,7 @@ async function saveSearchCache(
     for (let i = 0; i < shardCount; i++) {
       const json = await workerToJSONShard(i);
       if (!json) {
-        console.warn(`[search-cache] shard${i} 직렬화 실패 — 풀텍스트 캐시를 포기한다`);
+        logWarn("stores/vault", `[search-cache] shard${i} 직렬화 실패 — 풀텍스트 캐시를 포기한다`);
         complete = false;
         break;
       }
@@ -806,7 +807,7 @@ async function saveSearchCache(
     await writeSearchCacheStats(root, fingerprint, fileStats);
   } catch (e) {
     // 델타는 최적화지 정확성이 아니다 — 실패해도 meta는 써야 한다(다음 기동 풀 빌드).
-    console.warn("[search-cache] stats 저장 실패 — 다음 기동은 풀 빌드", e);
+    logWarn("stores/vault", "[search-cache] stats 저장 실패 — 다음 기동은 풀 빌드", e);
   }
 
   // 커밋 — 구조 데이터는 풀텍스트 성패와 무관하게 항상 저장한다.
@@ -879,7 +880,7 @@ export async function reindexIncremental(
         try {
           await workerRemoveDoc(computeShardId(path, activeShardCount), path);
         } catch (e) {
-          console.warn("[reindex] removeDoc 실패", path, e);
+          logWarn("stores/vault", "[reindex] removeDoc 실패", path, e);
         }
       }
     }
@@ -899,7 +900,7 @@ export async function reindexIncremental(
           });
         }
       } catch (e) {
-        console.warn("[reindex] scan/update 실패", path, e);
+        logWarn("stores/vault", "[reindex] scan/update 실패", path, e);
       }
     }
 
@@ -942,7 +943,7 @@ export async function reindexIncremental(
             snapshot.files,
           );
         } catch (e) {
-          console.warn("[reindex] 캐시 재저장 실패", e);
+          logWarn("stores/vault", "[reindex] 캐시 재저장 실패", e);
         }
       })();
     }, 0);
@@ -989,7 +990,7 @@ async function refreshTreeOnly(): Promise<void> {
     const list = await listNotes(root);
     notes.set(list);
   } catch (e) {
-    console.error("listNotes failed", e);
+    logError("stores/vault", "listNotes failed", e);
   } finally {
     treeLoading.set(false);
   }
@@ -1008,7 +1009,7 @@ export async function createNewNote(
     await selectNote(newPath);
     return newPath;
   } catch (e) {
-    console.error("createNewNote failed", e);
+    logError("stores/vault", "createNewNote failed", e);
     return null;
   }
 }
@@ -1021,7 +1022,7 @@ export async function createNewFolder(parentDir: string, folderName: string): Pr
     await refreshTreeOnly();
     return newPath;
   } catch (e) {
-    console.error("createNewFolder failed", e);
+    logError("stores/vault", "createNewFolder failed", e);
     return null;
   }
 }
@@ -1037,7 +1038,7 @@ export async function deletePath(path: string): Promise<boolean> {
     clearBacklinkCache(); // 백링크 스니펫 즉시 무효화 (watcher 디바운스 갭 제거)
     return true;
   } catch (e) {
-    console.error("deletePath failed", e);
+    logError("stores/vault", "deletePath failed", e);
     return false;
   }
 }
@@ -1070,7 +1071,7 @@ export async function renamePath(oldPath: string, newName: string): Promise<stri
 
     return newPath;
   } catch (e) {
-    console.error("renamePath failed", e);
+    logError("stores/vault", "renamePath failed", e);
     return null;
   }
 }
@@ -1088,7 +1089,7 @@ export async function movePath(path: string, newParentDir: string): Promise<stri
     clearBacklinkCache(); // source path 변경 → 백링크 캐시 키 무효화
     return newPath;
   } catch (e) {
-    console.error("movePath failed", e);
+    logError("stores/vault", "movePath failed", e);
     return null;
   }
 }
@@ -1127,7 +1128,7 @@ async function rewriteAllLinksWithPreview(
       try {
         notesMap.set(path, await readNote(path));
       } catch (e) {
-        console.warn(`readNote failed for preview ${path}:`, e);
+        logWarn("stores/vault", `readNote failed for preview ${path}:`, e);
       }
     }),
   );
@@ -1150,7 +1151,7 @@ async function rewriteAllLinksWithPreview(
   if (!outcome.ok) {
     // ⚠️ 이 경로에는 아직 **화면 오류 표면이 없다.** 아무도 안 읽는 store를 새로
     // 만드는 대신 사람이 읽을 요약을 남긴다. UI 노출은 별도 작업이다.
-    console.error(`[lapis] 인용 갱신 실패 — ${describeFailure(outcome)}`);
+    logError("stores/vault", `[lapis] 인용 갱신 실패 — ${describeFailure(outcome)}`);
   }
 }
 
@@ -1175,7 +1176,7 @@ export function backupAndWrite(
     writeNote,
     pruneBackups: pruneOldBackups,
     log: (level, message) => {
-      if (level === "error") console.error(`[lapis] ${message}`);
+      if (level === "error") logError("stores/vault", `[lapis] ${message}`);
       else console.info(`[lapis] ${message}`);
     },
     timestamp: () => new Date().toISOString().replace(/[:.]/g, "-"),
@@ -1192,7 +1193,7 @@ async function pruneOldBackups(vault: string): Promise<void> {
       console.info(`[lapis] backup prune: ${removed}개 디렉토리 정리 (max_keep=${max})`);
     }
   } catch (e) {
-    console.warn("backup prune failed:", e);
+    logWarn("stores/vault", "backup prune failed:", e);
   }
 }
 
@@ -1230,7 +1231,7 @@ export async function selectNote(
   try {
     editor = await import("./editor");
   } catch (e) {
-    console.warn("editor module load failed", e);
+    logWarn("stores/vault", "editor module load failed", e);
   }
 
   // 이전 노트가 dirty면 먼저 저장
@@ -1238,7 +1239,7 @@ export async function selectNote(
     try {
       await editor.saveCurrentNote();
     } catch (e) {
-      console.warn("save before navigate failed", e);
+      logWarn("stores/vault", "save before navigate failed", e);
     }
   }
 
@@ -1261,7 +1262,7 @@ export async function selectNote(
     // 뒤로/앞으로 이동(fromHistory)이 아닌 일반 열기만 히스토리에 기록.
     if (!opts.fromHistory) recordNavigation(path);
   } catch (e) {
-    console.error("read_note failed", e);
+    logError("stores/vault", "read_note failed", e);
     currentNoteContent.set("");
   }
 }
@@ -1351,7 +1352,7 @@ export async function restoreLastVault(): Promise<void> {
   try {
     await openVault(last);
   } catch (e) {
-    console.warn("restoreLastVault failed", e);
+    logWarn("stores/vault", "restoreLastVault failed", e);
     localStorage.removeItem(vaultStorageKey());
   }
 }

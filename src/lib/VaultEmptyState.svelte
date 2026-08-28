@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { logWarn } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
-  import { FolderOpen, Clock, X } from "@lucide/svelte";
+  import { FolderOpen, Clock, X, Settings } from "@lucide/svelte";
   import { pickAndOpenVault, openVault } from "$lib/stores/vault";
+  import { openSettings } from "$lib/stores/settings";
   import { recentVaults, forgetVault } from "$lib/stores/recentVaults";
 
   /**
@@ -31,7 +33,7 @@
       await openVault(path);
     } catch (e) {
       // 폴더가 지워졌거나 권한이 없다 — 계속 권하지 않는다.
-      console.warn("recent vault open failed", e);
+      logWarn("VaultEmptyState", "recent vault open failed", e);
       forgetVault(path);
     }
   }
@@ -45,6 +47,16 @@
     <button class="btn btn--primary btn--lg pick" onclick={pickAndOpenVault}>
       <FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
       {m.sidebar_open_vault()}
+    </button>
+
+    <!--
+      ⚠️ vault 가 없으면 **설정에 닿을 길이 없었다.** 설정은 레일 버튼으로만 열리는데
+      레일은 vault 가 있어야 뜨고, 팔레트에도 설정 명령이 없다. 그래서 언어·테마를
+      vault 를 열기 전에는 못 바꿨다.
+    -->
+    <button class="btn btn--plain settings-link" onclick={openSettings}>
+      <Settings size={14} strokeWidth={2} aria-hidden="true" />
+      {m.rail_settings()}
     </button>
 
     {#if $recentVaults.length > 0}

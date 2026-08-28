@@ -1,3 +1,4 @@
+import { logWarn } from "$lib/stores/usage";
 import MarkdownIt from "markdown-it";
 import yaml from "js-yaml";
 import hljs from "highlight.js/lib/core";
@@ -148,7 +149,7 @@ export function parseNote(raw: string): ParsedNote {
       data = parsed as Record<string, unknown>;
     }
   } catch (err) {
-    console.warn("Frontmatter YAML parse failed:", err);
+    logWarn("markdown", "Frontmatter YAML parse failed:", err);
   }
 
   const html = md.render(body, env);

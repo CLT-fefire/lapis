@@ -1,6 +1,14 @@
 <script lang="ts">
+  import { logError } from "$lib/stores/usage";
   import ModalShell from "$lib/ModalShell.svelte";
   import CustomCssEditor from "$lib/CustomCssEditor.svelte";
+  import { usageEnabled, usageDropped, flushUsage } from "$lib/stores/usage";
+  import { usageMonths, usageRead, usageClear } from "$lib/tauri/usage";
+  import { summarize } from "$lib/usageEvent";
+  import { buildUsageReport } from "$lib/usageReport";
+  import { BUILTIN_COMMANDS } from "$lib/commands";
+  import { save } from "@tauri-apps/plugin-dialog";
+  import { writeBinaryFile } from "$lib/tauri/notes";
   import ColorThemePicker from "$lib/ColorThemePicker.svelte";
   import { searchSettings, type SettingsCatId } from "$lib/settingsIndex";
   import { settingsPaths, type SettingsPaths } from "$lib/tauri/settings";
@@ -205,7 +213,7 @@
         if (backupKeepHintToken === token) backupKeepHint = "";
       }, 2000);
     } catch (e) {
-      console.error("[Settings] backup_keep apply failed", e);
+      logError("SettingsModal", "[Settings] backup_keep apply failed", e);
       backupKeepHint = m.settings_backup_save_failed();
     } finally {
       backupKeepSaving = false;
@@ -226,6 +234,9 @@
     if ($settingsOpen) {
       gitHint = "";
       void refreshGitStatus(get(vaultPath));
+      // 사용 기록의 크기·경로는 열 때마다 다시 읽는다 — 지우고 나면 바로 반영돼야 한다.
+      usageNote = "";
+      void refreshUsage();
     }
   });
 
@@ -244,8 +255,76 @@
   function onRebuildIndex() {
     if (!get(vaultPath)) return;
     closeSettings();
-    void forceReindex().catch((e) => console.error("[Settings] rebuild index failed", e));
+    void forceReindex().catch((e) => logError("SettingsModal", "[Settings] rebuild index failed", e));
   }
+  // ─── 사용 기록 ───────────────────────────────────────────────────────────
+  //
+  // ⚠️ 여기는 **보는 쪽**이다. 기록은 `stores/usage.ts` 가 하고, 집계와 가림은
+  //    `usageEvent.ts` · `usageReport.ts` 가 한다 — 화면이 판정을 하면 CLI 와 갈린다.
+  let usageDir = $state("");
+  let usageSize = $state(0);
+  let usageMonthList = $state<string[]>([]);
+  let usageNote = $state("");
+
+  async function refreshUsage(): Promise<void> {
+    try {
+      const r = await usageMonths();
+      usageDir = r.dir;
+      usageSize = r.total_bytes;
+      usageMonthList = r.months;
+    } catch {
+      // Tauri 밖(프리뷰)에서는 조용히 비운다 — 설정이 안 열리면 안 된다.
+      usageDir = "";
+      usageMonthList = [];
+    }
+  }
+
+  function humanSize(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function saveUsageReport(raw: boolean): Promise<void> {
+    usageNote = "";
+    try {
+      // ⚠️ 버퍼를 먼저 내린다 — 안 그러면 방금 한 일이 리포트에 없다.
+      await flushUsage();
+      await refreshUsage();
+      const lines: string[] = [];
+      for (const mo of usageMonthList) lines.push(...(await usageRead(mo)));
+      if (lines.length === 0) {
+        usageNote = m.settings_usage_empty();
+        return;
+      }
+      const known = BUILTIN_COMMANDS.map((c) => c.id);
+      const label = usageMonthList.length === 1 ? usageMonthList[0] : `${usageMonthList.at(-1)} ~ ${usageMonthList[0]}`;
+      const text = buildUsageReport(summarize(lines, known), { raw, label });
+      const target = await save({
+        defaultPath: `lapis-usage-${usageMonthList[0] ?? "report"}${raw ? "-raw" : ""}.md`,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (!target) return;
+      await writeBinaryFile(target, new TextEncoder().encode(text));
+      usageNote = m.settings_usage_saved({ path: target });
+    } catch (e) {
+      logError("SettingsModal", "사용 리포트 저장 실패", e);
+      usageNote = String(e);
+    }
+  }
+
+  async function clearUsage(): Promise<void> {
+    usageNote = "";
+    try {
+      const n = await usageClear();
+      await refreshUsage();
+      usageNote = m.settings_usage_cleared({ count: n });
+    } catch (e) {
+      logError("SettingsModal", "사용 기록 지우기 실패", e);
+      usageNote = String(e);
+    }
+  }
+
 </script>
 
 {#if $settingsOpen}
@@ -565,6 +644,62 @@
             </div>
           </div>
         </section>
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_usage_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_usage_desc()}</span>
+              <span class="label-hint">{m.settings_usage_warn()}</span>
+              {#if usageDir}
+                <span class="label-hint">
+                  {m.settings_usage_where({ dir: usageDir, size: humanSize(usageSize) })}
+                </span>
+              {/if}
+              {#if $usageDropped > 0}
+                <span class="label-hint">{m.settings_usage_dropped({ count: $usageDropped })}</span>
+              {/if}
+              {#if usageNote}<span class="label-hint">{usageNote}</span>{/if}
+            </span>
+          </div>
+          <div class="setting-control usage-controls">
+            <div class="segmented" role="group" aria-label={m.settings_usage_title()}>
+              <button
+                type="button"
+                class="segment"
+                class:active={$usageEnabled}
+                aria-pressed={$usageEnabled}
+                onclick={() => usageEnabled.set(true)}>{m.settings_usage_on()}</button
+              >
+              <button
+                type="button"
+                class="segment"
+                class:active={!$usageEnabled}
+                aria-pressed={!$usageEnabled}
+                onclick={() => usageEnabled.set(false)}>{m.settings_usage_off()}</button
+              >
+            </div>
+            <button type="button" class="btn btn--sm" onclick={() => saveUsageReport(false)}>
+              {m.settings_usage_report()}
+            </button>
+            <!--
+              ⚠️ 가리지 않은 리포트는 **따로** 둔다. 기본 버튼 옆에 두되 경고를 붙인다 —
+              경로와 검색어가 그대로 들어가고, 이 저장소는 공개다.
+            -->
+            <button
+              type="button"
+              class="btn btn--sm btn--plain"
+              title={m.settings_usage_raw_warn()}
+              onclick={() => saveUsageReport(true)}
+            >
+              {m.settings_usage_report_raw()}
+            </button>
+            <button type="button" class="btn btn--sm btn--plain" onclick={clearUsage}>
+              {m.settings_usage_clear()}
+            </button>
+          </div>
+        </section>
+
           <!-- 사용자 정의 CSS 는 아래 CustomCssEditor 가 담당한다. -->
           <CustomCssEditor />
         {/if}

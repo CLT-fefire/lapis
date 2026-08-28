@@ -1,3 +1,4 @@
+import { logWarn } from "$lib/stores/usage";
 import { get } from "svelte/store";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -45,7 +46,7 @@ const defaultDeps: CliOpenDeps = {
     await w.show().catch(() => {});
     await w.setFocus();
   },
-  warn: (m, e) => console.warn(m, e),
+  warn: (m, e) => logWarn("stores/cliOpen", m, e),
 };
 
 export type ClaimResult = "opened" | "not-mine" | "skipped";

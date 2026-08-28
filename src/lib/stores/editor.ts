@@ -1,6 +1,7 @@
 import { writable, get } from "svelte/store";
 import { writeNote } from "$lib/tauri/notes";
 import { vaultPath, currentNotePath, currentNoteContent, reloadNotes } from "./vault";
+import { logError } from "$lib/stores/usage";
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 
@@ -76,7 +77,7 @@ export async function saveCurrentNote(): Promise<void> {
     void reloadNotes();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("write_note failed:", msg);
+    logError("stores/editor", "write_note failed:", msg);
     lastSaveError.set(msg);
   } finally {
     isSaving.set(false);

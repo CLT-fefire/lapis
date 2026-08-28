@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { isMacPlatform } from "$lib/platform";
+  import { logError, logWarn, logCommand, logSessionStart } from "$lib/stores/usage";
   import { onMount, tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
@@ -282,7 +284,7 @@ import { isPanicChord } from "$lib/userCss";
         try {
           await exportMermaidHostToPng(host, base);
         } catch (err) {
-          console.error(m.page_mermaid_export_failed(), err);
+          logError("routes/+page", m.page_mermaid_export_failed(), err);
         }
       }
       return;
@@ -311,7 +313,7 @@ import { isPanicChord } from "$lib/userCss";
       try {
         await openUrl(href);
       } catch (err) {
-        console.error("openUrl failed", err);
+        logError("routes/+page", "openUrl failed", err);
       }
       return;
     }
@@ -410,7 +412,7 @@ import { isPanicChord } from "$lib/userCss";
     if (!idx) return;
     afterPreviewRender((body) => {
       void fillEmbeds(body, { index: idx, fromPath: from, load: readNote }).catch((e) =>
-        console.warn("fillEmbeds failed", e),
+        logWarn("routes/+page", "fillEmbeds failed", e),
       );
     });
   });
@@ -706,7 +708,7 @@ import { isPanicChord } from "$lib/userCss";
       await navigator.clipboard.writeText(raw);
       flashCopied("editor");
     } catch (e) {
-      console.error("editor copy failed", e);
+      logError("routes/+page", "editor copy failed", e);
     }
   }
 
@@ -720,7 +722,7 @@ import { isPanicChord } from "$lib/userCss";
       if (pathCopyTimer) clearTimeout(pathCopyTimer);
       pathCopyTimer = setTimeout(() => (pathCopied = false), 1200);
     } catch (e) {
-      console.error("copy current note path failed", e);
+      logError("routes/+page", "copy current note path failed", e);
     }
   }
 
@@ -742,12 +744,12 @@ import { isPanicChord } from "$lib/userCss";
       ]);
       flashCopied("preview");
     } catch (e) {
-      console.warn("rich copy failed, fallback to plain text", e);
+      logWarn("routes/+page", "rich copy failed, fallback to plain text", e);
       try {
         await navigator.clipboard.writeText(plain);
         flashCopied("preview");
       } catch (e2) {
-        console.error("preview copy failed entirely", e2);
+        logError("routes/+page", "preview copy failed entirely", e2);
       }
     }
   }
@@ -1049,6 +1051,9 @@ import { isPanicChord } from "$lib/userCss";
     // 어느 단축키인지 고르는 일은 keymap.ts(순수·테스트됨)가 한다. 여기는 효과만.
     const hit = resolveShortcut(e, { inEditing });
     if (!hit) return;
+    // ⚠️ switch **앞**에서 한 번 기록한다. 가지마다 적으면 새 단축키를 넣을 때 빼먹고,
+    //    빼먹은 것만 통계에서 사라진다.
+    logCommand(hit.id, "keymap");
 
     // ⚠️ preventDefault는 분기마다 위치가 다르다. "대상이 없으면 브라우저 기본 동작을
     //    남겨둔다"는 기존 의미를 그대로 지킨다 — 일괄로 앞당기지 말 것.
@@ -1086,7 +1091,7 @@ import { isPanicChord } from "$lib/userCss";
       case "new-window":
         // 새 창은 vault 없이 떠서 "Vault 열기…" 화면이 나온다.
         e.preventDefault();
-        void newWindow().catch((err) => console.error("new window failed", err));
+        void newWindow().catch((err) => logError("routes/+page", "new window failed", err));
         return;
       case "fulltext-search":
         e.preventDefault();
@@ -1220,6 +1225,12 @@ import { isPanicChord } from "$lib/userCss";
   // 요소를 다시 만들지 않고 내용만 바꾼다(순서 유지 · 타이핑 중 깜빡임 없음).
 
   onMount(() => {
+    // ⚠️ 세션 시작을 남긴다. 기동 중에 난 오류도 이 세션에 묶여야 "어느 버전에서
+    //    났나"를 나중에 가를 수 있다. 버전은 비동기라 못 읽으면 빈 문자열로 남긴다 —
+    //    기록을 아예 빠뜨리는 것보다 낫다.
+    void getVersion()
+      .then((v) => logSessionStart(v, isMacPlatform() ? "macos" : "windows"))
+      .catch(() => logSessionStart("", isMacPlatform() ? "macos" : "windows"));
     restoreTheme();
     restoreDensity();
     restoreMotionPref();
@@ -1240,7 +1251,7 @@ import { isPanicChord } from "$lib/userCss";
       try {
         appVersion = await getVersion();
       } catch (e) {
-        console.warn("[app] getVersion failed", e);
+        logWarn("routes/+page", "[app] getVersion failed", e);
       }
     })();
     void (async () => {
@@ -1248,7 +1259,7 @@ import { isPanicChord } from "$lib/userCss";
         isDebug = await isDebugBuild();
       } catch (e) {
         // 표식은 편의 기능 — 실패해도 앱은 그대로 쓴다(릴리즈처럼 보일 뿐).
-        console.warn("[app] isDebugBuild failed", e);
+        logWarn("routes/+page", "[app] isDebugBuild failed", e);
       }
     })();
 

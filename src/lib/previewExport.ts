@@ -14,6 +14,7 @@
  * Neighborhood(백링크)는 문서가 아니라 앱 UI라 제외한다.
  */
 
+import { logError, logWarn } from "$lib/stores/usage";
 import { m } from "$lib/paraglide/messages.js";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
@@ -80,7 +81,7 @@ async function inlineImages(root: HTMLElement): Promise<ImageInlineResult> {
       } catch (e) {
         failed++;
         // 원본 경로를 함께 남긴다 — asset:// URL만으로는 어느 파일인지 알기 어렵다.
-        console.warn("[export] 이미지 인라인 실패", img.dataset.absPath ?? src, e);
+        logWarn("previewExport", "[export] 이미지 인라인 실패", img.dataset.absPath ?? src, e);
       }
       // 지연 로딩은 앱 프리뷰용 최적화 — 정적 문서에선 의미가 없다.
       img.removeAttribute("loading");
@@ -158,7 +159,7 @@ export async function exportPreviewToHtml(
 
 async function notifyExportError(summary: string, err: unknown): Promise<void> {
   const detail = err instanceof Error ? err.message : String(err);
-  console.error("[export] HTML 내보내기 실패:", err);
+  logError("previewExport", "[export] HTML 내보내기 실패:", err);
   try {
     await message(`${summary}\n\n${detail}`, {
       title: m.export_html_error_title(),

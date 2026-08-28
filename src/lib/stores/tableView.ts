@@ -14,6 +14,7 @@ import {
  */
 
 const SAVED_VIEWS_KEY = "lapis.table-views";
+import { logWarn } from "$lib/stores/usage";
 
 export const tableViewOpen = writable<boolean>(false);
 
@@ -155,6 +156,6 @@ function persistSavedViews(views: SavedView[]): void {
   try {
     localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
   } catch (e) {
-    console.warn("[table-view] 저장뷰 영속화 실패", e);
+    logWarn("stores/tableView", "[table-view] 저장뷰 영속화 실패", e);
   }
 }

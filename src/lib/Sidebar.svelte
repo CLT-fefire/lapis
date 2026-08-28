@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logError } from "$lib/stores/usage";
   import FileTree from "./FileTree.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import { welcomeNote } from "$lib/welcomeDoc";
@@ -226,7 +227,7 @@
       // parentDir에 vault root를 그대로 전달 — create_note Tauri command이 그 안에 파일 생성
       await createNewNote(vault, "Welcome.md", welcomeNote());
     } catch (e) {
-      console.error("[Sidebar] createWelcomeNote 실패", e);
+      logError("Sidebar", "[Sidebar] createWelcomeNote 실패", e);
     } finally {
       welcomeCreating = false;
     }

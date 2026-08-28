@@ -1,5 +1,6 @@
 import { writable } from "svelte/store";
 import { notesMtimes } from "$lib/tauri/notes";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * "안 본 사이 바뀐 노트" — Discord unread의 번역 (2026-08-05 PR-11).
@@ -100,7 +101,7 @@ export async function syncFromDisk(vaultPath: string): Promise<void> {
     changedNotes.set(changed);
   } catch (e) {
     // 실패해도 앱 기능에는 영향이 없다 — 표시만 안 될 뿐.
-    console.warn("[unread] syncFromDisk failed", e);
+    logWarn("stores/unread", "[unread] syncFromDisk failed", e);
   }
 }
 

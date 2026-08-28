@@ -16,6 +16,57 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-08-28
+
+> Candidate 21 of the fourth analysis. It started as "menu usage statistics", but measuring
+> moved the center of gravity — this app was **failing silently in 96 places**.
+
+### Added
+- **Usage log** ([#275]). Records which commands you run and **from which entry point**, and
+  where errors happen, on this machine only. Settings → Advanced turns it on or off, exports a
+  report, and clears it.
+
+  ⚠️ **This is not telemetry.** The README states there is no network code, and this feature is
+  no exception — it writes to disk and nowhere else.
+
+  ⚠️ **It does not write into the vault.** A log inside the vault makes the watcher reindex on
+  **every event** and gets itself indexed as a note. It lives in
+  `app_data_root/usage/YYYY-MM.jsonl`, following the same dev/release split.
+
+  **Recording the entry point is the whole point.** "Opened files 400 times" is nearly useless;
+  "380 of 400 via ⌘P, 3 via the rail" decides whether the rail is worth fixing. Commands never
+  used are listed too — those are *absent* from the log, so the full command list is the
+  denominator.
+
+- **All 96 error sites are structured** ([#275]). Every `console.error`/`console.warn` is now
+  `logError`/`logWarn` (console output is kept — in development it is still the fastest path).
+
+  ⚠️ **Release builds have no devtools.** Until now those 96 sites wrote where nobody reads.
+  `usageWiring.test.ts` blocks `console.error` from coming back.
+
+- **Report export** ([#275]) as Markdown: period, most-used commands with their entry-point
+  split, never-used commands, and error frequencies.
+
+  ⚠️ **Redacted by default** — paths keep only their last segment. The accident happens not in
+  the raw log but the moment a **document is pasted somewhere**, and this repository is public.
+  An unredacted export takes a separate, explicit button, and that document carries a warning on
+  its first line.
+
+### Fixed
+- **Settings were unreachable without a vault** ([#275]). Settings opened only from the rail
+  button, the rail requires a vault, and no palette command exists for it — so language and
+  theme could not be changed before opening a vault. The empty state now has an entry.
+
+  (Found while verifying the usage screen in the browser.)
+
+### What is and is not recorded
+
+| Recorded | Not recorded |
+|---|---|
+| Command id, entry point, timestamp | Note **content** |
+| Error site, message, exception, path | Any **transmission** |
+| Session start, version, platform | |
+
 ## [3.1.2] — 2026-08-28
 
 > **The rest** of the untouched modules. Two more defects, both **without an error**.
@@ -1846,7 +1897,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.2...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.2.0...main
+[3.2.0]: https://github.com/eren0315/lapis/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/eren0315/lapis/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/eren0315/lapis/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/eren0315/lapis/compare/v3.0.2...v3.1.0
@@ -1901,6 +1953,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#275]: https://github.com/eren0315/lapis/pull/275
 [#274]: https://github.com/eren0315/lapis/pull/274
 [#273]: https://github.com/eren0315/lapis/pull/273
 [#272]: https://github.com/eren0315/lapis/pull/272

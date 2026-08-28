@@ -15,6 +15,7 @@
 import { m } from "$lib/paraglide/messages.js";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
+import { logError, logWarn } from "$lib/stores/usage";
 
 const SCALE = 3;
 /** 다이어그램 테마(라이트/다크)에 맞춘 불투명 PNG 배경. */
@@ -53,8 +54,9 @@ export async function svgElementToPngBlob(svg: SVGSVGElement): Promise<Blob> {
   const fitScale = Math.sqrt(MAX_CANVAS_AREA / (width * height));
   const scale = Math.min(SCALE, fitScale);
   if (scale < SCALE) {
-    console.warn(
-      `[mermaidExport] 다이어그램이 커서 배율을 ${SCALE}x → ${scale.toFixed(2)}x로 낮춤 ` +
+    logWarn(
+      "mermaidExport",
+      `다이어그램이 커서 배율을 ${SCALE}x → ${scale.toFixed(2)}x로 낮춤 ` +
         `(${Math.round(width)}×${Math.round(height)})`,
     );
   }
@@ -162,7 +164,7 @@ export async function exportMermaidHostToPng(
 
 async function notifyExportError(summary: string, err: unknown): Promise<void> {
   const detail = err instanceof Error ? err.message : String(err);
-  console.error("mermaid PNG 내보내기 실패:", err);
+  logError("mermaidExport", "mermaid PNG 내보내기 실패:", err);
   try {
     await message(`${summary}\n\n${detail}`, {
       title: m.mermaid_export_error_title(),

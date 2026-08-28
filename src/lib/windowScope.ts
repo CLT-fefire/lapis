@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * 창별 localStorage 키 스코프.
@@ -33,7 +34,7 @@ export function windowLabel(): string {
     // 보조 창이 main의 키를 읽어 남의 vault를 열게 되므로 흔적을 남긴다.
     const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
     if (inTauri) {
-      console.warn("windowLabel: Tauri 내부에서 라벨 조회 실패 — main으로 대체", e);
+      logWarn("windowScope", "windowLabel: Tauri 내부에서 라벨 조회 실패 — main으로 대체", e);
     }
     return MAIN_LABEL;
   }
