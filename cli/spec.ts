@@ -90,6 +90,7 @@ export const COMMANDS: CommandSpec[] = [
       { name: "doc-kind", kind: "string", desc: "정확 일치. frontmatter 선언 기준" },
       { name: "topic", kind: "string", desc: "정확 일치" },
       { name: "min-rel", kind: "number", desc: "상대 점수 하한 0~1. 결과가 넓을 때 꼬리를 자른다" },
+      { name: "under", kind: "string[]", desc: "이 아래에서만. vault 상대 문자열 prefix, 여러 번 줄 수 있다. exclude와 겹치면 exclude가 이긴다" },
       { name: "exclude", kind: "string[]", desc: "vault 상대 문자열 prefix. 여러 번 줄 수 있다" },
       { name: "include-archive", kind: "boolean", desc: "_memories 기본 제외를 해제" },
       ...TIME_OPTS,

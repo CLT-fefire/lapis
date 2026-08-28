@@ -576,6 +576,22 @@ export interface Staleness {
   behind_s: number;
   /** 새로운 파일 몇 개(최대 5) — 무엇이 빠졌는지 바로 보이게. */
   sample: string[];
+  /**
+   * 이 답이 **낡음의 영향을 받는가** — 결과에 든 경로 중 캐시보다 새로운 것이 있나.
+   *
+   * ⚠️ `newer_count` 는 vault 전체를 말하지 벌어진 질의를 말하지 않는다. 11시간 뒤처져
+   * 19건이 새로워도 그 19건이 이 결과에 없으면 **이 답은 멀쩡하다.** 개수만 보고 매번
+   * 의심하면 도구를 못 쓰고, 무시하면 틀린 답을 믿는다.
+   *
+   * 검색 결과가 있는 응답에만 실린다(`list`·`audit` 은 경로 집합이 다르다).
+   */
+  affects_results?: boolean;
+  /**
+   * ⚠️ **응답에 나가지 않는다.** `affects_results` 를 계산하려고 `checkStale` 이
+   * 들고 오는 전체 목록이고, `query.ts` 가 응답을 만들 때 떼어 낸다. 여기 남으면
+   * 큰 vault 에서 응답이 통째로 부풀어 `sample` 을 둔 뜻이 사라진다.
+   */
+  newer_all?: readonly string[];
   /** 지금 vault에서 계산한 fingerprint. 캐시의 것과 다르면 `changed`. */
   fingerprint: string;
 }
@@ -705,6 +721,8 @@ export function checkStale(vc: VaultCache): Staleness {
     total: entries.length,
     behind_s: newer.length === 0 ? 0 : Math.round((newer[0].ms - metaMs) / 1000),
     sample: newer.slice(0, 5).map((n) => n.rel),
+    // 상한을 둔다 — vault 전체가 새로울 수 있고, 그때 이 배열은 쓸모보다 크다.
+    newer_all: newer.slice(0, 2000).map((n) => n.rel),
     fingerprint,
   };
 }

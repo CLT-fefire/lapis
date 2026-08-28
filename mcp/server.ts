@@ -54,6 +54,11 @@ const TOOL = {
         items: { type: "string", enum: ["bm25", "structural"] },
         description: "팔 한정. 생략하면 둘 다",
       },
+      under: {
+        type: "array",
+        items: { type: "string" },
+        description: "**이 아래에서만** — vault 상대 경로 문자열 prefix 배열. 여럿이면 OR. `exclude`와 같은 규칙이고, 겹치면 `exclude`가 이긴다. 한 vault에 프로젝트가 여럿일 때 쓴다",
+      },
       exclude: {
         type: "array",
         items: { type: "string" },

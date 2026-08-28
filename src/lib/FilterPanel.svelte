@@ -6,11 +6,14 @@
     topicCounts,
     selectedDocKinds,
     selectedTopics,
+    selectedFolders,
     toggleDocKind,
     toggleTopic,
+    toggleFolder,
     clearFilters,
     applyFilters,
   } from "$lib/stores/filters";
+  import { scopeOptions } from "$lib/folderScope";
   import {
     selectNote,
     currentNotePath,
@@ -32,6 +35,18 @@
       .map(([k]) => k);
   });
 
+  /**
+   * 폴더 후보 — 경로에서 나온다.
+   *
+   * ⚠️ `buildFacetCounts` 를 안 쓴다. 그쪽은 `LinkInfo` 의 `doc_kind`·`topic` 만 세고
+   * 이 축은 **경로 문자열**에서 나오기 때문이다. 하나로 합치면 인자가 지저분해진다.
+   */
+  const folderOptions = $derived.by(() => {
+    const idx = $linkIndex;
+    if (!idx) return [];
+    return scopeOptions([...idx.byPath.keys()]);
+  });
+
   const filteredNotes = $derived.by<{ path: string; label: string; topic: string | null; doc_kind: string | null }[]>(() => {
     const idx = $linkIndex;
     if (!idx) return [];
@@ -39,6 +54,7 @@
       idx.byPath.values(),
       $selectedDocKinds,
       $selectedTopics,
+      $selectedFolders,
     );
     return matched
       .map((info) => ({
@@ -50,10 +66,12 @@
       .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
   });
 
-  const hasAnySelection = $derived($selectedDocKinds.size + $selectedTopics.size > 0);
+  const hasAnySelection = $derived(
+    $selectedDocKinds.size + $selectedTopics.size + $selectedFolders.size > 0,
+  );
 </script>
 
-{#if $docKindCounts.size === 0 && $topicCounts.size === 0}
+{#if $docKindCounts.size === 0 && $topicCounts.size === 0 && folderOptions.length === 0}
   <div class="empty">
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     <p>{@html m.filters_empty()}</p>
@@ -105,6 +123,33 @@
             >
               <span class="name">{topic}</span>
               <span class="count">{count}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    <!--
+      ⚠️ 폴더 축은 **마지막**이다. doc_kind·topic 이 "무엇인가"를 묻고 폴더는 "어디
+      것인가"를 묻는다 — 앞의 둘로 못 가르는 경우에만 쓰는 축이라 위로 올리면 자리를 먹는다.
+    -->
+    {#if folderOptions.length > 0}
+      <section class="facet">
+        <header class="facet-header">
+          <span>{m.filters_folder()}</span>
+          <span class="facet-meta">{folderOptions.length}</span>
+        </header>
+        <div class="chip-row">
+          {#each folderOptions as opt (opt.prefix)}
+            {@const active = $selectedFolders.has(opt.prefix)}
+            <button
+              class="facet-chip folder-chip"
+              class:active
+              onclick={() => toggleFolder(opt.prefix)}
+              title={`${opt.prefix} (${opt.count})`}
+            >
+              <span class="name">{opt.prefix.replace(/\/$/, "")}</span>
+              <span class="count">{opt.count}</span>
             </button>
           {/each}
         </div>

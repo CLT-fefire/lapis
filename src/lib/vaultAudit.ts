@@ -61,8 +61,16 @@ export interface OrphanNote {
  * 백링크가 이 앱의 주된 이동 수단이므로, 들어오는 링크가 없는 노트는 사실상 닿을 수 없다.
  * 끊긴 링크 감사의 정확한 거울상이다.
  *
- * 정렬은 경로 오름차순 — 관련도가 아니라 **결정성** 때문이다. 순서를 안 정하면 답이
- * 인덱스에 담긴 순서에 흔들린다.
+ * ## 정렬 — 나가는 링크가 적은 것부터
+ *
+ * ⚠️ 예전엔 경로 오름차순이었다. 그러면 이 vault 의 `HOME.md`(나가는 링크 **19개**)가
+ * 목록 **맨 위**에 온다 — 진입점이라 아무도 안 가리키는 게 당연한 노트다. 매번 첫 줄이
+ * "고쳐야 할 것 아님"이면 목록 전체를 덜 보게 된다.
+ *
+ * 나가는 링크가 적은 것이 **진짜 외딴 노트**다(양쪽 다 0이면 아무 데도 안 이어져 있다).
+ * 그것을 위로 올린다.
+ *
+ * ⚠️ 동점은 여전히 **경로순**이다. 결정성이 없으면 같은 vault 가 매번 다른 답을 낸다.
  */
 export function findOrphans(index: LinkIndex): OrphanNote[] {
   const out: OrphanNote[] = [];
@@ -73,7 +81,7 @@ export function findOrphans(index: LinkIndex): OrphanNote[] {
     if (viaBody > 0 || viaFrontmatter > 0) continue;
     out.push({ path, name: info.title ?? info.source_name, outgoing: countOutgoing(index, info) });
   }
-  out.sort((a, b) => asc(a.path, b.path));
+  out.sort((a, b) => a.outgoing - b.outgoing || asc(a.path, b.path));
   return out;
 }
 
@@ -205,7 +213,12 @@ export function findTagIssues(
 
 // ─── frontmatter 위생 ─────────────────────────────────────────────────────────
 
-export type FrontmatterIssueKind = "case-only" | "plural" | "prefix";
+export type FrontmatterIssueKind =
+  | "case-only"
+  | "plural"
+  | "prefix"
+  | "suffix"
+  | "sparse";
 
 export interface FrontmatterIssue {
   /** `doc_kind` · `topic` · props 필드 이름. */
@@ -213,7 +226,18 @@ export interface FrontmatterIssue {
   kind: FrontmatterIssueKind;
   /** 갈린 값들과 각각의 노트 수. 값 이름 오름차순. */
   values: { value: string; count: number }[];
+  /**
+   * `values` 를 자르기 전의 개수. 안 잘렸으면 없다.
+   *
+   * ⚠️ `sparse` 는 1회 값을 **전부** 담으면 벽이 된다 — 실측에서 `topic` 이 17줄이었다.
+   * 열일곱 줄을 다 읽는 사람은 없고, 그러면 그 아래 진짜 갈림(`suffix`)까지 안 보인다.
+   * 자르되 **자른 사실을 말한다** — 조용히 자르면 "이게 전부"로 읽힌다.
+   */
+  total?: number;
 }
+
+/** 한 묶음에 보여주는 값의 상한. */
+export const ISSUE_VALUES_MAX = 8;
 
 /**
  * props 필드를 **열거형으로 보는** 최소 노트 수.
@@ -245,6 +269,36 @@ function isPrefixOf(short: string, long: string): boolean {
   if (short.length >= long.length || !long.startsWith(short)) return false;
   return !/[\p{L}\p{N}]/u.test(long[short.length]);
 }
+
+/**
+ * `완료` 가 `구현 완료` 의 접미사인가.
+ *
+ * ⚠️ **이 방향이 빠져 있었다.** 2026-08-28 실측에서 `audit: props` 가 0건을 냈는데,
+ * `status` 에 `완료`(10)와 `구현 완료`(1)가 같이 있었다. 한정어는 **앞에** 붙는 일이
+ * 많아서(구현 완료 · 부분 완료) 접두사만 보면 실제 갈림의 절반을 놓친다.
+ *
+ * ⚠️ `isPrefixOf` 와 같은 경계 규칙이다 — 안 그러면 `완료`/`미완료` 처럼 **서로 다른
+ * 낱말**을 갈린 값이라고 보고한다.
+ */
+function isSuffixOf(short: string, long: string): boolean {
+  if (short.length >= long.length || !long.endsWith(short)) return false;
+  return !/[\p{L}\p{N}]/u.test(long[long.length - short.length - 1]);
+}
+
+/**
+ * `sparse` — 축이 **굳지 않았다**는 신호.
+ *
+ * 문자열로 안 걸리는 갈림이 있다. 실측된 `status` 는 `반영됨`·`해결됨`·`닫힘`·`이전됨` 이
+ * 전부 "끝났다"를 뜻하는데, 넷 사이에 공통 문자열이 없다.
+ *
+ * ⚠️ **동의어라고 말하지 않는다.** 그건 기계가 정할 수 없고, 이 기능의 원칙은
+ * "판단하지 않는다"다. 대신 셀 수 있는 것만 말한다 — "여덟 종인데 다섯이 1회다".
+ *
+ * ⚠️ 건강한 축에 울리면 감사 전체를 안 믿게 된다. 그래서 문턱이 둘이다:
+ * 1회 값이 **셋 이상**이고, 그 비율이 **절반 이상**일 때만.
+ */
+const SPARSE_MIN_SINGLETONS = 3;
+const SPARSE_RATIO = 0.5;
 
 /**
  * 감사에서 **이름으로** 빼는 필드.
@@ -377,9 +431,32 @@ export function findFrontmatterIssues(index: LinkIndex): FrontmatterIssue[] {
       if (longer.length === 0) continue;
       issues.push({ field, kind: "prefix", values: entries([short, ...longer]) });
     }
+
+    // ⚠️ 접두사 다음에 본다. 같은 쌍이 양쪽에 걸리는 일은 없다 — 한 값이 다른 값의
+    //    접두사이면서 동시에 접미사일 수는 없기 때문이다(길이가 같아야 하는데 그건 배제된다).
+    for (const short of values) {
+      const longer = values.filter((v) => isSuffixOf(short, v));
+      if (longer.length === 0) continue;
+      issues.push({ field, kind: "suffix", values: entries([short, ...longer]) });
+    }
+
+    // 축이 굳지 않았다 — 위 넷 중 아무것도 안 걸려도 이건 걸릴 수 있다.
+    const singletons = values.filter((v) => counts.get(v) === 1);
+    if (
+      singletons.length >= SPARSE_MIN_SINGLETONS &&
+      singletons.length >= values.length * SPARSE_RATIO
+    ) {
+      const all = entries([...singletons]);
+      issues.push({
+        field,
+        kind: "sparse",
+        values: all.slice(0, ISSUE_VALUES_MAX),
+        ...(all.length > ISSUE_VALUES_MAX ? { total: all.length } : {}),
+      });
+    }
   }
 
-  const order: FrontmatterIssueKind[] = ["case-only", "plural", "prefix"];
+  const order: FrontmatterIssueKind[] = ["case-only", "plural", "prefix", "suffix", "sparse"];
   return issues.sort(
     (a, b) =>
       asc(a.field, b.field) ||

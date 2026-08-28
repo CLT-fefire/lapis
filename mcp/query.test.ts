@@ -215,6 +215,55 @@ describe("exclude — 문자열 prefix", () => {
   });
 });
 
+describe("under — 이 아래에서만", () => {
+  /**
+   * 2026-08-28 실측: 이 vault 는 한 안에 프로젝트가 둘이고, `audit: tags` 가 낸 이름
+   * 충돌 **7건이 전부** 그 둘 사이였다. 검색 결과의 절반이 남의 프로젝트인데 에러가 없다.
+   */
+  it("스코프 밖은 안 나온다", () => {
+    const all = paths(search({ doc_kind: "adr" }));
+    expect(all.length).toBeGreaterThan(1);
+    const r = paths(search({ doc_kind: "adr", under: ["proj/adr/001-aban"] }));
+    expect(r).toEqual(["proj/adr/001-abandoned.md"]);
+  });
+
+  it("빈 배열은 안 거른다 — 없는 것과 같다", () => {
+    expect(paths(search({ doc_kind: "adr", under: [] }))).toEqual(paths(search({ doc_kind: "adr" })));
+  });
+
+  /** ⚠️ `exclude` 와 같은 문자열 접두사다. 규칙이 갈리면 같은 문자열이 한쪽에서만 먹는다. */
+  it("세그먼트 중간에서 끊는 접두사도 먹는다", () => {
+    const r = paths(search({ doc_kind: "adr", under: ["proj/adr/002-rev"] }));
+    expect(r).toEqual(["proj/adr/002-revived.md"]);
+  });
+
+  /** ⚠️ 겹치면 **제외가 이긴다.** "빼라"가 "여기서만"보다 강하다. */
+  it("exclude 가 under 를 이긴다", () => {
+    const r = paths(search({ doc_kind: "adr", under: ["proj/adr/"], exclude: ["proj/adr/001-aban"] }));
+    expect(r).not.toContain("proj/adr/001-abandoned.md");
+    expect(r).toContain("proj/adr/002-revived.md");
+  });
+
+  /** 아카이브 기본 제외도 스코프보다 세다 — 안 그러면 뺀 뜻이 사라진다. */
+  it("아카이브를 스코프로 잡아도 기본 제외가 이긴다", () => {
+    expect(paths(search({ text: "태그", under: ["_memories"] }))).toEqual([]);
+  });
+
+  it("BM25 팔에도 걸린다", () => {
+    const r = paths(search({ text: "태그", include_archive: true, under: ["_memories"] }));
+    expect(r.length).toBeGreaterThan(0);
+    expect(r.every((x) => x.startsWith("_memories"))).toBe(true);
+  });
+
+  /** facet 열거도 같은 스코프를 지나야 한다 — 아니면 못 고르는 값이 목록에 뜬다. */
+  it("list 도 스코프를 지킨다", () => {
+    const wide = facets({ list: "doc_kinds" });
+    const narrow = facets({ list: "doc_kinds", under: ["proj/adr/"] });
+    expect(narrow.values.length).toBeLessThan(wide.values.length);
+    expect(narrow.values.every((v) => v.value === "adr")).toBe(true);
+  });
+});
+
 describe("_memories 기본 제외", () => {
   // vault의 94%를 차지해 BM25 상위를 익사시킨다(판정 세션의 최대 마찰).
   it("기본으로 아카이브를 뺀다", () => {
@@ -405,6 +454,44 @@ describe("staleness — 보고하되 막지 않는다", () => {
     utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
     resetState();
     expect(facets({ list: "topics" }).stale?.newer_count).toBe(1);
+  });
+
+  /**
+   * `newer_count` 는 **vault 전체**를 말하지 이 질의를 말하지 않는다.
+   *
+   * 2026-08-28 실측: 11시간 뒤처져 19건이 새로웠다. 그 19건이 결과에 없으면 이 답은
+   * 멀쩡한데, 개수만 보면 매번 의심하게 된다 — 의심이 상시가 되면 아무도 안 본다.
+   */
+  it("새로운 파일이 결과에 있으면 affects_results 가 참", () => {
+    const fixture = setup();
+    const future = new Date(Date.now() + 3_600_000);
+    utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
+    resetState();
+    expect(search({ doc_kind: "adr" }).stale?.affects_results).toBe(true);
+  });
+
+  it("새로운 파일이 결과 밖이면 거짓 — 낡았어도 이 답은 멀쩡하다", () => {
+    const fixture = setup();
+    const future = new Date(Date.now() + 3_600_000);
+    utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
+    resetState();
+    const r = search({ doc_kind: "adr", exclude: ["proj/adr/001-aban"] });
+    expect(r.stale?.newer_count).toBe(1);
+    expect(r.stale?.affects_results).toBe(false);
+  });
+
+  /**
+   * ⚠️ 판정에 쓰는 전체 목록이 **응답에 새면 안 된다.** vault 전체가 새로울 수 있고,
+   * 그러면 `sample` 을 5건으로 둔 뜻이 사라진다.
+   */
+  it("newer_all 은 응답에 안 실린다", () => {
+    const fixture = setup();
+    const future = new Date(Date.now() + 3_600_000);
+    utimesSync(nodePath.join(fixture.vaultRoot, "proj/adr/001-abandoned.md"), future, future);
+    resetState();
+    const r = search({ doc_kind: "adr" });
+    expect(r.stale && "newer_all" in r.stale).toBe(false);
+    expect(JSON.stringify(r)).not.toContain("newer_all");
   });
 });
 

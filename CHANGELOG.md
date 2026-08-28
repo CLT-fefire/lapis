@@ -16,6 +16,85 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-08-28
+
+> Six findings from a third corpus pass (107 notes). This time the audits were **actually run**
+> to see what they miss.
+
+### Added
+- **Folder scope — "only under here"** ([#272]). All three surfaces: a **third axis** in the
+  app's filter panel, `lapis ... --under`, and MCP `under`.
+
+  Measured: all **7** name collisions reported by `audit: tags` were between the two projects
+  living in one vault (`state`, `feature-map`, `open-items`, `verification`, `shortcut-map`,
+  `autonomous-loop`, `열린 항목`). Half of every search result belongs to the other project,
+  and **there is no error**.
+
+  ⚠️ The two projects **use the same `doc_kind`**, so the existing two axes cannot draw that
+  boundary. The path is the only discriminator.
+
+  ⚠️ It is a **string prefix, exactly like `exclude`**. Matching on directory boundaries
+  (`x + "/"`) makes a mid-segment prefix like `lapis/plans/lapis-cli-` a silent no-op — that is
+  why `exclude` is already a string prefix, and if the two rules diverge the same string works
+  on one side only.
+
+  ⚠️ Where they overlap, **`exclude` wins.** If excluding the archive and then scoping into it
+  brought it back, the exclusion would mean nothing.
+- **`stale` now says whether *this* answer is wrong** ([#272]). `stale.affects_results` — is any
+  path in the results newer than the cache?
+
+  Measured: the cache was 11 hours (39,541s) behind with 19 newer files. But `newer_count` speaks
+  about the **whole vault**, not this query. If none of those 19 are in the results, the answer
+  is fine — and a count alone turns every response into a suspicion. Constant suspicion gets
+  ignored.
+
+### Changed
+- **The frontmatter audit catches values that overlap at the end** ([#272]). New kind: `suffix`.
+
+  Measured: `audit: props` returned **0** while `status` was split across
+  `반영됨(19)`, `완료(10)`, `진행 중(10)`, `구현 완료(1)`, `해결됨(1)`, `닫힘(1)`,
+  `이전됨(1)`, `미착수(1)` — five of the eight mean "done".
+
+  The `prefix` rule only looked at **prefixes**, and `완료` is a **suffix** of `구현 완료`.
+  Qualifiers usually attach to the front, so leaving that direction out misses half the splits.
+
+  On the real vault it now catches `구현 완료 ⊂ 완료` and `cross-platform ⊂ platform`.
+- **A signal for an unsettled axis** ([#272]). New kind: `sparse` — when values used exactly once
+  number **three or more and are at least half** of all values.
+
+  ⚠️ **It does not claim they are synonyms.** `반영됨`/`해결됨`/`닫힘`/`이전됨` share no
+  substring, and whether they mean the same thing is **not something a machine can decide**.
+  This feature's principle is that it does not judge. It reports only what can be counted:
+  "eight values, five used once".
+
+  ⚠️ It stays quiet on healthy axes. This vault's `doc_kind` has six values and no singletons.
+  Firing there would cost trust in the whole audit.
+
+  ⚠️ The value list is **capped at eight.** Uncapped, `topic` became a 17-row wall that buried
+  the real split (`suffix`) below it. The truncation is **stated**, not silent.
+- **Entry points sink to the bottom of "No backlinks"** ([#272]). Sorted by outgoing links
+  ascending, then by path.
+
+  Measured: this vault's `HOME.md` has **19** outgoing links and nothing points at it — which is
+  what an entry point looks like. Path ordering put it at the **top** of the list. When the first
+  row is always "not a problem", the rest of the list gets read less.
+
+### Not built — the corpus said so
+
+| | Measurement |
+|---|---|
+| More time-axis features | All 107 notes are **less than a week old**. Nothing to bite |
+| Assets and attachments | **Zero** non-markdown files |
+| Folding / long-document work | **Zero** notes over 1,000 lines |
+| Images, mermaid, math | Still **zero** |
+| `sparse` for tags | 35 of 74 used once, but the ratio is **0.47** — tags are an open axis and long-tailed by design. Firing there is noise |
+
+### One hypothesis that was wrong
+
+`related:` appears on 91% of notes while `buildBacklinks` only reads body links, which suggested
+plenty of false orphans. Running it gave **7** — the orphan check counts frontmatter relations
+too. That was nearly a conclusion drawn from one comment.
+
 ## [3.0.2] — 2026-08-28
 
 ### Changed
@@ -1663,7 +1742,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.2...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.0...main
+[3.1.0]: https://github.com/eren0315/lapis/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...v3.0.0
@@ -1715,6 +1795,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#272]: https://github.com/eren0315/lapis/pull/272
+[#271]: https://github.com/eren0315/lapis/pull/271
 [#270]: https://github.com/eren0315/lapis/pull/270
 [#269]: https://github.com/eren0315/lapis/pull/269
 [#268]: https://github.com/eren0315/lapis/pull/268
