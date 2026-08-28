@@ -276,6 +276,8 @@ pub fn run() {
             settings::settings_read,
             settings::settings_write,
             settings::settings_paths,
+            git::git_show_file,
+            git::git_recent,
             usage::usage_append,
             usage::usage_read,
             usage::usage_months,

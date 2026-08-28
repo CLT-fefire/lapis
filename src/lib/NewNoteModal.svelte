@@ -4,16 +4,49 @@
   import ModalShell from "$lib/ModalShell.svelte";
   import { newNoteRequest, closeNewNote } from "$lib/stores/tree-ui";
   import { createNewNote, vaultPath } from "$lib/stores/vault";
+  import { readVaultBundle, readNote } from "$lib/tauri/notes";
+  import {
+    applyTemplate,
+    defaultBody,
+    templateName,
+    TEMPLATE_DIR,
+  } from "$lib/noteTemplate";
 
   let fileName = $state("");
   let error = $state<string | null>(null);
+
+  /**
+   * vault 안의 템플릿 목록.
+   *
+   * ⚠️ **vault 안**이다(`.lapis/templates/`). 앱 설정에 담으면 vault 를 옮길 때
+   * 안 따라간다 — 노트가 파일시스템에 그대로 있는 것이 이 앱의 전제다.
+   */
+  let templates = $state<{ path: string; name: string }[]>([]);
+  let chosen = $state<string>("");
 
   $effect(() => {
     if ($newNoteRequest) {
       fileName = "";
       error = null;
+      chosen = "";
+      void loadTemplates();
     }
   });
+
+  async function loadTemplates(): Promise<void> {
+    const root = $vaultPath;
+    if (!root) return;
+    try {
+      const bundle = await readVaultBundle(root);
+      templates = bundle.contents
+        .filter((c) => c.path.includes(`/${TEMPLATE_DIR}/`) || c.path.includes(`${TEMPLATE_DIR}/`))
+        .map((c) => ({ path: c.path, name: templateName(c.path) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      // ⚠️ 템플릿을 못 읽어도 **새 노트는 만들 수 있어야 한다.** 목록만 빈다.
+      templates = [];
+    }
+  }
 
   async function submit() {
     const req = $newNoteRequest;
@@ -23,11 +56,20 @@
       error = m.newnote_name_required();
       return;
     }
-    // 단순 default 콘텐츠 — Phase 4.2에서 템플릿으로 확장 예정
-    const today = new Date().toISOString().slice(0, 10);
     // ⚠️ `.mmd` 로 만들면 h1 에 확장자가 남아 있었다 — 공용 규칙을 쓴다.
     const stem = noteStem(name);
-    const defaultContent = `# ${stem}\n\n`;
+
+    // ⚠️ 템플릿을 **안 고른** 경우의 동작은 예전 그대로다. 이 기능은 더하는 것이지
+    //    기존 흐름을 갈아치우는 것이 아니다.
+    let defaultContent = defaultBody(stem);
+    if (chosen) {
+      try {
+        const raw = await readNote(chosen);
+        defaultContent = applyTemplate(raw, { title: stem, now: new Date() });
+      } catch {
+        // 템플릿을 못 읽으면 기본 본문으로 — 새 노트 만들기가 그것 때문에 실패하면 안 된다.
+      }
+    }
 
     const newPath = await createNewNote(req.parentDir, name, defaultContent);
     if (newPath) {
@@ -72,6 +114,23 @@
             spellcheck="false"
           />
         </div>
+        <!--
+          ⚠️ 템플릿이 **없으면 이 줄도 없다.** 늘 그리면 안 쓰는 사람에게 빈 선택칸이
+          남고, 빈 선택칸은 "뭘 골라야 하나"를 묻게 만든다.
+        -->
+        {#if templates.length > 0}
+          <div class="row">
+            <label for="newnote-template">{m.newnote_template()}</label>
+            <select id="newnote-template" bind:value={chosen}>
+              <option value="">{m.newnote_template_none()}</option>
+              {#each templates as t (t.path)}
+                <option value={t.path}>{t.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        <p class="hint">{@html m.newnote_template_hint()}</p>
         {#if error}
           <div class="error">{error}</div>
         {/if}
@@ -133,6 +192,23 @@
     color: var(--text-secondary);
     font-family: "SF Mono", Menlo, monospace;
     font-size: var(--fs-sm);
+  }
+
+  .hint {
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+  }
+
+  select {
+    flex: 1;
+    padding: 6px 8px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    font: inherit;
   }
 
   input[type="text"] {

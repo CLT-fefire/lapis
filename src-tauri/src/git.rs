@@ -297,6 +297,44 @@ pub async fn git_show_diff(
 }
 
 #[cfg(test)]
+mod sha_tests {
+    use super::is_sha;
+
+    #[test]
+    fn accepts_hashes() {
+        assert!(is_sha("a1b2c3"));
+        assert!(is_sha("0123456789abcdef0123456789abcdef01234567"));
+        assert!(is_sha("ABCDEF"));
+    }
+
+    /// 🔴 임의 문자열을 `git show` 에 넘기면 `HEAD~3:../..` 같은 것으로 **vault 밖을
+    /// 읽는다.** 경로는 `rel_in_vault` 가 막지만 revision 쪽은 안 막힌다.
+    #[test]
+    fn rejects_revision_expressions() {
+        for bad in [
+            "",
+            "HEAD",
+            "HEAD~3",
+            "main",
+            "a1b2c3^",
+            "a1b2c3:../x",
+            "a1b2 c3",
+            "../etc",
+            "0123456789abcdef0123456789abcdef012345678", // 41자
+        ] {
+            assert!(!is_sha(bad), "{bad} 가 통과하면 안 된다");
+        }
+    }
+
+    /// ⚠️ 멀티바이트가 섞여도 패닉하지 않는다 — 바이트로 본다.
+    #[test]
+    fn handles_multibyte() {
+        assert!(!is_sha("한글"));
+        assert!(!is_sha("a1b2한"));
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
@@ -488,4 +526,69 @@ mod tests {
 
         fs::remove_dir_all(&dir).ok();
     }
+}
+
+/// 한 커밋 시점의 노트 내용.
+///
+/// ⚠️ **파일을 되돌리지 않는다.** `git checkout <sha> -- <path>` 는 작업 트리를 바꾸는
+/// 되돌릴 수 없는 쓰기이고, `README` 가 "쓰기 도구가 아니다"라고 못 박았다. 대신 옛
+/// 내용을 **읽어서** 준다 — 무엇으로 돌아가는지 보고 나서 사용자가 스스로 붙여넣는다.
+///
+/// 이 앱의 다른 감사들과 같은 태도다: 찾아서 보여줄 뿐 고치지 않는다.
+fn git_show_file_inner(vault_path: &str, sha: &str, path: &str) -> Result<String, String> {
+    let vault = canon_vault(vault_path)?;
+    let rel = rel_in_vault(&vault, path)?;
+    if !is_sha(sha) {
+        return Err(format!("커밋 해시가 아니다: {sha}"));
+    }
+    // `<sha>:<rel>` — git 이 그 시점의 blob 을 낸다.
+    run_git(&vault, &["show", &format!("{sha}:{rel}")])
+}
+
+/// ⚠️ 해시만 받는다. 임의 문자열을 `git show` 에 넘기면 `HEAD~3:../..` 같은 것으로
+/// vault 밖을 읽게 된다 — 경로는 `rel_in_vault` 가 막지만 revision 쪽은 안 막힌다.
+fn is_sha(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 40 && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// vault 전체의 최근 커밋 — "오늘 뭐가 바뀌었나".
+///
+/// ⚠️ 노트별 이력(`git_log`)과 **다른 질문**이다. 저쪽은 한 노트를 따라가고 이쪽은
+/// 하루를 조망한다. 둘을 한 함수로 합치면 `--follow` 가 전체 로그에서 뜻을 잃는다.
+fn git_recent_inner(vault_path: &str, limit: u32) -> Result<Vec<GitCommit>, String> {
+    let vault = canon_vault(vault_path)?;
+    let n = format!("-n{}", limit.clamp(1, 500));
+    let out = run_git(
+        &vault,
+        &["log", &n, "--pretty=format:%H%x1f%h%x1f%an%x1f%at%x1f%s"],
+    )?;
+    let fs = char::from(0x1f);
+    let mut commits = Vec::new();
+    for line in out.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let f: Vec<&str> = line.split(fs).collect();
+        if f.len() < 5 {
+            continue;
+        }
+        commits.push(GitCommit {
+            hash: f[0].to_string(),
+            short: f[1].to_string(),
+            author: f[2].to_string(),
+            timestamp: f[3].parse().unwrap_or(0),
+            subject: f[4].to_string(),
+        });
+    }
+    Ok(commits)
+}
+
+#[tauri::command]
+pub fn git_show_file(vault_path: String, sha: String, path: String) -> Result<String, String> {
+    git_show_file_inner(&vault_path, &sha, &path)
+}
+
+#[tauri::command]
+pub fn git_recent(vault_path: String, limit: u32) -> Result<Vec<GitCommit>, String> {
+    git_recent_inner(&vault_path, limit)
 }

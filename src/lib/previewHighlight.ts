@@ -40,6 +40,34 @@ function escapeRegExp(str: string): string {
 const ASCII_WORD = /[A-Za-z0-9_]/;
 
 /**
+ * 이 엔진이 lookbehind 를 파싱하나.
+ *
+ * ⚠️ **기능 검사다.** 버전으로 가르면 틀린다 — 같은 Safari 버전이 OS 에 따라 다르고,
+ * WKWebView 는 그보다 더 갈린다. 못 파싱하는 엔진에서 `new RegExp` 는 **던지고**,
+ * 그러면 `buildSearchRegex` 가 `null` 을 내 **검색이 통째로 죽는다**(v3.1.1 에서 고친
+ * 증상과 같아진다).
+ *
+ * 한 번만 재고 기억한다 — 매 키 입력마다 정규식을 컴파일할 이유가 없다.
+ */
+const LOOKBEHIND_OK = (() => {
+  try {
+    // eslint-disable-next-line prefer-regex-literals
+    new RegExp("(?<![a-z])x");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/**
+ * 낱말 문자 — **유니코드 기준**. 한글·한자·가나가 전부 들어간다.
+ *
+ * 이게 있어야 `고양이` 가 `검은고양이` 안에서는 안 잡힌다 — ASCII `\b` 로는
+ * 표현할 수 없는 경계다.
+ */
+const UNI_WORD = "[\\p{L}\\p{N}_]";
+
+/**
  * ## ⚠️ wholeWord 와 한글
  *
  * `\b` 는 **ASCII 낱말 문자**와 그 밖의 경계다. 한글은 낱말 문자가 아니라서
@@ -63,11 +91,26 @@ export function buildSearchRegex(query: string, opts: FindOptions): RegExp | nul
   if (!query) return null;
   let body = opts.regex ? query : escapeRegExp(query);
   if (opts.wholeWord) {
-    const head = opts.regex || ASCII_WORD.test(query[0]) ? "\\b" : "";
-    const tail = opts.regex || ASCII_WORD.test(query[query.length - 1]) ? "\\b" : "";
-    body = `${head}(?:${body})${tail}`;
+    if (LOOKBEHIND_OK && !opts.regex) {
+      // 🔴 **진짜 낱말 경계.** 유니코드 낱말 문자를 기준으로 하므로 한글도 제대로 갈린다 —
+      //    `고양이` 가 `검은고양이` 안에서는 안 잡힌다.
+      body = `(?<!${UNI_WORD})(?:${body})(?!${UNI_WORD})`;
+    } else {
+      // 옛 엔진 폴백 — ASCII 끝에만 `\b`. 한글은 부분 문자열로 돈다(결과가 0건이
+      // 되지는 않는다). regex 모드도 이쪽이다: 질의가 글자가 아니라 패턴이라 첫 글자로
+      // 경계를 판단하면 `(가|나)` 같은 입력에서 엉뚱한 결정을 한다.
+      const head = opts.regex || ASCII_WORD.test(query[0]) ? "\\b" : "";
+      const tail = opts.regex || ASCII_WORD.test(query[query.length - 1]) ? "\\b" : "";
+      body = `${head}(?:${body})${tail}`;
+    }
   }
-  const flags = opts.caseSensitive ? "g" : "gi";
+  /**
+   * ⚠️ `\p{...}` 는 **`u` 플래그가 있어야** 뜻이 있다. 없으면 `p` 한 글자로 읽혀
+   * 조용히 다른 것을 찾는다. 진짜 경계를 쓸 때만 켠다 — `u` 는 사용자 정규식의 일부
+   * 이스케이프를 더 엄격히 보므로, regex 모드에 켜면 예전에 되던 패턴이 깨진다.
+   */
+  const uni = opts.wholeWord && LOOKBEHIND_OK && !opts.regex;
+  const flags = (opts.caseSensitive ? "g" : "gi") + (uni ? "u" : "");
   try {
     return new RegExp(body, flags);
   } catch {

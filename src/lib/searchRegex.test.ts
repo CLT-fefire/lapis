@@ -55,9 +55,14 @@ describe("wholeWord", () => {
     expect(hits(buildSearchRegex("cat", { wholeWord: true }), "cat concat")).toEqual(["cat"]);
   });
 
-  /** ⚠️ 한쪽 끝만 ASCII 인 질의 — 그쪽에만 경계가 붙어야 한다. */
-  it("끝이 섞인 질의는 그 끝에만 경계를 건다", () => {
-    expect(hits(buildSearchRegex("가cat", { wholeWord: true }), "나가cat concat")).toEqual([
+  /**
+   * 끝이 섞인 질의도 **양쪽 다** 낱말 경계를 요구한다.
+   *
+   * ⚠️ `나가cat` 은 앞에 `나`(낱말 문자)가 붙어 있으므로 **안 잡힌다.** ASCII `\b` 만
+   * 쓰던 시절에는 잡혔는데, 그게 틀린 것이었다 — 한글도 낱말 문자다.
+   */
+  it("끝이 섞인 질의도 양쪽 경계를 요구한다", () => {
+    expect(hits(buildSearchRegex("가cat", { wholeWord: true }), "가cat 나가cat")).toEqual([
       "가cat",
     ]);
   });
@@ -69,20 +74,29 @@ describe("wholeWord", () => {
   });
 
   /**
-   * 🔴 **예전엔 0건이었다.** `\b` 는 ASCII 낱말 문자와의 경계라, 한글 질의는 앞뒤가 둘 다
-   * 비-낱말이어서 경계가 **아예 없다** — `\b고양이\b` 는 `"고양이"` 에도 안 맞았다.
+   * 🔴 **한글도 진짜 낱말 경계로 갈린다.**
    *
-   * "덜 걸린다"가 아니라 **검색이 죽었다.** 한글이 주 용도인 앱에서 낱말 단위를 켜면
-   * 결과가 통째로 비고, 에러도 안내도 없다.
+   * 여기까지 두 단계를 거쳤다:
    *
-   * 지금은 질의의 끝이 ASCII 낱말 문자가 아니면 그쪽 경계를 안 붙인다 — 한글은
-   * 부분 문자열로 돌아 **결과가 나온다**(진짜 낱말 경계는 아니다. 구현 주석 참조).
+   * 1. v3.1.1 이전 — `\b고양이\b` 는 `"고양이"` 에도 **안 맞았다.** ASCII 낱말
+   *    문자와의 경계라 한글은 앞뒤가 둘 다 비-낱말이어서 경계가 아예 없다.
+   *    "덜 걸린다"가 아니라 **검색이 죽었다.**
+   * 2. v3.1.1 — 0건은 면했지만 경계가 없어 `검은고양이` 안의 것도 잡혔다.
+   * 3. 지금 — 유니코드 낱말 문자 lookbehind 로 **standalone 만** 잡는다.
+   *
+   * ⚠️ lookbehind 를 못 파싱하는 엔진에서는 2단계로 떨어진다(기능 검사). 0건이 되는
+   * 1단계로는 **절대 안 돌아간다** — 그게 이 폴백의 요점이다.
    */
-  it("한글 질의에서 결과가 0건이 되지 않는다", () => {
+  it("한글에서 낱말 단위가 제대로 갈린다", () => {
     expect(hits(buildSearchRegex("고양이", { wholeWord: true }), "고양이 검은고양이")).toEqual([
       "고양이",
-      "고양이",
     ]);
+  });
+
+  it("한글 질의가 0건이 되지 않는다 — 폴백 포함", () => {
+    const re = buildSearchRegex("고양이", { wholeWord: true });
+    expect(re).not.toBeNull();
+    expect(hits(re, "고양이 를 본다")!.length).toBeGreaterThan(0);
   });
 });
 

@@ -51,3 +51,24 @@ export function gitLog(vaultPath: string, path: string, limit: number): Promise<
 export function gitShowDiff(vaultPath: string, path: string, rev: string): Promise<string> {
   return invoke<string>("git_show_diff", { vaultPath, path, rev });
 }
+
+/**
+ * 한 커밋 시점의 노트 내용.
+ *
+ * ⚠️ **파일을 되돌리지 않는다.** `git checkout` 은 작업 트리를 바꾸는 되돌릴 수 없는
+ * 쓰기이고, `README` 가 "쓰기 도구가 아니다"라고 못 박았다. 옛 내용을 **읽어서** 주고,
+ * 무엇으로 돌아가는지 보고 나서 사용자가 스스로 붙여넣는다.
+ */
+export function gitShowFile(vaultPath: string, sha: string, path: string): Promise<string> {
+  return invoke<string>("git_show_file", { vaultPath, sha, path });
+}
+
+/**
+ * vault 전체의 최근 커밋 — "오늘 뭐가 바뀌었나".
+ *
+ * ⚠️ `gitLog`(노트별 이력)와 **다른 질문**이다. 저쪽은 한 노트를 `--follow` 로 따라가고
+ * 이쪽은 하루를 조망한다.
+ */
+export function gitRecent(vaultPath: string, limit = 20): Promise<GitCommit[]> {
+  return invoke<GitCommit[]>("git_recent", { vaultPath, limit });
+}

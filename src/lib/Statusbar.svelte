@@ -9,6 +9,7 @@
     treeLoading,
   } from "$lib/stores/vault";
   import { watcherStatus } from "$lib/stores/watcher";
+  import { lastCommit, formatCommitDate } from "$lib/stores/git";
 
   /**
    * 상태바 — 셸의 마지막 줄.
@@ -68,6 +69,15 @@
       </span>
       {#if noteCount > 0}
         <span class="count">{noteCount.toLocaleString()}</span>
+      {/if}
+      <!--
+        ⚠️ 자동 커밋은 4초 뒤 **조용히** 돈다. 흔적이 없으면 잘 도는 것과 안 도는 것이
+        화면에서 같아 보인다 — 버전이 남는 줄 알고 계속 쓰게 된다.
+      -->
+      {#if $lastCommit}
+        <span class="commit" title={m.statusbar_committed_title({ at: formatCommitDate($lastCommit.at / 1000) })}>
+          {m.statusbar_committed({ count: $lastCommit.count })}
+        </span>
       {/if}
     {/if}
   </div>
@@ -145,6 +155,10 @@
 
   .dot.error {
     background: var(--danger-text);
+  }
+
+  .commit {
+    color: var(--text-disabled);
   }
 
   .count {

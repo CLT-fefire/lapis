@@ -14,6 +14,8 @@ import {
 
 export type WatcherStatus = "idle" | "watching" | "error";
 import { logError, logWarn } from "$lib/stores/usage";
+import { pushAlert } from "$lib/stores/alerts";
+import { m } from "$lib/paraglide/messages.js";
 
 export const watcherStatus = writable<WatcherStatus>("idle");
 export const lastWatchError = writable<string | null>(null);
@@ -192,7 +194,10 @@ export async function resolveConflictAcceptExternal(): Promise<void> {
     markSaved(fresh);
     externalConflict.set(null);
   } catch (e) {
-    logError("stores/watcher", "[watcher] accept external failed:", e);
+    // ⚠️ 충돌을 **안 닫는다.** 닫으면 사용자는 해결된 줄 알고 계속 편집하다가 다음
+    //    저장에서 남의 변경을 덮어쓴다. 대신 왜 안 됐는지를 화면에 남긴다.
+    logError("stores/watcher", "accept external failed:", e);
+    pushAlert("conflict-failed", m.alert_conflict_failed(), String(e));
   }
 }
 

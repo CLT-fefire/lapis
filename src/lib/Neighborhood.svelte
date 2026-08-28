@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { logWarn } from "$lib/stores/usage";
+  import { get } from "svelte/store";
   import { m } from "$lib/paraglide/messages.js";
   import { selectNote, vaultPath } from "$lib/stores/vault";
   import { fetchBacklinkContext, type BacklinkContext } from "$lib/backlinks";
   import { gitRepo, formatCommitDate, diffLineClass } from "$lib/stores/git";
-  import { gitLog, gitShowDiff, type GitCommit } from "$lib/tauri/git";
+  import { gitLog, gitShowDiff, gitShowFile, type GitCommit } from "$lib/tauri/git";
+  import { logWarn } from "$lib/stores/usage";
   import type { LinkInfo } from "$lib/tauri/notes";
   import type { RelationGroup } from "$lib/relations";
 
@@ -120,6 +121,43 @@
       diffs = next;
     } catch (e) {
       logWarn("Neighborhood", "[git] diff 실패", e);
+    }
+  }
+
+  /**
+   * 커밋 시점의 옛 내용. `sha → 본문`.
+   *
+   * ⚠️ **부를 때만 읽는다.** 커밋마다 미리 읽으면 이력을 펼치는 것만으로 파일을
+   * 스물다섯 번 읽게 된다.
+   */
+  let oldText = $state<Map<string, string>>(new Map());
+  let copiedSha = $state<string | null>(null);
+
+  async function showAt(sha: string): Promise<void> {
+    // ⚠️ `path` 는 위 effect 의 **지역 변수**다. 여기서는 다시 잡는다 — effect 것을
+    //    끌어다 쓰면 노트를 바꾼 뒤 옛 경로를 읽게 된다.
+    const notePath = targetNote?.source_path;
+    const vault = get(vaultPath);
+    if (!vault || !notePath || oldText.has(sha)) return;
+    try {
+      const text = await gitShowFile(vault, sha, notePath);
+      oldText = new Map(oldText).set(sha, text);
+    } catch (e) {
+      logWarn("Neighborhood", "옛 내용 읽기 실패", e);
+    }
+  }
+
+  async function copyOld(sha: string): Promise<void> {
+    const text = oldText.get(sha);
+    if (text === undefined) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedSha = sha;
+      setTimeout(() => {
+        if (copiedSha === sha) copiedSha = null;
+      }, 1200);
+    } catch (e) {
+      logWarn("Neighborhood", "클립보드 복사 실패", e);
     }
   }
 
@@ -252,6 +290,26 @@
                   <span class="commit-date">{formatCommitDate(c.timestamp)}</span>
                 </button>
                 {#if isOpen}
+                  <!--
+                    ⚠️ **되돌리기 버튼이 아니다.** `git checkout` 은 작업 트리를 바꾸는
+                    되돌릴 수 없는 쓰기이고, 이 앱은 쓰기 도구가 아니다. 옛 내용을
+                    **보여주고 복사**까지만 한다 — 무엇으로 돌아가는지 보고 나서
+                    사용자가 스스로 옮긴다.
+                  -->
+                  <div class="commit-actions">
+                    <button type="button" class="commit-act" onclick={() => showAt(c.hash)}>
+                      {m.nb_commit_show()}
+                    </button>
+                    {#if oldText.has(c.hash)}
+                      <button type="button" class="commit-act" onclick={() => copyOld(c.hash)}>
+                        {copiedSha === c.hash ? m.nb_commit_copied() : m.nb_commit_copy()}
+                      </button>
+                    {/if}
+                  </div>
+                  {#if oldText.has(c.hash)}
+                    <pre class="old-text">{oldText.get(c.hash)}</pre>
+                    <p class="placeholder">{m.nb_commit_restore_hint()}</p>
+                  {/if}
                   <div class="diff-box">
                     {#if diff == null}
                       <span class="placeholder">…</span>
@@ -493,6 +551,42 @@
     font-size: var(--fs-xs);
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
+  }
+
+  .commit-actions {
+    display: flex;
+    gap: var(--sp-2);
+    padding: 4px 0 4px 18px;
+  }
+
+  .commit-act {
+    background: none;
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    padding: 1px 6px;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+
+  .commit-act:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+
+  /* ⚠️ 높이를 묶는다 — 긴 노트의 옛 내용이 패널을 통째로 밀어낸다. */
+  .old-text {
+    margin: 0 0 4px 18px;
+    max-height: 14em;
+    overflow: auto;
+    padding: 6px 8px;
+    background: var(--surface-sunken);
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .diff-box {
