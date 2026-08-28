@@ -16,6 +16,54 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.1.2] — 2026-08-28
+
+> **The rest** of the untouched modules. Two more defects, both **without an error**.
+
+### Fixed
+- **The app and MCP gave different answers for the same tag** ([#274]).
+
+  MCP's tag query is `n === t || n.startsWith(t + "/")` — **exact match ∪ nested**. The app's
+  prefix index **did not include the tag itself**. Selecting `feature` gave only `feature/*`
+  in the app; notes tagged exactly `feature` **were missing**.
+
+  ⚠️ A second problem rode along: when a tag is **both an exact tag and a parent prefix**
+  (`a/b` used on its own while `a/b/c` also exists), `TagPanel`'s `isSubPrefix` went false and
+  selected leaf mode — and there was no third-level chip either, so **the deeper notes were
+  unreachable from the tree.** `prefixChildren` now holds every level and the test is
+  "does it have children".
+
+  `tagIndex.test.ts` reproduces the MCP rule directly and asserts **both implementations return
+  the same set.**
+- **Notes sharing a name shared their backlink excerpt** ([#274]).
+
+  The cache key was `${source}::${target stem}`. The excerpt is built from the target's
+  **stem, title and aliases**, so a stem alone does not identify the target.
+
+  With two same-named notes (this vault has **7 such pairs** per `audit: tags`), both targets
+  hit the **same key** from one source; the first computed won and the second showed **someone
+  else's excerpt**. The key is now the target **path**.
+
+### Added
+- **Tests for every remaining module** ([#274]) — 65 of them: `backlinks` (cache key), `unread`
+  (change-detection boundaries), `inDocSearch` (handed-over options must not persist),
+  `cssFormat` (empty input, idempotence, parse failure), `cli/appLaunch`
+  (detached/unref/stdio), `cli/io` (**vault escape, extension whitelist, atomic write**), and
+  `watcher` (both branches of external-change conflict resolution).
+
+  ⚠️ The `cli/io` escape check also covers **a symlink pointing outside**. Where symlinks cannot
+  be created the assertion is skipped — **an environment that could not run it is not counted
+  as a pass.**
+
+  ⚠️ `watcher`'s "use external" is pinned to **keep the conflict open when the read fails.**
+  Closing it would let the user believe it was resolved and overwrite the other change on the
+  next save.
+
+### Not tested — with reasons
+- `mermaidExport` and `previewExport` — canvas rendering and image inlining; **no meaningful
+  assertion exists without a real canvas.** The pure half of `previewExport`
+  (`previewExportDoc`) is already covered.
+
 ## [3.1.1] — 2026-08-28
 
 > A full pass over the unit tests. **Twelve modules had no test touching them**, and three of
@@ -1798,7 +1846,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.1...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.2...main
+[3.1.2]: https://github.com/eren0315/lapis/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/eren0315/lapis/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/eren0315/lapis/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
@@ -1852,6 +1901,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#274]: https://github.com/eren0315/lapis/pull/274
 [#273]: https://github.com/eren0315/lapis/pull/273
 [#272]: https://github.com/eren0315/lapis/pull/272
 [#271]: https://github.com/eren0315/lapis/pull/271

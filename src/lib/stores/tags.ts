@@ -77,31 +77,31 @@ export function buildTagIndex(infos: LinkInfo[]): TagIndex {
       }
       casings.set(tag, (casings.get(tag) ?? 0) + 1);
 
-      // 3) prefix 색인 — `feature/bubble/creation` → `feature`, `feature/bubble`.
+      // 3) prefix 색인 — `feature/bubble/creation` →
+      //    `feature`, `feature/bubble`, **그리고 `feature/bubble/creation` 자신**.
       //
-      // ⚠️ **마지막 조각은 안 넣는다.** 그건 접두사가 아니라 태그 자체이고 `byTag` 의
-      //    몫이다. 예전 주석은 셋 다 넣는다고 적고 있었는데 코드는 늘 둘이었다 —
-      //    그대로 믿고 `<=` 로 "고치면" `prefixCounts` 가 늘어 `rootPrefixes` 정렬이
-      //    흔들린다. 화면은 그려지고 숫자만 달라져서 알아채기 어렵다.
-      //    (`tagIndex.test.ts` 가 이 모양을 못 박는다.)
+      // ⚠️ **자기 자신을 넣는 것이 핵심이다.** MCP 의 태그 질의가
+      //    `n === t || n.startsWith(t + "/")` — **정확 일치 ∪ 하위**다. 앱이 자기 자신을
+      //    빼면 같은 태그를 물었을 때 **앱과 MCP 가 다른 집합**을 낸다. 정확히 태그된
+      //    노트가 앱의 접두사 선택에서만 사라지고, 에러는 없다.
       const parts = key.split("/");
-      if (parts.length > 1) {
-        for (let i = 0; i < parts.length - 1; i++) {
-          const prefix = parts.slice(0, i + 1).join("/");
-          addToPathSet(byPrefix, prefix, info.source_path);
+      for (let i = 0; i < parts.length; i++) {
+        const prefix = parts.slice(0, i + 1).join("/");
+        addToPathSet(byPrefix, prefix, info.source_path);
+        // ⚠️ **모든 단계의 직계 자식**을 담는다. 예전엔 root 의 1-depth 만 담아서
+        //    3단계 태그는 칩이 아예 없었고, 그 위 2단계가 정확 태그를 겸하면
+        //    `isSubPrefix` 가 false 가 되어 **트리에서 닿을 수 없었다.**
+        if (i + 1 < parts.length) {
+          const child = parts.slice(0, i + 2).join("/");
+          let children = prefixChildrenSet.get(prefix);
+          if (!children) {
+            children = new Set();
+            prefixChildrenSet.set(prefix, children);
+          }
+          children.add(child);
         }
-        // root prefix 의 직계 자식 등록 (1-depth만)
-        const root = parts[0];
-        const directChild = parts.length === 2 ? key : parts.slice(0, 2).join("/");
-        let children = prefixChildrenSet.get(root);
-        if (!children) {
-          children = new Set();
-          prefixChildrenSet.set(root, children);
-        }
-        children.add(directChild);
-      } else {
-        flatSet.add(key);
       }
+      if (parts.length === 1) flatSet.add(key);
     }
   }
 

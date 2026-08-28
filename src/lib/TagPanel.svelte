@@ -107,8 +107,16 @@
           <ul class="child-list">
             {#each children as childKey (childKey)}
               {@const childCount = $tagIndex.counts.get(childKey) ?? $tagIndex.prefixCounts.get(childKey) ?? 0}
-              {@const isSubPrefix = ($tagIndex.prefixCounts.get(childKey) ?? 0) > 0
-                && !($tagIndex.byTag.has(childKey))}
+              <!--
+                ⚠️ **자식이 있으면 접두사**다. 예전 판정은 `prefixCounts>0 && !byTag.has()`
+                였는데, 태그가 **정확 태그이면서 동시에 상위 접두사**이면(`a/b` 가 그 자체로
+                붙어 있고 `a/b/c` 도 있는 경우) false 가 되어 leaf 로 골랐다 — 그러면 더
+                깊은 노트는 칩도 없고 접두사 선택도 안 돼서 **트리에서 닿을 수 없었다.**
+
+                이제 `byPrefix` 가 자기 자신을 포함하므로(MCP 와 같은 규칙) 접두사로 골라도
+                정확히 태그된 노트가 빠지지 않는다.
+              -->
+              {@const isSubPrefix = ($tagIndex.prefixChildren.get(childKey)?.length ?? 0) > 0}
               <li>
                 <button
                   class="child-chip"

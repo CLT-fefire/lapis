@@ -18,6 +18,50 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [3.1.2] — 2026-08-28
+
+> 안 닿던 모듈 **나머지 전부**. 결함 둘이 더 나왔고 둘 다 **에러가 없다.**
+
+### Fixed
+- **앱과 MCP 가 같은 태그에 다른 답을 내던 것** ([#274]).
+
+  MCP 의 태그 질의는 `n === t || n.startsWith(t + "/")` — **정확 일치 ∪ 하위**다.
+  그런데 앱의 접두사 색인은 **자기 자신을 안 넣었다.** `feature` 를 고르면 앱은
+  `feature/*` 만 주고 정확히 `feature` 로 태그된 노트는 **빠졌다.**
+
+  ⚠️ 겸사로 딸려 있던 문제 — 태그가 **정확 태그이면서 동시에 상위 접두사**이면
+  (`a/b` 가 그 자체로 붙어 있고 `a/b/c` 도 있는 경우) `TagPanel` 의 `isSubPrefix` 가
+  false 가 되어 leaf 로 골랐고, 3단계 칩은 애초에 없어 **깊은 노트에 트리로 닿을 수
+  없었다.** 이제 `prefixChildren` 이 모든 단계를 담고, 판정이 "자식이 있는가"다.
+
+  `tagIndex.test.ts` 가 MCP 규칙을 그대로 재현해 **두 구현이 같은 집합을 내는지** 본다.
+- **동명 노트가 백링크 발췌를 나눠 쓰던 것** ([#274]).
+
+  캐시 키가 `${source}::${target의 stem}` 이었다. 발췌를 만드는 항목은 target 의
+  **stem · title · aliases** 셋이라 stem 만으로는 target 을 구별 못 한다.
+
+  이름이 같은 노트가 둘이면(이 vault 는 `audit: tags` 기준 **7쌍**) 같은 source 에서 두
+  target 이 **같은 키**를 쓰고, 먼저 계산된 쪽이 이겨 두 번째 노트가 **남의 발췌**를
+  보여줬다. 키를 target **경로**로 바꿨다.
+
+### Added
+- **남은 모듈 전부에 테스트** ([#274]) — 65건.
+  `backlinks`(캐시 키) · `unread`(변경 판정 경계) · `inDocSearch`(인계 옵션을 영속화하지
+  않는가) · `cssFormat`(빈 입력 · 멱등 · 파싱 실패) · `cli/appLaunch`(detached·unref·stdio) ·
+  `cli/io`(**vault 이탈 차단 · 확장자 화이트리스트 · 원자적 쓰기**) ·
+  `watcher`(외부 변경 충돌 해결 두 갈래).
+
+  ⚠️ `cli/io` 의 이탈 차단은 **심링크로 밖을 가리키는 경우**까지 본다. 심링크를 못 만드는
+  환경에서는 그 단언을 건너뛴다 — **못 만든 것을 통과로 세지 않는다.**
+
+  ⚠️ `watcher` 의 "외부 변경 사용"이 **읽기에 실패하면 충돌을 안 닫는지**를 못 박았다.
+  닫으면 사용자는 해결된 줄 알고 계속 편집하다가 다음 저장에서 남의 변경을 덮어쓴다.
+
+### 테스트하지 않은 것 — 이유를 적는다
+- `mermaidExport` · `previewExport` — 캔버스 렌더와 이미지 인라인이라 **실제 캔버스 없이는
+  뜻 있는 단언을 못 만든다.** `previewExport` 의 순수 절반(`previewExportDoc`)은 이미
+  덮여 있다.
+
 ## [3.1.1] — 2026-08-28
 
 > 유닛 테스트 전수 점검. **테스트가 하나도 안 닿는 모듈이 열둘**이었고, 그중 셋에서
@@ -1703,7 +1747,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.1...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.2...main
+[3.1.2]: https://github.com/eren0315/lapis/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/eren0315/lapis/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/eren0315/lapis/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
@@ -1757,6 +1802,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#274]: https://github.com/eren0315/lapis/pull/274
 [#273]: https://github.com/eren0315/lapis/pull/273
 [#272]: https://github.com/eren0315/lapis/pull/272
 [#271]: https://github.com/eren0315/lapis/pull/271
