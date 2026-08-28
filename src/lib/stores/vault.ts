@@ -1,5 +1,6 @@
 import { m } from "$lib/paraglide/messages.js";
 import { writable, get } from "svelte/store";
+import { noteStem } from "$lib/notePath";
 import { rememberVault } from "$lib/stores/recentVaults";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -1092,11 +1093,13 @@ export async function movePath(path: string, newParentDir: string): Promise<stri
   }
 }
 
-function stemOfPath(p: string): string {
-  const segs = p.split("/").filter(Boolean);
-  const last = segs[segs.length - 1] ?? p;
-  return last.replace(/\.md$/i, "");
-}
+/**
+ * ⚠️ 자체 구현이었는데 **`.md` 만** 벗겼다. `renamePath` 가 이걸로 뽑은 stem 을 링크
+ * 갱신에 넘기므로, `.mmd` 노트의 이름을 바꾸면 `"diagram.mmd"` 로 찾게 되고 본문의
+ * `[[diagram]]` 과 매칭이 **0건**이 된다 — 모달도 안 뜨고 조용히 끝난다.
+ * 공용 `noteStem` 이 지원 확장자 둘을 다 벗긴다.
+ */
+const stemOfPath = noteStem;
 
 /**
  * vault 내 모든 노트를 읽어 oldStem → newStem 치환.

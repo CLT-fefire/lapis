@@ -16,6 +16,62 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.1.1] — 2026-08-28
+
+> A full pass over the unit tests. **Twelve modules had no test touching them**, and three of
+> those held real defects. All three fail **without an error**.
+
+### Fixed
+- **Renaming a `.mmd` note silently broke its links** ([#273]).
+
+  `renamePath` derives the old and new stem and hands them to the link rewrite, but the stem
+  helper stripped **only `.md`**. For `.mmd` the extension stayed, so the rewrite searched for
+  `"diagram.mmd"` while the body links read `[[diagram]]` — **zero matches**, no preview modal,
+  a **silent return**. The file was renamed and every citation kept pointing at the old name.
+
+  ⚠️ `vault.rs` treats **both** `.md` and `.mmd` as notes and preserves `.mmd` on rename. Only
+  the extension-stripping rule was split **three ways** across the codebase:
+  `previewExportDoc` (md/mmd/markdown), `relations` (md/mmd), and four other sites (**md only**).
+
+  One definition now lives in `notePath.ts`, and `noteStem.test.ts` blocks a `.md`-only regex
+  from reappearing.
+- **Filtering the tree by a folder name produced an empty folder row** ([#273]).
+
+  A folder whose own name matched still had its children replaced by the filtered result (an
+  empty array). Typing `plans` showed an **empty `plans/`** while `countMatches`, which counts
+  leaves only, printed **"0 matches"** — a visible row with a zero count means one of the two
+  is lying.
+
+  When the folder matches, its contents **are** what you were looking for, so they stay.
+- **"Whole word" in in-document search returned nothing for Korean** ([#273]).
+
+  `\b` is a boundary against **ASCII word characters**. Korean characters are not word
+  characters, so both sides are non-word and there is **no boundary at all** — `\b고양이\b`
+  did not even match `"고양이"`.
+
+  That is not "matches less", it is **search is dead**. In an app built around Korean search,
+  enabling that option emptied the results with no error and no explanation.
+
+  In literal mode the boundary is now attached only on an edge that is an ASCII word character.
+  ⚠️ Real CJK word boundaries need lookbehind, and where an older WKWebView cannot parse it the
+  **whole regex becomes null — exactly the symptom just fixed.** So it stops here.
+
+### Added
+- **Tests for the untouched modules** ([#273]) — 60 of them: `layout` (three migration
+  branches), `treeFilter`, the regex assembly in `previewHighlight`, `windowScope` (per-window
+  keys), `tagIndex` (nested prefixes), and `noteStem`.
+- **A shell-dimension drift guard** ([#273]). Checks that `--collapsed-strip-w` (CSS) and
+  `COLLAPSED_STRIP` (TS) hold the same number, and that shell heights stay out of the density
+  blocks. Drift makes the collapsed width and the strip button width disagree — both near 34px,
+  so it is easy to miss.
+
+### Not fixed — recorded as latent
+- **A tag that is both an exact tag and a parent prefix hides its deeper notes.** `TagPanel`'s
+  `isSubPrefix` goes false there and selects leaf mode, and there is no third-level chip to
+  begin with. ⚠️ Measured on 2026-08-28, this vault has **zero depth-3 tags** and zero instances
+  of the shape, so it does not bite yet. `tagIndex.test.ts` pins the condition so there is a
+  reproduction to start from.
+
 ## [3.1.0] — 2026-08-28
 
 > Six findings from a third corpus pass (107 notes). This time the audits were **actually run**
@@ -1742,7 +1798,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.1...main
+[3.1.1]: https://github.com/eren0315/lapis/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/eren0315/lapis/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
@@ -1795,6 +1852,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#273]: https://github.com/eren0315/lapis/pull/273
 [#272]: https://github.com/eren0315/lapis/pull/272
 [#271]: https://github.com/eren0315/lapis/pull/271
 [#270]: https://github.com/eren0315/lapis/pull/270

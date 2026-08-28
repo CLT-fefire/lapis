@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
+  import { noteStem } from "$lib/notePath";
   import ModalShell from "$lib/ModalShell.svelte";
   import { newNoteRequest, closeNewNote } from "$lib/stores/tree-ui";
   import { createNewNote, vaultPath } from "$lib/stores/vault";
@@ -24,7 +25,8 @@
     }
     // 단순 default 콘텐츠 — Phase 4.2에서 템플릿으로 확장 예정
     const today = new Date().toISOString().slice(0, 10);
-    const stem = name.replace(/\.md$/i, "");
+    // ⚠️ `.mmd` 로 만들면 h1 에 확장자가 남아 있었다 — 공용 규칙을 쓴다.
+    const stem = noteStem(name);
     const defaultContent = `# ${stem}\n\n`;
 
     const newPath = await createNewNote(req.parentDir, name, defaultContent);
