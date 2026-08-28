@@ -19,6 +19,21 @@
  * 가려져 있으면 그릴 것이 없으니 paint 를 기다릴 이유도 없다 — 0ms 로 곧장 넘긴다.
  * 가시성은 도중에 바뀔 수 있으므로 `hidden` 판정만으로는 부족하고, 경주가 최종 안전망이다.
  *
+ * ## 양쪽 머신에서 같아야 한다
+ *
+ * **`document.hidden` 이 정확한지에 기대지 않는 것이 요점이다.** macOS 의 WKWebView 가 창
+ * 가림을 Page Visibility 로 보고하는지 여부는 여기서 확인할 수 없고(Windows 에서 잰 결과를
+ * macOS 근거로 쓰지 않는다), 확인할 필요도 없다 — `hidden` 은 타임아웃을 0ms 로 할지
+ * 100ms 로 할지만 정하고, **어느 쪽이든 반드시 풀린다.**
+ *
+ * 최악(창은 가려졌는데 `hidden` 이 거짓이라 rAF 를 100ms 씩 기다리는 경우)의 상한도 작다.
+ * 12,000 노트 vault 의 양보 횟수는 ~14회(`reloadNotesInner` 4 + `buildIndexChunked` 2 +
+ * `buildRelationIndexChunked` 는 `yieldEvery=1500` 이라 8) → **약 1.4초.** 그 전에는
+ * 무한이었다.
+ *
+ * ⚠️ `setTimeout` 이 백그라운드에서 throttle 되지 않는지 실측했다(6회 전부 0ms 대).
+ * `MessageChannel` 로 바꿀 근거가 없어 안 바꿨다 — 근거 없는 복잡도를 넣지 않는다.
+ *
  * ## ⚠️ 사본을 만들지 않는다
  *
  * 이 헬퍼는 `linkIndex` · `relations` · `stores/vault` 세 곳에 복제돼 있었고 결함도 세

@@ -124,6 +124,36 @@ describe("scopeOptions", () => {
     ]);
   });
 
+  /**
+   * ⚠️ **양쪽 머신에서 같아야 한다.** vault 는 Windows 에서 `C:/…`, macOS 에서 `/Users/…`
+   * 또는 `/Volumes/…`(이 저장소의 asset 스코프가 명시하는 경로) 아래 있다. 뿌리를 걷는
+   * 방식이라 모양에 안 기대지만, 한쪽만 통과하는 상태가 생기지 않게 못 박아 둔다.
+   */
+  it("macOS 외장 볼륨 경로도 같다", () => {
+    const abs = [
+      "/Volumes/Source/SharedDocs/knowledge/lapis/a.md",
+      "/Volumes/Source/SharedDocs/knowledge/lapis/b.md",
+      "/Volumes/Source/SharedDocs/knowledge/slate/c.md",
+      "/Volumes/Source/SharedDocs/HOME.md",
+    ];
+    expect(scopeOptions(abs)).toEqual([
+      { prefix: "/Volumes/Source/SharedDocs/knowledge/", label: "knowledge/", count: 3 },
+      { prefix: "/Volumes/Source/SharedDocs/knowledge/lapis/", label: "knowledge/lapis/", count: 2 },
+    ]);
+  });
+
+  /** Windows UNC — 앞의 빈 세그먼트 둘이 뿌리에 그대로 들어간다. */
+  it("UNC 경로도 같다", () => {
+    const abs = [
+      "//nas/share/vault/plans/a.md",
+      "//nas/share/vault/plans/b.md",
+      "//nas/share/vault/HOME.md",
+    ];
+    expect(scopeOptions(abs)).toEqual([
+      { prefix: "//nas/share/vault/plans/", label: "plans/", count: 2 },
+    ]);
+  });
+
   /** 상대경로에서는 걷을 뿌리가 없다 — label 이 prefix 와 같다. */
   it("상대경로면 label 이 prefix 와 같다", () => {
     expect(scopeOptions(paths)[0]).toEqual({

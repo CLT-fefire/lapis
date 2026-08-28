@@ -328,6 +328,29 @@ visible instead of silently passing.
 > app. None of it ships: the fake is behind `import.meta.env.DEV` and reached through a dynamic
 > `import()`, and a test scans the production build to prove it is absent.
 
+#### Measuring styles when the tab is not on screen
+
+If you drive that preview from a tool rather than looking at it, watch for one trap: while the tab
+is hidden (`document.hidden`), **the computed style of an element that already exists stops being
+updated**. Adding a class, or even setting `el.style.background` directly, leaves
+`getComputedStyle` returning the old value — no error, just a wrong number. Reading it and
+believing it sends you off to fix CSS that was never broken.
+
+Freshly inserted nodes *are* computed correctly, so clone what you want to measure:
+
+```js
+const a = el.cloneNode(true), b = el.cloneNode(true);
+b.classList.add("active");
+el.parentElement.append(a, b);
+// getComputedStyle(a) vs getComputedStyle(b) — the real difference
+a.remove(); b.remove();
+```
+
+`requestAnimationFrame` does not fire at all in that state either (measured: zero callbacks in
+1.5s). That is a property of the platform, not of the preview — it is why `yieldToPaint()` races
+rAF against a timer instead of awaiting it. Screenshots need the pane actually on screen, so
+anything that needs eyes — layout, alignment, spacing — still belongs in a real window.
+
 Builds:
 
 ```bash
