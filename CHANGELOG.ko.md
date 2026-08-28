@@ -18,6 +18,59 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [3.1.1] — 2026-08-28
+
+> 유닛 테스트 전수 점검. **테스트가 하나도 안 닿는 모듈이 열둘**이었고, 그중 셋에서
+> 실제 결함이 나왔다. 셋 다 **에러 없이** 틀린다.
+
+### Fixed
+- **`.mmd` 노트 이름을 바꾸면 링크가 조용히 끊기던 것** ([#273]).
+
+  `renamePath` 가 옛/새 stem 을 뽑아 링크 갱신에 넘기는데, stem 을 뽑는 코드가 **`.md` 만**
+  벗겼다. `.mmd` 는 확장자가 남아 `"diagram.mmd"` 로 찾게 되고, 본문 위키링크는
+  `[[diagram]]` 이라 **매칭 0건** → 미리보기 모달도 안 뜨고 **조용히 종료**한다.
+  이름은 바뀌고 인용은 옛 이름을 가리킨 채 남는다.
+
+  ⚠️ `vault.rs` 는 `.md` 와 `.mmd` 를 **둘 다** 노트로 다루고 이름 변경도 `.mmd` 를
+  보존한다. 확장자를 벗기는 규칙만 코드베이스에 **세 가지**로 갈려 있었다:
+  `previewExportDoc`(md·mmd·markdown) · `relations`(md·mmd) · 나머지 넷(**md 만**).
+
+  이제 `notePath.ts` 의 `noteStem` 하나가 정의하고, `noteStem.test.ts` 가 `.md` 만 보는
+  정규식이 다시 생기는 것을 막는다.
+- **트리 필터에서 폴더 이름으로 찾으면 빈 폴더 한 줄이 뜨던 것** ([#273]).
+
+  폴더 이름이 맞아도 자식을 필터 결과(=빈 배열)로 갈아 끼웠다. `plans` 를 치면
+  **빈 `plans/`** 가 뜨고, `countMatches` 는 잎만 세므로 화면에는 **"0 matches"** 라고
+  적혔다 — 줄은 보이는데 개수는 0이라 둘 중 하나가 거짓말이었다.
+
+  폴더가 맞으면 **그 안이 곧 찾던 것**이므로 하위를 통째로 남긴다.
+- **문서 내 검색의 "낱말 단위"가 한글에서 결과를 0건으로 만들던 것** ([#273]).
+
+  `\b` 는 **ASCII 낱말 문자**와의 경계다. 한글은 낱말 문자가 아니라서 앞뒤가 둘 다
+  비-낱말 → 경계가 **아예 없다**. `\b고양이\b` 는 `"고양이"` 에도 안 맞았다.
+
+  "덜 걸린다"가 아니라 **검색이 죽었다.** 한글이 주 용도인 앱에서 그 옵션을 켜면 결과가
+  통째로 비고, 에러도 안내도 없다.
+
+  이제 literal 모드에서는 질의의 그 끝이 ASCII 낱말 문자일 때만 경계를 붙인다.
+  ⚠️ 진짜 CJK 낱말 경계는 lookbehind 가 필요한데, 옛 WKWebView 가 그걸 못 파싱하면
+  **정규식이 통째로 null 이 되어 지금 고친 증상과 똑같아진다.** 거기서 멈췄다.
+
+### Added
+- **테스트가 안 닿던 모듈에 테스트** ([#273]) — 60건. `layout`(마이그레이션 분기 셋) ·
+  `treeFilter` · `previewHighlight` 의 정규식 조립 · `windowScope`(창별 키) ·
+  `tagIndex`(중첩 접두사) · `noteStem`.
+- **셸 치수 드리프트 가드** ([#273]). `--collapsed-strip-w`(CSS)와 `COLLAPSED_STRIP`(TS)이
+  같은 숫자인지, 셸 높이가 밀도 블록에 안 들어갔는지 본다. 갈리면 접힌 폭과 스트립 버튼
+  폭이 어긋나는데 둘 다 34 근처라 눈에 잘 안 띈다.
+
+### 고치지 않은 것 — 잠재 결함으로 적어 둔다
+- **태그가 정확 태그이면서 동시에 상위 접두사이면 깊은 노트에 못 닿는다.**
+  `TagPanel` 의 `isSubPrefix` 가 그때 false 가 되어 leaf 로 고르고, 3단계 칩은 애초에
+  없다. ⚠️ 2026-08-28 실측으로 이 vault 는 **깊이 3 태그가 0개**이고 이 형태도 0건이라
+  아직 안 터진다. `tagIndex.test.ts` 가 조건이 만들어지는 것을 고정해 뒀다 — 고칠 때
+  재현 지점이 된다.
+
 ## [3.1.0] — 2026-08-28
 
 > 3차 코퍼스 분석(107노트)에서 나온 여섯. **감사를 실제로 돌려서** 무엇이 안 잡히는지부터 봤다.
@@ -1650,7 +1703,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.1.1...main
+[3.1.1]: https://github.com/eren0315/lapis/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/eren0315/lapis/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
@@ -1703,6 +1757,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#273]: https://github.com/eren0315/lapis/pull/273
 [#272]: https://github.com/eren0315/lapis/pull/272
 [#271]: https://github.com/eren0315/lapis/pull/271
 [#270]: https://github.com/eren0315/lapis/pull/270

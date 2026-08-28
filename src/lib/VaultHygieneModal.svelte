@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
+  import { noteStem } from "$lib/notePath";
   import ModalShell from "$lib/ModalShell.svelte";
   import {
     brokenLinksOpen,
@@ -160,7 +161,7 @@
   }
 
   function shortName(path: string): string {
-    return path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
+    return noteStem(path);
   }
 </script>
 

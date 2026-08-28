@@ -77,8 +77,13 @@ export function buildTagIndex(infos: LinkInfo[]): TagIndex {
       }
       casings.set(tag, (casings.get(tag) ?? 0) + 1);
 
-      // 3) prefix 색인 — `feature/bubble/creation` →
-      //    `feature`, `feature/bubble`, `feature/bubble/creation` 모두 노트 추가
+      // 3) prefix 색인 — `feature/bubble/creation` → `feature`, `feature/bubble`.
+      //
+      // ⚠️ **마지막 조각은 안 넣는다.** 그건 접두사가 아니라 태그 자체이고 `byTag` 의
+      //    몫이다. 예전 주석은 셋 다 넣는다고 적고 있었는데 코드는 늘 둘이었다 —
+      //    그대로 믿고 `<=` 로 "고치면" `prefixCounts` 가 늘어 `rootPrefixes` 정렬이
+      //    흔들린다. 화면은 그려지고 숫자만 달라져서 알아채기 어렵다.
+      //    (`tagIndex.test.ts` 가 이 모양을 못 박는다.)
       const parts = key.split("/");
       if (parts.length > 1) {
         for (let i = 0; i < parts.length - 1; i++) {

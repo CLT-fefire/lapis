@@ -17,7 +17,12 @@ export function clearTreeFilter(): void {
 /**
  * 트리를 query로 재귀적으로 필터링. 매칭 시 부모 체인까지 결과에 포함.
  * - 파일: name이 query 포함 시 포함
- * - 폴더: name이 query 포함 OR 자손 매칭 있을 때 포함 (children도 필터 결과로 교체)
+ * - 폴더: name이 query 포함 → **하위를 통째로** 포함. 자손만 매칭 → 필터 결과로 교체
+ *
+ * ⚠️ **폴더가 맞으면 그 안이 곧 찾던 것이다.** 예전엔 폴더 이름이 맞아도 children 을
+ * 필터 결과(=빈 배열)로 갈아 끼워서, `plans` 를 치면 **빈 `plans/` 폴더 한 줄**이 떴다.
+ * 게다가 `countMatches` 는 잎만 세므로 화면에는 "0 matches"라고 적혔다 — 줄은 보이는데
+ * 개수는 0이라 **둘 중 하나가 거짓말**이었고, 에러는 없었다.
  *
  * `?:` query 빈 문자열이면 원본 그대로 반환 (zero-cost).
  */
@@ -31,9 +36,14 @@ function filterImpl(entries: NoteEntry[], q: string): NoteEntry[] {
   const out: NoteEntry[] = [];
   for (const entry of entries) {
     if (entry.is_dir) {
-      const filteredChildren = entry.children ? filterImpl(entry.children, q) : [];
       const selfMatches = entry.name.toLowerCase().includes(q);
-      if (selfMatches || filteredChildren.length > 0) {
+      // ⚠️ 폴더 이름이 맞으면 **자르지 않는다.** 그 안이 곧 찾던 것이다.
+      if (selfMatches) {
+        out.push(entry);
+        continue;
+      }
+      const filteredChildren = entry.children ? filterImpl(entry.children, q) : [];
+      if (filteredChildren.length > 0) {
         out.push({ ...entry, children: filteredChildren });
       }
     } else if (entry.name.toLowerCase().includes(q)) {

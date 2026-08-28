@@ -31,14 +31,40 @@ function escapeRegExp(str: string): string {
  * 옵션을 반영한 RegExp 생성. 사용자 입력이 invalid regex이면 null 반환.
  * - regex: 사용자 입력을 정규식으로 그대로 해석
  * - 일반(literal): escape 후 substring 매치
- * - wholeWord: 앞뒤 `\b` 추가 (ASCII 기준 — 한국어/CJK는 사실상 미동작)
  * - caseSensitive: false면 `i` 플래그
  * - `g` 플래그는 항상 켜짐 (matchAll/lastIndex 활용)
+ */
+/** `\b` 가 경계로 인정하는 문자 — ASCII 낱말 문자. 한글은 여기 없다. */
+const ASCII_WORD = /[A-Za-z0-9_]/;
+
+/**
+ * ## ⚠️ wholeWord 와 한글
+ *
+ * `\b` 는 **ASCII 낱말 문자**와 그 밖의 경계다. 한글은 낱말 문자가 아니라서
+ * `\b고양이\b` 는 `"고양이"` 에도 **안 맞는다** — 앞뒤가 둘 다 비-낱말이라 경계가
+ * 아예 없기 때문이다.
+ *
+ * 즉 예전 동작은 "덜 걸린다"가 아니라 **결과가 0건**이었다. 한글이 주 용도인 앱에서
+ * 낱말 단위를 켜면 검색이 조용히 죽었다 — 에러도 안내도 없다.
+ *
+ * 그래서 **literal 모드에서는 질의의 그 끝이 ASCII 낱말 문자일 때만** 경계를 붙인다.
+ * 한글 질의는 경계 없이(=부분 문자열) 돌아 결과가 나온다.
+ *
+ * ⚠️ 진짜 CJK 낱말 경계는 lookbehind 가 필요한데, 옛 WKWebView 가 그걸 못 파싱하면
+ * **정규식이 통째로 null 이 되어** 지금 고친 증상과 똑같아진다. 타깃 하한이 올라가기
+ * 전까지는 여기서 멈춘다.
+ *
+ * ⚠️ regex 모드는 손대지 않는다. 거기서 질의는 글자가 아니라 패턴이라, 첫 글자로
+ * 경계를 판단하면 `(가|나)` 같은 입력에서 엉뚱한 결정을 한다.
  */
 export function buildSearchRegex(query: string, opts: FindOptions): RegExp | null {
   if (!query) return null;
   let body = opts.regex ? query : escapeRegExp(query);
-  if (opts.wholeWord) body = `\\b(?:${body})\\b`;
+  if (opts.wholeWord) {
+    const head = opts.regex || ASCII_WORD.test(query[0]) ? "\\b" : "";
+    const tail = opts.regex || ASCII_WORD.test(query[query.length - 1]) ? "\\b" : "";
+    body = `${head}(?:${body})${tail}`;
+  }
   const flags = opts.caseSensitive ? "g" : "gi";
   try {
     return new RegExp(body, flags);
