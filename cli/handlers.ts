@@ -170,6 +170,28 @@ function relativizer(root: string): (abs: string) => string {
   return (abs) => (abs.startsWith(root) ? abs.slice(cut) : abs);
 }
 
+/**
+ * `--props status=완료 --props status=반영됨` → `{ status: ["완료", "반영됨"] }`.
+ *
+ * ⚠️ 값에 `=` 가 들어갈 수 있다(`date=2026-08-28`은 아니지만 자유 텍스트 축은 그럴 수 있다).
+ * **첫 `=` 에서만** 가른다.
+ * ⚠️ `=` 가 없는 인자는 **조용히 버리지 않는다** — 무시하면 사용자는 필터가 먹은 줄 안다.
+ */
+export function parseProps(pairs: readonly string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const raw of pairs) {
+    const at = raw.indexOf("=");
+    if (at <= 0) {
+      throw new Error(`--props 는 필드=값 꼴이어야 한다: ${raw}`);
+    }
+    const field = raw.slice(0, at).trim();
+    const value = raw.slice(at + 1).trim();
+    if (!field || !value) throw new Error(`--props 는 필드=값 꼴이어야 한다: ${raw}`);
+    (out[field] ??= []).push(value);
+  }
+  return out;
+}
+
 export function cmdSearch(p: ParsedCommand, out: Out): void {
   const o = p.options;
   const res = lapisQuery({
@@ -179,6 +201,7 @@ export function cmdSearch(p: ParsedCommand, out: Out): void {
     ...(typeof o["doc-kind"] === "string" ? { doc_kind: o["doc-kind"] } : {}),
     ...(typeof o.topic === "string" ? { topic: o.topic } : {}),
     ...(typeof o["min-rel"] === "number" ? { min_rel: o["min-rel"] } : {}),
+    ...(Array.isArray(o.props) ? { props: parseProps(o.props) } : {}),
     ...(Array.isArray(o.under) ? { under: o.under } : {}),
     ...(Array.isArray(o.exclude) ? { exclude: o.exclude } : {}),
   });

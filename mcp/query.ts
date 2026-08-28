@@ -32,6 +32,7 @@ import {
 } from "$lib/recency";
 import {
   applyFilters,
+  emptySelection,
   buildIndex,
   buildTagIndex,
   koBigramTokenize,
@@ -120,7 +121,13 @@ interface ResponseBase {
 }
 
 export interface FacetListResponse extends ResponseBase {
-  list: "topics" | "tags" | "doc_kinds";
+  /**
+   * `topics` · `tags` · `doc_kinds` · `fields`, 또는 **임의 frontmatter 필드 이름**.
+   *
+   * ⚠️ `fields` 는 "어떤 축이 있나"를 묻는다. 그걸 모르면 임의 필드를 물을 수가 없다 —
+   * 값을 찍어 맞히게 하지 않는다(`topics` 를 넣은 것과 같은 이유).
+   */
+  list: string;
   total_distinct: number;
   returned: number;
   truncated: boolean;
@@ -178,7 +185,13 @@ export interface QueryArgs {
   topic?: string;
   tag?: string;
   backlinks_of?: string;
-  list?: "topics" | "tags" | "doc_kinds";
+  /**
+   * facet 값 열거. `topics` · `tags` · `doc_kinds` · `fields`, 또는 **임의 frontmatter
+   * 필드 이름**(`status` 등).
+   *
+   * ⚠️ 어떤 필드를 물을 수 있는지는 `list: "fields"` 가 답한다.
+   */
+  list?: string;
   /**
    * vault 위생 감사 하나. 앱과 CLI가 쓰는 **같은 순수 함수**를 부른다.
    *
@@ -200,6 +213,15 @@ export interface QueryArgs {
    * 한 vault 에 프로젝트가 여럿일 때를 위한 것이다 — 이 vault 는 이름 충돌 7건이
    * 전부 프로젝트 사이에서 났다.
    */
+  /**
+   * 임의 frontmatter 축으로 거른다 — `{ status: ["완료", "반영됨"] }`.
+   *
+   * 같은 필드 안은 **OR**, 필드 사이는 **AND**. 앱의 필터 패널과 같은 규칙이다.
+   *
+   * ⚠️ 그 필드가 **없는** 노트는 빠진다 — `status` 없는 노트가 "완료"일 리 없다.
+   * ⚠️ 어떤 필드·값이 있는지는 `list: "fields"` 와 `list: "<필드>"` 가 답한다.
+   */
+  props?: Record<string, string[]>;
   under?: string[];
   exclude?: string[];
   include_archive?: boolean;
@@ -412,9 +434,24 @@ function listFacet(
   const counts = new Map<string, number>();
   const bump = (v: string) => counts.set(v, (counts.get(v) ?? 0) + 1);
   for (const i of infos) {
-    if (kind === "topics" && i.topic) bump(i.topic);
-    else if (kind === "doc_kinds" && i.doc_kind) bump(i.doc_kind);
-    else if (kind === "tags") for (const t of i.tags ?? []) bump(norm(t));
+    if (kind === "topics") {
+      if (i.topic) bump(i.topic);
+    } else if (kind === "doc_kinds") {
+      if (i.doc_kind) bump(i.doc_kind);
+    } else if (kind === "tags") {
+      for (const t of i.tags ?? []) bump(norm(t));
+    } else if (kind === "fields") {
+      // ⚠️ 필드 **이름**을 센다 — 값이 아니라. "어떤 축이 있나"에 답하려면 이쪽이다.
+      //    타입 있는 필드는 자기 이름의 `list` 가 이미 있으므로 뺀다.
+      for (const f of Object.keys(i.props ?? {})) {
+        if (f !== "doc_kind" && f !== "topic" && f !== "tags" && f !== "title") bump(f);
+      }
+    } else {
+      // 임의 frontmatter 필드의 **값**.
+      // ⚠️ 한 노트가 같은 값을 두 번 적어도 한 번만 센다 — 개수가 노트 수를 넘으면 안 된다.
+      const values = i.props?.[kind];
+      if (values) for (const v of new Set(values.map((x) => x.trim()).filter(Boolean))) bump(v);
+    }
   }
   const all = [...counts].sort((a, b) => b[1] - a[1] || asc(a[0], b[0]));
   return {
@@ -553,6 +590,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     list,
     audit,
     sources,
+    props: propFilter,
     under = [],
     exclude = [],
     include_archive = false,
@@ -563,12 +601,15 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     by: axis = "mtime",
   } = args;
 
-  const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of);
+  const propPairs = Object.entries(propFilter ?? {})
+    .map(([f, vs]) => [f, new Set((vs ?? []).map((v) => v.trim()).filter(Boolean))] as const)
+    .filter(([, set]) => set.size > 0);
+  const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of || propPairs.length > 0);
   if (!list && !audit && !text && !wantsStructural) {
     throw new LapisError(
       "no_criteria",
       "조건이 하나도 없다.",
-      "text · doc_kind · topic · tag · backlinks_of 중 최소 하나를 채우거나, " +
+      "text · doc_kind · topic · tag · props · backlinks_of 중 최소 하나를 채우거나, " +
         "list:\"topics\"|\"tags\"|\"doc_kinds\"로 쓸 수 있는 값부터 확인하거나, " +
         `audit:"${AUDIT_KINDS.join('"|"')}"로 vault 위생을 물어라.`,
     );
@@ -703,13 +744,33 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
       used.push({ name: "tag", corpus_size: st.tags.byTag.size, matched: hit.size });
     }
 
+    /**
+     * 임의 frontmatter 축 — 같은 필드 안은 OR, 필드 사이는 AND.
+     *
+     * ⚠️ 앱의 `applyFilters` 와 **같은 규칙**이어야 한다. 갈리면 같은 질문에 두 화면이
+     * 다른 답을 낸다 — 태그 접두사에서 실제로 그랬다(v3.1.2).
+     *
+     * ⚠️ 그 필드가 **없는** 노트는 빠진다. `status` 없는 노트가 "완료"일 리 없다.
+     */
+    for (const [field, wanted] of propPairs) {
+      const hit = new Set<string>();
+      for (const info of st.vc.infos) {
+        const have = info.props?.[field];
+        if (have?.some((v) => wanted.has(v.trim()))) hit.add(info.source_path);
+      }
+      pool = pool === null ? hit : new Set([...pool].filter((p) => hit.has(p)));
+      used.push({ name: `props:${field}`, corpus_size: st.vc.infos.length, matched: hit.size });
+    }
+
     if (doc_kind || topic) {
       const src = pool === null ? st.vc.infos : st.vc.infos.filter((i) => pool!.has(i.source_path));
-      const f = applyFilters(
-        src,
-        new Set(doc_kind ? [doc_kind] : []),
-        new Set(topic ? [topic] : []),
-      );
+      // ⚠️ 앱과 **같은 함수**를 쓴다. 여기서 따로 구현하면 같은 질문에 두 표면이
+      //    다른 답을 낸다 — 태그 접두사에서 실제로 그랬다(v3.1.2).
+      const f = applyFilters(src, {
+        ...emptySelection(),
+        docKinds: new Set(doc_kind ? [doc_kind] : []),
+        topics: new Set(topic ? [topic] : []),
+      });
       pool = new Set(f.map((i: LinkInfo) => i.source_path));
       used.push({ name: "facet", corpus_size: st.vc.infos.length, matched: pool.size });
     }

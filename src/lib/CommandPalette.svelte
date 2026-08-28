@@ -5,12 +5,18 @@
   import { fade } from "svelte/transition";
   import { backdropFade, cardIn, cardOut } from "$lib/motion";
   import { formatShortcut } from "$lib/shortcutLabel";
+  import { displayName as savedLabel } from "$lib/savedSearch";
   import {
     paletteOpen,
     paletteHintMode,
     paletteIntent,
     closePalette,
     setPaletteMode,
+    paletteScope,
+    setPaletteScope,
+    savedSearches,
+    saveSearch,
+    removeSavedSearch,
   } from "$lib/stores/palette";
   import {
     fullTextIndexReady,
@@ -25,6 +31,8 @@
     CYCLE_MODES,
     cycleMode,
     folderChips,
+    scopeCandidates,
+    inPaletteScope,
     relScore,
     type PaletteResult,
     type PaletteEntry,
@@ -38,11 +46,6 @@
   let listEl: HTMLDivElement | null = $state(null);
   let query = $state("");
   let activeIndex = $state(0);
-  /**
-   * 전문 모드의 폴더 칩. 빈 문자열은 **vault 루트 폴더**이므로 "필터 없음"과 다르다 —
-   * 없음은 `null` 이다. 하나로 합치면 루트를 고를 수 없다.
-   */
-  let folderFilter = $state<string | null>(null);
 
   /** 검색 디바운스(ms) — 빠른 타이핑 시 키 입력마다 풀검색(searchQuick 12k + readNote×N) 방지. */
   const SEARCH_DEBOUNCE_MS = 90;
@@ -58,7 +61,6 @@
     if ($paletteOpen) {
       query = "";
       activeIndex = 0;
-      folderFilter = null;
       keyboardNavMode = false;
       lastMouseXY = { x: -1, y: -1 };
       tick().then(() => inputEl?.focus());
@@ -118,29 +120,20 @@
   });
 
   /**
-   * 폴더 칩은 **거르기 전** 결과에서 뽑는다. 거른 뒤에서 뽑으면 칩을 하나 고르는 순간
-   * 나머지 칩이 사라져 **다른 폴더로 옮겨갈 수가 없다** — 되돌아올 길이 없는 필터다.
+   * 스코프 후보는 **스코프를 걸기 전** 결과에서 뽑는다. 건 뒤에서 뽑으면 하나를 고르는
+   * 순간 나머지가 사라져 **다른 폴더로 옮겨갈 수가 없다** — 되돌아올 길이 없는 필터다.
+   *
+   * ⚠️ 스코프가 이미 걸려 있으면 후보를 안 뽑는다. 그 안에서 다시 쪼개는 것은 이 화면이
+   * 답할 질문이 아니고, 칩이 두 겹으로 쌓이면 무엇이 걸린 건지 안 읽힌다.
    */
-  const chips = $derived($paletteHintMode === "fulltext" ? folderChips(results) : []);
+  const chips = $derived($paletteScope === null ? scopeCandidates(results) : []);
 
   /** ⚠️ 칩이 하나면 안 그린다 — 거를 것이 없는 필터는 자리만 먹고 아무 질문에도 답하지 않는다. */
   const showFolderChips = $derived(chips.length > 1);
 
-  /** 고른 폴더가 지금 결과에 없으면 필터를 놓는다. 아무것도 없는 화면은 고장과 구별이 안 된다. */
-  $effect(() => {
-    if (folderFilter === null) return;
-    if (!chips.some((c) => c.path === folderFilter)) folderFilter = null;
-  });
-
-  const visibleResults = $derived.by<PaletteResult[]>(() => {
-    if (folderFilter === null) return results;
-    const want = folderFilter;
-    return results.filter((r) => {
-      if (r.entry.kind !== "content") return true;
-      const at = r.entry.path.lastIndexOf("/");
-      return (at < 0 ? "" : r.entry.path.slice(0, at)) === want;
-    });
-  });
+  const visibleResults = $derived.by<PaletteResult[]>(() =>
+    results.filter((r) => inPaletteScope(r.entry, $paletteScope)),
+  );
 
   const groups = $derived(groupResults(visibleResults));
 
@@ -267,7 +260,25 @@
     }
   }
 
+  /**
+   * 지금 검색을 저장한다.
+   *
+   * ⚠️ **스코프를 같이 담는다.** 질의만 담으면 다른 프로젝트를 보던 중에 불렀을 때
+   * 엉뚱한 결과가 나오고, 그건 저장된 검색이 고장 난 것처럼 읽힌다.
+   */
+  function saveCurrent(): void {
+    const q = query.trim();
+    if (q === "") return;
+    saveSearch({ name: "", query: q, mode: $paletteHintMode, scope: $paletteScope });
+  }
+
   function onKeydown(e: KeyboardEvent) {
+    // ⚠️ `⌘S` 는 팔레트가 열려 있을 때만 여기로 온다 — 본문 저장과 겹치지 않는다.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      saveCurrent();
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       closePalette();
@@ -311,7 +322,6 @@
   function switchMode(mode: PaletteMode) {
     setPaletteMode(mode);
     if (/^[>#:]/.test(query)) query = query.slice(1);
-    folderFilter = null;
     activeIndex = 0;
     inputEl?.focus();
   }
@@ -433,26 +443,34 @@
 
       {#if showFolderChips}
         <div class="folders" aria-label={m.palette_folder_aria()}>
-          <button
-            type="button"
-            class="folder"
-            class:active={folderFilter === null}
-            onclick={() => { folderFilter = null; activeIndex = 0; }}
-          >
-            {m.palette_folder_clear()}
-          </button>
-          {#each chips as c (c.path)}
+          {#each chips as c (c.prefix)}
             <button
               type="button"
               class="folder"
-              class:active={folderFilter === c.path}
-              title={c.path || m.palette_folder_root()}
-              onclick={() => { folderFilter = c.path; activeIndex = 0; }}
+              title={c.prefix}
+              onclick={() => { setPaletteScope(c.prefix); activeIndex = 0; }}
             >
-              <span class="folder-name">{c.path || m.palette_folder_root()}</span>
+              <span class="folder-name">{c.prefix.replace(/\/$/, "")}</span>
               <span class="folder-count">{c.count}</span>
             </button>
           {/each}
+        </div>
+      {/if}
+
+      <!--
+        ⚠️ 스코프는 **닫아도 남는다.** 남는 만큼 항상 보여야 한다 — 조용히 좁혀진 결과는
+        "왜 안 나오지"가 되고, 그건 검색이 고장 난 것과 구별이 안 된다.
+      -->
+      {#if $paletteScope !== null}
+        <div class="scope-bar">
+          <span class="scope-label">{$paletteScope.replace(/\/$/, "")}</span>
+          <button
+            type="button"
+            class="scope-clear"
+            onclick={() => { setPaletteScope(null); activeIndex = 0; }}
+          >
+            {m.palette_folder_clear()}
+          </button>
         </div>
       {/if}
 
@@ -464,6 +482,39 @@
         <div class="status hint">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html m.palette_hint_full()}
+        </div>
+      {/if}
+
+      <!--
+        저장된 검색. ⚠️ **질의가 비었을 때만** 보인다 — 치기 시작하면 결과가 자리를 써야
+        하고, 둘이 같이 있으면 무엇이 검색 결과인지 안 읽힌다.
+      -->
+      {#if query.trim() === "" && $savedSearches.length > 0}
+        <div class="saved">
+          <div class="group-header">{m.palette_group_saved()}</div>
+          {#each $savedSearches as sv (sv.query + sv.mode + (sv.scope ?? ""))}
+            <div class="saved-row">
+              <button
+                type="button"
+                class="saved-open"
+                onclick={() => {
+                  setPaletteMode(sv.mode);
+                  setPaletteScope(sv.scope);
+                  query = sv.query;
+                  activeIndex = 0;
+                }}
+              >
+                <span class="saved-name">{savedLabel(sv)}</span>
+                {#if sv.scope}<span class="saved-scope">{sv.scope.replace(/\/$/, "")}</span>{/if}
+              </button>
+              <button
+                type="button"
+                class="saved-remove"
+                title={m.palette_saved_remove()}
+                onclick={() => removeSavedSearch(sv)}>×</button
+              >
+            </div>
+          {/each}
         </div>
       {/if}
 
@@ -662,6 +713,7 @@
 
       <footer class="palette-foot">
         <span>{m.palette_key_navigate()}</span>
+        <span>{m.palette_key_save()}</span>
         <span>{m.palette_key_mode()}</span>
         <span>{m.palette_key_run()}</span>
         <span>{m.palette_key_close()}</span>
@@ -781,12 +833,6 @@
     color: var(--text-secondary);
   }
 
-  .folder.active {
-    background: var(--accent-bg-subtle);
-    border-color: var(--accent);
-    color: var(--accent-text);
-  }
-
   .folder-name {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -796,8 +842,89 @@
     color: var(--text-disabled);
   }
 
-  .folder.active .folder-count {
+  /**
+   * 걸린 스코프. ⚠️ 칩(고를 것)과 **다르게 생겨야** 한다 — 같아 보이면 무엇이 걸린
+   * 상태인지 안 읽히고, 그게 "왜 안 나오지"의 원인이 된다.
+   */
+  .scope-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--accent-bg-subtle);
+    color: var(--accent-text);
+    font-size: var(--fs-xs);
+  }
+
+  .scope-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .scope-clear {
+    flex: none;
+    background: none;
+    border: none;
     color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .saved {
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .saved-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .saved-open {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-width: 0;
+    padding: var(--sp-2) var(--sp-4);
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .saved-open:hover {
+    background: var(--surface-hover);
+  }
+
+  .saved-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .saved-scope {
+    flex: none;
+    color: var(--text-disabled);
+    font-size: var(--fs-xs);
+  }
+
+  .saved-remove {
+    flex: none;
+    padding: 0 var(--sp-3);
+    background: none;
+    border: none;
+    color: var(--text-disabled);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .saved-remove:hover {
+    color: var(--danger-text);
   }
 
   .status {

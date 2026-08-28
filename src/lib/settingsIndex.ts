@@ -39,6 +39,7 @@ export const SETTINGS_INDEX: readonly SettingsEntry[] = [
   { key: "settings_backup_title", cat: "vault" },
   { key: "settings_git_title", cat: "vault" },
   { key: "settings_reindex_title", cat: "vault" },
+  { key: "settings_recency_title", cat: "vault" },
   { key: "settings_mcp_title", cat: "advanced" },
   { key: "settings_css_title", cat: "advanced" },
   { key: "settings_usage_title", cat: "advanced" },

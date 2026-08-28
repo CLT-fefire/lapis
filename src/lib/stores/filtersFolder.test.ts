@@ -1,19 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { applyFilters, buildFacetCounts } from "./filters";
+import { applyFilters, buildFacetCounts, emptySelection } from "./filters";
 import type { LinkInfo } from "$lib/tauri/notes";
 
 /**
- * 필터의 **세 번째 축 — 폴더**.
+ * 필터의 **폴더 축**.
  *
  * 2026-08-28 실측: 이 vault 는 한 안에 프로젝트가 둘이고(`knowledge/lapis` ·
  * `knowledge/slate`), `audit: tags` 가 낸 이름 충돌 **7건이 전부** 그 둘 사이였다.
  * doc_kind·topic 으로는 그 경계를 못 긋는다 — 두 프로젝트가 **같은 doc_kind 를 쓴다.**
- *
- * ⚠️ 여기서 조용히 틀리는 방법은 축을 더하면서 **빈 선택의 뜻**을 흐리는 것이다.
- * "아무것도 안 골랐으면 아무것도 안 보여준다"가 원래 규칙인데, 축이 셋이 되면
- * "폴더만 골랐을 때"가 새로 생긴다.
  */
 
 function note(path: string, doc_kind: string, topic: string): LinkInfo {
@@ -39,15 +35,23 @@ const INFOS = [
 
 const paths = (out: LinkInfo[]) => out.map((i) => i.source_path).sort();
 
+/** 축 셋만 쓰는 짧은 형태 — 이 파일의 관심사는 폴더다. */
+function sel(opts: { docKinds?: string[]; topics?: string[]; folders?: string[] }) {
+  const s = emptySelection();
+  for (const v of opts.docKinds ?? []) s.docKinds.add(v);
+  for (const v of opts.topics ?? []) s.topics.add(v);
+  for (const v of opts.folders ?? []) s.folders.add(v);
+  return s;
+}
+
 describe("폴더 축", () => {
-  it("아무것도 안 고르면 빈 결과 — 옛 규칙 그대로", () => {
-    expect(applyFilters(INFOS, new Set(), new Set(), new Set())).toEqual([]);
+  it("아무것도 안 고르면 빈 결과", () => {
+    expect(applyFilters(INFOS, sel({}))).toEqual([]);
   });
 
   /** 폴더만 골라도 결과가 나와야 한다 — 안 그러면 축이 하나 죽은 것이다. */
   it("폴더만 골라도 걸러진다", () => {
-    const out = applyFilters(INFOS, new Set(), new Set(), new Set(["knowledge/lapis/"]));
-    expect(paths(out)).toEqual([
+    expect(paths(applyFilters(INFOS, sel({ folders: ["knowledge/lapis/"] })))).toEqual([
       "knowledge/lapis/plans/a.md",
       "knowledge/lapis/reference/b.md",
     ]);
@@ -58,42 +62,34 @@ describe("폴더 축", () => {
    * `plan` 만으로는 경계를 못 긋는다.
    */
   it("다른 축과는 AND — 같은 doc_kind 가 두 프로젝트에 있어도 갈린다", () => {
-    const both = applyFilters(INFOS, new Set(["plan"]), new Set(), new Set());
-    expect(paths(both)).toHaveLength(2);
-
-    const one = applyFilters(INFOS, new Set(["plan"]), new Set(), new Set(["knowledge/slate/"]));
-    expect(paths(one)).toEqual(["knowledge/slate/plans/c.md"]);
+    expect(applyFilters(INFOS, sel({ docKinds: ["plan"] }))).toHaveLength(2);
+    expect(
+      paths(applyFilters(INFOS, sel({ docKinds: ["plan"], folders: ["knowledge/slate/"] }))),
+    ).toEqual(["knowledge/slate/plans/c.md"]);
   });
 
   it("같은 축 안에서는 OR", () => {
     const out = applyFilters(
       INFOS,
-      new Set(),
-      new Set(),
-      new Set(["knowledge/lapis/plans/", "knowledge/slate/plans/"]),
+      sel({ folders: ["knowledge/lapis/plans/", "knowledge/slate/plans/"] }),
     );
-    expect(paths(out)).toEqual([
-      "knowledge/lapis/plans/a.md",
-      "knowledge/slate/plans/c.md",
-    ]);
+    expect(paths(out)).toEqual(["knowledge/lapis/plans/a.md", "knowledge/slate/plans/c.md"]);
   });
 
   /** ⚠️ 문자열 접두사다 — MCP `under`·`exclude` 와 같은 규칙. */
   it("세그먼트 중간에서 끊는 접두사도 먹는다", () => {
-    const out = applyFilters(INFOS, new Set(), new Set(), new Set(["knowledge/la"]));
-    expect(paths(out)).toHaveLength(2);
+    expect(applyFilters(INFOS, sel({ folders: ["knowledge/la"] }))).toHaveLength(2);
   });
 
   it("맞는 게 없으면 빈 결과", () => {
-    expect(applyFilters(INFOS, new Set(), new Set(), new Set(["없는/"]))).toEqual([]);
+    expect(applyFilters(INFOS, sel({ folders: ["없는/"] }))).toEqual([]);
   });
 });
 
 describe("facet 개수는 폴더 축을 안 센다", () => {
   /**
    * ⚠️ `buildFacetCounts` 는 doc_kind·topic 만 센다. 폴더 후보는 경로에서 나오므로
-   * `folderScope.ts` 의 `scopeOptions` 가 따로 낸다 — 세는 코드를 하나로 합치면
-   * 한쪽이 `LinkInfo` 를, 다른 쪽이 경로 문자열을 원해서 인자가 지저분해진다.
+   * `folderScope.ts` 의 `scopeOptions` 가 따로 낸다.
    */
   it("옛 동작 그대로", () => {
     const { docKindCounts, topicCounts } = buildFacetCounts(INFOS);
@@ -103,7 +99,7 @@ describe("facet 개수는 폴더 축을 안 센다", () => {
 });
 
 /**
- * ⚠️ **배선 가드.** 위 단언이 전부 초록이어도 `FilterPanel.svelte` 가 새 축을 안 그리면
+ * ⚠️ **배선 가드.** 위 단언이 전부 초록이어도 `FilterPanel.svelte` 가 축을 안 그리면
  * 화면은 그대로다 — 에러 없이. 이 세션에서 실제로 여러 번 겪은 실패다.
  */
 describe("필터 패널 배선", () => {
@@ -112,7 +108,6 @@ describe("필터 패널 배선", () => {
       fileURLToPath(new URL("../FilterPanel.svelte", import.meta.url)),
       "utf-8",
     );
-    // 주석을 지운다 — 안 지우면 가드가 자기 설명 문구에 맞는다.
     return raw
       .replace(/<!--[\s\S]*?-->/g, "")
       .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -128,17 +123,16 @@ describe("필터 패널 배선", () => {
     expect(src).toMatch(/toggleFolder\(/);
   });
 
-  /** ⚠️ 안 넘기면 고른 폴더가 목록에 반영되지 않는다 — 칩만 켜지고 결과는 그대로다. */
-  it("applyFilters 에 폴더 축을 넘긴다", () => {
-    const call = src.match(/applyFilters\(([\s\S]*?)\);/);
-    expect(call, "applyFilters 호출을 못 찾았다").not.toBeNull();
-    expect(call![1]).toContain("selectedFolders");
+  /** 🔴 3차에서 빠뜨렸던 축 — 그리는지 본다. */
+  it("임의 frontmatter 축을 그린다", () => {
+    expect(src).toMatch(/propAxes\(/);
+    expect(src).toMatch(/togglePropValue\(/);
   });
 
-  /** 선택 여부 판정에도 들어가야 한다 — 아니면 폴더만 골랐을 때 목록이 안 뜬다. */
-  it("선택 여부에 폴더를 센다", () => {
-    const has = src.match(/hasAnySelection = \$derived\(([\s\S]*?)\);/);
-    expect(has, "hasAnySelection 을 못 찾았다").not.toBeNull();
-    expect(has![1]).toContain("selectedFolders");
+  /** ⚠️ 안 넘기면 고른 값이 목록에 반영되지 않는다 — 칩만 켜지고 결과는 그대로다. */
+  it("applyFilters 에 선택 객체를 넘긴다", () => {
+    const call = src.match(/applyFilters\(([\s\S]*?)\);/);
+    expect(call, "applyFilters 호출을 못 찾았다").not.toBeNull();
+    expect(call![1]).toContain("selection");
   });
 });

@@ -7,9 +7,13 @@
     selectedDocKinds,
     selectedTopics,
     selectedFolders,
+    selectedProps,
     toggleDocKind,
     toggleTopic,
     toggleFolder,
+    togglePropValue,
+    propAxes,
+    selectionSize,
     clearFilters,
     applyFilters,
   } from "$lib/stores/filters";
@@ -47,15 +51,29 @@
     return scopeOptions([...idx.byPath.keys()]);
   });
 
+  /**
+   * 임의 frontmatter 축 — **무엇이 축이 될 수 있나**는 `propAxes` 가 정한다.
+   *
+   * ⚠️ 아무 필드나 축으로 내면 `date` 처럼 값이 전부 다른 필드가 칩 107개를 만든다.
+   * 하나를 고르면 노트 한 개가 남으니 그건 필터가 아니라 파일 열기다.
+   */
+  const axes = $derived.by(() => {
+    const idx = $linkIndex;
+    if (!idx) return [];
+    return propAxes(idx.byPath.values());
+  });
+
+  const selection = $derived({
+    docKinds: $selectedDocKinds,
+    topics: $selectedTopics,
+    folders: $selectedFolders,
+    props: $selectedProps,
+  });
+
   const filteredNotes = $derived.by<{ path: string; label: string; topic: string | null; doc_kind: string | null }[]>(() => {
     const idx = $linkIndex;
     if (!idx) return [];
-    const matched: LinkInfo[] = applyFilters(
-      idx.byPath.values(),
-      $selectedDocKinds,
-      $selectedTopics,
-      $selectedFolders,
-    );
+    const matched: LinkInfo[] = applyFilters(idx.byPath.values(), selection);
     return matched
       .map((info) => ({
         path: info.source_path,
@@ -66,12 +84,10 @@
       .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
   });
 
-  const hasAnySelection = $derived(
-    $selectedDocKinds.size + $selectedTopics.size + $selectedFolders.size > 0,
-  );
+  const hasAnySelection = $derived(selectionSize(selection) > 0);
 </script>
 
-{#if $docKindCounts.size === 0 && $topicCounts.size === 0 && folderOptions.length === 0}
+{#if $docKindCounts.size === 0 && $topicCounts.size === 0 && folderOptions.length === 0 && axes.length === 0}
   <div class="empty">
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     <p>{@html m.filters_empty()}</p>
@@ -155,6 +171,33 @@
         </div>
       </section>
     {/if}
+
+    <!--
+      임의 frontmatter 축. ⚠️ **마지막**이다 — doc_kind·topic·폴더가 "무엇/어디"를 묻고
+      이건 vault 마다 다른 축이라, 위로 올리면 있는 vault 에서만 자리를 먹는다.
+    -->
+    {#each axes as axis (axis.field)}
+      <section class="facet">
+        <header class="facet-header">
+          <span>{axis.field}</span>
+          <span class="facet-meta">{axis.values.length}</span>
+        </header>
+        <div class="chip-row">
+          {#each axis.values as v (v.value)}
+            {@const active = $selectedProps.get(axis.field)?.has(v.value) ?? false}
+            <button
+              class="facet-chip prop-chip"
+              class:active
+              onclick={() => togglePropValue(axis.field, v.value)}
+              title={`${axis.field}: ${v.value} (${v.count})`}
+            >
+              <span class="name">{v.value}</span>
+              <span class="count">{v.count}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/each}
 
     {#if hasAnySelection}
       <div class="action-bar">

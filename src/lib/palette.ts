@@ -12,6 +12,10 @@ import { docKindCounts, topicCounts } from "$lib/stores/filters";
 import { matchCommands, BUILTIN_COMMANDS, type Command } from "$lib/commands";
 import { recentNotePaths, RECENT_DISPLAY } from "$lib/stores/recent";
 import { noteMtimes } from "$lib/stores/mtimes";
+import { linkIndex } from "$lib/stores/vault";
+import { recencyAxis } from "$lib/stores/palette";
+import { parseFrontmatterDate } from "$lib/recency";
+import { scopeOptions } from "$lib/folderScope";
 
 /**
  * 팔레트 모드.
@@ -337,13 +341,30 @@ function recentAsResults(limit: number = RECENT_DISPLAY): PaletteResult[] {
  * 보인다. 그 규율은 `$lib/recency`와 같다.
  */
 function changedAsResults(limit: number = RECENT_DISPLAY): PaletteResult[] {
+  const axis = get(recencyAxis);
   const times = get(noteMtimes);
-  if (times.size === 0) return [];
   const entries = get(quickEntries);
+
+  /**
+   * ⚠️ `date` 축은 **frontmatter 를 적은 노트만** 대상이다. mtime 은 모든 파일에 있지만
+   * `date` 는 없을 수 있고, 없는 노트를 0으로 두면 목록 맨 뒤에 몰려 뜻이 없어진다 —
+   * **뺀다.**
+   *
+   * `parseFrontmatterDate` 는 CLI·MCP 가 `--by date` 에 쓰는 **같은 함수**다. 여기서
+   * 따로 파싱하면 같은 노트가 표면마다 다른 날짜를 갖는다.
+   */
+  const timeOf = (path: string): number | undefined => {
+    if (axis === "mtime") return times.get(path);
+    const raw = get(linkIndex)?.byPath.get(path)?.props?.date?.[0];
+    const parsed = raw ? parseFrontmatterDate(raw) : null;
+    return parsed ?? undefined;
+  };
+
+  if (axis === "mtime" && times.size === 0) return [];
 
   const rows: { qe: QuickEntry; mtimeMs: number }[] = [];
   for (const qe of entries) {
-    const t = times.get(qe.path);
+    const t = timeOf(qe.path);
     if (t !== undefined) rows.push({ qe, mtimeMs: t });
   }
   rows.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.qe.path < b.qe.path ? -1 : 1));
@@ -602,4 +623,54 @@ export function folderChips(results: readonly PaletteResult[], limit = 6): Folde
     .map(([path, count]) => ({ path, count }))
     .sort((a, b) => b.count - a.count || a.path.localeCompare(b.path))
     .slice(0, limit);
+}
+
+/**
+ * 이 항목이 가리키는 노트 경로. 경로가 없는 종류(명령·태그·facet)는 `null`.
+ *
+ * ⚠️ **경로가 없는 항목을 스코프가 지우면 안 된다.** 폴더를 좁혔다고 `>` 명령이 사라지면
+ * 스코프를 켠 사용자는 명령 팔레트를 못 쓴다.
+ */
+export function entryPath(entry: PaletteEntry): string | null {
+  switch (entry.kind) {
+    case "note":
+    case "content":
+    case "recent":
+    case "changed":
+      return entry.path;
+    default:
+      return null;
+  }
+}
+
+/**
+ * 팔레트 스코프 안인가.
+ *
+ * ⚠️ **문자열 접두사**다 — `inScope`(앱 필터) · `under`(MCP) · `exclude` 와 같은 규칙이다.
+ * 예전 폴더 칩은 **정확 일치**로 걸렀는데, 그러면 `knowledge/lapis` 로 좁혔을 때
+ * `knowledge/lapis/plans/a.md` 가 빠진다 — 결과는 나오고 에러는 없다.
+ */
+export function inPaletteScope(entry: PaletteEntry, scope: string | null): boolean {
+  if (!scope) return true;
+  const p = entryPath(entry);
+  if (p === null) return true;
+  return p.startsWith(scope);
+}
+
+/**
+ * 지금 결과에서 고를 만한 스코프 후보.
+ *
+ * ⚠️ `folderChips` 와 다르다. 저쪽은 **본문 결과만** 센다(질의가 찾아낸 것만). 스코프는
+ * **지금 보이는 것**을 기준으로 골라야 화면에 있는 폴더가 후보에 있다.
+ */
+export function scopeCandidates(
+  results: readonly PaletteResult[],
+  limit = 6,
+): { prefix: string; count: number }[] {
+  const paths: string[] = [];
+  for (const r of results) {
+    const p = entryPath(r.entry);
+    if (p !== null) paths.push(p);
+  }
+  return scopeOptions(paths).slice(0, limit);
 }

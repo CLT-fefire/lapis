@@ -222,6 +222,8 @@ export const SAMPLE_NOTES: FixtureNote[] = [
     title: "ADR-001 폐기 결정",
     doc_kind: "adr",
     topic: "graph",
+    // 임의 frontmatter 축 테스트용 — 실측 vault 의 `status` 를 본떴다.
+    props: { status: ["완료"] },
     body: "그래프 뷰를 폐기한다.",
   },
   {
@@ -230,6 +232,7 @@ export const SAMPLE_NOTES: FixtureNote[] = [
     topic: "graph",
     targets: ["001-abandoned"],
     related: { amends: ["001-abandoned"] },
+    props: { status: ["진행 중"] },
     body: "ADR-001을 개정해 다시 도입한다.",
   },
   {
