@@ -18,6 +18,34 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-08-28
+
+### Changed
+- **용어 셋을 바꿨다** ([#270]). 화면에 보이는 말만 바뀐다 — **저장된 것도, 명령도,
+  CLI 플래그도 그대로다.**
+
+  | 전 | 후 |
+  |---|---|
+  | vault 위생 | **vault 진단** |
+  | 고아 노트 | **백링크 없음** |
+  | 테이블 뷰 | **한눈에 보기** |
+
+  "위생"과 "정리"는 좋고 나쁨을 함의하는데, 이 화면은 **판단하지 않는다** — 찾아서
+  보여줄 뿐 고치지 않는다. "고아"는 감정이 실린 비유였고, 실제로 재는 것은
+  **들어오는 링크가 하나도 없다**는 사실 하나다. "테이블 뷰"는 번역투였다.
+
+  ⚠️ **코드와 CLI 는 옛 이름을 쓴다.** `lapis links --orphans` 가 **API** 라서다 —
+  플래그를 바꾸면 남의 스크립트가 깨진다. 코드만 UI 를 따라가면 CLI 만 옛 말을 써서
+  셋이 갈리므로, 화면 하나만 바꾸고 대응표를 `vaultAudit.ts` 머리에 적었다.
+
+### Fixed
+- **한눈에 보기에서 "컬럼" 메뉴가 표 머리글에 가려지던 것** ([#270]).
+  컬럼 메뉴와 sticky 헤더가 **둘 다 `z-index: 1`** 이었고, 같은 값이면 **DOM 순서가
+  이긴다** — 표가 툴바보다 뒤에 있어서 헤더가 메뉴를 덮었다.
+
+  메뉴는 열리고 항목도 다 있는데 첫 줄들만 헤더 뒤로 사라진다. 에러도 없고 콘솔도
+  조용하다. `tableStacking.test.ts` 가 두 값의 순서를 못 박는다.
+
 ## [3.0.1] — 2026-08-28
 
 ### Fixed
@@ -1548,7 +1576,8 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.1...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.2...main
+[3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...v3.0.0
 [3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
@@ -1599,6 +1628,7 @@ vault를 git으로 버전 관리.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#270]: https://github.com/eren0315/lapis/pull/270
 [#269]: https://github.com/eren0315/lapis/pull/269
 [#268]: https://github.com/eren0315/lapis/pull/268
 [#267]: https://github.com/eren0315/lapis/pull/267

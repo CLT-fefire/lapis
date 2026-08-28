@@ -2,7 +2,18 @@ import { resolveTarget, targetName, type LinkIndex } from "$lib/linkIndex";
 import type { LinkInfo } from "$lib/tauri/notes";
 
 /**
- * vault 위생 감사 — **고아 노트 · 태그 중복 후보 · 모호한 이름.**
+ * vault 진단 — **백링크 없는 노트 · 태그 중복 후보 · 모호한 이름.**
+ *
+ * ⚠️ **화면 용어와 코드 용어가 다르다.** UI 는 "vault 진단" · "백링크 없음"이고 코드는
+ * `hygiene` · `orphan` 이다. 바꾸지 않은 이유는 `lapis links --orphans` 가 **API** 라서다 —
+ * 플래그를 바꾸면 남의 스크립트가 깨진다. 코드 쪽 이름을 UI 를 따라 바꾸면 CLI 만 옛 말을
+ * 쓰게 되어 셋이 갈린다. 지금 대응은 이렇다:
+ *
+ * | 화면 | 코드 · CLI |
+ * |---|---|
+ * | vault 진단 | `hygiene` |
+ * | 백링크 없음 | `orphan` · `--orphans` |
+ * | 한눈에 보기 | `tableView` |
  *
  * `brokenLinks.ts`와 같은 부류다: 인덱스에 이미 있는 것만 읽고, 아무것도 쓰지 않으며,
  * 앱과 CLI가 **같은 함수**를 쓴다.
