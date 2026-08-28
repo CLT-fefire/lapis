@@ -1,5 +1,6 @@
 <script lang="ts">
   import { logError } from "$lib/stores/usage";
+  import { recencyAxis, setRecencyAxis } from "$lib/stores/palette";
   import ModalShell from "$lib/ModalShell.svelte";
   import CustomCssEditor from "$lib/CustomCssEditor.svelte";
   import { usageEnabled, usageDropped, flushUsage } from "$lib/stores/usage";
@@ -587,6 +588,39 @@
             {/if}
           </div>
         </section>
+        <!--
+          ⚠️ CLI·MCP 는 `--by mtime|date` 로 둘 다 받는데 앱은 mtime 고정이었다.
+          실측: date 가 있는 107노트 중 **42건이 mtime 과 날짜가 다르다** — 두 축은
+          이 vault 에서 실제로 갈린다.
+        -->
+        <section class="setting-row">
+          <div class="setting-label number">
+            <span class="label-text">
+              <span class="label-title">{m.settings_recency_title()}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="label-desc">{@html m.settings_recency_desc()}</span>
+            </span>
+          </div>
+          <div class="setting-control">
+            <div class="segmented" role="group" aria-label={m.settings_recency_aria()}>
+              <button
+                type="button"
+                class="segment"
+                class:active={$recencyAxis === "mtime"}
+                aria-pressed={$recencyAxis === "mtime"}
+                onclick={() => setRecencyAxis("mtime")}>{m.settings_recency_mtime()}</button
+              >
+              <button
+                type="button"
+                class="segment"
+                class:active={$recencyAxis === "date"}
+                aria-pressed={$recencyAxis === "date"}
+                onclick={() => setRecencyAxis("date")}>{m.settings_recency_date()}</button
+              >
+            </div>
+          </div>
+        </section>
+
         <section class="setting-row">
           <div class="setting-label number">
             <span class="label-text">

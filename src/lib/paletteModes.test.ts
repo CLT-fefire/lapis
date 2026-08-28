@@ -190,9 +190,21 @@ describe("팔레트 컴포넌트 배선", () => {
     expect(src).toMatch(/relScore\(/);
   });
 
-  it("폴더 칩을 그린다", () => {
-    expect(src).toMatch(/folderChips\(/);
+  /**
+   * ⚠️ v3.3.0 에서 **일회성 칩 → 영속 스코프**가 됐다. 후보는 `scopeCandidates` 가
+   * 뽑고(경로를 가진 결과 전부에서), 거르기는 `inPaletteScope` 가 **접두사**로 한다 —
+   * 예전 칩은 정확 일치라 `knowledge/lapis` 로 좁히면 그 하위가 빠졌다.
+   */
+  it("스코프 후보를 그리고 접두사로 거른다", () => {
+    expect(src).toMatch(/scopeCandidates\(/);
     expect(src).toMatch(/#each chips as/);
+    expect(src).toMatch(/inPaletteScope\(/);
+  });
+
+  /** ⚠️ 걸린 스코프는 **항상 보여야** 한다 — 조용히 좁혀지면 고장과 구별이 안 된다. */
+  it("걸린 스코프를 화면에 그린다", () => {
+    expect(src).toMatch(/paletteScope !== null/);
+    expect(src).toMatch(/setPaletteScope\(null\)/);
   });
 
   /**

@@ -16,6 +16,70 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.3.0] — 2026-08-28
+
+> The **axes and search** group from the fourth analysis (1, 6, 14, 15, 16). The first item was
+> **planned in the third pass and dropped**.
+
+### Added
+- 🔴 **Filter by any frontmatter axis** ([#276]). Fields like `status` become chips in the
+  filter view.
+
+  The third-pass plan listed this as `PR-C`, but only the folder axis shipped. The measurement
+  still held: `status` is on **44 notes (41%)** and Overview lets you **add it as a column while
+  offering no way to filter by it.** Visible but unfilterable is half a feature.
+
+  ⚠️ **Not every field is an axis.** `date` is on 96% of notes with a distinct value each — the
+  chip row would be as long as the note list, and picking one leaves a single note. That is not
+  a filter, it is opening a file. It uses the **same threshold** the audit uses for "is this an
+  enum".
+
+  ⚠️ Notes **without** the field drop out — a note with no `status` cannot be "done".
+
+- **MCP and the CLI know the same axes** ([#276]). `props: {status: ["완료"]}` and
+  `--props status=완료`. `list: "fields"` answers which axes exist; `list: "<field>"` lists its
+  values.
+
+  ⚠️ MCP calls the app's `applyFilters` **directly**. A separate implementation would let two
+  surfaces answer the same question differently — which is exactly what happened with tag
+  prefixes (v3.1.2).
+
+- **Saved searches** ([#276]). `⌘S` saves the current search; an empty palette lists them.
+
+  ⚠️ **The scope is saved with it.** Saving only the query means recalling it from another
+  project returns the wrong thing, which reads as the saved search being broken.
+
+- **Choose what "recently changed" means** ([#276]). Settings → Vault: file mtime or
+  frontmatter `date`.
+
+  The CLI and MCP accept `--by mtime|date`; the app was pinned to mtime. Measured: of the 107
+  notes carrying `date`, **42 disagree with their mtime** — the two axes genuinely diverge here.
+
+  ⚠️ The `date` axis only covers notes that carry the field. Treating a missing date as 0 would
+  pile them at the end where they mean nothing. Parsing uses `parseFrontmatterDate`, the **same
+  function** the CLI and MCP use.
+
+### Changed
+- **The palette's folder chips became a persistent scope** ([#276]). It survives closing,
+  applies to **every mode**, and draws candidates from all path-bearing results.
+
+  🔴 The old chips matched a folder **exactly** — every other surface uses a string prefix
+  (`inScope`, `under`, `exclude`) and only the palette differed. Narrowing to `knowledge/lapis`
+  **excluded** `knowledge/lapis/plans/a.md`. Results still appeared; no error.
+
+  ⚠️ Because it persists, it is **always visible**. A silently narrowed result set becomes "why
+  isn't it showing up", which is indistinguishable from broken search. The active scope gets its
+  own row and clears in one click.
+
+  ⚠️ **Items without a path (commands, tags, facets) are never removed by the scope.** If
+  narrowing a folder made `>` commands disappear, anyone with a scope set could not use the
+  command palette.
+
+### Not built — items 18, 19 and 20 of the fourth analysis
+Link previews (URLs on **4%** of notes), outline depth control (h4+ in **4 notes**), and a
+title-collision UI (**1** duplicate title; the 7 duplicate filenames are already handled by
+showing the path).
+
 ## [3.2.0] — 2026-08-28
 
 > Candidate 21 of the fourth analysis. It started as "menu usage statistics", but measuring
@@ -1897,7 +1961,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.2.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.3.0...main
+[3.3.0]: https://github.com/eren0315/lapis/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/eren0315/lapis/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/eren0315/lapis/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/eren0315/lapis/compare/v3.1.0...v3.1.1
@@ -1953,6 +2018,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#276]: https://github.com/eren0315/lapis/pull/276
 [#275]: https://github.com/eren0315/lapis/pull/275
 [#274]: https://github.com/eren0315/lapis/pull/274
 [#273]: https://github.com/eren0315/lapis/pull/273

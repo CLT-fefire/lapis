@@ -264,6 +264,77 @@ describe("under — 이 아래에서만", () => {
   });
 });
 
+describe("props — 임의 frontmatter 축", () => {
+  /**
+   * 🔴 3차 분석이 계획해 놓고 빠뜨린 축. `status` 가 실측 vault 의 **44노트(41%)** 에
+   * 있는데 어느 표면에서도 못 걸렀다.
+   */
+  it("그 값을 가진 노트만 낸다", () => {
+    expect(paths(search({ props: { status: ["완료"] } }))).toEqual(["proj/adr/001-abandoned.md"]);
+  });
+
+  it("같은 필드 안은 OR", () => {
+    const r = paths(search({ props: { status: ["완료", "진행 중"] } }));
+    expect(r).toContain("proj/adr/001-abandoned.md");
+    expect(r).toContain("proj/adr/002-revived.md");
+  });
+
+  /** ⚠️ 그 필드가 **없는** 노트는 빠진다 — `status` 없는 노트가 "완료"일 리 없다. */
+  it("그 필드가 없는 노트는 빠진다", () => {
+    expect(paths(search({ props: { status: ["완료"] } })).length).toBeLessThan(
+      paths(search({ doc_kind: "adr" })).length + 5,
+    );
+    expect(paths(search({ props: { status: ["없는값"] } }))).toEqual([]);
+  });
+
+  it("다른 구조 인자와는 AND", () => {
+    expect(paths(search({ doc_kind: "adr", props: { status: ["진행 중"] } }))).toEqual([
+      "proj/adr/002-revived.md",
+    ]);
+  });
+
+  it("빈 배열인 필드는 안 거른다", () => {
+    expect(paths(search({ doc_kind: "adr", props: { status: [] } }))).toEqual(
+      paths(search({ doc_kind: "adr" })),
+    );
+  });
+
+  /** ⚠️ 앱의 `applyFilters` 와 같은 규칙이어야 한다 — 갈리면 두 화면이 다른 답을 낸다. */
+  it("used 에 어느 축이 걸렸는지 남는다", () => {
+    const r = search({ props: { status: ["완료"] } });
+    expect(r.used.some((u) => u.name === "props:status")).toBe(true);
+  });
+});
+
+describe("list — 임의 필드", () => {
+  it("fields 가 어떤 축이 있는지 낸다", () => {
+    expect(facets({ list: "fields" }).values.map((v) => v.value)).toContain("status");
+  });
+
+  /** ⚠️ 타입 있는 필드는 자기 이름의 `list` 가 이미 있다 — 두 번 나오면 헷갈린다. */
+  it("fields 에 doc_kind·topic·tags 는 없다", () => {
+    const vs = facets({ list: "fields" }).values.map((v) => v.value);
+    for (const f of ["doc_kind", "topic", "tags", "title"]) expect(vs).not.toContain(f);
+  });
+
+  it("필드 이름을 주면 그 값을 센다", () => {
+    const vs = facets({ list: "status" }).values;
+    expect(vs.map((v) => v.value).sort()).toEqual(["완료", "진행 중"]);
+    expect(vs.find((v) => v.value === "완료")!.count).toBe(1);
+  });
+
+  it("없는 필드는 빈 목록 — 오류가 아니다", () => {
+    expect(facets({ list: "없는필드" }).values).toEqual([]);
+  });
+
+  /** 스코프가 list 에도 걸린다(v3.1.0 계약). */
+  it("under 가 list 에도 먹는다", () => {
+    expect(facets({ list: "status", under: ["proj/adr/002"] }).values.map((v) => v.value)).toEqual([
+      "진행 중",
+    ]);
+  });
+});
+
 describe("_memories 기본 제외", () => {
   // vault의 94%를 차지해 BM25 상위를 익사시킨다(판정 세션의 최대 마찰).
   it("기본으로 아카이브를 뺀다", () => {

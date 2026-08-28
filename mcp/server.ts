@@ -37,8 +37,10 @@ const TOOL = {
       },
       list: {
         type: "string",
-        enum: ["topics", "tags", "doc_kinds"],
-        description: "facet 값을 빈도순으로 열거한다. 구조 인자에 뭘 넣을지 모를 때 먼저 호출",
+        description:
+          "facet 값을 빈도순으로 열거한다. 구조 인자에 뭘 넣을지 모를 때 먼저 호출. " +
+          "`topics` · `tags` · `doc_kinds` · `fields`(어떤 frontmatter 축이 있나), " +
+          "또는 임의 필드 이름(`status` 등)을 주면 그 필드의 값을 센다",
       },
       audit: {
         type: "string",
@@ -53,6 +55,11 @@ const TOOL = {
         type: "array",
         items: { type: "string", enum: ["bm25", "structural"] },
         description: "팔 한정. 생략하면 둘 다",
+      },
+      props: {
+        type: "object",
+        additionalProperties: { type: "array", items: { type: "string" } },
+        description: "임의 frontmatter 축으로 거른다 — `{\"status\": [\"완료\",\"반영됨\"]}`. 같은 필드 안은 OR, 필드 사이는 AND. 그 필드가 **없는** 노트는 빠진다. 어떤 필드·값이 있는지는 `list:\"fields\"` 와 `list:\"<필드>\"` 가 답한다",
       },
       under: {
         type: "array",
