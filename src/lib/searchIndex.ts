@@ -3,6 +3,7 @@ import { readNote } from "$lib/tauri/notes";
 import { snippetForQuery } from "$lib/snippet";
 import { chosungOf, isChosungQuery } from "$lib/hangul";
 import FullTextWorker from "./fullTextWorker?worker";
+import { logError, logWarn } from "$lib/stores/usage";
 
 /* =========================================================
  * Quick Switcher (파일명 / alias / title fuzzy 매칭)
@@ -251,7 +252,7 @@ function getWorker(): Worker {
     }
   };
   w.onerror = (e) => {
-    console.error("[fulltext-worker] error event", e);
+    logError("searchIndex", "[fulltext-worker] error event", e);
   };
   workerSingleton = w;
   return w;
@@ -406,7 +407,7 @@ export async function buildContentSnippet(path: string, query: string): Promise<
   try {
     return snippetForQuery(await readNote(path), query, SNIPPET_RADIUS);
   } catch (e) {
-    console.warn(`[search] readNote failed for ${path}`, e);
+    logWarn("searchIndex", `[search] readNote failed for ${path}`, e);
     return "";
   }
 }

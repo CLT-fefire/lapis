@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logWarn, logCommand } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -104,7 +105,7 @@
           if (!cancelled) results = r;
         } catch (e) {
           if (!cancelled) {
-            console.warn("unifiedSearch failed", e);
+            logWarn("CommandPalette", "unifiedSearch failed", e);
             results = [];
           }
         }
@@ -232,6 +233,12 @@
     const r = displayList[idx];
     if (!r) return;
     const entry = r.entry;
+    // ⚠️ **여기 한 곳**에서 기록한다. 아래 switch 의 가지마다 적으면 새 가지를 넣을 때
+    //    빼먹고, 빼먹은 가지만 통계에서 사라진다.
+    logCommand(
+      entry.kind === "command" ? entry.command.id : `open:${entry.kind}`,
+      "palette",
+    );
     switch (entry.kind) {
       case "note":
       case "content":

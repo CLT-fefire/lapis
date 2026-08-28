@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logWarn } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { selectNote, vaultPath } from "$lib/stores/vault";
   import { fetchBacklinkContext, type BacklinkContext } from "$lib/backlinks";
@@ -56,7 +57,7 @@
       nextCtx.set(key, ctx);
       contexts = nextCtx;
     } catch (e) {
-      console.warn("fetchBacklinkContext failed", e);
+      logWarn("Neighborhood", "fetchBacklinkContext failed", e);
     } finally {
       const after = new Set(loading);
       after.delete(key);
@@ -92,7 +93,7 @@
         const log = await gitLog(vault, path, 25);
         if (!cancelled) commits = log;
       } catch (e) {
-        console.warn("[git] log 실패", e);
+        logWarn("Neighborhood", "[git] log 실패", e);
       } finally {
         if (!cancelled) commitsLoading = false;
       }
@@ -118,7 +119,7 @@
       next.set(hash, d);
       diffs = next;
     } catch (e) {
-      console.warn("[git] diff 실패", e);
+      logWarn("Neighborhood", "[git] diff 실패", e);
     }
   }
 

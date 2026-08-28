@@ -13,6 +13,7 @@ import {
 } from "./vault";
 
 export type WatcherStatus = "idle" | "watching" | "error";
+import { logError, logWarn } from "$lib/stores/usage";
 
 export const watcherStatus = writable<WatcherStatus>("idle");
 export const lastWatchError = writable<string | null>(null);
@@ -46,7 +47,7 @@ export async function startWatching(): Promise<void> {
     unlisten = u;
     watcherStatus.set("watching");
   } catch (e) {
-    console.error("[watcher] start failed:", e);
+    logError("stores/watcher", "[watcher] start failed:", e);
     lastWatchError.set(e instanceof Error ? e.message : String(e));
     watcherStatus.set("error");
   }
@@ -60,7 +61,7 @@ export async function stopWatching(): Promise<void> {
   try {
     await unwatchVault();
   } catch (e) {
-    console.warn("[watcher] stop failed:", e);
+    logWarn("stores/watcher", "[watcher] stop failed:", e);
   }
   watcherStatus.set("idle");
 }
@@ -145,7 +146,7 @@ async function reconcileCurrentNote(path: string, mtimeMs: number): Promise<void
     const fresh = await readNote(path);
     editor.markSaved(fresh);
   } catch (e) {
-    console.warn("[watcher] readNote on external change failed:", e);
+    logWarn("stores/watcher", "[watcher] readNote on external change failed:", e);
   }
 }
 
@@ -170,7 +171,7 @@ async function runReindex(): Promise<void> {
   try {
     handled = await reindexIncremental(changed, removed);
   } catch (e) {
-    console.warn("[watcher] 증분 재인덱싱 실패:", e);
+    logWarn("stores/watcher", "[watcher] 증분 재인덱싱 실패:", e);
     handled = true; // 에러는 재시도 안 함(무한 루프 방지) — 다음 변경 때 정정
   }
   if (!handled) {
@@ -191,7 +192,7 @@ export async function resolveConflictAcceptExternal(): Promise<void> {
     markSaved(fresh);
     externalConflict.set(null);
   } catch (e) {
-    console.error("[watcher] accept external failed:", e);
+    logError("stores/watcher", "[watcher] accept external failed:", e);
   }
 }
 

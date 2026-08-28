@@ -1,5 +1,6 @@
 import { writable } from "svelte/store";
 import { isMacPlatform } from "$lib/platform";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * 창 크롬 — **상단바가 타이틀바를 겸하는가**.
@@ -90,7 +91,7 @@ async function applyToWindow(mode: ChromeMode): Promise<void> {
     await getCurrentWindow().setDecorations(mode === "native");
   } catch (e) {
     // 권한이 없거나 플랫폼이 거부한 경우 — 네이티브 장식이 남는다. 그게 안전한 쪽이다.
-    console.warn("setDecorations failed", e);
+    logWarn("stores/chrome", "setDecorations failed", e);
   }
 }
 

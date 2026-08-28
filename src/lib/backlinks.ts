@@ -1,5 +1,6 @@
 import { readNote, type LinkInfo } from "$lib/tauri/notes";
 import { extractSnippetAround } from "$lib/snippet";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * 백링크 칩을 펼쳤을 때 보여줄 컨텍스트.
@@ -58,7 +59,7 @@ export async function fetchBacklinkContext(
   try {
     body = await readNote(source.source_path);
   } catch (e) {
-    console.warn(`fetchBacklinkContext: readNote failed for ${source.source_path}`, e);
+    logWarn("backlinks", `fetchBacklinkContext: readNote failed for ${source.source_path}`, e);
     body = "";
   }
 

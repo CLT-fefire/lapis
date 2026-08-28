@@ -21,6 +21,7 @@ import { openBrokenLinks } from "$lib/stores/brokenLinks";
 import { openGrep } from "$lib/stores/grep";
 import { openTagRename } from "$lib/stores/tagRewrite";
 import { newWindow } from "$lib/tauri/window";
+import { logError } from "$lib/stores/usage";
 
 export interface Command {
   id: string;
@@ -176,7 +177,7 @@ export const BUILTIN_COMMANDS: Command[] = [
     shortcut: "⌘⇧T",
     run() {
       // 새 창은 vault 없이 뜬다 — 거기서 다른 vault를 고르면 그 창만 바뀐다.
-      void newWindow().catch((e) => console.error("new window failed", e));
+      void newWindow().catch((e) => logError("commands", "new window failed", e));
     },
   },
   {
@@ -248,7 +249,7 @@ export const BUILTIN_COMMANDS: Command[] = [
       try {
         await navigator.clipboard.writeText(cur);
       } catch (e) {
-        console.error("copy current note path failed", e);
+        logError("commands", "copy current note path failed", e);
       }
     },
   },

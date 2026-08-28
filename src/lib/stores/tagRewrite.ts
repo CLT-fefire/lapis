@@ -4,6 +4,7 @@ import { readNote } from "$lib/tauri/notes";
 import { linkIndex, vaultPath, backupAndWrite, reloadNotes } from "$lib/stores/vault";
 import { describeFailure } from "$lib/safeWrite";
 import { tagIndex } from "$lib/stores/tags";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * 태그 이름 바꾸기의 **상태 절반**. 판정·치환은 전부 `$lib/tagRewrite`(순수)에 있다.
@@ -69,7 +70,7 @@ export async function computeTagRenamePreview(): Promise<void> {
           notes.set(p, await readNote(p));
         } catch (e) {
           // 한 파일을 못 읽었다고 전체를 세우지 않는다. 그 노트만 대상에서 빠진다.
-          console.warn(`[tag-rename] readNote 실패 ${p}:`, e);
+          logWarn("stores/tagRewrite", `[tag-rename] readNote 실패 ${p}:`, e);
         }
       }),
     );

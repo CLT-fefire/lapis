@@ -1,4 +1,5 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * Finder에서 대상을 **선택된 상태로** 연다.
@@ -18,6 +19,6 @@ export async function revealInFinder(path: string): Promise<void> {
   try {
     await revealItemInDir(path);
   } catch (e) {
-    console.warn("[reveal] Finder에서 보기 실패", path, e);
+    logWarn("tauri/reveal", "[reveal] Finder에서 보기 실패", path, e);
   }
 }

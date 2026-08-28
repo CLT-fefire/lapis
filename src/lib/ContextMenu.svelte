@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logWarn } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { scale } from "svelte/transition";
   import { menuPop } from "$lib/motion";
@@ -62,7 +63,7 @@
     try {
       await navigator.clipboard.writeText(text);
     } catch (e) {
-      console.warn("copy failed", e);
+      logWarn("ContextMenu", "copy failed", e);
     }
   }
 

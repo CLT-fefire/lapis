@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
 import { DEFAULT_THEME_ID, findTheme } from "$lib/colorThemes";
 import { settingsRead, settingsWrite, type LapisSettings } from "$lib/tauri/settings";
+import { logWarn } from "$lib/stores/usage";
 
 // 백엔드 `lapis-settings.json`이 단일 SOT. localStorage 사용 안 함.
 export const settingsOpen = writable<boolean>(false);
@@ -128,7 +129,7 @@ export async function restoreSettings(): Promise<void> {
     customCssEnabled.set(cssOn);
     colorTheme.set(theme);
   } catch (e) {
-    console.warn("[settings] restore 실패 → 기본값 유지", e);
+    logWarn("stores/settings", "[settings] restore 실패 → 기본값 유지", e);
   } finally {
     settingsLoaded.set(true);
   }
@@ -167,7 +168,7 @@ export async function setCustomCssEnabled(on: boolean): Promise<void> {
     await patchSettings({ custom_css_enabled: on });
   } catch (e) {
     // 저장에 실패해도 화면은 이미 돌아왔다. 다음 기동에 다시 켜질 뿐이다.
-    console.warn("[settings] 사용자 CSS 토글 저장 실패", e);
+    logWarn("stores/settings", "[settings] 사용자 CSS 토글 저장 실패", e);
   }
 }
 
@@ -206,6 +207,6 @@ export async function applyColorTheme(id: string): Promise<void> {
     // ⚠️ 호출부가 `void applyColorTheme(...)`로 부른다. 여기서 안 잡으면 unhandled
     //    rejection이 된다. 저장에 실패해도 이번 세션의 화면은 이미 바뀌었고, 다음 기동에
     //    옛 테마로 돌아갈 뿐이다 — 색 하나 때문에 콘솔을 어지럽힐 이유가 없다.
-    console.warn("[settings] 색 테마 저장 실패", e);
+    logWarn("stores/settings", "[settings] 색 테마 저장 실패", e);
   }
 }

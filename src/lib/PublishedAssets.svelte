@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logWarn } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
@@ -26,7 +27,7 @@
         const list = await findAssetsForNote(vault, path);
         assets = list;
       } catch (e) {
-        console.warn("find_assets_for_note failed", e);
+        logWarn("PublishedAssets", "find_assets_for_note failed", e);
         assets = [];
       } finally {
         loading = false;
@@ -38,7 +39,7 @@
     try {
       await openUrl(`file://${asset.abs_path}`);
     } catch (e) {
-      console.warn("openUrl failed", e);
+      logWarn("PublishedAssets", "openUrl failed", e);
     }
   }
 </script>

@@ -7,6 +7,7 @@ mod paths;
 mod search_cache;
 mod settings;
 mod uipath;
+mod usage;
 mod vault;
 mod watcher;
 
@@ -275,6 +276,10 @@ pub fn run() {
             settings::settings_read,
             settings::settings_write,
             settings::settings_paths,
+            usage::usage_append,
+            usage::usage_read,
+            usage::usage_months,
+            usage::usage_clear,
         ])
         .build(context)
         .expect("error while building tauri application");

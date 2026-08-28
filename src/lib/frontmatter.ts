@@ -12,6 +12,7 @@
  */
 
 import yaml from "js-yaml";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * ⚠️ 구분자 뒤 여백을 `[ \t]*`로 받는다 — `\s*`가 아니다. `\s`는 **개행을 포함**해서,
@@ -95,7 +96,7 @@ export function parseFrontmatter(raw: string): ParseResult {
       parseError = true;
     }
   } catch (err) {
-    console.warn("Frontmatter YAML parse failed:", err);
+    logWarn("frontmatter", "Frontmatter YAML parse failed:", err);
     parseError = true;
   }
   return { ...split, data, parseError };

@@ -10,6 +10,8 @@
  * 스타일은 +page.svelte에서 글로벌로 정의된다(.lapis-search-match / .lapis-search-current).
  */
 
+import { logWarn } from "$lib/stores/usage";
+
 export interface PreviewMatch {
   range: Range;
 }
@@ -141,7 +143,7 @@ export function applyHighlights(
     try {
       m.range.surroundContents(mark);
     } catch (e) {
-      console.warn("[lapis] highlight surroundContents failed", e);
+      logWarn("previewHighlight", "highlight surroundContents failed", e);
     }
   }
 }

@@ -23,6 +23,7 @@ import {
  */
 
 export const grepOpen = writable<boolean>(false);
+import { logWarn } from "$lib/stores/usage";
 export const grepPattern = writable<string>("");
 export const grepRegex = writable<boolean>(false);
 export const grepCase = writable<boolean>(false);
@@ -125,7 +126,7 @@ export async function computeReplace(): Promise<void> {
           notes.set(p, await readNote(p));
         } catch (e) {
           // 한 파일을 못 읽었다고 전체를 세우지 않는다. 그 노트만 대상에서 빠진다.
-          console.warn(`[replace] readNote 실패 ${p}:`, e);
+          logWarn("stores/grep", `[replace] readNote 실패 ${p}:`, e);
         }
       }),
     );

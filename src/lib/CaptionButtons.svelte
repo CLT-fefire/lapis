@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logWarn } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
 
   /**
@@ -49,7 +50,7 @@
         });
         return () => un();
       } catch (e) {
-        console.warn("window state watch failed", e);
+        logWarn("CaptionButtons", "window state watch failed", e);
       }
     })();
     return () => {
@@ -68,7 +69,7 @@
         maximized = await w.isMaximized();
       }
     } catch (e) {
-      console.warn(`window ${kind} failed`, e);
+      logWarn("CaptionButtons", `window ${kind} failed`, e);
     }
   }
 </script>

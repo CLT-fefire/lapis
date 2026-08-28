@@ -9,6 +9,7 @@ import {
   type FullTextDoc,
 } from "$lib/searchIndex";
 import type { FileStat, LinkInfo, NoteContent } from "$lib/tauri/notes";
+import { logError, logWarn } from "$lib/stores/usage";
 
 /**
  * 검색 인덱스 store. 모달 open/mode 상태는 Phase 4.5에서 `stores/palette.ts`로 이관.
@@ -142,7 +143,7 @@ export async function rebuildIndexes(
       }
     }
   } catch (e) {
-    console.error("worker shard addAll failed", e);
+    logError("stores/search", "worker shard addAll failed", e);
     fullTextIndexReady.set(false);
   } finally {
     indexBuilding.set(false);
@@ -157,7 +158,7 @@ export function clearIndexes(): void {
   indexBuilding.set(false);
   buildProgress.set(null);
   // worker의 in-memory 인덱스도 release — 다음 빌드 전까지 메모리 줄임.
-  void workerReset().catch((e) => console.warn("worker reset failed", e));
+  void workerReset().catch((e) => logWarn("stores/search", "worker reset failed", e));
 }
 
 /** 디버그/상태 확인용 — worker 모델이라 doc count는 worker 안에 있음. ready boolean만. */

@@ -1,4 +1,5 @@
 import { writable, get } from "svelte/store";
+import { logWarn } from "$lib/stores/usage";
 
 // `lastClosedNotePath` / `lapis.last-closed-note`는 2026-08-10에 제거됐다.
 // ⌘⇧T(닫은 노트 복원)가 사라지면서 유일한 소비자가 없어졌고, 방문 순서 이동은
@@ -48,7 +49,7 @@ function loadRecent(): string[] {
       return arr.slice(0, RECENT_LIMIT);
     }
   } catch (e) {
-    console.warn("loadRecent failed", e);
+    logWarn("stores/recent", "loadRecent failed", e);
   }
   localStorage.removeItem(RECENT_KEY);
   return [];

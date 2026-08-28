@@ -1,5 +1,6 @@
 import { get, writable } from "svelte/store";
 import { vaultFileStats } from "$lib/tauri/notes";
+import { logWarn } from "$lib/stores/usage";
 
 /**
  * 노트 경로 → 파일 수정 시각(ms). **시간축 정렬의 앱 쪽 데이터원.**
@@ -32,7 +33,7 @@ export async function primeMtimes(vaultPath: string): Promise<void> {
     for (const f of stats.files) next.set(f.path, f.mtime_ms);
     noteMtimes.set(next);
   } catch (e) {
-    console.warn("[mtimes] 초기 로드 실패 — 시간축 정렬이 빈 값으로 떨어진다", e);
+    logWarn("stores/mtimes", "[mtimes] 초기 로드 실패 — 시간축 정렬이 빈 값으로 떨어진다", e);
     noteMtimes.set(new Map());
   }
 }

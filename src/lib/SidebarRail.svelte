@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logCommand } from "$lib/stores/usage";
   import {
     FileText,
     Hash,
@@ -50,6 +51,7 @@
   };
 
   function activate(key: SidebarViewKey) {
+    logCommand(`view:${key}`, "rail");
     const asModal = MODAL_VIEWS[key];
     if (asModal) return asModal();
     if (get(sidebarCollapsed)) {

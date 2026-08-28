@@ -1,4 +1,5 @@
 import { writable, get } from "svelte/store";
+import { logWarn } from "$lib/stores/usage";
 
 const PANE_KEY = "lapis.pane-state";
 const SIDEBAR_WIDTH_KEY = "lapis.sidebar-width";
@@ -181,7 +182,7 @@ export function restorePaneState(): void {
         if (typeof parsed.pane !== "string") persistPane();
       }
     } catch (e) {
-      console.warn("restorePaneState (pane) failed", e);
+      logWarn("stores/layout", "restorePaneState (pane) failed", e);
       localStorage.removeItem(PANE_KEY);
     }
   }

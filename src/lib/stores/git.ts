@@ -1,6 +1,7 @@
 import { m } from "$lib/paraglide/messages.js";
 import { writable, get } from "svelte/store";
 import { gitIsRepo, gitInit, gitCommitAll, gitCommitPaths } from "$lib/tauri/git";
+import { logError, logWarn } from "$lib/stores/usage";
 
 /**
  * vault git 버전관리 상태 + 자동 커밋 (ADR-004 V2).
@@ -66,7 +67,7 @@ export async function refreshGitStatus(vault: string | null): Promise<void> {
     if (repo) needsFullSweep = true;
     gitBannerVisible.set(shouldShowBanner(repo, isBannerDismissed(vault)));
   } catch (e) {
-    console.warn("[git] status 조회 실패", e);
+    logWarn("stores/git", "[git] status 조회 실패", e);
     gitRepo.set(false);
     gitBannerVisible.set(false);
   }
@@ -81,7 +82,7 @@ export async function startVersioning(vault: string): Promise<void> {
     gitRepo.set(true);
     gitBannerVisible.set(false);
   } catch (e) {
-    console.error("[git] init 실패", e);
+    logError("stores/git", "[git] init 실패", e);
   } finally {
     gitBusy.set(false);
   }
@@ -185,7 +186,7 @@ async function runAutoCommit(vault: string): Promise<void> {
       await gitCommitPaths(vault, paths, autoCommitMessage(new Date()));
     }
   } catch (e) {
-    console.warn("[git] auto-commit 실패", e);
+    logWarn("stores/git", "[git] auto-commit 실패", e);
     // 실패분 복원 — 다음 변경 때 재시도(무손실).
     if (fullSweep) needsFullSweep = true;
     for (const p of paths) pendingCommitPaths.add(p);
