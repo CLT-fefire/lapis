@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "$lib/tauri/invoke";
 
 /**
  * vault git 버전관리 IPC 래퍼 (ADR-004). 백엔드 `src-tauri/src/git.rs`(shell-out)와 1:1.

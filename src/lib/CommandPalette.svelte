@@ -450,7 +450,8 @@
               title={c.prefix}
               onclick={() => { setPaletteScope(c.prefix); activeIndex = 0; }}
             >
-              <span class="folder-name">{c.prefix.replace(/\/$/, "")}</span>
+              <!-- ⚠️ 매칭은 `prefix`(절대경로), 표시는 `label`(vault 아래). -->
+              <span class="folder-name">{c.label.replace(/\/$/, "")}</span>
               <span class="folder-count">{c.count}</span>
             </button>
           {/each}

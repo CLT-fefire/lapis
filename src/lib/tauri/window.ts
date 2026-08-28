@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "$lib/tauri/invoke";
 
 /**
  * 새 창을 띄우고 그 창의 라벨을 반환한다.

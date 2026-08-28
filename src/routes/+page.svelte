@@ -11,6 +11,9 @@
   import Titlebar from "$lib/Titlebar.svelte";
   import Statusbar from "$lib/Statusbar.svelte";
   import AlertBanner from "$lib/AlertBanner.svelte";
+  import { openVault } from "$lib/stores/vault";
+  import { usingFakeBackend } from "$lib/tauri/invoke";
+  import { DEV_VAULT } from "$lib/dev/fixtureVault";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
@@ -1248,6 +1251,20 @@ import { isPanicChord } from "$lib/userCss";
         sortHint: m.rendered_sort_hint(),
       });
     });
+  });
+
+  /**
+   * dev 서버(Tauri 밖)에서는 **픽스처 vault 를 자동으로 연다.**
+   *
+   * ⚠️ 여기가 없으면 브라우저에서는 항상 빈 상태만 보인다 — 그래서 이 세션에서
+   * 필터 패널·표·진단 모달을 한 번도 화면으로 못 봤고, 칩 활성 표시가 빠진 채로 두
+   * 릴리스가 나갔다.
+   *
+   * ⚠️ Tauri 안에서는 **절대 안 돈다**(`usingFakeBackend` 가 false). 실물에서 남의
+   * vault 를 여는 일은 없다.
+   */
+  onMount(() => {
+    if (usingFakeBackend()) void openVault(DEV_VAULT);
   });
 
   onMount(() => {

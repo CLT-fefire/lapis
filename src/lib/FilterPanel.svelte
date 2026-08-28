@@ -164,7 +164,8 @@
               onclick={() => toggleFolder(opt.prefix)}
               title={`${opt.prefix} (${opt.count})`}
             >
-              <span class="name">{opt.prefix.replace(/\/$/, "")}</span>
+              <!-- ⚠️ 매칭은 `prefix`(절대경로), 표시는 `label`(vault 아래). 드라이브를 보여줄 이유가 없다. -->
+              <span class="name">{opt.label.replace(/\/$/, "")}</span>
               <span class="count">{opt.count}</span>
             </button>
           {/each}
@@ -317,13 +318,22 @@
     font-size: 10px;
   }
 
-  /* doc_kind 활성 — 청록 */
-  .kind-chip.active {
+  /**
+   * 🔴 **활성 표시의 기본**. 축마다 색은 다르되 **"켜졌다"는 사실은 여기서** 온다.
+   *
+   * 예전엔 `.kind-chip.active`·`.topic-chip.active` 만 있었다. 축을 더할 때마다 규칙을
+   * 같이 안 쓰면 **칩이 켜져도 아무 표시가 안 난다** — 목록은 걸러지는데 무엇을 골랐는지
+   * 화면이 말하지 않는다. 에러는 없다.
+   *
+   * 실제로 폴더 축(v3.1.0)과 임의 축(v3.3.0) 둘 다 그 상태로 나갔다.
+   * `filterChips.test.ts` 가 마크업의 칩 종류마다 활성 규칙이 있는지 본다.
+   */
+  .facet-chip.active {
     background: var(--accent-bg-subtle);
     border-color: var(--accent);
     color: var(--text-primary);
   }
-  .kind-chip.active .count {
+  .facet-chip.active .count {
     color: var(--accent-hover);
   }
 
@@ -331,10 +341,18 @@
   .topic-chip.active {
     background: var(--violet-bg-subtle);
     border-color: var(--violet);
-    color: var(--text-primary);
   }
   .topic-chip.active .count {
     color: var(--violet);
+  }
+
+  /* 폴더 활성 — 중립. "어디"는 "무엇"과 다른 축이라 색을 안 겹친다. */
+  .folder-chip.active {
+    background: var(--surface-raised);
+    border-color: var(--border-strong);
+  }
+  .folder-chip.active .count {
+    color: var(--text-secondary);
   }
 
   .action-bar {

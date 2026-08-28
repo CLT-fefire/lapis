@@ -42,10 +42,38 @@ export function passesScope(
 
 /** 스코프 후보 하나. */
 export interface ScopeOption {
-  /** 접두사 — 끝에 `/` 가 붙는다. 루트 직속 파일은 후보가 아니다. */
+  /**
+   * 매칭에 쓰는 접두사 — 끝에 `/` 가 붙는다. 루트 직속 파일은 후보가 아니다.
+   *
+   * ⚠️ **넣어 준 경로와 같은 형태로 나온다.** 호출부가 절대경로를 넘겼으면 절대경로다
+   * (`applyFilters` 와 팔레트가 `startsWith` 로 그대로 비교하기 때문).
+   */
   prefix: string;
+  /** 화면에 쓰는 이름 — 모든 경로가 공유하는 뿌리를 걷어낸 것. 상대경로면 `prefix` 와 같다. */
+  label: string;
   /** 이 접두사 아래 노트 수. */
   count: number;
+}
+
+/**
+ * 모든 경로가 공유하는 **디렉터리** 접두사의 세그먼트 수.
+ *
+ * ⚠️ 이게 없으면 절대경로에서 `depth` 예산을 드라이브·홈이 다 먹는다 —
+ * `C:/` 와 `C:/Projects/` 는 둘 다 전체를 덮으니 `n < total` 에 걸려 사라지고,
+ * 후보가 **에러 없이 하나도 안 나온다.** 실제로 그렇게 나가 있었다.
+ */
+function commonRootDepth(paths: readonly string[]): number {
+  if (paths.length === 0) return 0;
+  // 파일명은 디렉터리가 아니다 — 마지막 세그먼트는 뺀다.
+  let common = paths[0].split("/").slice(0, -1);
+  for (const p of paths.slice(1)) {
+    const segs = p.split("/").slice(0, -1);
+    let i = 0;
+    while (i < common.length && i < segs.length && common[i] === segs[i]) i++;
+    common = common.slice(0, i);
+    if (common.length === 0) break;
+  }
+  return common.length;
 }
 
 /**
@@ -65,19 +93,28 @@ export function scopeOptions(
   depth = 2,
   minCount = 2,
 ): ScopeOption[] {
+  // ⚠️ `depth` 는 **공통 뿌리 아래로** 센다. 절대경로에서 드라이브·홈이 예산을 먹으면
+  //    후보가 통째로 사라진다(위 `commonRootDepth` 참조).
+  const root = commonRootDepth(paths);
   const counts = new Map<string, number>();
   for (const p of paths) {
     const segs = p.split("/");
     // 마지막은 파일명이라 디렉터리가 아니다.
-    for (let d = 1; d <= Math.min(depth, segs.length - 1); d++) {
+    for (let d = root + 1; d <= Math.min(root + depth, segs.length - 1); d++) {
       const prefix = segs.slice(0, d).join("/") + "/";
       counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
     }
   }
   const total = paths.length;
+  // 뿌리를 걷어 화면에 쓸 이름을 만든다. 매칭용 `prefix` 는 받은 형태 그대로 둔다.
+  const rootPrefix = root === 0 ? "" : paths[0].split("/").slice(0, root).join("/") + "/";
   return [...counts.entries()]
     .filter(([, n]) => n >= minCount && n < total)
-    .map(([prefix, count]) => ({ prefix, count }))
+    .map(([prefix, count]) => ({
+      prefix,
+      label: rootPrefix && prefix.startsWith(rootPrefix) ? prefix.slice(rootPrefix.length) : prefix,
+      count,
+    }))
     .sort((a, b) => b.count - a.count || a.prefix.localeCompare(b.prefix));
 }
 
