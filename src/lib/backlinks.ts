@@ -14,8 +14,13 @@ export interface BacklinkContext {
 }
 
 /**
- * 메모리 캐시 — 같은 (source, target stem) 쌍은 한 번만 fetch.
- * key 형식: `${sourcePath}::${targetStem}` (source 본문 발췌라 source 변경에만 의존).
+ * 메모리 캐시 — 같은 (source, target) 쌍은 한 번만 fetch.
+ * key 형식: `${sourcePath}::${targetPath}`.
+ *
+ * ⚠️ **target 은 stem 이 아니라 경로여야 한다.** 발췌를 만드는 항목이 target 의
+ * stem · title · aliases 셋이라 stem 만으로는 target 을 구별 못 한다. 이름이 같은 노트가
+ * 둘이면(이 vault 는 7쌍) 두 target 이 **같은 키**를 쓰고, 먼저 계산된 쪽이 이겨
+ * 두 번째 노트가 **남의 발췌**를 받는다. 에러는 없다.
  *
  * 무효화 경로 (모두 연결됨):
  * - 외부 변경: watcher `onPathChanged`/`onPathRemoved` → `invalidateCacheBySource(path)`
@@ -25,8 +30,8 @@ export interface BacklinkContext {
  */
 const snippetCache = new Map<string, BacklinkContext>();
 
-function cacheKey(sourcePath: string, targetStem: string): string {
-  return `${sourcePath}::${targetStem}`;
+function cacheKey(sourcePath: string, targetPath: string): string {
+  return `${sourcePath}::${targetPath}`;
 }
 
 /**
@@ -38,7 +43,7 @@ export async function fetchBacklinkContext(
   targetNote: LinkInfo,
   radius = 60,
 ): Promise<BacklinkContext> {
-  const key = cacheKey(source.source_path, targetNote.source_name);
+  const key = cacheKey(source.source_path, targetNote.source_path);
   const cached = snippetCache.get(key);
   if (cached) return cached;
 
@@ -71,7 +76,7 @@ export function invalidateCacheBySource(sourcePath: string): void {
   }
 }
 
-/** target 노트가 rename되거나 변경되면 캐시 키의 target stem 부분이 달라짐 — 전체 클리어가 안전. */
+/** target 이 rename 되면 그 경로를 키로 쓴 항목이 남는다 — 전체 클리어가 안전. */
 export function clearBacklinkCache(): void {
   snippetCache.clear();
 }
