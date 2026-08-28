@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "$lib/tauri/invoke";
 
 /**
  * vault 전체 정규식·리터럴 검색 — Rust `grep_vault`의 타입드 래퍼.

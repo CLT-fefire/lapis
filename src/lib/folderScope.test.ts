@@ -62,9 +62,9 @@ describe("scopeOptions", () => {
   it("2단계까지의 디렉터리를 개수와 함께 낸다", () => {
     expect(scopeOptions(paths)).toEqual([
       // 5중 4 — `HOME.md` 를 실제로 거르므로 쓸모 있는 후보다.
-      { prefix: "knowledge/", count: 4 },
-      { prefix: "knowledge/lapis/", count: 2 },
-      { prefix: "knowledge/slate/", count: 2 },
+      { prefix: "knowledge/", label: "knowledge/", count: 4 },
+      { prefix: "knowledge/lapis/", label: "knowledge/lapis/", count: 2 },
+      { prefix: "knowledge/slate/", label: "knowledge/slate/", count: 2 },
     ]);
   });
 
@@ -86,6 +86,51 @@ describe("scopeOptions", () => {
   it("노트 하나짜리 후보는 뺀다", () => {
     const one = [...paths, "solo/only/z.md"];
     expect(scopeOptions(one).map((o) => o.prefix)).not.toContain("solo/");
+  });
+
+  /**
+   * 🔴 **호출부는 절대경로를 넘긴다.** `FilterPanel` 은 `idx.byPath.keys()`,
+   * 팔레트는 `entryPath()` — 둘 다 `C:/…/vault/…` 또는 `/Users/…/vault/…` 다.
+   *
+   * 위 단언들이 vault 상대경로만 먹였기 때문에 이 함수는 **테스트에서만 동작했다.**
+   * 절대경로를 주면 depth 2 예산을 드라이브·홈이 다 먹어 후보가 전부 `n < total` 에
+   * 걸리고, 폴더 칩과 팔레트 스코프 칩이 **에러 없이 하나도 안 뜬다.**
+   */
+  it("절대경로를 받아도 vault 아래에서 후보를 낸다", () => {
+    const abs = [
+      "C:/Projects/vault/knowledge/lapis/a.md",
+      "C:/Projects/vault/knowledge/lapis/b.md",
+      "C:/Projects/vault/knowledge/slate/c.md",
+      "C:/Projects/vault/HOME.md",
+    ];
+    const opts = scopeOptions(abs);
+    // 매칭은 `startsWith` 이므로 접두사는 **절대경로 그대로** 나와야 한다.
+    expect(opts.map((o) => o.prefix)).toEqual([
+      "C:/Projects/vault/knowledge/",
+      "C:/Projects/vault/knowledge/lapis/",
+    ]);
+    // 화면에 드라이브를 보여줄 이유는 없다 — 공통 뿌리를 걷은 이름을 같이 낸다.
+    expect(opts.map((o) => o.label)).toEqual(["knowledge/", "knowledge/lapis/"]);
+  });
+
+  it("POSIX 절대경로도 같다", () => {
+    const abs = [
+      "/Users/me/vault/plans/a.md",
+      "/Users/me/vault/plans/b.md",
+      "/Users/me/vault/HOME.md",
+    ];
+    expect(scopeOptions(abs)).toEqual([
+      { prefix: "/Users/me/vault/plans/", label: "plans/", count: 2 },
+    ]);
+  });
+
+  /** 상대경로에서는 걷을 뿌리가 없다 — label 이 prefix 와 같다. */
+  it("상대경로면 label 이 prefix 와 같다", () => {
+    expect(scopeOptions(paths)[0]).toEqual({
+      prefix: "knowledge/",
+      label: "knowledge/",
+      count: 4,
+    });
   });
 
   it("루트 직속 파일은 후보를 안 만든다", () => {

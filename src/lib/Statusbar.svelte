@@ -10,6 +10,7 @@
   } from "$lib/stores/vault";
   import { watcherStatus } from "$lib/stores/watcher";
   import { lastCommit, formatCommitDate } from "$lib/stores/git";
+  import { usingFakeBackend } from "$lib/tauri/invoke";
 
   /**
    * 상태바 — 셸의 마지막 줄.
@@ -58,6 +59,15 @@
 <footer class="statusbar" data-lapis="statusbar">
   <div class="sb-left">
     {#if $vaultPath}
+      <!--
+        ⚠️ **픽스처라는 표시.** 없으면 프리뷰에서 본 것을 실물로 착각하게 되고, 그게 이
+        도구가 만들 수 있는 최악의 실수다. Tauri 안에서는 안 뜬다.
+      -->
+      {#if usingFakeBackend()}
+        <span class="fixture" title="dev 서버의 가짜 백엔드 — 실제 vault 가 아니다">
+          FIXTURE
+        </span>
+      {/if}
       <span class="status" title={$vaultPath}>
         <span
           class="dot"
@@ -155,6 +165,17 @@
 
   .dot.error {
     background: var(--danger-text);
+  }
+
+  .fixture {
+    flex: none;
+    padding: 0 6px;
+    border-radius: var(--r-sm);
+    background: var(--warning-bg-subtle, var(--danger-bg-subtle));
+    color: var(--danger-text);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
   }
 
   .commit {

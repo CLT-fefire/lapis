@@ -1,3 +1,4 @@
+import { invoke } from "$lib/tauri/invoke";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 /** `C:` 같은 Windows 드라이브 지정자. 경로의 루트를 판정·복원할 때 쓴다. */

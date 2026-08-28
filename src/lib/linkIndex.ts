@@ -1,4 +1,5 @@
 import type { LinkInfo } from "$lib/tauri/notes";
+import { yieldToPaint } from "$lib/yieldToPaint";
 import {
   buildRelationIndex,
   buildRelationIndexChunked,
@@ -236,16 +237,6 @@ function buildBacklinks(infos: LinkInfo[], index: ResolveSource): Map<string, Se
  * 다음 paint 직전까지 양보 — `requestAnimationFrame` 우선(렌더 기회 보장 → 인덱스 빌드
  * 오버레이 스피너가 청크 사이에 실제로 갱신/회전). rAF 없으면(worker/test) setTimeout(0).
  */
-function yieldToPaint(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => resolve());
-    } else {
-      setTimeout(resolve, 0);
-    }
-  });
-}
-
 export function buildIndex(infos: LinkInfo[]): LinkIndex {
   const { byPath, resolver } = buildResolverAndByPath(infos);
   const backlinks = buildBacklinks(infos, { resolver });

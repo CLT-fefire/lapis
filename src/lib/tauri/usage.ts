@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "$lib/tauri/invoke";
 
 /**
  * 사용 로그 Rust 커맨드의 타입드 래퍼.

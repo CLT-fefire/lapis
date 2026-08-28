@@ -1,4 +1,5 @@
 import { m } from "$lib/paraglide/messages.js";
+import { yieldToPaint } from "$lib/yieldToPaint";
 import { writable, get } from "svelte/store";
 import { noteStem } from "$lib/notePath";
 import { rememberVault } from "$lib/stores/recentVaults";
@@ -246,15 +247,8 @@ export async function openVault(path: string): Promise<void> {
  * 인덱스 빌드 오버레이 스피너가 단계 사이에 실제로 갱신/회전한다(setTimeout(0)은 메인
  * 스레드가 바쁘면 paint를 건너뛸 수 있음). rAF 없으면(test 등) setTimeout(0) fallback.
  */
-function nextTick(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => resolve());
-    } else {
-      setTimeout(resolve, 0);
-    }
-  });
-}
+/** 인덱스 빌드 청크 사이의 양보. ⚠️ 가려진 창에서 멈추지 않는 이유는 `yieldToPaint`. */
+const nextTick = yieldToPaint;
 
 /**
  * cache hit 시점에 호출 — `pendingFullTextVault`에 박은 vault path 기준으로 idle 시점에

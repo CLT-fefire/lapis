@@ -1,7 +1,8 @@
 <script lang="ts">
   import { logWarn } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
-  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { invoke } from "$lib/tauri/invoke";
+import { convertFileSrc } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { vaultPath } from "$lib/stores/vault";
   import { findAssetsForNote, type AssetInfo } from "$lib/tauri/notes";

@@ -15,7 +15,7 @@ import { noteMtimes } from "$lib/stores/mtimes";
 import { linkIndex } from "$lib/stores/vault";
 import { recencyAxis } from "$lib/stores/palette";
 import { parseFrontmatterDate } from "$lib/recency";
-import { scopeOptions } from "$lib/folderScope";
+import { scopeOptions, type ScopeOption } from "$lib/folderScope";
 
 /**
  * 팔레트 모드.
@@ -666,7 +666,7 @@ export function inPaletteScope(entry: PaletteEntry, scope: string | null): boole
 export function scopeCandidates(
   results: readonly PaletteResult[],
   limit = 6,
-): { prefix: string; count: number }[] {
+): ScopeOption[] {
   const paths: string[] = [];
   for (const r of results) {
     const p = entryPath(r.entry);

@@ -318,6 +318,16 @@ cannot see (happy-dom has no layout engine).
 > The fixtures deliberately fill every tab and trigger every warning at once. A screen with one
 > section populated hides whether the others render at all.
 
+The same dev server also runs **the whole app** at `/`, against an in-memory fixture vault that
+opens by itself. The status bar shows a `FIXTURE` badge so a preview is never mistaken for the real
+thing. Unknown backend commands throw rather than returning `undefined`, so gaps in the fake are
+visible instead of silently passing.
+
+> ⚠️ **It answers one question: does this draw correctly.** Atomic writes, path-escape checks, the
+> watcher, the disk cache and git are not simulated — what works here is no evidence it works in the
+> app. None of it ships: the fake is behind `import.meta.env.DEV` and reached through a dynamic
+> `import()`, and a test scans the production build to prove it is absent.
+
 Builds:
 
 ```bash

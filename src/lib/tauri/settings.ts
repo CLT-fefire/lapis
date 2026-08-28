@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "$lib/tauri/invoke";
 
 export interface LapisSettings {
   /** 노트 이름 변경 시 `.lapis/link-rewrite-backup/` 스냅샷 최대 보존 개수. 기본 20, range 1-100. */

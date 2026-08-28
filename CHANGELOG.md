@@ -16,6 +16,45 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.5.1] — 2026-08-28
+
+> Three defects that produced **no error message at all**, plus a way to actually look at the app.
+
+### Fixed
+- 🔴 **The index build stopped forever when the window was not visible** — `requestAnimationFrame`
+  never fires while a window is hidden or fully occluded, and three copies of the same chunk-yield
+  helper (`linkIndex` · `relations` · `stores/vault`) simply awaited it. Measured in a background
+  tab: zero rAF callbacks in 1.5s, and the build stalled at the first chunk boundary with no error,
+  no timeout, no log — just the "building index…" overlay, forever.
+
+  The helper now lives in one place (`yieldToPaint.ts`) and **races rAF against a timer**. A visible
+  window still yields to paint (rAF arrives in ~16ms, well inside the 100ms cap), so the spinner
+  keeps updating; a hidden one proceeds immediately.
+
+- 🔴 **The folder axis and the palette scope chips never appeared** — `scopeOptions` computes
+  directory prefixes down to depth 2, but both callers pass **absolute** paths. The drive and home
+  directory ate the entire depth budget, so every candidate covered all notes and was dropped by the
+  "must actually filter something" rule. The unit tests fed it vault-relative paths, so the function
+  passed while the feature was blank.
+
+  `scopeOptions` now skips the root every path shares, and returns a `label` (below the vault) next
+  to the `prefix` used for matching — one function owns both, so they cannot drift apart.
+
+- **Filter chips showed no selected state** — active styling was written per chip type, so axes
+  added later (folder in 3.1.0, arbitrary frontmatter in 3.3.0) silently had none. There is now a
+  base `.facet-chip.active` rule with per-type accents layered on, and a test that requires every
+  chip variant to have one.
+
+- **The dev fake backend is now off under test** — vitest is also `DEV` and outside Tauri, so tests
+  that mock the Tauri core were reaching the fixture instead of the mock. The fixture returns
+  plausible values, so the assertions **passed without observing anything**.
+
+### Added
+- **The app runs in a plain browser during development** (`npm run dev`) against an in-memory
+  fixture vault, so the filter panel, tables, and diagnostics can be looked at directly. The status
+  bar shows a `FIXTURE` badge, unknown commands throw rather than returning `undefined`, and a test
+  scans the production build to prove none of it ships.
+
 ## [3.5.0] — 2026-08-28
 
 > The **last** group from the fourth analysis (8, 9, 10, 11, 12, 13, 17). All 21 candidates are
@@ -2085,6 +2124,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.5.1]: https://github.com/eren0315/lapis/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/eren0315/lapis/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/eren0315/lapis/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/eren0315/lapis/compare/v3.2.0...v3.3.0

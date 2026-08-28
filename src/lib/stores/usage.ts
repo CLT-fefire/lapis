@@ -1,5 +1,5 @@
 import { writable, get } from "svelte/store";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "$lib/tauri/invoke";
 import {
   serialize,
   monthOf,

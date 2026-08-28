@@ -17,7 +17,10 @@
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],
+    // ⚠️ `vite/client` — 이 그래프는 앱 모듈을 끌어온다(`$lib/tauri/notes` → `tauri/invoke`)
+    //    그리고 그쪽은 `import.meta.env` 를 쓴다. 없으면 `npm run check` 는 통과하는데
+    //    `check:cli`·`check:mcp` 만 빨개진다 — 한쪽만 통과하는 상태를 만들지 않는다.
+    "types": ["node", "vite/client"],
     "paths": { "$lib/*": ["../src/lib/*"] }
   },
   "include": ["**/*.ts", "../mcp/**/*.ts"]

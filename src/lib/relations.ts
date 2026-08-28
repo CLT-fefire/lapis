@@ -1,4 +1,5 @@
 import type { LinkInfo } from "$lib/tauri/notes";
+import { yieldToPaint } from "$lib/yieldToPaint";
 import { resolveTarget, type ResolveSource } from "$lib/linkIndex";
 
 /**
@@ -163,14 +164,8 @@ export async function buildRelationIndexChunked(
   for (let i = 0; i < infos.length; i++) {
     collectRelationsForInfo(infos[i], index, outgoing, incoming);
     if (i > 0 && i % yieldEvery === 0) {
-      // requestAnimationFrame 우선 — 청크 사이 paint 보장(스피너 갱신). 없으면 setTimeout.
-      await new Promise<void>((resolve) => {
-        if (typeof requestAnimationFrame === "function") {
-          requestAnimationFrame(() => resolve());
-        } else {
-          setTimeout(resolve, 0);
-        }
-      });
+      // 청크 사이 paint 보장(스피너 갱신). ⚠️ rAF 를 그냥 기다리면 가려진 창에서 멈춘다.
+      await yieldToPaint();
     }
   }
   return { outgoing, incoming };
