@@ -8,7 +8,7 @@ import {
 } from "$lib/tableView";
 
 /**
- * 테이블 뷰의 **상태 절반** — 열림 여부 · 활성 뷰 · 저장뷰 영속화.
+ * 한눈에 보기(코드 이름은 `tableView`)의 **상태 절반** — 열림 여부 · 활성 뷰 · 저장뷰 영속화.
  *
  * 판정·변환은 전부 `$lib/tableView`(순수)에 있다. 여기는 store와 localStorage만 만진다.
  */

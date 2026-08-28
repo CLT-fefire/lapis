@@ -1,7 +1,7 @@
 import type { LinkInfo } from "$lib/tauri/notes";
 
 /**
- * 테이블 뷰의 **순수 절반** — 컬럼 열거 · 셀 값 · 정렬 · 필터 · 저장뷰 직렬화.
+ * 한눈에 보기(코드 이름은 `tableView`)의 **순수 절반** — 컬럼 열거 · 셀 값 · 정렬 · 필터 · 저장뷰 직렬화.
  *
  * store도 IO도 만지지 않는다. Node 테스트에서 그대로 import 되어야 정렬 규칙과
  * 저장뷰 파싱을 고정할 수 있기 때문이다(`fullTextOptions`·`snippet`·`cacheDelta`와 같은 이유).

@@ -145,7 +145,7 @@ Per-version changes live in [`CHANGELOG.md`](CHANGELOG.md) — this repository d
 | `⌘⌃←` / `⌘⌃→` | Visit history back / forward |
 | `⌘B` | Collapse/expand the sidebar |
 | `⌘⌥B` | Collapse/expand the context panel |
-| `⌘⇧B` | Table view |
+| `⌘⇧B` | Overview (notes as a table) |
 | `⌘⇧O` | Outline |
 | `⌘⇧C` | Copy the current note's path |
 
@@ -304,7 +304,7 @@ cargo test --locked
 
 ### Previewing hard-to-reach screens
 
-Some surfaces need real vault state before they show anything — the vault-hygiene modal, and the
+Some surfaces need real vault state before they show anything — the vault diagnostics modal, and the
 find-and-replace panel inside `⌘⇧G`. To look at them without building that state by hand:
 
 ```bash

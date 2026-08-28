@@ -347,11 +347,23 @@
     position: relative;
   }
 
+  /**
+   * 컬럼 메뉴.
+   *
+   * ⚠️ **`thead th` 보다 위여야 한다.** 둘 다 `z-index: 1` 이었는데, 같은 값이면
+   * **DOM 순서가 이긴다** — 표가 툴바보다 뒤에 있어서 sticky 헤더가 메뉴를 덮었다.
+   * 메뉴는 열리는데 첫 줄들이 헤더 뒤로 사라진다. 에러는 없다.
+   *
+   * ⚠️ 두 값을 바꿀 때는 같이 본다. 이 카드 안의 국지적 척도이고 `--z-*` 와 무관하다:
+   *   1 = sticky 헤더(행 위)
+   *   2 = 컬럼 메뉴(헤더 위)
+   * `tableStacking.test.ts` 가 순서를 못 박는다.
+   */
   .menu {
     position: absolute;
     top: calc(100% + var(--sp-2));
     right: 0;
-    z-index: 1;
+    z-index: 2;
     min-width: 210px;
     max-height: 320px;
     overflow-y: auto;
@@ -446,6 +458,7 @@
     font-size: var(--fs-sm);
   }
 
+  /* sticky 헤더 — 행 위, **컬럼 메뉴 아래**(위 `.menu` 주석 참조). */
   thead th {
     position: sticky;
     top: 0;

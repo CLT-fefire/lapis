@@ -16,6 +16,34 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-08-28
+
+### Changed
+- **Three terms renamed** ([#270]). Display text only — **stored state, commands, and CLI
+  flags are unchanged.**
+
+  | Before | After |
+  |---|---|
+  | Vault hygiene | **Vault diagnostics** |
+  | Orphan notes | **No backlinks** |
+  | Table view | **Overview** |
+
+  "Hygiene" and "cleanup" imply good and bad, and this screen **does not judge** — it finds
+  and shows, it does not fix. "Orphan" was a loaded metaphor for the one thing actually
+  measured: nothing links to this note.
+
+  ⚠️ **Code and CLI keep the old names.** `lapis links --orphans` is an **API** — changing the
+  flag breaks other people's scripts. Renaming only the code would leave the CLI as the odd one
+  out, so the display changed alone and the mapping is documented at the top of `vaultAudit.ts`.
+
+### Fixed
+- **The "Columns" menu hid behind the table header in Overview** ([#270]). The menu and the
+  sticky header were **both `z-index: 1`**, and at equal values **DOM order wins** — the table
+  comes after the toolbar, so the header covered the menu.
+
+  The menu opened with every item present; only its first rows disappeared behind the header.
+  No error, nothing in the console. `tableStacking.test.ts` now pins the order of the two values.
+
 ## [3.0.1] — 2026-08-28
 
 ### Fixed
@@ -1635,7 +1663,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.1...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.0.2...main
+[3.0.2]: https://github.com/eren0315/lapis/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/eren0315/lapis/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/eren0315/lapis/compare/v3.0.0-beta...v3.0.0
 [3.0.0-beta]: https://github.com/eren0315/lapis/compare/v2.4.1...v3.0.0-beta
@@ -1686,6 +1715,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#270]: https://github.com/eren0315/lapis/pull/270
 [#269]: https://github.com/eren0315/lapis/pull/269
 [#268]: https://github.com/eren0315/lapis/pull/268
 [#267]: https://github.com/eren0315/lapis/pull/267
