@@ -1,0 +1,127 @@
+import { describe, it, expect } from "vitest";
+import { inScope, passesScope, scopeOptions, normalizeScope } from "./folderScope";
+
+/**
+ * 폴더 스코프.
+ *
+ * ⚠️ 여기서 조용히 틀리는 방법은 **포함과 제외가 다른 규칙을 쓰는 것**이다. `exclude` 는
+ * 문자열 접두사이고 그 이유가 `mcp/query.ts` 에 적혀 있다(디렉터리 경계로 맞추면
+ * 세그먼트 중간 접두사가 no-op 이 된다). 둘이 갈리면 같은 문자열이 한쪽에서만 먹는다.
+ */
+
+describe("inScope", () => {
+  it("빈 스코프는 전부 통과", () => {
+    expect(inScope("a/b.md", [])).toBe(true);
+  });
+
+  it("접두사가 맞으면 통과", () => {
+    expect(inScope("knowledge/lapis/x.md", ["knowledge/lapis/"])).toBe(true);
+    expect(inScope("knowledge/slate/x.md", ["knowledge/lapis/"])).toBe(false);
+  });
+
+  /** ⚠️ 디렉터리 경계가 아니라 **문자열** 접두사다 — `exclude` 와 같은 규칙. */
+  it("세그먼트 중간에서 끊는 접두사도 먹는다", () => {
+    expect(inScope("plans/lapis-cli-layer4.md", ["plans/lapis-cli-"])).toBe(true);
+  });
+
+  it("여럿이면 하나만 맞아도 통과 (OR)", () => {
+    const under = ["knowledge/lapis/", "knowledge/slate/"];
+    expect(inScope("knowledge/slate/x.md", under)).toBe(true);
+    expect(inScope("other/x.md", under)).toBe(false);
+  });
+});
+
+describe("passesScope — 제외가 이긴다", () => {
+  /**
+   * ⚠️ 아카이브를 빼 두고 그 안을 스코프로 잡았을 때 아카이브가 딸려 나오면
+   * **뺀 뜻이 사라진다.** "빼라"가 "여기서만"보다 강하다.
+   */
+  it("스코프 안이어도 제외되면 탈락", () => {
+    expect(passesScope("_memories/a.md", ["_memories/"], ["_memories"])).toBe(false);
+  });
+
+  it("제외에 안 걸리고 스코프 안이면 통과", () => {
+    expect(passesScope("knowledge/lapis/a.md", ["knowledge/"], ["_memories"])).toBe(true);
+  });
+
+  it("스코프가 비어도 제외는 먹는다", () => {
+    expect(passesScope("_memories/a.md", [], ["_memories"])).toBe(false);
+    expect(passesScope("other/a.md", [], ["_memories"])).toBe(true);
+  });
+});
+
+describe("scopeOptions", () => {
+  const paths = [
+    "knowledge/lapis/reference/a.md",
+    "knowledge/lapis/plans/b.md",
+    "knowledge/slate/reference/c.md",
+    "knowledge/slate/plans/d.md",
+    "HOME.md",
+  ];
+
+  it("2단계까지의 디렉터리를 개수와 함께 낸다", () => {
+    expect(scopeOptions(paths)).toEqual([
+      // 5중 4 — `HOME.md` 를 실제로 거르므로 쓸모 있는 후보다.
+      { prefix: "knowledge/", count: 4 },
+      { prefix: "knowledge/lapis/", count: 2 },
+      { prefix: "knowledge/slate/", count: 2 },
+    ]);
+  });
+
+  /**
+   * ⚠️ **전부를 덮는 후보만 뺀다.** 눌러도 화면이 안 바뀌는 항목은 고장과 구별이 안 된다.
+   * 반대로 하나라도 거르면(위의 `knowledge/` 는 `HOME.md` 를 뺀다) 남긴다 — "두 프로젝트
+   * 전부"가 유효한 선택지이기 때문이다.
+   */
+  it("전부를 덮는 후보는 뺀다", () => {
+    const all = ["knowledge/a/x.md", "knowledge/b/y.md"];
+    expect(scopeOptions(all).map((o) => o.prefix)).not.toContain("knowledge/");
+  });
+
+  it("일부만 덮으면 남긴다", () => {
+    expect(scopeOptions(paths).map((o) => o.prefix)).toContain("knowledge/");
+  });
+
+  /** 하나뿐인 후보는 필터가 아니라 파일 열기다. */
+  it("노트 하나짜리 후보는 뺀다", () => {
+    const one = [...paths, "solo/only/z.md"];
+    expect(scopeOptions(one).map((o) => o.prefix)).not.toContain("solo/");
+  });
+
+  it("루트 직속 파일은 후보를 안 만든다", () => {
+    expect(scopeOptions(["a.md", "b.md", "c.md"])).toEqual([]);
+  });
+
+  it("개수 내림차순, 동점은 경로순", () => {
+    const p = [
+      "z/1/a.md", "z/1/b.md", "z/1/c.md",
+      "a/1/d.md", "a/1/e.md",
+      "m/1/f.md", "m/1/g.md",
+    ];
+    expect(scopeOptions(p, 1).map((o) => o.prefix)).toEqual(["z/", "a/", "m/"]);
+  });
+});
+
+describe("normalizeScope", () => {
+  it("앞의 슬래시와 ./ 를 걷는다", () => {
+    expect(normalizeScope("/knowledge/lapis")).toBe("knowledge/lapis");
+    expect(normalizeScope("./knowledge/lapis")).toBe("knowledge/lapis");
+  });
+
+  it("역슬래시를 슬래시로", () => {
+    expect(normalizeScope("knowledge\\lapis")).toBe("knowledge/lapis");
+  });
+
+  /**
+   * ⚠️ 끝에 `/` 를 **붙이지 않는다.** 붙이면 세그먼트 중간 접두사가 죽는다
+   * (`plans/lapis-cli-` → `plans/lapis-cli-/` 는 아무것도 안 맞는다).
+   */
+  it("끝에 슬래시를 붙이지 않는다", () => {
+    expect(normalizeScope("plans/lapis-cli-")).toBe("plans/lapis-cli-");
+    expect(normalizeScope("knowledge/lapis")).toBe("knowledge/lapis");
+  });
+
+  it("공백만이면 빈 문자열", () => {
+    expect(normalizeScope("   ")).toBe("");
+  });
+});

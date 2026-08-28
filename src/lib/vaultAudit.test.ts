@@ -33,7 +33,32 @@ describe("고아 노트", () => {
       mkInfo("/v/seen.md"),
       mkInfo("/v/lonely.md"),
     ]);
-    expect(findOrphans(idx).map((o) => o.path)).toEqual(["/v/hub.md", "/v/lonely.md"]);
+    expect(findOrphans(idx).map((o) => o.path).sort()).toEqual(["/v/hub.md", "/v/lonely.md"]);
+  });
+
+  /**
+   * ⚠️ **나가는 링크가 적은 것이 위**다. 예전엔 경로순이라 진입점이 맨 위에 왔다 —
+   * 실제 vault 의 `HOME.md` 는 나가는 링크가 19개인데 아무도 안 가리킨다(당연하다).
+   * 첫 줄이 매번 "고칠 것 아님"이면 목록 전체를 덜 보게 된다.
+   */
+  it("진입점(나가는 링크가 많은 것)을 뒤로 보낸다", () => {
+    const idx = buildIndex([
+      mkInfo("/v/hub.md", { targets: ["seen", "other"] }),
+      mkInfo("/v/seen.md"),
+      mkInfo("/v/other.md"),
+      mkInfo("/v/lonely.md"),
+    ]);
+    expect(findOrphans(idx).map((o) => o.path)).toEqual(["/v/lonely.md", "/v/hub.md"]);
+  });
+
+  /** ⚠️ 동점은 경로순 — 결정성이 없으면 같은 vault 가 매번 다른 답을 낸다. */
+  it("나가는 링크 수가 같으면 경로순", () => {
+    const idx = buildIndex([
+      mkInfo("/v/z.md"),
+      mkInfo("/v/a.md"),
+      mkInfo("/v/m.md"),
+    ]);
+    expect(findOrphans(idx).map((o) => o.path)).toEqual(["/v/a.md", "/v/m.md", "/v/z.md"]);
   });
 
   /** 한쪽 채널만 보면 `related`로만 걸린 노트를 고아로 오판한다. */

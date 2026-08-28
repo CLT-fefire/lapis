@@ -188,6 +188,19 @@ export interface QueryArgs {
    */
   audit?: AuditKind;
   sources?: ("bm25" | "structural")[];
+  /**
+   * **"이 아래에서만"** — 경로 접두사. 여럿이면 OR.
+   *
+   * ⚠️ **`exclude` 와 같은 문자열 접두사**다. 디렉터리 경계(`x + "/"`)로 맞추면
+   * `lapis/plans/lapis-cli-` 처럼 세그먼트 중간에서 끊는 접두사가 조용히 no-op 이 된다.
+   * 포함과 제외가 다른 규칙을 쓰면 같은 문자열이 한쪽에서만 먹는다.
+   *
+   * ⚠️ `exclude` 와 겹치면 **`exclude` 가 이긴다.** "빼라"가 "여기서만"보다 강하다.
+   *
+   * 한 vault 에 프로젝트가 여럿일 때를 위한 것이다 — 이 vault 는 이름 충돌 7건이
+   * 전부 프로젝트 사이에서 났다.
+   */
+  under?: string[];
   exclude?: string[];
   include_archive?: boolean;
   limit?: number;
@@ -392,9 +405,10 @@ function listFacet(
   st: Loaded,
   kind: NonNullable<QueryArgs["list"]>,
   cap: number,
-  ex: string[],
+  /** ⚠️ 스코프+제외를 **호출부가** 만든다. 여기서 다시 만들면 규칙이 두 곳이 된다. */
+  keep: (rel: string) => boolean,
 ): Omit<FacetListResponse, keyof ResponseBase> {
-  const infos = st.vc.infos.filter((i) => !excluded(st.rel(i.source_path), ex));
+  const infos = st.vc.infos.filter((i) => keep(st.rel(i.source_path)));
   const counts = new Map<string, number>();
   const bump = (v: string) => counts.set(v, (counts.get(v) ?? 0) + 1);
   for (const i of infos) {
@@ -539,6 +553,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     list,
     audit,
     sources,
+    under = [],
     exclude = [],
     include_archive = false,
     limit = DEFAULT_LIMIT,
@@ -567,6 +582,11 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   // "인덱스가 비었다"로 오해하게 된다. NaN도 0으로 떨어뜨려 필터를 끈다.
   const minRel = Number.isFinite(minRelArg) ? Math.min(Math.max(minRelArg, 0), 1) : 0;
   const ex = [...exclude.map(norm), ...(include_archive ? [] : ARCHIVE_PREFIXES)];
+  // ⚠️ `under` 도 같은 정규화를 지난다. 한쪽만 정규화하면 `\` 를 준 사용자에게
+  //    제외는 먹고 포함은 안 먹는다 — 결과가 통째로 빈다.
+  const un = under.map(norm).filter((u) => u !== "");
+  /** 스코프 + 제외. ⚠️ 제외가 이긴다 — `folderScope.ts` 의 `passesScope` 와 같은 규칙. */
+  const keep = (rel: string): boolean => !excluded(rel, ex) && (un.length === 0 || un.some((u) => rel.startsWith(u)));
   const allow = new Set<string>(sources ?? ["bm25", "structural"]);
 
   // ⚠️ 상대 기간(`7d`)은 본질적으로 "지금"에 의존한다. 테스트는 절대 날짜를 쓴다 —
@@ -617,6 +637,10 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   // 계속 쓰이므로, 0.016%가 새롭다는 이유로 모든 질의를 세우면 도구를 못 쓴다.
   // 판단은 Claude Code가 한다(이 서버의 원칙).
   const stale = checkStale(st.vc);
+  // ⚠️ `newer_all` 은 **응답에 안 나간다** — 여기서 떼어 낸다. `affects_results` 를
+  //    계산할 때만 쓰는 목록이고, 그대로 실으면 큰 vault 에서 응답이 부푼다.
+  const { newer_all: newerAll = [], ...staleOut } = stale;
+  const newerSet = new Set(newerAll);
 
   const base = {
     vault: st.vc.root,
@@ -624,11 +648,11 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     // ⚠️ 조건이 `newer_count`가 아니라 `changed`다. 프록시는 **수정만 있는 변경**을
     // 놓쳤다 — 새 파일이 없으면 0이라 "최신"이라고 답했다. v8부터 fingerprint를
     // 재현할 수 있어 정확히 판정한다.
-    ...(stale.changed ? { stale } : {}),
+    ...(stale.changed ? { stale: staleOut } : {}),
     excluded: ex,
   };
 
-  if (list) return { ...base, ...listFacet(st, list, cap, ex) };
+  if (list) return { ...base, ...listFacet(st, list, cap, keep) };
   if (audit) return { ...base, ...runAudit(st, audit, cap) };
 
   const used: Record<string, unknown>[] = [];
@@ -700,7 +724,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     const { hits, combine } = unionRankDetailed(idxs, text, 0);
     ranked = hits
       .map((h) => ({ path: normPath(h.path), score: h.score, rel: h.rel }))
-      .filter((h) => !excluded(st.rel(h.path), ex));
+      .filter((h) => keep(st.rel(h.path)));
 
     // `min_rel` 적용 — **자른 건수를 남긴다.** 조용히 줄이면 "왜 안 나오지"의
     // 원인이 인자였다는 걸 알 방법이 없다.
@@ -818,7 +842,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     pool === null
       ? []
       : [...pool]
-          .filter((abs) => !excluded(st.rel(abs), ex))
+          .filter((abs) => keep(st.rel(abs)))
           .map((abs) => ({ path: abs })),
     false,
   ).map((r) => r.path);
@@ -870,9 +894,20 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   // 반대로 BM25 전용 질의는 553건 중 10건만 주면서 false였다.
   const truncated = structuralTotal > structuralCount || ranked.some((r) => !seen.has(r.path));
 
+  /**
+   * 낡음이 **이 답**에 닿는가.
+   *
+   * ⚠️ 전체 개수(`newer_count`)와 다른 질문이다. 19건이 새로워도 그 19건이 결과에
+   * 없으면 이 답은 멀쩡하다. 개수만 보고 매번 의심하면 도구를 못 쓴다.
+   */
+  const staleFinal = stale.changed
+    ? { stale: { ...staleOut, affects_results: results.some((r) => newerSet.has(r.path)) } }
+    : {};
+
   // 필수 메타를 배열 **앞에** 둔다 — 응답이 잘려도 `used`·`vault`가 살아남게.
   return {
     ...base,
+    ...staleFinal,
     used,
     ...(resolvedTarget ? { resolved_target: st.rel(resolvedTarget) } : {}),
     returned: results.length,

@@ -164,9 +164,17 @@ describe("탭 바", () => {
 describe("고아 탭", () => {
   beforeEach(() => clickTab(1));
 
-  /** 경로 오름차순이다. 동명이인(`dup` 둘)이 있어도 순서가 흔들리지 않아야 한다. */
-  it("고아 노트를 이름으로, 경로 순서대로 낸다", () => {
-    expect(textOf(".rows .src")).toEqual(["hub", "lonely", "dup", "dup"]);
+  /**
+   * **나가는 링크가 적은 것부터**, 같으면 경로순.
+   *
+   * ⚠️ 예전엔 경로순만이었다. 그러면 진입점이 맨 위에 온다 — 실제 vault 의 `HOME.md` 는
+   * 나가는 링크가 19개인데 아무도 안 가리킨다(당연하다). 첫 줄이 매번 "고칠 것 아님"이면
+   * 목록 전체를 덜 보게 된다.
+   *
+   * 동명이인(`dup` 둘)이 있어도 순서가 흔들리지 않아야 한다.
+   */
+  it("떨어진 섬이 먼저, 진입점이 뒤", () => {
+    expect(textOf(".rows .src")).toEqual(["lonely", "dup", "dup", "hub"]);
   });
 
   /**
@@ -177,8 +185,8 @@ describe("고아 탭", () => {
   it("행마다 나가는 링크 수가 함께 나온다", () => {
     const counts = textOf(".rows .count");
     expect(counts).toHaveLength(4);
-    // 문구(로케일)에 묶이지 않도록 숫자만 본다.
-    expect(counts.map((c) => c.match(/\d+/)?.[0])).toEqual(["1", "0", "0", "0"]);
+    // 문구(로케일)에 묶이지 않도록 숫자만 본다. 정렬이 오름차순이라 `hub`(1)가 뒤다.
+    expect(counts.map((c) => c.match(/\d+/)?.[0])).toEqual(["0", "0", "0", "1"]);
   });
 
   /**
@@ -192,13 +200,18 @@ describe("고아 탭", () => {
    */
   it("끊긴 링크는 나가는 링크 수에 안 들어간다", () => {
     const hubTargets = 2; // 없는문서 · seen
-    expect(textOf(".rows .count")[0].match(/\d+/)?.[0]).toBe("1");
+    // ⚠️ 자리로 찾지 않는다 — 정렬이 바뀌면 엉뚱한 행을 보고도 통과한다.
+    const rows = [...document.querySelectorAll(".rows > li")];
+    const hubRow = rows.find((r) => r.querySelector(".src")?.textContent?.trim() === "hub");
+    expect(hubRow, "hub 행을 못 찾았다").toBeTruthy();
+    expect(hubRow!.querySelector(".count")?.textContent?.match(/\d+/)?.[0]).toBe("1");
     expect(hubTargets).toBeGreaterThan(1);
   });
 
   it("경로는 title 속성으로 남는다 — 목록에는 이름만 그린다", () => {
     const first = document.querySelector<HTMLButtonElement>(".rows .src");
-    expect(first?.getAttribute("title")).toBe("/v/hub.md");
+    expect(first?.textContent?.trim()).toBe("lonely");
+    expect(first?.getAttribute("title")).toBe("/v/lonely.md");
   });
 });
 

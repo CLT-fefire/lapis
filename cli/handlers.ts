@@ -179,6 +179,7 @@ export function cmdSearch(p: ParsedCommand, out: Out): void {
     ...(typeof o["doc-kind"] === "string" ? { doc_kind: o["doc-kind"] } : {}),
     ...(typeof o.topic === "string" ? { topic: o.topic } : {}),
     ...(typeof o["min-rel"] === "number" ? { min_rel: o["min-rel"] } : {}),
+    ...(Array.isArray(o.under) ? { under: o.under } : {}),
     ...(Array.isArray(o.exclude) ? { exclude: o.exclude } : {}),
   });
   if (out.json) return out.json_(res);

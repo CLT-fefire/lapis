@@ -108,6 +108,8 @@
     "case-only": () => m.hygiene_props_case_only(),
     plural: () => m.hygiene_props_plural(),
     prefix: () => m.hygiene_props_prefix(),
+    suffix: () => m.hygiene_props_suffix(),
+    sparse: () => m.hygiene_props_sparse(),
   };
 
   const TAG_LABEL: Record<TagIssueKind, () => string> = {
@@ -336,6 +338,12 @@
                       <span class="count">{v.count}</span>
                     </li>
                   {/each}
+                  <!-- ⚠️ 자른 것을 **말한다.** 조용히 자르면 "이게 전부"로 읽힌다. -->
+                  {#if issue.total}
+                    <li class="more">
+                      {m.hygiene_props_more({ count: issue.total - issue.values.length })}
+                    </li>
+                  {/if}
                 </ul>
               </div>
             {/each}
