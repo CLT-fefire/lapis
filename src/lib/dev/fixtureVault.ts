@@ -20,7 +20,41 @@
  * 착각하게 되고, 그게 이 도구가 만들 수 있는 최악의 실수다.
  */
 
+import { TEMPLATE_DIR } from "$lib/noteTemplate";
+
 export const DEV_VAULT = "/dev-vault";
+
+/** 저장하면 가짜가 거부하는 경로 — 실패 배너를 화면에서 보기 위한 것. */
+export const FIXTURE_READONLY = `${DEV_VAULT}/lapis/reference/읽기전용.md`;
+
+/**
+ * 가짜 git 이력. 실제 git 은 없다 — **되돌아보기 화면이 그려지는지**만 답한다.
+ *
+ * ⚠️ `timestamp` 는 epoch **초**다(ms 아님). 밀리초를 넣으면 화면이 서기 5만년을 그린다.
+ */
+export const FIXTURE_COMMITS = [
+  {
+    hash: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    short: "a1b2c3d",
+    author: "lapis",
+    timestamp: 1787900000,
+    subject: "표 예시에 빈 칸 행을 넣었다",
+  },
+  {
+    hash: "b2c3d4e5f60718293a4b5c6d7e8f901234567890",
+    short: "b2c3d4e",
+    author: "lapis",
+    timestamp: 1787810000,
+    subject: "작업 목록 — 코드 블록 안은 세지 않는다",
+  },
+  {
+    hash: "c3d4e5f60718293a4b5c6d7e8f90123456789012",
+    short: "c3d4e5f",
+    author: "lapis",
+    timestamp: 1787720000,
+    subject: "slate 계획 status 를 완료로",
+  },
+];
 
 export interface FixtureNote {
   rel: string;
@@ -174,6 +208,66 @@ date: 2026-08-28
 # ⚠️ 코드 블록 안은 세지 않는다
 - [ ] 이건 예시일 뿐
 \`\`\`
+`,
+  },
+  {
+    // ⚠️ **쓰기가 실패하는 경로.** 실패 배너는 되돌릴 수 없는 쓰기가 깨졌을 때만 뜨는데,
+    //    가짜 백엔드가 항상 성공하면 그 화면을 **한 번도 못 본다.**
+    //
+    // ⚠️ `status: 구현 완료` 는 **오타가 아니다.** 다른 노트들은 `완료` 라, vault 진단의
+    //    "속성" 탭(값이 갈린 축)이 이 한 건으로 켜진다. 통일하면 그 화면이 다시 빈다.
+    //
+    // ⚠️ `완료됨` 으로 두면 **안 잡힌다.** 감사의 경계 규칙이 접두·접미 뒤에 글자가
+    //    오면 다른 낱말로 보기 때문이다(`완료`/`미완료` 오보 방지). 공백 경계가 있어야 한다.
+    rel: "lapis/reference/읽기전용.md",
+    body: `---
+title: 저장이 실패하는 노트
+doc_kind: reference
+topic: ui
+tags: [lapis]
+status: 구현 완료
+date: 2026-08-26
+---
+
+# 저장이 실패하는 노트
+
+이 노트를 저장하면 가짜 백엔드가 **거부한다**. 실패 배너가 어떻게 보이는지 확인하는 용도다.
+
+⚠️ [[표-예시]] 로 나가는 링크가 **일부러** 있다. 그 노트의 이름을 바꾸면 링크 재작성이
+이 노트에서 실패하고, 그게 실패 배너가 뜨는 실제 경로다 — 배너는 되돌릴 수 없는 쓰기가
+깨졌을 때만 뜬다.
+`,
+  },
+  {
+    rel: TEMPLATE_DIR + "/계획.md",
+    body: `---
+doc_kind: plan
+topic:
+status: 미착수
+---
+
+# {{title}}
+
+## 무엇을
+
+## 왜
+
+## 안 하는 것
+`,
+  },
+  {
+    rel: TEMPLATE_DIR + "/회고.md",
+    body: `---
+doc_kind: reference
+topic:
+status: 완료
+---
+
+# {{title}}
+
+## 잘 된 것
+
+## 다음에 다르게
 `,
   },
   {

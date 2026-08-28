@@ -25,19 +25,8 @@ import {
   buildRootTokenBlock,
   documentTitle,
   suggestHtmlFileName,
+  stripAppOnlyNodes,
 } from "$lib/previewExportDoc";
-
-/** 앱에서만 의미 있는 요소를 걷어낸다. clone 위에서만 호출할 것. */
-function stripAppOnlyNodes(root: HTMLElement): void {
-  // Mermaid hover PNG 버튼 — 정적 문서에선 눌러도 아무 일이 없다.
-  root.querySelectorAll(".mermaid-export-btn").forEach((el) => el.remove());
-
-  // 인도큐먼트 검색 하이라이트 — 내보내는 시점의 검색어가 문서에 박제되면 안 된다.
-  // 요소만 벗기고 안의 텍스트는 남긴다.
-  root
-    .querySelectorAll("mark.lapis-search-match, mark.lapis-search-current")
-    .forEach((el) => el.replaceWith(...Array.from(el.childNodes)));
-}
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

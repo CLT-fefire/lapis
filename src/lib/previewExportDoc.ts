@@ -134,6 +134,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }`;
 
+/**
+ * 앱에서만 뜻이 있는 요소를 걷어낸다. **clone 위에서만 부를 것.**
+ *
+ * ## 🔴 검색어가 내보낸 문서에 박제되면 안 된다
+ *
+ * 문서 내 검색(`⌘F`)은 본문에 `<mark class="lapis-search-match">` 를 심는다. 그대로
+ * 내보내면 **내보낸 순간 무엇을 찾고 있었는지가 파일에 남는다** — 남에게 보내는 파일이면
+ * 특히 곤란하고, 에러는 나지 않으므로 본인도 모른다.
+ *
+ * ⚠️ 요소만 벗기고 **안의 텍스트는 남긴다.** 통째로 지우면 본문에서 그 낱말이 사라진다.
+ *
+ * ⚠️ `previewExport.ts` 가 아니라 여기 있는 이유는 캔버스·파일 대화상자가 안 붙어야
+ * 테스트가 되기 때문이다. 저 파일은 이걸 부르기만 한다.
+ */
+export function stripAppOnlyNodes(root: HTMLElement): void {
+  // Mermaid hover PNG 버튼 — 정적 문서에선 눌러도 아무 일이 없다.
+  root.querySelectorAll(".mermaid-export-btn").forEach((el) => el.remove());
+
+  root
+    .querySelectorAll("mark.lapis-search-match, mark.lapis-search-current")
+    .forEach((el) => el.replaceWith(...Array.from(el.childNodes)));
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

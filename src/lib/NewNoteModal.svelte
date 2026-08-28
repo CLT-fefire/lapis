@@ -137,7 +137,7 @@
       </div>
       <footer class="modal-foot">
         <button class="btn btn--ghost" onclick={closeNewNote}>{m.newnote_cancel()}</button>
-        <button class="btn btn--primary" onclick={submit}>Create &amp; Open</button>
+        <button class="btn btn--primary" onclick={submit}>{m.newnote_create()}</button>
       </footer>
     </div>
   </ModalShell>

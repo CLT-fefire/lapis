@@ -16,6 +16,45 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.6.0] — 2026-08-28
+
+> Everything left on the open list that could be closed from here. Two of the four fixes were
+> found by putting screens the fixture could not reach in front of the preview.
+
+### Fixed
+- **The Korean UI showed English in three places.** `NewNoteModal`'s primary button read
+  *Create & Open* while *Cancel* right beside it was translated; one of the palette's nine group
+  headers was a hardcoded `COMMANDS` while its siblings render as 최근 / 노트 / 본문; and
+  `commandsHeaderLabel` carried `"COMMANDS"` / `"QUICK ACTIONS"` in code. Type checking cannot see
+  this — the strings are perfectly valid. A guard now scans markup and code for untranslated UI
+  text, with an allowlist limited to proper nouns and abbreviations.
+
+- **Locale files can no longer drift.** A key present in only one of `ko.json` / `en.json` leaks as
+  an empty string or the key name in the other.
+
+### Added
+- **The dev fixture now reaches four more screens.** It carries a git history, two note templates
+  under `.lapis/templates/`, a deliberately divergent `status` value, and a path whose writes fail.
+  Each exists so a screen that only appears under some condition can actually be looked at: the
+  recent-changes tab, the template picker, the frontmatter-divergence audit, and the failure banner.
+
+  ⚠️ The divergent value is `구현 완료`, not `완료됨`. The audit requires a word boundary after the
+  shared part — `완료됨` is one word, so it is deliberately not reported (otherwise `완료`/`미완료`
+  would be flagged as the same value). The fixture comments say so, because "fixing the typo" would
+  silently empty that screen.
+
+- **The failure banner has component tests.** The store was fully covered while nothing tested the
+  thing that draws it — this repository's recurring failure. Ten tests pin that it stays out of the
+  layout when empty, keeps detail collapsed, dismisses one alert at a time, and carries a readable
+  accessible name.
+
+- **The export path's canvas-free logic is now testable.** Scale clamping moved to
+  `exportGeometry.ts` and the app-only node stripping to `previewExportDoc.ts`. Both were previously
+  unreachable: with a canvas attached, happy-dom gives "passed without running".
+
+  The stripping matters more than it looks — it unwraps in-document search highlights before export.
+  Miss it and **the file records what you were searching for** when you exported it, with no error.
+
 ## [3.5.2] — 2026-08-28
 
 > Found by looking at the app rather than at the tests.
@@ -2151,6 +2190,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.6.0]: https://github.com/eren0315/lapis/compare/v3.5.2...v3.6.0
 [3.5.2]: https://github.com/eren0315/lapis/compare/v3.5.1...v3.5.2
 [3.5.1]: https://github.com/eren0315/lapis/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/eren0315/lapis/compare/v3.4.0...v3.5.0
