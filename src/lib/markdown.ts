@@ -28,6 +28,7 @@ import http from "highlight.js/lib/languages/http";
 import { FRONTMATTER_YAML_SCHEMA } from "$lib/frontmatter";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
+import { taskListPlugin } from "./markdownPlugins/taskList";
 import { calloutPlugin } from "$lib/markdownPlugins/callout";
 import { embedPlugin } from "$lib/markdownPlugins/embed";
 import {
@@ -116,6 +117,7 @@ const md = new MarkdownIt({
   .use(embedPlugin)
   .use(mermaidPlugin)
   .use(calloutPlugin)
+  .use(taskListPlugin)
   .use(headingAnchorPlugin);
 
 export interface ParsedNote {

@@ -157,7 +157,13 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "props",
-    desc: "frontmatter 값 위생 — 거를 수 있는 축이 갈렸는지",
+    desc: "frontmatter 값 진단 — 거를 수 있는 축이 갈렸는지",
+    positional: [{ name: "동작", required: true, desc: "audit" }],
+    options: [],
+  },
+  {
+    name: "tasks",
+    desc: "본문의 미완 `- [ ]` 를 모은다. 코드 블록 안은 안 센다",
     positional: [{ name: "동작", required: true, desc: "audit" }],
     options: [],
   },

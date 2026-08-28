@@ -11,7 +11,7 @@ import { writable } from "svelte/store";
 export const brokenLinksOpen = writable<boolean>(false);
 
 /** 위생 화면의 탭 id — 모달과 팔레트가 공유한다. */
-export type HygieneTab = "broken" | "orphans" | "tags" | "unlinked" | "props";
+export type HygieneTab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks";
 
 /**
  * **열 때 어느 탭으로 갈지.** 팔레트가 세우고 모달이 읽는다.

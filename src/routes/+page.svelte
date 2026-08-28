@@ -1,6 +1,7 @@
 <script lang="ts">
   import { isMacPlatform } from "$lib/platform";
   import { logError, logWarn, logCommand, logSessionStart } from "$lib/stores/usage";
+  import { enhanceRendered } from "$lib/renderedEnhance";
   import { onMount, tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
@@ -1223,6 +1224,30 @@ import { isPanicChord } from "$lib/userCss";
   // ⚠️ 주석에 style 여는 태그를 문자 그대로 쓰면 Svelte 파서가 script 블록이 안 닫혔다고
   //    본다("<script> was left open"). 파일 끝을 가리켜서 원인이 안 보인다.
   // 요소를 다시 만들지 않고 내용만 바꾼다(순서 유지 · 타이핑 중 깜빡임 없음).
+
+  /**
+   * 렌더가 끝난 뒤 표·코드블록에 버튼과 정렬을 붙인다.
+   *
+   * ⚠️ 노트를 바꿀 때마다 다시 돈다. `enhanceRendered` 가 이미 붙인 것을 표시로 걸러
+   * 두 번 붙지 않게 한다 — 안 그러면 버튼이 쌓인다.
+   *
+   * ⚠️ `tick()` 뒤에 부른다. 그 전에는 새 HTML 이 아직 DOM 에 없다.
+   */
+  $effect(() => {
+    void parsed.html;
+    const el = renderedArticleEl;
+    if (!el) return;
+    void tick().then(() => {
+      if (!renderedArticleEl) return;
+      enhanceRendered(renderedArticleEl, {
+        copy: m.rendered_copy(),
+        copied: m.rendered_copied(),
+        copyMarkdown: m.rendered_copy_markdown(),
+        copyCsv: m.rendered_copy_csv(),
+        sortHint: m.rendered_sort_hint(),
+      });
+    });
+  });
 
   onMount(() => {
     // ⚠️ 세션 시작을 남긴다. 기동 중에 난 오류도 이 세션에 묶여야 "어느 버전에서

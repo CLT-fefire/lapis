@@ -13,6 +13,7 @@
 export { buildIndex } from "$lib/linkIndex";
 export { buildTagIndex } from "$lib/stores/tags";
 export { applyFilters, emptySelection } from "$lib/stores/filters";
+export { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
 export { koBigramTokenize, normalizeTerm } from "$lib/koTokenize";
 export {
   FULLTEXT_OPTIONS,
