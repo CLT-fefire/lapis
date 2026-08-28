@@ -108,6 +108,7 @@ import {
  */
 const VAULT_KEY_BASE = "lapis.last-vault-path";
 import { logError, logWarn } from "$lib/stores/usage";
+import { pushAlert } from "$lib/stores/alerts";
 const vaultStorageKey = () => scopedKey(VAULT_KEY_BASE);
 
 export const vaultPath = writable<string | null>(null);
@@ -1149,9 +1150,11 @@ async function rewriteAllLinksWithPreview(
   // 없어 "이름은 바뀌었는데 인용은 안 바뀐" 상태가 조용히 남았다.
   const outcome = await backupAndWrite(vault, preview);
   if (!outcome.ok) {
-    // ⚠️ 이 경로에는 아직 **화면 오류 표면이 없다.** 아무도 안 읽는 store를 새로
-    // 만드는 대신 사람이 읽을 요약을 남긴다. UI 노출은 별도 작업이다.
-    logError("stores/vault", `[lapis] 인용 갱신 실패 — ${describeFailure(outcome)}`);
+    // ⚠️ **화면에 띄운다.** 이름은 바뀌고 인용은 안 바뀐 상태를 사용자가 모르면, 다음에
+    //    그 링크를 눌렀을 때 "끊긴 링크"로 만난다 — 원인에서 한참 떨어진 곳이다.
+    const detail = describeFailure(outcome);
+    logError("stores/vault", `인용 갱신 실패 — ${detail}`);
+    pushAlert("rewrite-failed", m.alert_rewrite_failed(), detail ?? undefined);
   }
 }
 

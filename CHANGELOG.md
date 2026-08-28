@@ -16,6 +16,78 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.5.0] — 2026-08-28
+
+> The **last** group from the fourth analysis (8, 9, 10, 11, 12, 13, 17). All 21 candidates are
+> now closed.
+
+### Added
+- 🔴 **Failures are shown on screen** ([#278]). v3.2.0 structured 96 sites into `logError`, but
+  that is a **record** — release builds have no devtools, so the user still saw nothing.
+
+  `stores/vault.ts` said as much: *"this path still has no on-screen error surface."*
+
+  ⚠️ Only **failures of irreversible writes** reach it — citation rewrites, conflict
+  resolution, auto-commit. Surfacing all 96 would make the banner permanent, and a permanent
+  warning is one nobody reads.
+
+  ⚠️ A **banner, not a toast**. Toasts disappear; if you step away while "renamed but citations
+  not updated" flashes by, you never learn it happened. It stays until dismissed.
+
+  ⚠️ One entry per key. A repeatedly failing auto-commit would otherwise stack identical lines,
+  which is noise rather than information.
+
+- **New-note templates** ([#278]). `NewNoteModal` carried a "expand into templates in Phase 4.2"
+  note. The measurement justifies it: frontmatter conventions here are at **100%**
+  (`title`/`doc_kind`/`topic`/`tags` on 112 of 112), all typed by hand.
+
+  ⚠️ They live **inside the vault** (`.lapis/templates/`). Putting them in app settings means
+  they do not travel with the vault — notes living in the filesystem is this app's premise.
+
+  ⚠️ Substitution covers **dates and the title only**. Expressions and conditionals would make
+  it a template engine, and engines fail silently. **Unknown names are left alone**, so a typo
+  like `{{titel}}` stays visible instead of vanishing.
+
+- **Note content at a commit** ([#278]). "Content at this commit" in the history shows the body
+  as it was, with a copy button.
+
+  ⚠️ **Not a restore.** `git checkout` rewrites the working tree — an irreversible write. It
+  shows and copies, nothing more; the same stance as every audit here.
+
+  ⚠️ Only commit hashes are accepted. An arbitrary string passed to `git show` could read
+  **outside the vault** via something like `HEAD~3:../..` — the path is guarded, the revision was not.
+
+- **Recent changes across the vault** ([#278]). The seventh tab in diagnostics, answering "what
+  changed today" — a **different question** from per-note history.
+
+- **A trace of auto-commit** ([#278]) in the status bar. It runs silently after 4 seconds, so
+  without a trace **working and not working look identical.**
+
+  ⚠️ Recorded **only when a commit actually happened.** With no changes the backend is a no-op,
+  and updating the trace anyway would be a lie.
+
+### Changed
+- 🔴 **Whole-word search now works correctly in Korean** ([#278]). `고양이` no longer matches
+  inside `검은고양이`.
+
+  Three stages: before v3.1.1 it matched **nothing** (ASCII `\b` gives Korean no boundary at
+  all); v3.1.1 avoided the zero-result case but had no real boundary; now it uses a Unicode
+  word-character lookbehind.
+
+  ⚠️ **Guarded by a feature test.** Where lookbehind cannot be parsed, `new RegExp` throws, the
+  regex becomes `null`, and **search dies entirely** — the very symptom v3.1.1 fixed. Engines
+  without it fall back to stage two and **never to the zero-result stage one**.
+
+  ⚠️ `\p{...}` requires the `u` flag; without it, `p` is read as a literal and it silently
+  matches something else. The flag is set only for real boundaries — enabling it in regex mode
+  would break patterns that used to work.
+
+### 17 · Deliberately not built
+`lapis doctor` is **not** moving into the app. What doctor answers (cache version, paths, schema
+skew) are questions you ask **when the app will not start**. Inside the app it would be
+unavailable exactly when it is needed — the CLI is the right place. The reasoning is recorded in
+the plan.
+
 ## [3.4.0] — 2026-08-28
 
 > The **note body** group from the fourth analysis (2, 3, 4, 5, 7) — where the corpus pointed
@@ -2012,7 +2084,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.4.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.5.0]: https://github.com/eren0315/lapis/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/eren0315/lapis/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/eren0315/lapis/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/eren0315/lapis/compare/v3.1.2...v3.2.0
@@ -2070,6 +2143,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#278]: https://github.com/eren0315/lapis/pull/278
 [#277]: https://github.com/eren0315/lapis/pull/277
 [#276]: https://github.com/eren0315/lapis/pull/276
 [#275]: https://github.com/eren0315/lapis/pull/275

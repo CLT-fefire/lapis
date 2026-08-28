@@ -10,6 +10,7 @@
   import GitBanner from "$lib/GitBanner.svelte";
   import Titlebar from "$lib/Titlebar.svelte";
   import Statusbar from "$lib/Statusbar.svelte";
+  import AlertBanner from "$lib/AlertBanner.svelte";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
   import ContextMenu from "$lib/ContextMenu.svelte";
@@ -1603,6 +1604,12 @@ import { isPanicChord } from "$lib/userCss";
     </section>
   </div>
   {/if}
+
+  <!--
+    ⚠️ 상태바 **위**다. 이건 창이 소유하는 알림이고(노트가 아니라), 상태바처럼 항상
+    같은 자리에 있어야 눈이 찾는다. 토스트가 아닌 이유는 `AlertBanner` 머리에 적었다.
+  -->
+  <AlertBanner />
 
   <Statusbar
     docStats={$currentNotePath

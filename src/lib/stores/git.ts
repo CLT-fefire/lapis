@@ -2,6 +2,7 @@ import { m } from "$lib/paraglide/messages.js";
 import { writable, get } from "svelte/store";
 import { gitIsRepo, gitInit, gitCommitAll, gitCommitPaths } from "$lib/tauri/git";
 import { logError, logWarn } from "$lib/stores/usage";
+import { pushAlert } from "$lib/stores/alerts";
 
 /**
  * vault git 버전관리 상태 + 자동 커밋 (ADR-004 V2).
@@ -93,6 +94,14 @@ export async function startVersioning(vault: string): Promise<void> {
 // watcher가 알려준 **변경 경로만 add**해 거대 vault의 `add -A` 전체 스캔을 피한다(duration 최적화).
 
 const AUTO_COMMIT_DELAY_MS = 4000;
+
+/**
+ * 마지막 자동 커밋 — **흔적**.
+ *
+ * ⚠️ 자동 커밋은 4초 뒤 조용히 돈다. 사용자는 그게 돌았는지, 무엇을 담았는지 알 수
+ * 없었다 — 조용히 잘 도는 것과 조용히 안 도는 것이 화면에서 같아 보인다.
+ */
+export const lastCommit = writable<{ at: number; count: number } | null>(null);
 let commitTimer: ReturnType<typeof setTimeout> | null = null;
 let committing = false;
 /** 다음 자동 커밋에 add할 변경 경로(수정/생성/삭제/rename 대상). `git add -- <path>`가 셋 다 처리. */
@@ -179,14 +188,21 @@ async function runAutoCommit(vault: string): Promise<void> {
   needsFullSweep = false;
   try {
     // 변경 없으면 backend가 no-op(false) 반환 — 빈 커밋 안 생김.
+    let did = false;
     if (fullSweep || paths.length === 0) {
       // 첫 커밋(또는 경로 정보 없음) — 전체 스윕으로 drift/누락 방지.
-      await gitCommitAll(vault, autoCommitMessage(new Date()));
+      did = await gitCommitAll(vault, autoCommitMessage(new Date()));
     } else {
-      await gitCommitPaths(vault, paths, autoCommitMessage(new Date()));
+      did = await gitCommitPaths(vault, paths, autoCommitMessage(new Date()));
     }
+    // ⚠️ **실제로 커밋됐을 때만** 흔적을 남긴다. 변경이 없으면 backend 가 no-op 이고,
+    //    그때도 흔적을 갱신하면 "방금 커밋했다"는 거짓말이 된다.
+    if (did) lastCommit.set({ at: Date.now(), count: paths.length });
   } catch (e) {
-    logWarn("stores/git", "[git] auto-commit 실패", e);
+    logWarn("stores/git", "auto-commit 실패", e);
+    // ⚠️ 화면에 띄운다. 자동 커밋이 계속 실패하면 사용자는 버전이 남는 줄 알고 계속
+    //    쓰는데, 실제로는 아무것도 안 남고 있다. 같은 키라 배너가 쌓이지는 않는다.
+    pushAlert("commit-failed", m.alert_commit_failed(), String(e));
     // 실패분 복원 — 다음 변경 때 재시도(무손실).
     if (fullSweep) needsFullSweep = true;
     for (const p of paths) pendingCommitPaths.add(p);

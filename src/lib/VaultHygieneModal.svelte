@@ -2,6 +2,8 @@
   import { m } from "$lib/paraglide/messages.js";
   import { noteStem } from "$lib/notePath";
   import { collectOpenTasks, countOpenTasks, type OpenTaskGroup } from "$lib/openTasks";
+  import { gitRecent, type GitCommit } from "$lib/tauri/git";
+  import { gitRepo, formatCommitDate } from "$lib/stores/git";
   import ModalShell from "$lib/ModalShell.svelte";
   import {
     brokenLinksOpen,
@@ -46,7 +48,7 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks";
+  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks" | "changes";
   let tab = $state<Tab>("broken");
 
   // 열릴 때 팔레트가 지정한 탭으로 간다. ⚠️ **열릴 때만** — 열려 있는 동안 store 가
@@ -74,6 +76,15 @@
   let tasksBusy = $state(false);
   let tasksFailed = $state(false);
 
+  /**
+   * vault 전체의 최근 커밋 — "오늘 뭐가 바뀌었나".
+   *
+   * ⚠️ 노트별 이력(컨텍스트 패널의 관계 탭)과 **다른 질문**이다. 저쪽은 한 노트를
+   * 따라가고 이쪽은 하루를 조망한다.
+   */
+  let changes = $state<GitCommit[] | null>(null);
+  let changesBusy = $state(false);
+
   const idx = $derived($brokenLinksOpen ? $linkIndex : null);
   const targets = $derived(idx ? findBrokenLinks(idx) : []);
   const brokenTotal = $derived(countBrokenLinks(targets));
@@ -100,7 +111,27 @@
     if (tab === "tasks" && tasks === null && !tasksBusy && !tasksFailed) {
       void loadTasks();
     }
+    if (tab === "changes" && changes === null && !changesBusy) {
+      void loadChanges();
+    }
   });
+
+  async function loadChanges(): Promise<void> {
+    const root = $vaultPath;
+    if (!root || !$gitRepo) {
+      // ⚠️ repo 가 아니면 **빈 목록**이지 실패가 아니다. 화면이 그 둘을 다르게 말한다.
+      changes = [];
+      return;
+    }
+    changesBusy = true;
+    try {
+      changes = await gitRecent(root, 30);
+    } catch {
+      changes = [];
+    } finally {
+      changesBusy = false;
+    }
+  }
 
   async function loadTasks(): Promise<void> {
     const root = $vaultPath;
@@ -158,6 +189,7 @@
     props: fmIssues.length,
     // null = 아직 안 셌다. 0 을 띄우면 안 본 것을 "할 일 없음"이라고 말하게 된다.
     tasks: tasks === null ? null : countOpenTasks(tasks).open,
+    changes: changes === null ? null : changes.length,
   });
 
   /**
@@ -189,6 +221,11 @@
       //    묶음을 나눠 두지 않으면 "왜 여기 있지"가 된다.
       label: m.hygiene_group_body(),
       tabs: [["tasks", m.hygiene_tab_tasks()]],
+    },
+    {
+      // 나머지는 vault 의 **지금**을 본다. 이건 **지나온 것**을 본다.
+      label: m.hygiene_group_history(),
+      tabs: [["changes", m.hygiene_tab_changes()]],
     },
   ]);
 
@@ -423,6 +460,24 @@
           {/if}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           <p class="hint">{@html m.hygiene_tasks_hint()}</p>
+        {:else if tab === "changes"}
+          {#if changesBusy}
+            <p class="empty loading">{m.hygiene_tasks_loading()}</p>
+          {:else if !$gitRepo}
+            <p class="empty">{m.hygiene_changes_norepo()}</p>
+          {:else if changes !== null && changes.length === 0}
+            <p class="empty">{m.hygiene_changes_empty()}</p>
+          {:else if changes !== null}
+            <ul class="rows">
+              {#each changes as c (c.hash)}
+                <li>
+                  <span class="value">{c.subject}</span>
+                  <span class="count">{formatCommitDate(c.timestamp)}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <p class="hint">{m.hygiene_changes_hint()}</p>
         {/if}
         </div>
         </div>
