@@ -16,6 +16,33 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.5.2] — 2026-08-28
+
+> Found by looking at the app rather than at the tests.
+
+### Fixed
+- 🔴 **Descending sort put empty cells at the top.** `compareCells` documents the rule as
+  *"empty always goes last"*, but `sortedOrder` multiplied the whole comparison by the direction
+  sign — which flipped the empty rule along with everything else. Sorting a column with gaps
+  descending filled the top of the table with blank rows.
+
+  `tableView.ts` implements the same rule correctly, with a measurement to justify it: in a real
+  vault `related` is filled on 3% of notes and `description` on 1%, so most columns become all-blank
+  when reversed. The rule was written twice and only one copy was right — the shape of defect this
+  repository keeps producing. A new test now stands both sorters in front of the same question.
+
+- **Table headers could not be sorted from the keyboard.** They carried a click listener and
+  nothing else — no `tabindex`, no control — so with no mouse the feature was simply unreachable, in
+  an app otherwise driven by shortcuts. Headers now hold a focusable button; the click handler stays
+  on the cell, so the whole header remains a click target.
+
+- **Sort state was invisible to assistive technology.** Headers now carry `aria-sort`
+  (`none` → `ascending` → `descending`), matching the arrow that was already drawn.
+
+- **Three modals announced their close button as "✕".** `aria-label="✕"` looks like a label and
+  passes automated checks, but a screen reader reads the glyph. Grep, tag-rename and vault
+  diagnostics now use a translated *Close*, like the app's other modals already did.
+
 ## [3.5.1] — 2026-08-28
 
 > Three defects that produced **no error message at all**, plus a way to actually look at the app.
@@ -2124,6 +2151,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.5.2]: https://github.com/eren0315/lapis/compare/v3.5.1...v3.5.2
 [3.5.1]: https://github.com/eren0315/lapis/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/eren0315/lapis/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/eren0315/lapis/compare/v3.3.0...v3.4.0

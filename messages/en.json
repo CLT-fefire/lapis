@@ -528,5 +528,6 @@
   "empty_desc": "Pick a folder that holds your Markdown notes. Lapis reads it in place — nothing is copied and nothing leaves this machine.",
   "empty_recent": "Recent",
   "empty_recent_forget": "Remove from list",
-  "empty_local_only": "Notes stay on your filesystem. There is no sync and no network code in this app."
+  "empty_local_only": "Notes stay on your filesystem. There is no sync and no network code in this app.",
+  "modal_close": "Close"
 }

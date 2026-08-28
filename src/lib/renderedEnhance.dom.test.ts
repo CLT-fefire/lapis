@@ -87,6 +87,47 @@ describe("표 정렬", () => {
     expect(el.querySelectorAll("th.sortable")).toHaveLength(2);
   });
 
+  /**
+   * 🔴 **키보드로 정렬할 수 없었다.** 머리글에 클릭 리스너만 있고 `tabindex` 도 버튼도
+   * 없어서, 마우스가 없으면 이 기능에 **닿을 방법이 아예 없다.** 단축키로 도는 앱에서
+   * 마우스 전용 조작은 앞뒤가 안 맞는다. 프리뷰에서 머리글 속성을 읽어 보고 걸렸다.
+   */
+  it("키보드로 정렬한다", () => {
+    const el = root(TABLE);
+    enhanceRendered(el, LABELS);
+    const th = el.querySelector<HTMLElement>("th.sortable")!;
+    const btn = th.querySelector<HTMLButtonElement>("button");
+    expect(btn, "머리글에 초점 받을 수 있는 컨트롤이 없다").not.toBeNull();
+
+    const before = names(el).join();
+    btn!.click();
+    expect(names(el).join(), "키보드로 닿는 컨트롤이 정렬을 안 한다").not.toBe(before);
+  });
+
+  /** 정렬 상태를 보조기술이 읽을 수 있어야 한다 — 시각 표시만으로는 안 닿는다. */
+  it("정렬 상태를 aria-sort 로 알린다", () => {
+    const el = root(TABLE);
+    enhanceRendered(el, LABELS);
+    const th = el.querySelector<HTMLElement>("th.sortable")!;
+    const click = () => th.querySelector<HTMLButtonElement>("button")!.click();
+
+    expect(th.getAttribute("aria-sort")).toBe("none");
+    click();
+    expect(th.getAttribute("aria-sort")).toBe("ascending");
+    click();
+    expect(th.getAttribute("aria-sort")).toBe("descending");
+    click();
+    expect(th.getAttribute("aria-sort"), "원문으로 돌아가면 none").toBe("none");
+  });
+
+  /** ⚠️ 버튼을 넣어도 머리글 **글자**는 그대로여야 한다 — 복사가 그걸 읽는다. */
+  it("버튼을 넣어도 머리글 글자가 그대로다", () => {
+    const el = root(TABLE);
+    const beforeText = [...el.querySelectorAll("th")].map((h) => h.textContent);
+    enhanceRendered(el, LABELS);
+    expect([...el.querySelectorAll("th")].map((h) => h.textContent)).toEqual(beforeText);
+  });
+
   const names = (el: HTMLElement) =>
     [...el.querySelectorAll<HTMLTableRowElement>("tbody tr")].map((r) => r.cells[0].textContent);
 
