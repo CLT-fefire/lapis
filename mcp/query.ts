@@ -33,6 +33,8 @@ import {
 import {
   applyFilters,
   emptySelection,
+  collectOpenTasks,
+  countOpenTasks,
   buildIndex,
   buildTagIndex,
   koBigramTokenize,
@@ -145,7 +147,7 @@ export function isAudit(r: QueryResponse): r is AuditResponse {
 }
 
 /** 쓸 수 있는 감사. **앱·CLI와 같은 다섯**이다 — 여기만 다르면 답이 갈린다. */
-export const AUDIT_KINDS = ["broken", "orphans", "unlinked", "tags", "props"] as const;
+export const AUDIT_KINDS = ["broken", "orphans", "unlinked", "tags", "props", "tasks"] as const;
 export type AuditKind = (typeof AUDIT_KINDS)[number];
 
 export interface AuditResponse extends ResponseBase {
@@ -525,7 +527,7 @@ function timeSource(st: Loaded, axis: "mtime" | "date"): TimeOf {
  * `$lib/brokenLinks` · `$lib/vaultAudit` 하나뿐이다. MCP가 자기 판정을 따로 두면 AI가 보는
  * vault 상태와 사람이 보는 상태가 갈린다 — 그러면 둘 중 누가 맞는지 아무도 모른다.
  *
- * ⚠️ `unlinked` 만 **본문을 전부 읽는다.** 그래서 `all` 을 안 둔다(위 `audit` 주석).
+ * ⚠️ `unlinked` 와 `tasks` 가 **본문을 전부 읽는다.** 그래서 `all` 을 안 둔다(위 `audit` 주석).
  */
 function runAudit(
   st: Loaded,
@@ -575,6 +577,30 @@ function runAudit(
         sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
       }));
       return { audit: kind, count: all.length, unit: "이름", ...cut(all) };
+    }
+    case "tasks": {
+      // ⚠️ `unlinked` 와 같은 부류 — 인덱스로는 안 되고 본문을 봐야 한다.
+      const groups = collectOpenTasks(
+        st.vc.infos.flatMap((info) => {
+          try {
+            return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
+          } catch {
+            // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
+            return [];
+          }
+        }),
+      ).map((g) => ({
+        ...g,
+        path: rel(g.path),
+        open: g.open.map((t) => ({ ...t, path: rel(t.path) })),
+      }));
+      const total = countOpenTasks(groups);
+      return {
+        audit: kind,
+        count: total.open,
+        unit: "건",
+        ...cut(groups),
+      };
     }
   }
 }

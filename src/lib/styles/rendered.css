@@ -431,3 +431,116 @@
 .rendered .hljs-strong {
   font-weight: 600;
 }
+
+/**
+ * 작업 목록 — `- [ ]` · `- [x]`.
+ *
+ * ⚠️ 불릿을 지운다. 체크박스와 불릿이 같이 보이면 표시가 둘이라 줄이 지저분해진다.
+ */
+.rendered .task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.rendered .task-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+/**
+ * ⚠️ `disabled` 인 체크박스는 브라우저가 흐리게 그린다. 읽기 전용이라 그게 맞지만,
+ * 너무 흐리면 완료/미완이 안 갈린다 — 불투명도를 되돌린다.
+ */
+.rendered .task-checkbox {
+  flex: none;
+  margin: 0;
+  opacity: 1;
+  accent-color: var(--accent-solid);
+  cursor: default;
+}
+
+/* 끝난 항목은 글자를 죽인다 — 목록을 훑을 때 남은 것이 먼저 보이게. */
+.rendered .task-item:has(.task-checkbox:checked) {
+  color: var(--text-muted);
+}
+
+/**
+ * 본문 안의 복사 버튼 · 표 정렬.
+ *
+ * ⚠️ 평소엔 **거의 안 보인다.** 읽기가 주 용도라 버튼이 늘 떠 있으면 글을 방해한다.
+ * hover·focus 에서만 드러나되, 키보드로도 닿아야 하므로 `:focus-visible` 을 같이 본다.
+ */
+.rendered pre.hljs.has-copy {
+  position: relative;
+}
+
+.rendered .rendered-copy {
+  padding: 2px 8px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: opacity var(--dur-1) var(--ease-standard);
+}
+
+.rendered pre.hljs .rendered-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+}
+
+.rendered pre.hljs:hover .rendered-copy,
+.rendered pre.hljs .rendered-copy:focus-visible {
+  opacity: 1;
+}
+
+.rendered .rendered-copy:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* 표 도구는 표 위에 한 줄. ⚠️ 표를 감싸지 않는다 — 가로 스크롤 규칙이 어긋난다. */
+.rendered .table-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-standard);
+}
+
+.rendered .table-tools:hover,
+.rendered .table-tools:focus-within,
+.rendered table:hover + .table-tools {
+  opacity: 1;
+}
+
+/* ⚠️ 표에 hover 해도 도구가 보여야 한다 — 도구가 표 **위**에 있어서 마우스가 표에 있다. */
+.rendered .table-tools:has(+ table:hover) {
+  opacity: 1;
+}
+
+.rendered th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.rendered th.sortable:hover {
+  background: var(--surface-hover);
+}
+
+/* 정렬 방향 표시 — 지금 무엇으로 정렬돼 있는지 모르면 표를 못 믿는다. */
+.rendered th.sortable[data-sort="asc"]::after {
+  content: " ▲";
+  color: var(--accent-text);
+}
+
+.rendered th.sortable[data-sort="desc"]::after {
+  content: " ▼";
+  color: var(--accent-text);
+}

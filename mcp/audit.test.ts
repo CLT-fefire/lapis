@@ -31,11 +31,19 @@ describe("도구 스키마", () => {
     }
   });
 
-  /** ⚠️ 비싼 것을 비싸다고 적는다 — 안 적으면 AI가 반복해서 부른다. */
-  it("unlinked 가 느리다고 적혀 있다", () => {
+  /**
+   * ⚠️ 비싼 것을 비싸다고 적는다 — 안 적으면 AI가 반복해서 부른다.
+   *
+   * ⚠️ **본문을 읽는 감사가 늘면 여기도 늘어야 한다.** v3.4.0 에서 `tasks` 가 붙었다.
+   */
+  it("본문을 읽는 감사가 느리다고 적혀 있다", () => {
     const i = SERVER.indexOf("audit: {");
-    const block = SERVER.slice(i, i + 900);
-    expect(block).toContain("unlinked만 본문을 전부 읽어");
+    const block = SERVER.slice(i, i + 1200);
+    for (const k of ["unlinked", "tasks"]) {
+      expect(block, `${k} 가 비싸다는 말이 없다`).toMatch(
+        new RegExp(`⚠️[^"]*${k}[^"]*본문을 전부 읽어`),
+      );
+    }
   });
 });
 

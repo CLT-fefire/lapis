@@ -16,6 +16,57 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.4.0] — 2026-08-28
+
+> The **note body** group from the fourth analysis (2, 3, 4, 5, 7) — where the corpus pointed
+> hardest.
+
+### Added
+- **Task lists render as checkboxes** ([#277]). markdown-it has no task-list support, so
+  `- [ ] a task` showed up **literally** as `[ ] a task`.
+
+  Measured: **90 open** and **30 done** across 5 notes — not a small number, all of it brackets.
+
+  ⚠️ **Read-only.** Clicking to edit the file is an irreversible write and the README states
+  this is not a writing tool. Since a checkbox that does nothing looks broken, the reason is in
+  its `title`.
+
+  ⚠️ Inline tokens are **not rebuilt.** Re-parsing would either double-process wikilinks and
+  emphasis or drop them — both fail silently.
+
+- **Open-tasks audit** ([#277]) — the **sixth** vault diagnostic, on all three surfaces
+  (app, `lapis tasks audit`, MCP `audit: "tasks"`).
+
+  On the real vault: **88 open, 23 done**, with 67 of them in a single note — invisible without
+  opening it.
+
+  ⚠️ **Fenced code is skipped.** 63 notes here contain code blocks and shell examples include
+  `- [ ]`. Counting those would put **tasks that do not exist** in the list, and then the list
+  cannot be trusted.
+
+  ⚠️ Like `unlinked`, it **reads every note body**, so it only runs when the tab is opened.
+
+- **Sortable, copyable tables** ([#277]). Click a header for source → ascending → descending;
+  copy as Markdown or CSV.
+
+  Measured: tables appear in **95 of 112 notes (85%)** — the dominant structure here, and it had
+  styling but no behavior.
+
+  ⚠️ **The source is never modified.** Sorting changes the view only; a reload restores the
+  original order, which is the correct behavior.
+
+  ⚠️ Cells that look numeric sort **as numbers**. String comparison puts `10` before `9`, which
+  anyone sorting a table notices immediately.
+
+  ⚠️ Copying **after** sorting yields the visible order. Copying something different from what is
+  on screen would be a lie.
+
+- **Copy button on code blocks** ([#277]). Measured languages: `bash:33`, `ts:12`, `json:5`.
+
+### Already handled
+Item 7 (horizontal overflow for wide tables) was already covered by `overflow-x: auto` in
+`rendered.css` — the analysis listed it without checking the code.
+
 ## [3.3.0] — 2026-08-28
 
 > The **axes and search** group from the fourth analysis (1, 6, 14, 15, 16). The first item was
@@ -1961,7 +2012,8 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.3.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.4.0...main
+[3.4.0]: https://github.com/eren0315/lapis/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/eren0315/lapis/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/eren0315/lapis/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/eren0315/lapis/compare/v3.1.1...v3.1.2
@@ -2018,6 +2070,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 [0.3.0]: https://github.com/eren0315/lapis/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/eren0315/lapis/releases/tag/v0.2.0
 
+[#277]: https://github.com/eren0315/lapis/pull/277
 [#276]: https://github.com/eren0315/lapis/pull/276
 [#275]: https://github.com/eren0315/lapis/pull/275
 [#274]: https://github.com/eren0315/lapis/pull/274

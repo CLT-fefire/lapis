@@ -44,12 +44,13 @@ const TOOL = {
       },
       audit: {
         type: "string",
-        enum: ["broken", "orphans", "unlinked", "tags", "props"],
+        enum: ["broken", "orphans", "unlinked", "tags", "props", "tasks"],
         description:
-          "vault 위생 감사 하나. broken=끊긴 링크 · orphans=아무도 안 가리키는 노트 · " +
+          "vault 진단 하나. broken=끊긴 링크 · orphans=아무도 안 가리키는 노트 · " +
           "unlinked=이름을 말했는데 링크는 안 건 자리 · tags=태그 중복+모호한 이름 · " +
-          "props=거를 수 있는 축(doc_kind·topic 등)의 값이 갈린 곳. " +
-          "⚠️ unlinked만 본문을 전부 읽어 느리다. 고치라고 하지 않고 보여주기만 한다",
+          "props=거를 수 있는 축(doc_kind·topic 등)의 값이 갈린 곳 · " +
+          "tasks=본문의 미완 `- [ ]`(코드 블록 안은 안 센다). " +
+          "⚠️ unlinked·tasks 는 본문을 전부 읽어 느리다. 고치라고 하지 않고 보여주기만 한다",
       },
       sources: {
         type: "array",

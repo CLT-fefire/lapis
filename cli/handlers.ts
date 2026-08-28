@@ -1,3 +1,4 @@
+import { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
 import {
   lapisQuery,
   isAudit,
@@ -1028,6 +1029,48 @@ export function cmdProps(p: ParsedCommand, out: Out): void {
 }
 
 /**
+ * `lapis tasks audit` — 본문의 미완 `- [ ]`.
+ *
+ * ⚠️ **본문을 전부 읽는다.** `links --unlinked` 와 같은 부류다 — 인덱스로는 안 된다.
+ * ⚠️ 코드 블록 안은 안 센다. 셸 예시의 `- [ ]` 를 할 일로 세면 목록을 못 믿게 된다.
+ */
+export function cmdTasks(p: ParsedCommand, out: Out): void {
+  const action = p.positional[0];
+  if (action !== "audit") {
+    out.fail("no_criteria", `모르는 동작: ${action}`, "쓸 수 있는 값: audit", 2);
+  }
+  const vc = resolveVault(vaultOf(p));
+  const groups = collectOpenTasks(
+    vc.infos.flatMap((info) => {
+      try {
+        return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
+      } catch {
+        // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
+        return [];
+      }
+    }),
+  );
+  const total = countOpenTasks(groups);
+
+  if (out.json) {
+    return out.json_({ vault: vc.root, ...staleField(vc), total, groups });
+  }
+  if (groups.length === 0) {
+    out.line("미완 작업이 없다.");
+  } else {
+    out.line(`${total.open}건 미완 · ${total.done}건 완료`);
+    for (const g of groups) {
+      out.line("");
+      out.line(`${g.path}  (${g.open.length})`);
+      for (const t of g.open) {
+        out.line(`${"  ".repeat(t.depth + 1)}- ${t.text}`);
+      }
+    }
+  }
+  reportStale(out, vc);
+}
+
+/**
  * `lapis css --off` — 사용자 정의 CSS를 끈다.
  *
  * ## 왜 CLI에 있나
@@ -1074,6 +1117,7 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   status: cmdStatus,
   export: cmdExport,
   props: cmdProps,
+  tasks: cmdTasks,
   index: cmdIndex,
   open: cmdOpen,
   replace: cmdReplace,

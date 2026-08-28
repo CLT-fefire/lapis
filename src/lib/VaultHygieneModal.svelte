@@ -1,6 +1,7 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
   import { noteStem } from "$lib/notePath";
+  import { collectOpenTasks, countOpenTasks, type OpenTaskGroup } from "$lib/openTasks";
   import ModalShell from "$lib/ModalShell.svelte";
   import {
     brokenLinksOpen,
@@ -45,7 +46,7 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props";
+  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks";
   let tab = $state<Tab>("broken");
 
   // 열릴 때 팔레트가 지정한 탭으로 간다. ⚠️ **열릴 때만** — 열려 있는 동안 store 가
@@ -65,6 +66,14 @@
   let unlinkedBusy = $state(false);
   let unlinkedFailed = $state(false);
 
+  /**
+   * 미완 작업 — `unlinked` 와 같은 부류다. 인덱스로는 안 되고 **본문을 읽어야** 한다.
+   * 그래서 탭을 열 때만 돈다(`audit: all` 이 없는 것과 같은 이유).
+   */
+  let tasks = $state<OpenTaskGroup[] | null>(null);
+  let tasksBusy = $state(false);
+  let tasksFailed = $state(false);
+
   const idx = $derived($brokenLinksOpen ? $linkIndex : null);
   const targets = $derived(idx ? findBrokenLinks(idx) : []);
   const brokenTotal = $derived(countBrokenLinks(targets));
@@ -79,6 +88,8 @@
     if (!$brokenLinksOpen) {
       unlinked = null;
       unlinkedFailed = false;
+      tasks = null;
+      tasksFailed = false;
     }
   });
 
@@ -86,7 +97,25 @@
     if (tab === "unlinked" && unlinked === null && !unlinkedBusy && !unlinkedFailed) {
       void loadUnlinked();
     }
+    if (tab === "tasks" && tasks === null && !tasksBusy && !tasksFailed) {
+      void loadTasks();
+    }
   });
+
+  async function loadTasks(): Promise<void> {
+    const root = $vaultPath;
+    if (!root) return;
+    tasksBusy = true;
+    try {
+      const bundle = await readVaultBundle(root);
+      tasks = collectOpenTasks(bundle.contents.map((c) => ({ path: c.path, body: c.body })));
+    } catch {
+      // ⚠️ 읽기 실패를 빈 목록으로 삼키면 "할 일이 없다"로 보인다.
+      tasksFailed = true;
+    } finally {
+      tasksBusy = false;
+    }
+  }
 
   async function loadUnlinked(): Promise<void> {
     const root = $vaultPath;
@@ -127,6 +156,8 @@
     // null = 아직 안 셌다. 0을 띄우면 안 본 것을 깨끗하다고 말하게 된다.
     unlinked: unlinked === null ? null : unlinked.length,
     props: fmIssues.length,
+    // null = 아직 안 셌다. 0 을 띄우면 안 본 것을 "할 일 없음"이라고 말하게 된다.
+    tasks: tasks === null ? null : countOpenTasks(tasks).open,
   });
 
   /**
@@ -152,6 +183,12 @@
     {
       label: m.hygiene_group_axis(),
       tabs: [["props", m.hygiene_tab_props()]],
+    },
+    {
+      // ⚠️ 앞의 다섯은 **구조**를 본다(링크·축). 이건 **본문에 적힌 것**을 본다 —
+      //    묶음을 나눠 두지 않으면 "왜 여기 있지"가 된다.
+      label: m.hygiene_group_body(),
+      tabs: [["tasks", m.hygiene_tab_tasks()]],
     },
   ]);
 
@@ -325,7 +362,8 @@
             </ul>
           {/if}
           <p class="hint">{m.hygiene_unlinked_hint()}</p>
-        {:else}
+        <!-- ⚠️ 명시 분기다. `{:else}` 로 두면 뒤에 탭을 더할 수 없다. -->
+        {:else if tab === "props"}
           {#if fmIssues.length === 0}
             <p class="empty">{m.hygiene_props_empty()}</p>
           {:else}
@@ -350,6 +388,41 @@
             {/each}
           {/if}
           <p class="hint">{m.hygiene_props_hint()}</p>
+        {:else if tab === "tasks"}
+          {#if tasksBusy}
+            <!-- `loading` 은 "읽는 중"과 "읽었더니 없다"를 문구 없이 가르는 표식이다. -->
+            <p class="empty loading">{m.hygiene_tasks_loading()}</p>
+          {:else if tasksFailed}
+            <p class="empty">{m.hygiene_tasks_failed()}</p>
+          {:else if tasks !== null && tasks.length === 0}
+            <p class="empty">{m.hygiene_tasks_empty()}</p>
+          {:else if tasks !== null}
+            <p class="summary">
+              {m.hygiene_tasks_summary({
+                open: countOpenTasks(tasks).open,
+                done: countOpenTasks(tasks).done,
+              })}
+            </p>
+            {#each tasks as g (g.path)}
+              <div class="group">
+                <div class="group-label">
+                  <button class="src" title={g.path} onclick={() => go(g.path)}>
+                    {shortName(g.path)}
+                  </button>
+                  <span class="count">{m.hygiene_tasks_in({ count: g.open.length })}</span>
+                </div>
+                <ul class="rows">
+                  {#each g.open as t (t.line)}
+                    <li class="task-row" style="--task-depth: {t.depth}">
+                      <span class="value">{t.text}</span>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/each}
+          {/if}
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          <p class="hint">{@html m.hygiene_tasks_hint()}</p>
         {/if}
         </div>
         </div>
@@ -565,6 +638,16 @@
   }
 
   /* 고아 목록 — 이름과 '나가는 링크 수'를 나란히. 그 숫자가 허브를 가른다. */
+  /**
+   * 미완 작업의 중첩 — 원문의 들여쓰기를 그대로 보인다.
+   *
+   * ⚠️ 깊이를 버리면 "부모 하나"와 "자식 셋"이 같은 줄로 보인다. 무엇에 딸린 일인지가
+   * 사라지면 목록이 그냥 문장 더미가 된다.
+   */
+  .task-row {
+    padding-left: calc(var(--task-depth, 0) * 14px);
+  }
+
   .rows {
     list-style: none;
     margin: 0;
