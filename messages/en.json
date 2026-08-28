@@ -529,5 +529,8 @@
   "empty_recent": "Recent",
   "empty_recent_forget": "Remove from list",
   "empty_local_only": "Notes stay on your filesystem. There is no sync and no network code in this app.",
-  "modal_close": "Close"
+  "modal_close": "Close",
+  "newnote_create": "Create & Open",
+  "palette_group_commands": "COMMANDS",
+  "palette_group_actions": "QUICK ACTIONS"
 }

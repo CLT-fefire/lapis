@@ -390,7 +390,9 @@
   );
 
   // 빈 입력 시 COMMANDS 그룹은 "QUICK ACTIONS"로 라벨
-  const commandsHeaderLabel = $derived(query.trim() ? "COMMANDS" : "QUICK ACTIONS");
+  const commandsHeaderLabel = $derived(
+    query.trim() ? m.palette_group_commands() : m.palette_group_actions(),
+  );
 
   // 풀텍스트 인덱스가 아직 준비 안 됨 — 두 가지 케이스:
   // 1) cold-start 풀 빌드 중 (`$indexBuilding`)
@@ -526,7 +528,7 @@
           QUICK ACTIONS 분기가 필요 없다).
         -->
         {#if showTopCommands}
-          <div class="group-header">COMMANDS</div>
+          <div class="group-header">{m.palette_group_commands()}</div>
           {#each groups.topCommands as r (entryKey(r.entry))}
             {@const e = r.entry}
             {#if e.kind === "command"}

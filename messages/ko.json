@@ -529,5 +529,8 @@
   "empty_recent": "최근",
   "empty_recent_forget": "목록에서 빼기",
   "empty_local_only": "노트는 파일시스템에 그대로 있습니다. 동기화도, 네트워크 코드도 없습니다.",
-  "modal_close": "닫기"
+  "modal_close": "닫기",
+  "newnote_create": "만들고 열기",
+  "palette_group_commands": "명령",
+  "palette_group_actions": "빠른 동작"
 }

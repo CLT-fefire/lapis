@@ -16,6 +16,7 @@ import { m } from "$lib/paraglide/messages.js";
 import { save, message } from "@tauri-apps/plugin-dialog";
 import { writeBinaryFile } from "$lib/tauri/notes";
 import { logError, logWarn } from "$lib/stores/usage";
+import { intrinsicSize, clampScale, canvasSize } from "$lib/exportGeometry";
 
 const SCALE = 3;
 /** 다이어그램 테마(라이트/다크)에 맞춘 불투명 PNG 배경. */
@@ -23,8 +24,12 @@ function exportBackground(): string {
   // 테마가 다크 하나뿐이라 고정이다. 다시 늘어나면 여기가 갈라진다.
   return "#1e1e1e";
 }
-/** WebKit(WKWebView) canvas 면적 한계 ≈ 16,777,216 px² (≈4096×4096). 초과 시 빈/검은 출력. */
-const MAX_CANVAS_AREA = 16_777_216;
+/**
+ * 크기·배율 계산은 `$lib/exportGeometry` 에 있다.
+ *
+ * ⚠️ **여기 두면 테스트가 안 된다.** 캔버스가 붙어 있어 happy-dom 에서는 "안 돌았는데
+ * 통과"가 된다. 판단이 든 부분만 순수 함수로 내려놨다.
+ */
 
 /**
  * SVG 엘리먼트를 PNG Blob으로 변환.
@@ -46,13 +51,10 @@ const MAX_CANVAS_AREA = 16_777_216;
 export async function svgElementToPngBlob(svg: SVGSVGElement): Promise<Blob> {
   // 크기: viewBox 우선, 없으면 화면 렌더 크기, 그것도 0이면 안전 기본값
   const vb = svg.viewBox.baseVal;
-  const rect = svg.getBoundingClientRect();
-  const width = (vb && vb.width) || rect.width || 800;
-  const height = (vb && vb.height) || rect.height || 600;
+  const { width, height } = intrinsicSize(vb ?? null, svg.getBoundingClientRect());
 
   // 면적 한계에 맞춘 배율 클램프 — 기본 3x를 넘지 않되, 한계 초과 시 더 낮게.
-  const fitScale = Math.sqrt(MAX_CANVAS_AREA / (width * height));
-  const scale = Math.min(SCALE, fitScale);
+  const scale = clampScale(width, height, SCALE);
   if (scale < SCALE) {
     logWarn(
       "mermaidExport",
@@ -85,8 +87,9 @@ export async function svgElementToPngBlob(svg: SVGSVGElement): Promise<Blob> {
 
   const img = await loadImage(url);
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
+  const px = canvasSize(width, height, scale);
+  canvas.width = px.width;
+  canvas.height = px.height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas 2d context 생성 실패");
 

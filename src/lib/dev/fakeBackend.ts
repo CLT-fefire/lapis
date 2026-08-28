@@ -1,4 +1,4 @@
-import { DEV_VAULT, FIXTURE_NOTES } from "./fixtureVault";
+import { DEV_VAULT, FIXTURE_NOTES, FIXTURE_READONLY, FIXTURE_COMMITS } from "./fixtureVault";
 
 /**
  * dev 전용 **가짜 Tauri 백엔드**.
@@ -156,8 +156,37 @@ export async function fakeInvoke(cmd: string, args: Record<string, unknown> = {}
     case "read_note":
       return files.get(path) ?? "";
     case "write_note":
+      // ⚠️ **한 경로는 거부한다.** 항상 성공하면 실패 배너를 한 번도 못 본다 — 그 화면은
+      //    되돌릴 수 없는 쓰기가 깨졌을 때만 뜨고, 그때가 가장 잘 보여야 하는 순간이다.
+      if (path === FIXTURE_READONLY) {
+        throw new Error("[dev] 이 픽스처 경로는 저장이 실패하도록 돼 있다");
+      }
       files.set(path, String(args.content ?? ""));
       return null;
+    case "rename_note": {
+      const oldPath = String(args.oldPath ?? "");
+      const dir = oldPath.slice(0, oldPath.lastIndexOf("/"));
+      const next = `${dir}/${String(args.newName ?? "")}`;
+      const body = files.get(oldPath) ?? "";
+      files.delete(oldPath);
+      files.set(next, body);
+      return next;
+    }
+    case "move_note": {
+      const from = String(args.path ?? args.oldPath ?? "");
+      const to = String(args.newPath ?? args.destPath ?? "");
+      const body = files.get(from) ?? "";
+      files.delete(from);
+      files.set(to, body);
+      return to;
+    }
+    case "delete_note":
+      files.delete(path);
+      return null;
+    case "backup_notes":
+      // 백업은 성공한 것으로 둔다 — 실패시키고 싶은 것은 **쓰기**다(`FIXTURE_READONLY`).
+      return `${DEV_VAULT}/${String(args.backupDirRel ?? ".lapis/backup")}`;
+
     case "scan_link_single":
       return linkInfoOf(path.slice(DEV_VAULT.length + 1), files.get(path) ?? "");
     case "notes_mtimes":
@@ -186,16 +215,31 @@ export async function fakeInvoke(cmd: string, args: Record<string, unknown> = {}
     case "unwatch_vault":
       return null;
 
-    // git — repo 가 아니다. 배너와 이력이 그 상태를 어떻게 그리는지 볼 수 있다.
+    // git — 이력이 **있는** 것처럼 답한다. 되돌아보기·커밋 시점 내용이 그려지는지 본다.
     case "git_is_repo":
+      return true;
     case "git_has_changes":
-      return false;
+      return true;
+    case "git_init":
+    case "git_commit_all":
+    case "git_commit_paths":
+      return true;
     case "git_log":
-    case "git_recent":
-      return [];
+    case "git_recent": {
+      const limit = Number(args.limit ?? FIXTURE_COMMITS.length);
+      return FIXTURE_COMMITS.slice(0, limit);
+    }
     case "git_show_diff":
+      return [
+        "--- a/표-예시.md",
+        "+++ b/표-예시.md",
+        "@@ -1,3 +1,4 @@",
+        " | 이름 | 수 | 비고 |",
+        "+| 라 |  | 빈 칸은 뒤로 |",
+      ].join("\n");
     case "git_show_file":
-      return "";
+      // 그 시점의 본문 — 지금 것과 **달라야** 비교 화면이 뜻을 갖는다.
+      return (files.get(String(args.path ?? "")) ?? "").replace("| 라 |  | 빈 칸은 뒤로 |\n", "");
 
     case "settings_read":
       return {};
