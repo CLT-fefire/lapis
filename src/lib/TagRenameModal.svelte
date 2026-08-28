@@ -35,7 +35,7 @@
     <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <header>
         <h2>{m.tagrename_title()}</h2>
-        <button class="x" onclick={closeTagRename} aria-label="✕">✕</button>
+        <button class="x" onclick={closeTagRename} aria-label={m.modal_close()}>✕</button>
       </header>
 
       <div class="form">

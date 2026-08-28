@@ -29,12 +29,14 @@ export function nextDir(cur: SortDir): SortDir {
 }
 
 /**
- * 셀 값 비교.
+ * 셀 값 비교. **오름차순 기준**이고 방향은 호출부가 뒤집는다.
  *
  * ⚠️ **숫자처럼 보이면 숫자로** 센다. 문자열로 비교하면 `10` 이 `9` 보다 앞에 오고,
  * 그건 표를 정렬한 사람이 바로 알아채는 종류의 오답이다.
  *
- * ⚠️ 빈 칸은 **항상 뒤로**. 오름차순에서 빈 칸이 위에 몰리면 표가 안 읽힌다.
+ * ⚠️ 빈 칸도 여기서는 뒤로 보내지만, **방향과 무관하게 뒤로 두는 책임은 `sortedOrder`**
+ * 에 있다. 여기 결과에 `sign` 을 곱하면 내림차순에서 빈 칸이 맨 위로 온다 — 실제로 그렇게
+ * 나가 있었다. `tableView.ts` 의 `sortRows` 와 같은 계약이다.
  */
 export function compareCells(a: string, b: string): number {
   const ta = a.trim();
@@ -72,7 +74,15 @@ export function sortedOrder(rows: readonly string[][], col: number, dir: SortDir
   if (dir === null) return idx;
   const sign = dir === "asc" ? 1 : -1;
   return idx.sort((x, y) => {
-    const c = compareCells(rows[x][col] ?? "", rows[y][col] ?? "");
+    const a = (rows[x][col] ?? "").trim();
+    const b = (rows[y][col] ?? "").trim();
+    // 🔴 **빈 칸은 `sign` 밖에서 처리한다.** 비교 결과에 통째로 곱하면 "빈 칸은 뒤로"까지
+    //    뒤집혀 내림차순에서 맨 위로 온다. `tableView.ts` 의 `sortRows` 와 같은 순서다.
+    if (a === "" || b === "") {
+      if (a === "" && b === "") return x - y;
+      return a === "" ? 1 : -1;
+    }
+    const c = compareCells(a, b);
     // 동점은 **원래 순서**로 — 안정 정렬.
     return c !== 0 ? c * sign : x - y;
   });

@@ -99,14 +99,37 @@ function makeSortable(table: HTMLTableElement, labels: RenderedLabels): void {
   let sortedCol = -1;
   let dir: SortDir = null;
 
+  const ARIA: Record<string, string> = { asc: "ascending", desc: "descending" };
+
   head.forEach((th, col) => {
     th.classList.add("sortable");
     th.title = labels.sortHint;
+    th.setAttribute("aria-sort", "none");
+
+    // 🔴 **초점 받는 컨트롤을 안에 넣는다.** 예전엔 `th` 에 클릭 리스너만 있어서 마우스가
+    //    없으면 정렬에 **닿을 방법이 아예 없었다.** 단축키로 도는 앱에서 앞뒤가 안 맞는다.
+    //
+    // ⚠️ `th` 자체를 `role="button"` 으로 만들지 않는다 — `columnheader` 의미가 사라진다.
+    // ⚠️ 글자를 옮겨 담으므로 `th.textContent` 는 그대로다. 복사가 그걸 읽는다.
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sort-btn";
+    while (th.firstChild) btn.appendChild(th.firstChild);
+    th.appendChild(btn);
+
+    // ⚠️ **핸들러는 `th` 에 둔다.** 버튼에 걸면 누를 수 있는 자리가 글자 폭으로 줄어
+    //    칸 여백을 눌러도 안 먹는다. 버튼 클릭은 여기로 버블링하므로 키보드도 같은 길이다.
     th.addEventListener("click", () => {
       dir = col === sortedCol ? nextDir(dir) : "asc";
       sortedCol = col;
-      for (const other of head) other.removeAttribute("data-sort");
-      if (dir) th.setAttribute("data-sort", dir);
+      for (const other of head) {
+        other.removeAttribute("data-sort");
+        other.setAttribute("aria-sort", "none");
+      }
+      if (dir) {
+        th.setAttribute("data-sort", dir);
+        th.setAttribute("aria-sort", ARIA[dir]);
+      }
 
       const order = sortedOrder(cells(), col, dir);
       // ⚠️ `appendChild` 는 **옮긴다**(복사가 아니다) — 그래서 원래 노드를 잃지 않는다.

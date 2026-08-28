@@ -83,7 +83,7 @@
           spellcheck="false"
           autocomplete="off"
         />
-        <button class="x" onclick={closeGrep} aria-label="✕">✕</button>
+        <button class="x" onclick={closeGrep} aria-label={m.modal_close()}>✕</button>
       </header>
 
       <div class="opts">

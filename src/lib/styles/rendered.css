@@ -534,6 +534,27 @@
   background: var(--surface-hover);
 }
 
+/*
+  머리글 안의 초점 컨트롤. 키보드로 정렬에 닿기 위한 것이라 **보이지는 않아야** 한다 —
+  머리글이 갑자기 버튼처럼 보이면 표가 시끄러워진다. 초점 표시만 낸다.
+
+  ⚠️ `display: contents` 를 쓰지 않는다. 그러면 초점 링이 그려질 상자가 없어져
+  키보드 사용자가 **지금 어디 있는지 못 본다** — 접근성을 위해 넣고 접근성을 깨는 꼴이다.
+*/
+.rendered th.sortable .sort-btn {
+  all: unset;
+  display: inline;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.rendered th.sortable .sort-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
 /* 정렬 방향 표시 — 지금 무엇으로 정렬돼 있는지 모르면 표를 못 믿는다. */
 .rendered th.sortable[data-sort="asc"]::after {
   content: " ▲";

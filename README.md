@@ -351,6 +351,17 @@ a.remove(); b.remove();
 rAF against a timer instead of awaiting it. Screenshots need the pane actually on screen, so
 anything that needs eyes — layout, alignment, spacing — still belongs in a real window.
 
+The same frozen clock has one more consequence worth knowing before you conclude anything is
+broken: **Svelte transitions never finish**, so a closed modal is faded out but never removed.
+`document.getAnimations()` shows every animation `running` with `currentTime: 0`. Asking whether the
+node is still in the DOM will tell you the modal "did not close", the close button "does nothing",
+and two modals are "open at once" — all three false. Measure the state instead (computed `opacity`,
+`aria-*`, whatever the store drives), not whether the element is gone.
+
+Finally, after editing a file, **reload the page** before trusting what you measure. Accumulated
+hot-module updates leave stale handlers behind: a table whose header clicks quietly stop sorting is
+the preview, not the code.
+
 Builds:
 
 ```bash

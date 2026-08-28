@@ -244,7 +244,7 @@
     <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
       <header>
         <h2>{m.hygiene_title()}</h2>
-        <button class="x" data-autofocus onclick={closeBrokenLinks} aria-label="✕">✕</button>
+        <button class="x" data-autofocus onclick={closeBrokenLinks} aria-label={m.modal_close()}>✕</button>
       </header>
 
       {#if !idx}
