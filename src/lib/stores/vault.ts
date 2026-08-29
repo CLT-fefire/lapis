@@ -50,7 +50,7 @@ import {
   type LinkRewritePreview,
   type LinkRewritePreviewItem,
 } from "$lib/linkRewrite";
-import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
+import { requestLinkRewritePreview } from "$lib/stores/linkRewritePreview";
 import {
   backupAndWrite as safeBackupAndWrite,
   describeFailure,
@@ -1151,8 +1151,10 @@ async function rewriteAllLinksWithPreview(
   if (preview.items.length === 0) return;
 
   // 3) 사용자 confirm 대기
+  // ⚠️ `set` 이 아니라 함수로 넣는다 — 이미 떠 있는 요청이 있으면 그쪽을 취소로 닫아야
+  //    한다. 그냥 덮으면 먼저 온 rename 이 여기서 영원히 기다린다.
   const apply = await new Promise<boolean>((resolve) => {
-    linkRewritePreviewRequest.set({ preview, resolve });
+    requestLinkRewritePreview(preview, resolve);
   });
   if (!apply) return;
 
