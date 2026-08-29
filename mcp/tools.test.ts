@@ -109,10 +109,21 @@ describe("lapis_render", () => {
     expect(src).toMatch(/v\.ok === false/);
   });
 
-  /** 타임아웃만 주면 "느린 건지 안 뜬 건지"를 못 가른다. */
+  /**
+   * 타임아웃만 주면 "느린 건지 안 뜬 건지"를 못 가른다.
+   *
+   * ⚠️ **문구를 그대로 못 박지 않는다.** 처음엔 `"앱이 떠 있는지 확인할 것"` 을 통째로
+   * 비교했는데, 조치문을 **더 정확하게** 고치자 테스트가 빨개졌다 — 개선을 막는 검사다.
+   * 지켜야 할 것은 문장이 아니라 **조치가 붙어 있다는 것**이다(아래 `app_timeout 조치문`
+   * 절이 그 내용을 본다).
+   */
   it("타임아웃에 조치를 적는다", () => {
-    expect(src).toMatch(/app_timeout/);
-    expect(src).toMatch(/앱이 떠 있는지 확인할 것/);
+    const at = src.indexOf('"app_timeout"');
+    expect(at).toBeGreaterThan(-1);
+    const args = src.slice(at, at + 900);
+    // 종류 · 메시지 · 조치 셋을 준다 — 조치가 빈 문자열이면 안 된다.
+    expect(args).toMatch(/안에 결과를 안 냈다/);
+    expect(args, "조치가 비어 있다").not.toMatch(/"app_timeout",[\s\S]{0,120}""\s*\)/);
   });
 });
 
@@ -218,5 +229,37 @@ describe("내보내기 기본 경로", () => {
   /** ⚠️ 어디에 썼는지 응답이 말해야 한다 — 안 그러면 찾으러 다녀야 한다. */
   it("어디 썼는지 응답에 담는다", () => {
     expect(src).toMatch(/out: normPath\(out\)/);
+  });
+});
+
+/**
+ * 🔴 **`app_timeout` 의 조치문이 한 원인만 말했다.**
+ *
+ * 실측: 앱이 **떠 있는데도** "앱이 떠 있는지 확인할 것"이 나왔다. 진짜 원인은 떠 있는 앱이
+ * `--render` 를 **모르는 구버전**이라는 것이었다 — 옛 빌드는 모르는 인자를 조용히 무시하고,
+ * 두 번째 프로세스는 argv 를 넘긴 뒤 그냥 종료한다. 아무도 실패를 안 쓴다.
+ *
+ * 조치문이 첫 원인만 단정하면 부른 쪽은 **맞는 것을 확인하고 막힌다.** 원인에서 한참 떨어진
+ * 신호이고, 이 저장소가 가장 싫어하는 부류다.
+ *
+ * ## ⚠️ 왜 버전을 물어보지 않나
+ *
+ * 떠 있는 앱에게 물을 통로가 없다 — 이 프로젝트에는 **네트워킹 코드가 없고**, argv 는
+ * 한 방향이다. CLI 의 `cache-info` 프로브는 **헤드리스** 확인이라 떠 있는 인스턴스에는
+ * 못 쓴다(single-instance 가 삼킨다). 그래서 탐지 대신 **정직한 조치문**을 고른다.
+ */
+describe("app_timeout 조치문", () => {
+  it("두 원인을 다 말한다", () => {
+    const at = src.indexOf('"app_timeout"');
+    expect(at).toBeGreaterThan(-1);
+    const around = src.slice(at, at + 500);
+    expect(around, "앱이 안 떠 있는 경우").toMatch(/떠 있는지/);
+    expect(around, "버전이 낮은 경우").toMatch(/3\.10/);
+  });
+
+  /** ⚠️ 도구 설명에도 있어야 한다 — LLM 은 조치문보다 설명을 먼저 읽는다. */
+  it("도구 설명이 최소 버전을 밝힌다", () => {
+    const render = TOOLS.find((t) => t.name === "lapis_render")!;
+    expect(render.description).toMatch(/3\.10/);
   });
 });

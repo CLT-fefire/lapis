@@ -338,7 +338,7 @@ export function defaultHtmlPath(notePath: string): string {
 const renderTool: ToolDef = {
   name: "lapis_render",
   description:
-    '실행 중인 Lapis 앱에게 렌더를 시켜 파일로 받는다 — **앱 품질** HTML 또는 mermaid PNG.\n\n· `format: "html"` — mermaid 가 **SVG 로 박제된** 자립 HTML. 사용자 정의 CSS 도 반영된다.\n  (`lapis_export_html` 은 브라우저가 없어 mermaid 를 코드 펜스로 남긴다 — 다이어그램이 필요하면 이쪽을 쓴다.)\n· `format: "png"` — 본문 **첫 번째** mermaid 다이어그램을 PNG 로. 여럿이면 첫 번째다.\n· ⚠️ **앱이 떠 있어야 한다.** 꺼져 있으면 켜지느라 늦거나 못 받는다.\n· ⚠️ 앱이 **그 노트를 실제로 연다** — 사람이 보던 화면이 바뀐다.',
+    '실행 중인 Lapis 앱에게 렌더를 시켜 파일로 받는다 — **앱 품질** HTML 또는 mermaid PNG.\n\n· `format: "html"` — mermaid 가 **SVG 로 박제된** 자립 HTML. 사용자 정의 CSS 도 반영된다.\n  (`lapis_export_html` 은 브라우저가 없어 mermaid 를 코드 펜스로 남긴다 — 다이어그램이 필요하면 이쪽을 쓴다.)\n· `format: "png"` — 본문 **첫 번째** mermaid 다이어그램을 PNG 로. 여럿이면 첫 번째다.\n· ⚠️ **앱이 떠 있어야 하고, 버전이 3.10.0 이상이어야 한다.** 그 아래는 이 인자를 모르고 조용히 무시한다 — `app_timeout` 으로만 드러난다.\n· ⚠️ 앱이 **그 노트를 실제로 연다** — 사람이 보던 화면이 바뀐다.',
   inputSchema: {
     type: "object",
     properties: {
@@ -406,7 +406,16 @@ const renderTool: ToolDef = {
       throw new LapisError(
         "app_timeout",
         `앱이 ${timeout}ms 안에 결과를 안 냈다`,
-        "앱이 떠 있는지 확인할 것 — 꺼져 있으면 켜지는 시간이 더 든다. timeout_ms 로 늘릴 수 있다",
+        // 🔴 **원인이 둘인데 하나만 말하면 맞는 것을 확인하고 막힌다.**
+        //    실측: 앱이 떠 있는데도 "떠 있는지 확인할 것"이 나왔다 — 진짜 원인은 그 앱이
+        //    `--render` 를 모르는 구버전이라는 것이었다. 옛 빌드는 모르는 인자를 조용히
+        //    무시하고, 두 번째 프로세스는 argv 를 넘긴 뒤 그냥 끝난다. 아무도 실패를 안 쓴다.
+        //
+        //    ⚠️ 떠 있는 앱에게 버전을 물을 통로가 없다 — 네트워킹 코드가 없고 argv 는
+        //    한 방향이다. CLI 의 `cache-info` 프로브는 헤드리스 확인이라 여기 못 쓴다.
+        //    그래서 탐지 대신 두 원인을 다 적는다.
+        "① 앱 버전이 3.10.0 이상인지 — 그 아래는 --render 를 모르고 조용히 무시한다. " +
+          "② 앱이 떠 있는지 — 꺼져 있으면 켜지는 시간이 더 든다(timeout_ms 로 늘릴 수 있다).",
       );
     }
     const failure = readFailure(outNative);

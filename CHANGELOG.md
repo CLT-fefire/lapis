@@ -76,6 +76,14 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   accumulated where their notes live. It now goes to `~/Downloads` (or the temp directory if
   that is missing), and the reply says where.
 
+- **A timeout blamed the wrong thing.** With the app plainly running, `lapis_render` still
+  answered "check that the app is running". The real cause was that the running app predates
+  the feature: older builds ignore an argument they do not know, the second process hands over
+  its argv and exits, and nobody writes a failure. The remedy now names both causes, version
+  first. There is no probe for this — the project has no networking code and argv is one-way,
+  so a running app cannot be asked its version; an honest remedy beats a detection that cannot
+  exist.
+
 - **`lapis_render` mixed two path shapes in one reply.** `path` and `vault` came back with
   forward slashes and `out` with backslashes. Consumers split these on `/`, so the odd one
   out silently loses its file name and parent directory.
