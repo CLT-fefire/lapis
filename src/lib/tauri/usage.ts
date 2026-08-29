@@ -26,3 +26,13 @@ export function usageRead(month: string): Promise<string[]> {
 export function usageClear(): Promise<number> {
   return invoke<number>("usage_clear");
 }
+
+/**
+ * 분석 문서를 로그 폴더에 쓴다. 반환값은 쓴 경로.
+ *
+ * ⚠️ **사용자가 누르는 버튼이 없다.** 기동할 때 앱이 알아서 부른다 — 통계를 보고 싶은
+ * 사람에게 저장 형식을 고르게 할 이유가 없다. 필요하면 폴더에서 꺼내 간다.
+ */
+export function usageWriteReport(text: string): Promise<string> {
+  return invoke<string>("usage_write_report", { text });
+}

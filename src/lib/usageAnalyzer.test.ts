@@ -147,20 +147,50 @@ describe("성능", () => {
 });
 
 describe("세션", () => {
-  it("시작을 세고 끝난 세션의 길이를 평균낸다", () => {
+  /**
+   * 🔴 **길이는 타임스탬프에서 계산한다 — 끝 이벤트가 아니라.**
+   *
+   * 닫을 때 무언가를 남기려면 창을 붙잡아야 하고, 실제로 그렇게 해서 **X 버튼이 안 먹는
+   * 앱**을 만들었다(v3.7.0). 관찰 장치 하나 때문에 앱을 못 닫게 되는 것은 어떤 로그보다
+   * 나쁘다. 마지막 이벤트까지의 시간은 "실제로 쓴 시간"이라 오히려 더 정직하다.
+   */
+  it("시작부터 마지막 이벤트까지를 길이로 본다", () => {
     const a = new UsageAnalyzer();
-    a.feed(line({ k: "session", t: 1, ev: "start", v: "3.6.0", os: "windows" }));
-    a.feed(line({ k: "session", t: 2, ev: "end", v: "3.6.0", os: "windows", ms: 1000 }));
-    a.feed(line({ k: "session", t: 3, ev: "end", v: "3.6.0", os: "windows", ms: 3000 }));
+    a.feed(line({ k: "session", t: 1000, ev: "start", v: "3.8.0", os: "windows" }));
+    a.feed(CMD(3000, "a"));
     const r = a.result();
     expect(r.sessions).toBe(1);
     expect(r.avgSessionMs).toBe(2000);
   });
 
-  it("끝난 세션이 없으면 null", () => {
+  it("세션이 여럿이면 평균낸다", () => {
     const a = new UsageAnalyzer();
-    a.feed(line({ k: "session", t: 1, ev: "start", v: "3.6.0", os: "windows" }));
+    a.feed(line({ k: "session", t: 0, ev: "start", v: "3.8.0", os: "windows" }));
+    a.feed(CMD(1000, "a"));
+    a.feed(line({ k: "session", t: 5000, ev: "start", v: "3.8.0", os: "windows" }));
+    a.feed(CMD(8000, "b"));
+    expect(a.result().avgSessionMs).toBe(2000);
+  });
+
+  /** ⚠️ 마지막 세션은 아직 안 끝났다 — 안 세면 통계에서 통째로 빠진다. */
+  it("마지막(안 끝난) 세션도 센다", () => {
+    const a = new UsageAnalyzer();
+    a.feed(line({ k: "session", t: 0, ev: "start", v: "3.8.0", os: "windows" }));
+    a.feed(CMD(4000, "a"));
+    expect(a.result().avgSessionMs).toBe(4000);
+  });
+
+  it("이벤트가 시작 하나뿐이면 길이가 없다", () => {
+    const a = new UsageAnalyzer();
+    a.feed(line({ k: "session", t: 1, ev: "start", v: "3.8.0", os: "windows" }));
     expect(a.result().avgSessionMs).toBeNull();
+  });
+
+  /** v3.7.0 이 쓴 끝 이벤트. 지금은 안 쓰지만 **이미 쌓인 줄은 읽는다.** */
+  it("옛 끝 이벤트의 ms 도 읽는다", () => {
+    const a = new UsageAnalyzer();
+    a.feed('{"k":"session","t":9,"ev":"end","v":"3.7.0","os":"windows","ms":6000}');
+    expect(a.result().avgSessionMs).toBe(6000);
   });
 });
 
