@@ -16,6 +16,21 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Fixed
+- **A second rename could leave the first one waiting forever.** The link-rewrite consent
+  modal is held in a store slot that carries the caller's resolve callback, and the slot
+  could simply be overwritten. When that happened nobody ever answered the first request,
+  so the rename sat on an unresolved promise — no error, no timeout, and the note ended up
+  renamed with its incoming links untouched. Global shortcuts are not suppressed while a
+  modal is open, so a second rename was reachable.
+
+  The store now owns the pair: a new request cancels the pending one, and settling resolves
+  and clears in a single step. Nothing outside can set the slot directly.
+
+  The modal itself had no tests at all despite being the consent gate for a write that
+  touches many files at once. All four ways of closing it are now pinned, along with the
+  default focus sitting on **cancel** — one stray Enter must not apply an irreversible write.
+
 ## [3.10.0] — 2026-08-29
 
 > The MCP server can now drive the app, and the CLI can sit in the middle of a pipe.
