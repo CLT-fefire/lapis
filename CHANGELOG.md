@@ -17,6 +17,14 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Fixed
+- **The caller gave up two seconds before the app explained itself.** When nobody claims a
+  render request the app writes a failure file saying so, but that only happens after its
+  own 15.5 second wait — and the default limit on the calling side was 20 seconds. Measured
+  end to end, the file lands at about 18 seconds. A slightly slower window meant the user
+  saw "the app produced nothing in time" instead of the actual reason, exactly when the
+  precise diagnosis mattered. The limit is now 25 seconds, and it lives in one place
+  instead of the four it had been copied into.
+
 - **A second rename could leave the first one waiting forever.** The link-rewrite consent
   modal is held in a store slot that carries the caller's resolve callback, and the slot
   could simply be overwritten. When that happened nobody ever answered the first request,
