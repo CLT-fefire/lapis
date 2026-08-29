@@ -8,6 +8,7 @@ import {
   settleLinkRewritePreview,
 } from "./stores/linkRewritePreview";
 import type { LinkRewritePreview } from "./linkRewrite";
+import { installAnimateStub, flushFrames } from "./testHarness/animateStub";
 
 /**
  * 링크 갱신 미리보기 모달 — **되돌릴 수 없는 쓰기의 동의 게이트.**
@@ -24,47 +25,8 @@ import type { LinkRewritePreview } from "./linkRewrite";
  * 나오고, 번역을 고치면 테스트가 깨진다. **구조로 찾는다.**
  */
 
-/**
- * ⚠️ `happy-dom` 에는 **Web Animations API 가 없다.** `ModalShell` 의 `fade` 가
- * `element.animate` 를 부르므로 모달이 닫힐 때 `TypeError` 로 터진다.
- *
- * 전역 setup 에 두지 않는다 — 이 저장소가 `resolve.conditions` 를 전역에 안 두는 것과
- * 같은 이유다. 필요한 파일에서만 채워야 어디가 무엇에 기대는지가 보인다.
- */
-if (!(Element.prototype as Partial<Element>).animate) {
-  (Element.prototype as unknown as { animate: () => unknown }).animate = () => {
-    // ⚠️ **끝났다고 알려 줘야 한다.** 그냥 객체만 돌려주면 아웃트로가 영원히 안 끝나고
-    //    닫힌 모달의 노드가 DOM 에 남는다 — 이 저장소가 프리뷰 계측에서 이미 한 번
-    //    헛짚은 자리다(숨겨진 탭에서 트랜지션이 안 끝나 "모달이 안 닫힌다"는 틀린 결론).
-    let onfinish: (() => void) | null = null;
-    const a = {
-      cancel() {},
-      finish() {
-        onfinish?.();
-      },
-      currentTime: 0,
-      playState: "finished",
-      finished: Promise.resolve(),
-      addEventListener(_: string, cb: () => void) {
-        setTimeout(cb, 0);
-      },
-      removeEventListener() {},
-    };
-    Object.defineProperty(a, "onfinish", {
-      get: () => onfinish,
-      set: (fn: (() => void) | null) => {
-        onfinish = fn;
-        if (fn) setTimeout(fn, 0);
-      },
-    });
-    return a;
-  };
-}
-
-/** 마이크로태스크와 이펙트가 도는 틈. 트랜지션 아웃트로가 끝나야 노드가 사라진다. */
-const flush = async () => {
-  for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0));
-};
+installAnimateStub();
+const flush = flushFrames;
 
 const PREVIEW: LinkRewritePreview = {
   oldStem: "옛 이름",
