@@ -5,6 +5,32 @@
     activeHeadingSlug,
     jumpToHeading,
   } from "$lib/stores/outline";
+  import { currentNotePath } from "$lib/stores/vault";
+  import { headingLinkFor } from "$lib/headingLink";
+  import { logWarn } from "$lib/stores/usage";
+
+  /** 방금 복사한 헤딩 — 눌렀다는 것을 잠깐 보여준다. */
+  let copied = $state<string | null>(null);
+
+  /**
+   * 이 헤딩으로 가는 위키링크를 복사한다.
+   *
+   * ⚠️ 만들 수 없는 헤딩(`]]`·`|`·`#` 가 든 것)은 **버튼을 아예 안 낸다.** 깨진 링크를
+   * 주면 붙여넣은 사람이 한참 뒤에야 안다.
+   */
+  async function copyLink(text: string): Promise<void> {
+    const link = headingLinkFor($currentNotePath ?? "", text);
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      copied = text;
+      setTimeout(() => {
+        if (copied === text) copied = null;
+      }, 1200);
+    } catch (e) {
+      logWarn("OutlinePanel", "헤딩 링크 복사 실패", e);
+    }
+  }
 </script>
 
 {#if $outlineHeadings.length === 0}
@@ -16,20 +42,69 @@
 {:else}
   <nav class="outline" aria-label={m.outline_aria()}>
     {#each $outlineHeadings as h (h.slug)}
-      <button
-        class="outline-item lvl-{h.level}"
-        class:active={$activeHeadingSlug === h.slug}
-        style="padding-left: {(h.level - 1) * 14 + 12}px"
-        title={h.text}
-        onclick={() => jumpToHeading(h)}
-      >
-        {h.text}
-      </button>
+      <div class="outline-row">
+        <button
+          class="outline-item lvl-{h.level}"
+          class:active={$activeHeadingSlug === h.slug}
+          style="padding-left: {(h.level - 1) * 14 + 12}px"
+          title={h.text}
+          onclick={() => jumpToHeading(h)}
+        >
+          {h.text}
+        </button>
+        {#if headingLinkFor($currentNotePath ?? "", h.text)}
+          <button
+            class="outline-copy"
+            title={m.outline_copy_link()}
+            aria-label={m.outline_copy_link()}
+            onclick={() => copyLink(h.text)}
+          >
+            {copied === h.text ? "✓" : "⧉"}
+          </button>
+        {/if}
+      </div>
     {/each}
   </nav>
 {/if}
 
 <style>
+  /* 항목 한 줄 — 글자와 복사 버튼. 버튼은 호버·초점에만 보인다. */
+  .outline-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .outline-row .outline-item {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .outline-copy {
+    flex: none;
+    opacity: 0;
+    padding: 0 var(--sp-2);
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+
+  /*
+    ⚠️ **초점에도 보여야 한다.** 호버로만 드러내면 키보드로는 있는 줄도 모른다 —
+    이 앱에서 실제로 그 종류의 결함이 셋 나왔다.
+  */
+  .outline-row:hover .outline-copy,
+  .outline-copy:focus-visible {
+    opacity: 1;
+  }
+
+  .outline-copy:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--r-sm);
+  }
+
   .outline {
     display: flex;
     flex-direction: column;

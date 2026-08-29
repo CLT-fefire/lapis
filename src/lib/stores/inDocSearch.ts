@@ -18,6 +18,18 @@ export interface InDocSearchState {
   options: InDocSearchOptions;
   /** regex 모드에서 정규식 자체가 invalid한지. UI에서 빨간색 표시용. */
   regexError: boolean;
+  /**
+   * 🔴 **인계 일련번호** — `applySearch` 가 부를 때만 는다.
+   *
+   * 프리뷰 하이라이트는 "프리뷰 HTML 이 바뀔 때"만 다시 걸린다(그 이유는 `+page.svelte`
+   * 의 effect 주석에). 그런데 `grep`·미완 작업에서 넘어올 때는 **본문이 먼저 그려지고
+   * 질의가 나중에** 온다 — 그 순서에서는 하이라이트가 영영 안 걸린다. 실제로 안 걸렸다.
+   *
+   * ⚠️ 질의 전체를 반응 의존성으로 만들면 안 된다. `setMatchInfo` 가 스토어를 갱신하므로
+   * 다음 일치로 넘어갈 때마다 effect 가 돌고 **현재 위치가 0 으로 되돌아간다.**
+   * 그래서 인계에만 반응하는 번호를 따로 둔다.
+   */
+  handoff: number;
 }
 
 const DEFAULT_OPTIONS: InDocSearchOptions = {
@@ -61,6 +73,7 @@ const initial: InDocSearchState = {
   current: 0,
   options: loadOptions(),
   regexError: false,
+  handoff: 0,
 };
 
 export const inDocSearch = writable<InDocSearchState>(initial);
@@ -96,6 +109,8 @@ export function applySearch(
     total: 0,
     current: 0,
     regexError: false,
+    // ⚠️ 여기서만 는다 — 화면이 "인계가 왔다"를 이걸로 안다.
+    handoff: s.handoff + 1,
   }));
 }
 
@@ -149,6 +164,9 @@ export function resetSearch(): void {
   inDocSearch.update((s) => ({
     ...initial,
     options: s.options,
+    // ⚠️ **번호는 안 되돌린다.** 0 으로 되돌리면 다음 인계가 "이미 본 번호"가 돼서
+    //    조용히 무시된다. 단조 증가여야 한다.
+    handoff: s.handoff,
   }));
 }
 

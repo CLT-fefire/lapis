@@ -14,6 +14,12 @@ export const contextTarget = writable<ContextTarget | null>(null);
 export interface NewNoteRequest {
   parentDir: string;
   parentLabel: string;
+  /**
+   * 파일명 칸에 미리 채울 이름. 끊긴 링크에서 그 노트를 만들 때 쓴다.
+   *
+   * ⚠️ **채우기만 한다.** 확정하지 않는다 — 폴더도 이름도 사용자가 바꿀 수 있어야 한다.
+   */
+  suggestedName?: string;
 }
 export const newNoteRequest = writable<NewNoteRequest | null>(null);
 

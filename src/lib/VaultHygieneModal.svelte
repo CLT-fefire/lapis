@@ -1,6 +1,10 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
   import { noteStem } from "$lib/notePath";
+  import { get } from "svelte/store";
+  import { applySearch } from "$lib/stores/inDocSearch";
+  import { mainPane } from "$lib/stores/layout";
+  import { newNoteRequest } from "$lib/stores/tree-ui";
   import { collectOpenTasks, countOpenTasks, type OpenTaskGroup } from "$lib/openTasks";
   import { gitRecent, type GitCommit } from "$lib/tauri/git";
   import { gitRepo, formatCommitDate } from "$lib/stores/git";
@@ -234,6 +238,44 @@
     await selectNote(path, { via: "search" });
   }
 
+  /**
+   * 🔴 **찾아 놓고 데려다주지 않으면 절반이다.**
+   *
+   * `OpenTask` 는 `line` 을 담고 있는데 예전엔 파일까지만 갔다 — 90건짜리 노트에서
+   * 그 줄을 다시 손으로 찾아야 했다.
+   *
+   * ⚠️ 줄 번호로 스크롤하지 않고 **문서 내 검색으로 넘긴다.** 렌더된 본문에는 원문
+   * 줄 번호가 없다(코드 블록·표·트랜스클루전이 줄 수를 바꾼다). `grep` 결과에서
+   * 노트로 넘어갈 때 쓰는 것과 **같은 기계**다.
+   *
+   * ⚠️ 정규식이 아니라 **리터럴**로 넘긴다. 작업 문장에 `(`·`*` 가 들어 있으면
+   * 정규식으로는 안 맞거나 죽는다.
+   */
+  async function goToTask(path: string, text: string) {
+    closeBrokenLinks();
+    await selectNote(path, { via: "search" });
+    applySearch(
+      text,
+      { regex: false, caseSensitive: false, wholeWord: false },
+      get(mainPane) === "editor" ? "editor" : "preview",
+    );
+  }
+
+  /**
+   * 🔴 **끊긴 링크에서 그 노트를 만든다.**
+   *
+   * 찾아 놓고 "직접 만드세요"로 끝내면, 정작 만들 때 이름을 다시 옮겨 적어야 한다.
+   * 새 노트 모달과 템플릿은 이미 있다 — **그 자리에 잇는 것**뿐이다.
+   *
+   * ⚠️ 어느 폴더에 만들지는 **거는 쪽 노트의 폴더**로 둔다. vault 루트에 만들면
+   * 구조가 무너지고, 물어보면 흐름이 끊긴다. 모달에서 바꿀 수 있다.
+   */
+  function createMissing(target: string, fromPath: string) {
+    const dir = fromPath.slice(0, fromPath.lastIndexOf("/"));
+    closeBrokenLinks();
+    newNoteRequest.set({ parentDir: dir, parentLabel: noteStem(dir), suggestedName: target });
+  }
+
   function shortName(path: string): string {
     return noteStem(path);
   }
@@ -286,6 +328,16 @@
                     <span class="count">
                       {m.brokenlinks_referenced_by({ count: t.sources.length })}
                     </span>
+                    <!--
+                      🔴 찾아 놓고 "직접 만드세요"로 끝내면 이름을 다시 옮겨 적어야 한다.
+                      새 노트 모달과 템플릿은 이미 있다 — 그 자리에 잇는 것뿐이다.
+                    -->
+                    <button
+                      class="make"
+                      onclick={() => createMissing(t.target, t.sources[0]?.path ?? "")}
+                    >
+                      {m.brokenlinks_create()}
+                    </button>
                   </div>
                   <ul class="sources">
                     {#each t.sources as s (s.path)}
@@ -451,7 +503,9 @@
                 <ul class="rows">
                   {#each g.open as t (t.line)}
                     <li class="task-row" style="--task-depth: {t.depth}">
-                      <span class="value">{t.text}</span>
+                      <button class="task-jump" onclick={() => goToTask(g.path, t.text)}>
+                        {t.text}
+                      </button>
                     </li>
                   {/each}
                 </ul>
@@ -699,6 +753,39 @@
    * ⚠️ 깊이를 버리면 "부모 하나"와 "자식 셋"이 같은 줄로 보인다. 무엇에 딸린 일인지가
    * 사라지면 목록이 그냥 문장 더미가 된다.
    */
+  .make {
+    all: unset;
+    padding: 0 var(--sp-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+
+  .make:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+
+  /* 작업 한 줄 — 눌러서 그 자리로 간다. 글자처럼 보이되 초점은 받는다. */
+  .task-jump {
+    all: unset;
+    cursor: pointer;
+    color: var(--text-secondary);
+  }
+
+  .task-jump:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  .task-jump:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+  }
+
   .task-row {
     padding-left: calc(var(--task-depth, 0) * 14px);
   }

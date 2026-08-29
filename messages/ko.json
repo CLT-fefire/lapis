@@ -536,5 +536,8 @@
   "settings_usage_format_label": "형식",
   "settings_usage_hide": "경로·검색어 가리기",
   "settings_usage_hide_title": "공개된 곳에 붙여넣을 때만 켜세요. 요약(.md)에만 걸립니다.",
-  "settings_usage_raw_note": "원본은 가려지지 않습니다 — 가리려면 해석해야 하고, 그러면 원본이 아닙니다."
+  "settings_usage_raw_note": "원본은 가려지지 않습니다 — 가리려면 해석해야 하고, 그러면 원본이 아닙니다.",
+  "brokenlinks_create": "만들기",
+  "outline_copy_link": "헤딩 링크 복사",
+  "cmd_reopen_tab": "닫은 탭 되살리기"
 }
