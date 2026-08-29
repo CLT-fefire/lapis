@@ -5,6 +5,8 @@
   import { readNote } from "$lib/tauri/notes";
   import { enhanceRendered } from "$lib/renderedEnhance";
   import { renderMermaidIn } from "$lib/mermaid-runtime";
+  import { renderQueriesIn } from "$lib/queryRuntime";
+  import { queryText, queryContext } from "$lib/queryWiring";
   import { noteStem, noteDisplayName } from "$lib/notePath";
   import { readingFontSize, readingMeasureEm, readingMeasureLimited } from "$lib/stores/reading";
   import { closeCompare } from "$lib/stores/compare";
@@ -76,6 +78,7 @@
         sortHint: m.rendered_sort_hint(),
       });
       renderMermaidIn(articleEl);
+      renderQueriesIn(articleEl, queryContext(), queryText());
     });
   });
 

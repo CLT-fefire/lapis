@@ -28,6 +28,7 @@ import http from "highlight.js/lib/languages/http";
 import { FRONTMATTER_YAML_SCHEMA } from "$lib/frontmatter";
 import { wikilinkPlugin } from "$lib/markdownPlugins/wikilink";
 import { mermaidPlugin } from "$lib/markdownPlugins/mermaid";
+import { lapisQueryPlugin } from "$lib/markdownPlugins/lapisQuery";
 import { taskListPlugin } from "./markdownPlugins/taskList";
 import { calloutPlugin } from "$lib/markdownPlugins/callout";
 import { embedPlugin } from "$lib/markdownPlugins/embed";
@@ -116,6 +117,9 @@ const md = new MarkdownIt({
   //    그 인자가 순서를 정하므로, 여기 줄 순서를 바꿔도 안전하다.
   .use(embedPlugin)
   .use(mermaidPlugin)
+  // ⚠️ `mermaid` 와 같은 자리(fence)를 본다. 둘 다 자기 info-string 만 가로채고
+  //    나머지는 앞 렌더러에 넘기므로 순서는 안 따진다.
+  .use(lapisQueryPlugin)
   .use(calloutPlugin)
   .use(taskListPlugin)
   .use(headingAnchorPlugin);

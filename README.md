@@ -67,6 +67,30 @@ so you land on the match rather than at the top of the note.
 
 The full-text index is built in a **Web Worker** and **cached to disk per shard**, so restarting the app doesn't re-read everything from scratch.
 
+### Saved queries inside a note
+
+A fenced block runs where it sits and shows what matches:
+
+````
+```lapis-query
+doc_kind: plan, adr
+topic: overview
+text: windows
+limit: 20
+```
+````
+
+It reuses the same matcher the table view uses, so a query cannot mean one thing in a table
+and another inside a note. Results are ordinary wikilinks, so clicking one behaves exactly like
+any other link — including how an ambiguous name is resolved.
+
+The block always says **how many** matched, and says so again when the list was cut short; a
+truncated list that looks complete is worse than no list. A query it cannot read is shown as an
+error in place rather than as an empty result — an empty result would read as "no such notes".
+
+Nothing is written back into the note. There is no tag axis yet, because the shared matcher does
+not have one and adding it here alone would split the two.
+
 ### Tags
 
 - **Only frontmatter `tags:`** is indexed. Inline hashtags in the body are deliberately ignored — there's no reliable way to tell them apart from `#define` in code or a URL fragment like `#section`.

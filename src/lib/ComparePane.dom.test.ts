@@ -25,6 +25,9 @@ vi.mock("$lib/stores/vault", async () => {
     jumpToWikilink: (...a: unknown[]) => jumpToWikilink(...(a as [])),
     currentNotePath: writable<string | null>(null),
     linkIndex: writable(null),
+    // ⚠️ 옆칸이 저장된 질의도 채운다 — 그 배선이 `vaultPath` 를 읽는다.
+    //    목에서 빠지면 테스트는 초록인데 **처리 안 된 오류**가 쌓인다.
+    vaultPath: writable<string | null>(null),
   };
 });
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (...a: unknown[]) => openUrl(...(a as [])) }));

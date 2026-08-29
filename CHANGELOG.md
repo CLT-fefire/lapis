@@ -16,6 +16,17 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+### Added
+- **Saved queries inside a note.** A `lapis-query` fenced block runs where it sits and lists
+  what matches, by `doc_kind`, `topic` and free text. It calls the same matcher the table
+  view uses, so a query cannot mean one thing in a table and another in a note, and results are
+  ordinary wikilinks, so clicking one goes through the same rule as every other link. The block
+  states how many matched and says so again when the list was cut short — a truncated list that
+  looks complete is worse than no list — and a query it cannot read is shown as an error in place,
+  because an empty result would read as "no such notes". Nothing is written back into the note,
+  and there is no tag axis yet: the shared matcher has none, and adding it here alone would split
+  the two.
+
 ### Fixed
 - **The caller gave up two seconds before the app explained itself.** When nobody claims a
   render request the app writes a failure file saying so, but that only happens after its
