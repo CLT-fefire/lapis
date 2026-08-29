@@ -16,6 +16,47 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.8.0] — 2026-08-29
+
+> The fifth analysis, first group: the places where lapis found something and then made you go
+> find it again.
+
+### Added
+- 🔴 **Notes reopen where you stopped reading.** Position is remembered per note and restored
+  after the body renders. Measured motivation: four sessions in the usage log all reopened the
+  same note `via: tab`, every one of them at the top.
+
+  ⚠️ Written outside `requestAnimationFrame` — a hidden window never fires it (v3.5.1), and that
+  is exactly when the last position matters. Restoring re-checks the current path immediately
+  before applying, so a fast note switch cannot land the previous note's position on the new body.
+  An explicit `[[note#heading]]` anchor wins over a remembered position.
+
+- **Open tasks jump to the line.** `OpenTask` already carried `line`; the panel only opened the
+  file, leaving you to find the item again in a ninety-item note. It now hands the task text to
+  in-document search — the same mechanism `⌘⇧G` results use — as a literal, because task text
+  contains brackets and asterisks often enough that a regex would miss or throw.
+
+- **Broken links can create the missing note.** The name is carried into the new-note dialog,
+  in the folder of the note that links to it. Nothing is written until you confirm.
+
+- **Copy a link to any heading** from the outline. `[[note#heading]]` anchors already worked;
+  there was no way to produce one without retyping the heading, and one wrong character silently
+  lands at the top of the document. Headings containing `]]`, `|` or `#` offer no button at all —
+  a broken link is worse than no link.
+
+- **Reopen closed tab**, from the command palette. No shortcut: `⌘⇧T` opens a new window and this
+  is not an everyday action.
+
+### Fixed
+- 🔴 **A search handed over from another screen never highlighted.** Preview highlighting only
+  re-runs when the preview HTML changes, and reads the query non-reactively — deliberately, since
+  making it reactive resets the current match on every step. But a hand-off arrives in the other
+  order: body first, query second. So `⌘⇧G` → note has been landing at the top of the document
+  with the search bar filled in and nothing marked.
+
+  A hand-off counter now wakes the highlight; only `applySearch` increments it, so stepping
+  through matches is unaffected.
+
 ## [3.7.2] — 2026-08-29
 
 > Both of these were found by reading the first analysis document the app wrote for itself.
@@ -2296,6 +2337,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.8.0]: https://github.com/eren0315/lapis/compare/v3.7.2...v3.8.0
 [3.7.2]: https://github.com/eren0315/lapis/compare/v3.7.1...v3.7.2
 [3.7.1]: https://github.com/eren0315/lapis/compare/v3.7.0...v3.7.1
 [3.7.0]: https://github.com/eren0315/lapis/compare/v3.6.0...v3.7.0

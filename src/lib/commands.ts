@@ -7,6 +7,7 @@ import {
   pickAndOpenVault,
   reloadNotes,
   deletePath,
+  reopenClosedTab,
 } from "$lib/stores/vault";
 import { openNewNote, requestRename } from "$lib/stores/tree-ui";
 import {
@@ -62,6 +63,20 @@ export const BUILTIN_COMMANDS: Command[] = [
         ? (cur.split("/").slice(-2, -1)[0] ?? "") + "/"
         : m.cmd_vault_root();
       openNewNote(parentDir, parentLabel);
+    },
+  },
+  {
+    id: "reopen-tab",
+    get label() {
+      return m.cmd_reopen_tab();
+    },
+    /**
+     * ⚠️ 단축키를 안 준다. `⌘⇧T` 는 새 창이 쓰고 있고, 자주 쓰는 조작이 아니다 —
+     * 키를 뺏으면 매일 쓰는 것이 밀린다.
+     */
+    disabled: () => !get(vaultPath),
+    run() {
+      void reopenClosedTab();
     },
   },
   {

@@ -179,3 +179,40 @@ export function saveTabsFor(vaultPath: string, tabs: string[], active: string | 
   if (!vaultPath) return;
   saveTabsMap(upsertVaultTabs(loadTabsMap(), vaultPath, tabs, active));
 }
+
+// ─── 닫은 탭 ─────────────────────────────────────────────────────────────────
+
+/**
+ * 방금 닫은 탭들 — 최근 닫은 것이 **뒤**에 있다.
+ *
+ * ⚠️ **메모리에만 둔다.** 재기동 뒤에 되살릴 것은 열린 탭이지 닫은 탭이 아니다 —
+ * 저장하면 어제 닫은 것이 오늘 되살아나서, 되살리기가 무엇을 줄지 예측이 안 된다.
+ */
+const closedStack: string[] = [];
+
+/** 몇 개까지 기억하나. 실수로 여러 개를 닫는 경우가 이 정도다. */
+export const CLOSED_MAX = 10;
+
+/** 닫힌 것을 쌓는다. ⚠️ 같은 경로가 여럿 쌓이지 않게 — 되살리기가 제자리를 맴돈다. */
+export function pushClosed(path: string): void {
+  if (!path) return;
+  const at = closedStack.indexOf(path);
+  if (at !== -1) closedStack.splice(at, 1);
+  closedStack.push(path);
+  while (closedStack.length > CLOSED_MAX) closedStack.shift();
+}
+
+/** 가장 최근에 닫은 것을 꺼낸다. 없으면 `null`. */
+export function popClosed(): string | null {
+  return closedStack.pop() ?? null;
+}
+
+/** ⚠️ vault 를 바꾸면 비운다 — 남의 vault 경로를 되살리면 빈 노트가 열린다. */
+export function clearClosed(): void {
+  closedStack.length = 0;
+}
+
+/** 테스트·화면용 — 지금 쌓여 있는 것. */
+export function peekClosed(): readonly string[] {
+  return closedStack;
+}

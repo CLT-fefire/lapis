@@ -536,5 +536,8 @@
   "settings_usage_format_label": "Format",
   "settings_usage_hide": "Hide paths and queries",
   "settings_usage_hide_title": "Turn on only when pasting somewhere public. Applies to the summary (.md) only.",
-  "settings_usage_raw_note": "The raw log is never redacted — redacting means parsing it, and parsed is no longer raw."
+  "settings_usage_raw_note": "The raw log is never redacted — redacting means parsing it, and parsed is no longer raw.",
+  "brokenlinks_create": "Create",
+  "outline_copy_link": "Copy link to heading",
+  "cmd_reopen_tab": "Reopen closed tab"
 }

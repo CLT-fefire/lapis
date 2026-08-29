@@ -93,6 +93,9 @@ import {
   clearTabs,
   openTabs,
   loadTabsFor,
+  pushClosed,
+  popClosed,
+  clearClosed,
   saveTabsFor,
   reorderTabs,
   closeOthers,
@@ -186,6 +189,8 @@ export async function openVault(path: string): Promise<void> {
   fullTextRecoveryTried = false;
   clearNavHistory();
   clearTabs();
+  // ⚠️ 남의 vault 경로를 되살리면 빈 노트가 열린다.
+  clearClosed();
 
   // 인덱스 빌드(큰 vault 1~3s) 전에 저장된 탭/활성 노트를 먼저 복원 → 빌드 중에도
   // 마지막 보던 문서가 즉시 표시(빈 placeholder/welcome 대신). 노트 본문은 readNote
@@ -1316,6 +1321,8 @@ export async function goToHistory(index: number): Promise<void> {
  */
 export async function closeTab(path: string): Promise<void> {
   if (!path) return;
+  // ⚠️ **닫기 전에** 쌓는다. 아래에서 활성 탭이 바뀌므로 순서가 중요하다.
+  pushClosed(path);
   const wasActive = get(currentNotePath) === path;
   const nextActive = unregisterTab(path, get(currentNotePath));
   if (!wasActive) {
@@ -1328,6 +1335,22 @@ export async function closeTab(path: string): Promise<void> {
     currentNotePath.set(null);
     currentNoteContent.set("");
     persistTabs();
+  }
+}
+
+/**
+ * 마지막으로 닫은 탭을 되살린다. 되살릴 것이 없으면 아무 일도 안 한다.
+ *
+ * ⚠️ **이미 열려 있으면 건너뛰고 그다음 것을 본다.** 안 그러면 같은 탭을 다시 여는
+ * 것으로 보이고, 사용자는 되살리기가 고장 났다고 여긴다.
+ */
+export async function reopenClosedTab(): Promise<void> {
+  for (;;) {
+    const path = popClosed();
+    if (!path) return;
+    if (get(openTabs).includes(path)) continue;
+    await selectNote(path, { via: "history" });
+    return;
   }
 }
 

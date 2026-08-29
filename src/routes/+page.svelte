@@ -130,6 +130,7 @@ import { isPanicChord } from "$lib/userCss";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
   import { newWindow } from "$lib/tauri/window";
   import { writeUsageAnalysis } from "$lib/usageAutoReport";
+  import { rememberPos, posFor } from "$lib/stores/readingPos";
   import { BUILTIN_COMMANDS } from "$lib/commands";
   import { resolveShortcut } from "$lib/keymap";
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
@@ -429,6 +430,21 @@ import { isPanicChord } from "$lib/userCss";
     });
   });
 
+  /**
+   * 🔴 **읽던 자리로 되돌린다.**
+   *
+   * 실측(사용 로그): 네 세션이 전부 같은 노트를 `via: tab` 으로 열었다. 매번 맨 위였다.
+   *
+   * ⚠️ `afterPreviewRender` 뒤에 한다 — 본문이 아직 안 그려졌으면 `scrollHeight` 가
+   * 작아서 스크롤이 잘린다. 그러면 "복원했는데 엉뚱한 데" 가 된다.
+   */
+  $effect(() => {
+    trackPreviewHtml();
+    const path = $currentNotePath;
+    if (!path) return;
+    afterPreviewRender(() => void restoreReadingPos(path));
+  });
+
   // Preview 갱신 시 mermaid 코드블록 렌더 (lazy + dynamic import) — Phase 4.4.a
   $effect(() => {
     trackPreviewHtml();
@@ -552,12 +568,58 @@ import { isPanicChord } from "$lib/userCss";
   // 프리뷰 스크롤 → 활성 헤딩 하이라이트 (scroll-spy). rAF 스로틀.
   let scrollSpyScheduled = false;
   function handlePreviewScroll() {
+    // ⚠️ **자리 적기는 rAF 밖에서.** 창이 가려지면 rAF 가 안 오고(v3.5.1 참조), 그러면
+    //    마지막으로 읽던 자리를 못 남긴다 — 정작 다시 열 때 필요한 값이다.
+    rememberCurrentPreviewPos();
     if (scrollSpyScheduled) return;
     scrollSpyScheduled = true;
     requestAnimationFrame(() => {
       scrollSpyScheduled = false;
       updateActiveHeading();
     });
+  }
+
+  /**
+   * 읽던 자리를 적는다.
+   *
+   * ⚠️ **복원 중에는 안 적는다.** 복원이 만든 스크롤 이벤트가 자리를 덮어쓰면 값이
+   * 한 틱 낡은 것으로 굳는다.
+   */
+  function rememberCurrentPreviewPos(): void {
+    if (restoringPos) return;
+    const el = previewBodyEl;
+    const path = $currentNotePath;
+    if (!el || !path) return;
+    rememberPos(path, { scroll: el.scrollTop });
+  }
+
+  /** 복원이 부른 스크롤인지 — `onscroll` 이 자기 값을 덮어쓰지 않게. */
+  let restoringPos = false;
+
+  /**
+   * 읽던 자리로 되돌린다.
+   *
+   * ## 🔴 남의 자리로 복원하면 안 된다
+   *
+   * 본문이 아직 이전 노트일 때 새 노트의 자리를 적용하면 엉뚱한 데로 튄다. 그래서
+   * **적용 직전에 경로를 다시 확인**한다 — 그 사이에 또 바뀌었을 수 있다.
+   *
+   * ⚠️ 헤딩 앵커(`[[노트#헤딩]]`)가 대기 중이면 **자리 복원을 건너뛴다.** 사용자가
+   * 명시적으로 지목한 자리가 우선이다.
+   */
+  async function restoreReadingPos(path: string): Promise<void> {
+    if (get(pendingHeadingAnchor)) return;
+    const pos = posFor(path);
+    if (!pos) return;
+    await tick();
+    const el = previewBodyEl;
+    if (!el || $currentNotePath !== path) return;
+    restoringPos = true;
+    el.scrollTop = pos.scroll;
+    // 다음 매크로태스크까지 잠근다 — 스크롤 이벤트가 비동기로 온다.
+    setTimeout(() => {
+      restoringPos = false;
+    }, 0);
   }
   function updateActiveHeading() {
     const container = previewBodyEl;
@@ -693,6 +755,29 @@ import { isPanicChord } from "$lib/userCss";
       previewTotal = 0;
       previewCurrentIdx = -1;
     }
+  });
+
+  /**
+   * 🔴 **인계로 들어온 검색을 실제로 걸어 준다.**
+   *
+   * 위 effect 는 "프리뷰 HTML 이 바뀔 때"만 깨어난다(질의를 `get` 으로 비반응 읽기 하는
+   * 이유가 그 주석에). 그런데 `grep`·미완 작업에서 넘어올 때는 **본문이 먼저 그려지고
+   * 질의가 나중에** 온다 — 그 순서에서는 하이라이트가 영영 안 걸렸다.
+   *
+   * ⚠️ 스토어 전체가 아니라 **인계 번호**만 본다. 질의를 의존성으로 만들면
+   * `setMatchInfo` 가 스토어를 갱신할 때마다 돌아서 다음 일치로 넘어갈 때마다 현재
+   * 위치가 0 으로 되돌아간다.
+   */
+  let lastHandoff = 0;
+  $effect(() => {
+    const s = $inDocSearch;
+    if (s.handoff === lastHandoff) return;
+    lastHandoff = s.handoff;
+    if (!s.open || s.target !== "preview" || !s.query) return;
+    afterPreviewRender(() => {
+      previewQuery = s.query;
+      previewApply(s.query, 0);
+    });
   });
 
   let editorCopied = $state(false);

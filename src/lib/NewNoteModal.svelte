@@ -29,6 +29,8 @@
       fileName = "";
       error = null;
       chosen = "";
+      // ⚠️ 제안된 이름이 있으면 채운다(끊긴 링크에서 왔을 때). 확정은 안 한다.
+      fileName = $newNoteRequest.suggestedName ?? "";
       void loadTemplates();
     }
   });
