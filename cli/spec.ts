@@ -1,3 +1,4 @@
+import { RENDER_TIMEOUT_MS_DEFAULT } from "./renderRequest.ts";
 /**
  * CLI 표면의 **단일 출처** — 명령·옵션·설명이 여기 한 곳에만 있다.
  *
@@ -271,7 +272,11 @@ export const COMMANDS: CommandSpec[] = [
     options: [
       { name: "out", kind: "string", desc: "저장할 경로. 안 주면 ~/Downloads" },
       { name: "format", kind: "string", desc: "html(기본) · png" },
-      { name: "timeout", kind: "number", desc: "앱을 기다릴 ms. 기본 20000" },
+      {
+        name: "timeout",
+        kind: "number",
+        desc: `앱을 기다릴 ms. 기본 ${RENDER_TIMEOUT_MS_DEFAULT}`,
+      },
     ],
   },
   {

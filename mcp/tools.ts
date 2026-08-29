@@ -21,7 +21,12 @@ import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import { buildIndex } from "$lib/linkIndex";
 import { launchOpen, LaunchError } from "../cli/appLaunch.ts";
-import { requestRender, RENDER_FORMATS, type RenderFormat } from "../cli/renderRequest.ts";
+import {
+  requestRender,
+  RENDER_FORMATS,
+  RENDER_TIMEOUT_MS_DEFAULT,
+  type RenderFormat,
+} from "../cli/renderRequest.ts";
 import { runIndex, IndexError } from "../cli/indexRun.ts";
 import { runExport, ExportError } from "../cli/exportRun.ts";
 
@@ -358,7 +363,10 @@ const renderTool: ToolDef = {
         description: "기본 html",
       },
       vault: { type: "string", description: "vault 루트" },
-      timeout_ms: { type: "number", description: "기다릴 상한. 기본 20000" },
+      timeout_ms: {
+        type: "number",
+        description: `기다릴 상한. 기본 ${RENDER_TIMEOUT_MS_DEFAULT}`,
+      },
     },
     required: ["note", "out"],
   },
@@ -382,7 +390,8 @@ const renderTool: ToolDef = {
       );
     }
     const resolved = resolveNotePath(note, str(args.vault));
-    const timeout = typeof args.timeout_ms === "number" ? args.timeout_ms : 2e4;
+    const timeout =
+      typeof args.timeout_ms === "number" ? args.timeout_ms : RENDER_TIMEOUT_MS_DEFAULT;
 
     // 🔴 **두 모양을 나눠 둔다.**
     //

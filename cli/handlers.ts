@@ -30,7 +30,12 @@ import {
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computePropRewritePreview, SCALAR_PROP_KEYS } from "$lib/propsRewrite";
-import { requestRender, RENDER_FORMATS, type RenderFormat } from "./renderRequest.ts";
+import {
+  requestRender,
+  RENDER_FORMATS,
+  RENDER_TIMEOUT_MS_DEFAULT,
+  type RenderFormat,
+} from "./renderRequest.ts";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
@@ -1614,7 +1619,8 @@ function cmdRender(p: ParsedCommand, out: Out): void {
       ? p.options.out
       : defaultRenderOut(resolved.path, format),
   );
-  const timeout = typeof p.options.timeout === "number" ? p.options.timeout : 20_000;
+  const timeout =
+    typeof p.options.timeout === "number" ? p.options.timeout : RENDER_TIMEOUT_MS_DEFAULT;
 
   const r = requestRender(
     { notePath: resolved.path, vault: resolved.vault, outNative, format },
