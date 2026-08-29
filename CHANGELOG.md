@@ -95,6 +95,23 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   ever looking wrong.
 
 ### Fixed
+- **Every link in the side-by-side pane was dead.** Wikilinks, markdown links and the mermaid
+  export button all did nothing when clicked, and nothing reported an error. The click rules
+  lived inside `+page.svelte`, where nothing could call them, so the side pane got its own
+  copy — and the copy was wrong. It looked for `a.wikilink` while the plugin emits
+  `span.wikilink` (deliberately: an anchor would let the webview navigate away), and read
+  `data-target-path`, a name nothing in the repository ever sets. Plain `<a>` links were
+  not handled at all, so their default behaviour survived: an internal `.md` link could
+  trigger SPA routing and an external URL could move the webview.
+
+  The fix removes the copy rather than correcting it. Both panes now call one function. They
+  render with the same parts, so the HTML they produce is identical — the rule that reads it
+  should be single too.
+
+  Two older tests had pinned the bug in place: they hand-built the DOM the broken component
+  expected instead of using what the renderer actually emits, so they stayed green while the
+  feature was entirely dead.
+
 - **`props rename` could rewrite a value it should not touch.** In YAML a `#` only starts a
   comment when whitespace precedes it, so `C#` is the scalar `C#` — but the comment was
   matched with a pattern that allowed none, so `topic: C#` was read as the value `C`.
