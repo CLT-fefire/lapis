@@ -53,8 +53,13 @@ const INDEX_READING: Record<string, string> = {
   doctor: "cmdDoctor",
 };
 
-/** 되돌릴 수 없는 쓰기를 하는 명령 — 낡으면 **막아야** 한다. */
-const WRITERS = ["tag", "replace"] as const;
+/**
+ * 되돌릴 수 없는 쓰기를 하는 명령 — 낡으면 **막아야** 한다.
+ *
+ * ⚠️ `props` 는 오래 읽기 전용이었다가 `rename` 이 생기며 여기로 왔다. 이 목록에
+ * 안 넣고 옵션만 붙이면 아래 "읽기 전용에는 없다" 검사가 운다 — 그게 목적이다.
+ */
+const WRITERS = ["tag", "replace", "props"] as const;
 
 describe("낡음 보고", () => {
   /** ⚠️ 카나리아 — 본문을 못 잘라내면 아래 단언이 빈 문자열을 보고 통과한다. */
@@ -105,8 +110,20 @@ describe("낡음 보고", () => {
 });
 
 describe("쓰기는 낡으면 막는다", () => {
+  /**
+   * ⚠️ **이름을 표로 짝지어 둔다.** 예전엔 `cmd === "tag" ? "cmdTag" : "cmdReplace"`
+   * 였는데, 쓰기 명령이 셋이 되자 새로 온 `props` 가 조용히 `cmdReplace` 를 검사하고
+   * 통과했다 — **엉뚱한 함수를 보고 초록이 된 것**이다. 짝이 없으면 여기서 운다.
+   */
+  const WRITER_FN: Record<string, string> = {
+    tag: "cmdTag",
+    replace: "cmdReplace",
+    props: "cmdPropsRename",
+  };
+
   it.each(WRITERS)("`lapis %s` 가 requireFreshIndex를 부른다", (cmd) => {
-    const fn = cmd === "tag" ? "cmdTag" : "cmdReplace";
+    const fn = WRITER_FN[cmd];
+    expect(fn, `${cmd} 의 핸들러 이름이 표에 없다`).toBeTruthy();
     expect(/requireFreshIndex\(/.test(bodyOf(fn)), `${fn}`).toBe(true);
   });
 

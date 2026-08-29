@@ -191,6 +191,34 @@ export function renderTagPreview(
   return out.join("\n");
 }
 
+/**
+ * frontmatter 값 바꾸기 미리보기.
+ *
+ * ⚠️ 태그와 달리 **정확히 일치한 것만** 걸린다. 그래서 "접두가 같아 안 걸린 것"이
+ * 있을 수 있는데, 그건 감사가 후보로 보여준 것이지 같은 값이 아니다.
+ */
+export function renderPropPreview(
+  key: string,
+  oldValue: string,
+  newValue: string,
+  rows: readonly TagPreviewRow[],
+  total: number,
+  merge: boolean,
+): string {
+  if (rows.length === 0) return `${key}: ${oldValue} 인 노트가 없다`;
+  const out = [
+    `${key}:  ${oldValue}  →  ${newValue}`,
+    "",
+    table(rows.map((r) => [String(r.occurrences), r.path])),
+    "",
+    `노트 ${rows.length}개 · ${total}건`,
+  ];
+  if (merge) {
+    out.push("", "⚠️ 이미 쓰이는 값이다 — 둘이 하나로 합쳐진다. 되돌릴 수 없다.");
+  }
+  return out.join("\n");
+}
+
 export interface OrphanRow {
   path: string;
   name: string;

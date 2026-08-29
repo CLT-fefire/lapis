@@ -158,9 +158,22 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "props",
-    desc: "frontmatter 값 진단 — 거를 수 있는 축이 갈렸는지",
-    positional: [{ name: "동작", required: true, desc: "audit" }],
-    options: [],
+    desc: "frontmatter 값 진단·정리 — 거를 수 있는 축이 갈렸는지 보고, 고친다",
+    positional: [
+      { name: "동작", required: true, desc: "audit | rename" },
+      { name: "키", required: false, desc: "rename 전용 — doc_kind · topic · status" },
+      { name: "이전", required: false, desc: "rename 전용 — 바꿀 값" },
+      { name: "새값", required: false, desc: "rename 전용 — 새 값" },
+    ],
+    options: [
+      {
+        name: "apply",
+        kind: "boolean",
+        // ⚠️ `tag rename` 과 같은 이유로 기본이 dry-run 이다.
+        desc: "실제로 쓴다. 없으면 미리보기만 (기본)",
+      },
+      ALLOW_STALE,
+    ],
   },
   {
     name: "tasks",
@@ -325,7 +338,11 @@ export const FACETS = ["tags", "topics", "doc-kinds"] as const;
 export const TAG_ACTIONS = ["rename", "audit"] as const;
 
 /** `props` 명령이 받는 동작. 지금은 하나뿐이지만 `tag`와 같은 모양을 지킨다. */
-export const PROPS_ACTIONS = ["audit"] as const;
+/**
+ * ⚠️ `rename` 은 **쓰기**다. `tag rename` 과 같은 규율을 따른다 —
+ * 기본 dry-run, `--apply` 가 있어야 쓰고, 쓰기 직전에 낡은 인덱스를 막는다.
+ */
+export const PROPS_ACTIONS = ["audit", "rename"] as const;
 
 export function findCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);

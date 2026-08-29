@@ -29,6 +29,7 @@ import {
   findFrontmatterIssues,
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
+import { computePropRewritePreview, SCALAR_PROP_KEYS } from "$lib/propsRewrite";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
@@ -49,6 +50,7 @@ import {
   renderFacet,
   renderBroken,
   renderTagPreview,
+  renderPropPreview,
   renderReplacePreview,
   renderOrphans,
   renderTagIssues,
@@ -1432,7 +1434,7 @@ export function cmdExport(p: ParsedCommand, out: Out): void {
  * ⚠️ `tag audit`과 성격이 같지만 **대상이 다르다.** 저쪽은 태그, 이쪽은 거를 수 있는
  * 축(`doc_kind`·`topic`과 열거형처럼 쓰이는 props 필드)이다.
  */
-export function cmdProps(p: ParsedCommand, out: Out): void {
+export async function cmdProps(p: ParsedCommand, out: Out): Promise<void> {
   const action = p.positional[0];
   if (!(PROPS_ACTIONS as readonly string[]).includes(action)) {
     out.fail(
@@ -1442,6 +1444,7 @@ export function cmdProps(p: ParsedCommand, out: Out): void {
       2,
     );
   }
+  if (action === "rename") return cmdPropsRename(p, out);
   const vc = resolveVault(vaultOf(p));
   const issues = findFrontmatterIssues(buildIndex(vc.infos));
   if (out.json) {
@@ -1454,6 +1457,119 @@ export function cmdProps(p: ParsedCommand, out: Out): void {
     out.line("이 축으로 거르는 질의가 절반만 찾는다는 뜻이다.");
   }
   reportStale(out, vc);
+}
+
+/**
+ * `lapis props rename <키> <이전> <새값>` — 감사가 찾은 것을 고치는 짝.
+ *
+ * ## 🔴 `tag rename` 과 같은 규율이다
+ *
+ * 기본 dry-run · `--apply` 로만 쓰기 · 쓰기 직전에만 낡은 인덱스를 막기 ·
+ * 백업 후 원자 교체. **쓰기 경로를 새로 만들지 않는다** — 같은 `backupAndWrite` 를 쓴다.
+ *
+ * ## ⚠️ 태그와 다른 점 — 접두 계층이 없다
+ *
+ * `tag rename tech` 는 `tech/svelte5` 도 옮기지만, `topic` 에는 계층이 없으므로
+ * **정확히 일치할 때만** 바꾼다. 감사가 "앞부분이 같음"으로 묶어 준 것은 후보일 뿐이다 —
+ * `cross-platform` 은 `platform` 이 아니다.
+ */
+async function cmdPropsRename(p: ParsedCommand, out: Out): Promise<void> {
+  const key = p.positional[1];
+  const oldValue = p.positional[2];
+  const newValue = p.positional[3];
+
+  if (!key || !oldValue || !newValue) {
+    out.fail(
+      "no_criteria",
+      "rename 에는 키·이전 값·새 값이 필요하다",
+      "lapis props rename <키> <이전> <새값>",
+      2,
+    );
+  }
+  // ⚠️ 아무 키나 받지 않는다. `tags` 는 배열이고 `tag rename` 이 계층까지 다룬다 —
+  //    여기서 손대면 규칙이 두 벌이 된다.
+  if (!(SCALAR_PROP_KEYS as readonly string[]).includes(key)) {
+    out.fail(
+      "no_criteria",
+      `이 키는 다루지 않는다: ${key}`,
+      key === "tags"
+        ? "태그는 `lapis tag rename` 이 계층까지 다룬다"
+        : `쓸 수 있는 키: ${SCALAR_PROP_KEYS.join(" · ")}`,
+      2,
+    );
+  }
+  if (oldValue === newValue) {
+    out.fail("no_criteria", "이전 값과 새 값이 같다", "바꿀 값을 다르게 주어라", 2);
+  }
+
+  const vc = resolveVault(vaultOf(p));
+
+  const notes = new Map<string, string>();
+  for (const info of vc.infos) {
+    try {
+      notes.set(info.source_path, readFileSync(info.source_path, "utf8"));
+    } catch {
+      // 한 파일을 못 읽었다고 전체를 세우지 않는다. 그 노트만 대상에서 빠진다.
+    }
+  }
+  const known = new Set<string>();
+  for (const i of vc.infos) {
+    const v = i.props?.[key];
+    if (Array.isArray(v)) for (const x of v) known.add(x);
+  }
+
+  const preview = computePropRewritePreview(notes, key, oldValue, newValue, known);
+  const apply = p.options.apply === true;
+  // ⚠️ 쓰기 직전에만 막는다 — 미리보기는 낡아도 보여준다.
+  if (apply) requireFreshIndex(out, vc, p);
+
+  if (!apply) {
+    if (out.json) {
+      return out.json_({ vault: vc.root, dry_run: true, ...staleField(vc), ...preview });
+    }
+    out.line(
+      renderPropPreview(
+        key,
+        oldValue,
+        newValue,
+        preview.items.map((i) => ({ path: i.path, occurrences: i.occurrences })),
+        preview.totalOccurrences,
+        preview.merge,
+      ),
+    );
+    if (preview.items.length > 0) out.line("\n미리보기다 — 실제로 쓰려면 --apply");
+    reportStale(out, vc);
+    return;
+  }
+
+  if (preview.items.length === 0) {
+    // 쓸 게 없는데 성공이라고 하면 "바뀐 줄 알았다"가 된다.
+    out.fail(
+      "path_not_indexed",
+      `${key}: ${oldValue} 인 노트가 없다`,
+      "`lapis props audit` 으로 실제 값을 확인하라",
+      1,
+    );
+  }
+
+  const io = makeCliIo({
+    settingsFile: nodePath.join(nodePath.dirname(vc.dir), "lapis-settings.json"),
+  });
+  const outcome = await backupAndWrite(vc.root, preview.items, io);
+  if (!outcome.ok) {
+    out.fail("corrupt", describeFailure(outcome) ?? "쓰기 실패", "백업에서 회수할 수 있다", 1);
+  }
+
+  if (out.json) {
+    return out.json_({
+      vault: vc.root,
+      applied: true,
+      written: outcome.ok ? outcome.written : [],
+    });
+  }
+  out.line(`${key}: ${oldValue} → ${newValue} — 노트 ${preview.items.length}개 갱신`);
+  // ⚠️ 앱이 인덱스 생산자다. CLI 가 쓴 것은 앱이 다시 읽어야 검색에 반영된다.
+  out.line("앱이 떠 있으면 watcher가 반영한다. 아니면 다음에 vault를 열 때 재색인된다.");
 }
 
 /**
