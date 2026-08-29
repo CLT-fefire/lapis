@@ -1,4 +1,4 @@
-import { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
+import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import {
   lapisQuery,
   isAudit,
@@ -696,9 +696,12 @@ function cmdStats(p: ParsedCommand, out: Out): void {
   const topics = count((i) => i.topic);
   const tags = new Set<string>();
   for (const i of infos) for (const t of i.tags ?? []) tags.add(t);
-  const openTasks = countOpenTasks(
-    collectOpenTasks([...readBodies(vc)].map(([path, body]) => ({ path, body }))),
+  const taskGroups = collectOpenTasks(
+    [...readBodies(vc)].map(([path, body]) => ({ path, body })),
   );
+  const openTasks = countOpenTasks(taskGroups);
+  // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다.
+  const conc = taskConcentration(taskGroups);
 
   if (out.json) {
     return out.json_({
@@ -707,7 +710,7 @@ function cmdStats(p: ParsedCommand, out: Out): void {
       doc_kinds: Object.fromEntries(docKinds),
       topics: Object.fromEntries(topics),
       tags: tags.size,
-      tasks: openTasks,
+      tasks: { ...openTasks, concentration: conc },
       stale: checkStale(vc),
     });
   }
@@ -723,6 +726,15 @@ function cmdStats(p: ParsedCommand, out: Out): void {
       ["topic", top(topics)],
       ["태그", String(tags.size)],
       ["미완 작업", `${openTasks.open}건 미완 · ${openTasks.done}건 완료`],
+      ...(conc.top
+        ? [
+            [
+              "  가장 많은 노트",
+              `${conc.top.open}건 (${Math.round(conc.top.share * 100)}%) · ${conc.top.path}`,
+            ] as [string, string],
+            ["  퍼진 노트", `${conc.notes}개`] as [string, string],
+          ]
+        : []),
     ]),
   );
 }

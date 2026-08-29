@@ -20,7 +20,7 @@ import {
 } from "./cache.ts";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
-import { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
+import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import { buildIndex } from "$lib/linkIndex";
 import { launchOpen, LaunchError } from "../cli/appLaunch.ts";
 import { runIndex, IndexError } from "../cli/indexRun.ts";
@@ -185,7 +185,7 @@ const statsTool: ToolDef = {
     };
     const tags = /* @__PURE__ */ new Set();
     for (const i of vc.infos) for (const t of i.tags ?? []) tags.add(t);
-    const bodies = [];
+    const bodies: { path: string; body: string }[] = [];
     for (const i of vc.infos) {
       try {
         bodies.push({
@@ -194,13 +194,19 @@ const statsTool: ToolDef = {
         });
       } catch {}
     }
+    const groups = collectOpenTasks(bodies);
     return {
       vault: vc.root,
       notes: vc.infos.length,
       doc_kinds: count((i) => i.doc_kind),
       topics: count((i) => i.topic),
       tags: tags.size,
-      tasks: countOpenTasks(collectOpenTasks(bodies)),
+      tasks: {
+        ...countOpenTasks(groups),
+        // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다 — 이 vault 는
+        //    미완 89건 중 67건이 체크리스트 한 파일이었다.
+        concentration: taskConcentration(groups),
+      },
       stale: checkStale(vc),
     };
   },
