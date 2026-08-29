@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+  import { logCommand } from "$lib/stores/usage";
   /**
    * 페인 툴바(Editor/Preview)의 `⋯` 오버플로 메뉴.
    *
@@ -62,6 +63,9 @@
   async function select(item: PaneMenuItem) {
     if (item.disabled) return;
     if (!item.keepOpen) open = false;
+    // ⚠️ **여기 한 곳**에서 기록한다. 항목마다 적으면 새 항목을 넣을 때 빼먹고,
+    //    빼먹은 항목만 통계에서 사라진다 — 팔레트와 같은 규칙이다.
+    logCommand(item.id, "menu");
     await item.onSelect();
   }
 

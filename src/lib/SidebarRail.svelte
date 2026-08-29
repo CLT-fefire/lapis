@@ -84,7 +84,16 @@
     </button>
   {/each}
   <div class="rail-spacer"></div>
-  <button class="rail-btn" aria-label={m.rail_settings_open()} onclick={openSettings}>
+  <!-- ⚠️ `activate()` 를 안 거치므로 기록을 여기서 한다. 이걸 빠뜨려서 "많이 쓰는 명령"이
+       통째로 비어 있었다. -->
+  <button
+    class="rail-btn"
+    aria-label={m.rail_settings_open()}
+    onclick={() => {
+      logCommand("view:settings", "rail");
+      openSettings();
+    }}
+  >
     <Settings size={18} />
     <span class="rail-tip" aria-hidden="true">{m.rail_settings()}</span>
   </button>

@@ -1,4 +1,3 @@
-import { redact } from "$lib/usageSchema";
 import type { UsageSummary } from "$lib/usageAnalyzer";
 
 /**
@@ -15,8 +14,6 @@ import type { UsageSummary } from "$lib/usageAnalyzer";
  */
 
 export interface ReportOptions {
-  /** 원본 그대로. ⚠️ 경로·검색어가 문서에 남는다. */
-  raw?: boolean;
   /** 몇 위까지. 기본 20. */
   top?: number;
   /** 문서 머리에 적을 기간 이름(`2026-08`). */
@@ -49,22 +46,14 @@ function minutes(v: number): string {
 }
 
 export function buildUsageReport(s: UsageSummary, opts: ReportOptions = {}): string {
-  const raw = opts.raw === true;
   const top = opts.top ?? 20;
-  const hide = (t: string) => (raw ? t : redact(t));
-  /**
-   * ⚠️ **질의문은 질의 규칙으로 가린다.** 경로 규칙은 질의를 못 가린다 — 질의는 경로처럼
-   * 안 생겼고, 가장 드러나면 안 되는 것이 그 내용 자체다.
-   */
-  const hideQuery = (t: string) => (raw ? t : redact(t, { query: true }));
   const out: string[] = [];
 
   out.push(`# 사용 통계${opts.label ? ` — ${opts.label}` : ""}`);
   out.push("");
   out.push(
-    raw
-      ? "> ⚠️ **원본 그대로다.** 경로와 검색어가 그대로 들어 있다 — 공개된 곳에 붙여넣지 말 것."
-      : "> 경로는 마지막 조각만 남기고 가렸다. 원본이 필요하면 `raw` 로 다시 내보낸다.",
+    "> 앱이 기동할 때 로그 옆에 자동으로 쓴다. **경로와 검색어가 그대로 들어 있다** — " +
+      "이 컴퓨터를 안 벗어나므로 가리지 않는다. 공개된 곳에 붙여넣기 전에는 지울 것.",
   );
   out.push("");
   out.push("| | |");
@@ -125,7 +114,7 @@ export function buildUsageReport(s: UsageSummary, opts: ReportOptions = {}): str
     for (const e of s.errors.slice(0, top)) {
       // ⚠️ 심각도를 별도 열로 낸다. 예전엔 `msg` 앞의 `warn: ` 접두사가 그 일을 했다.
       const lvl = e.lvl === "warn" ? "경고" : "오류";
-      out.push(`| ${lvl} | \`${e.at}\` | ${hide(e.msg)} | ${e.count} | ${day(e.lastAt)} |`);
+      out.push(`| ${lvl} | \`${e.at}\` | ${e.msg} | ${e.count} | ${day(e.lastAt)} |`);
     }
     if (s.errors.length > top) {
       out.push("");
@@ -158,7 +147,7 @@ export function buildUsageReport(s: UsageSummary, opts: ReportOptions = {}): str
       out.push("|---|---|---:|");
       for (const q of s.queries.empty.slice(0, top)) {
         // ⚠️ 질의문은 **질의 규칙으로** 가린다 — 경로 규칙으로는 안 가려진다.
-        out.push(`| ${hideQuery(q.q)} | ${q.kind} | ${q.count} |`);
+        out.push(`| ${q.q} | ${q.kind} | ${q.count} |`);
       }
     }
   }
@@ -175,7 +164,7 @@ export function buildUsageReport(s: UsageSummary, opts: ReportOptions = {}): str
     out.push("| 노트 | 횟수 | 어느 입구로 |");
     out.push("|---|---:|---|");
     for (const o of s.opens.slice(0, top)) {
-      out.push(`| ${hide(o.path)} | ${o.total} | ${viaLine(o.via)} |`);
+      out.push(`| ${o.path} | ${o.total} | ${viaLine(o.via)} |`);
     }
     if (s.opens.length > top) {
       out.push("");

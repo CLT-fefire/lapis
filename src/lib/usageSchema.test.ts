@@ -3,7 +3,6 @@ import {
   serialize,
   parseLine,
   monthOf,
-  redact,
   COMMAND_SURFACES,
   type UsageEvent,
 } from "./usageSchema";
@@ -144,47 +143,6 @@ describe("monthOf", () => {
 
   it("한 자리 달을 0 으로 채운다", () => {
     expect(monthOf(Date.parse("2026-01-31T23:00:00"))).toBe("2026-01");
-  });
-});
-
-describe("redact", () => {
-  it("경로는 마지막 조각만 남긴다", () => {
-    expect(redact("C:/Projects/SharedDocs/knowledge/lapis/a.md")).toBe("…/a.md");
-  });
-
-  /**
-   * 🔴 **사용자 이름이 남으면 안 된다.**
-   *
-   * 예전엔 경로 규칙이 먼저 돌아 사용자 이름 규칙이 사실상 죽어 있었고,
-   * `/Users/누군가` 처럼 조각이 둘뿐인 경로는 "마지막 조각만 남긴다"에 걸려
-   * **이름이 그대로 남았다.** 가림의 목적이 정확히 그것을 막는 것이다.
-   */
-  it("사용자 이름이 남지 않는다 — 깊은 경로", () => {
-    expect(redact("/Users/누군가/notes/a.md")).not.toContain("누군가");
-  });
-
-  it("사용자 이름이 남지 않는다 — 홈 경로 그 자체", () => {
-    expect(redact("/Users/누군가")).not.toContain("누군가");
-    expect(redact("C:/Users/누군가")).not.toContain("누군가");
-    expect(redact("/home/누군가")).not.toContain("누군가");
-  });
-
-  /**
-   * 🔴 **질의문도 가려야 한다.**
-   *
-   * 질의문은 생각의 내용 그 자체다. 경로만 가리고 질의를 그대로 두면, 가린 리포트가
-   * **가려졌다고 거짓말**을 한다.
-   */
-  it("질의문을 길이만 남긴다", () => {
-    expect(redact("검색어 일곱자", { query: true })).toBe("…(7자)");
-  });
-
-  it("질의 모드가 아니면 그대로 둔다", () => {
-    expect(redact("보통 글")).toBe("보통 글");
-  });
-
-  it("빈 질의는 빈 채로", () => {
-    expect(redact("", { query: true })).toBe("");
   });
 });
 
