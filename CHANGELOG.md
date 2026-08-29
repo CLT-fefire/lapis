@@ -49,7 +49,39 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   the app. When that toggle silently did nothing there was no other way to look, so the search
   for a cause started in the wrong place. Two readers disagree loudly.
 
+### Added
+- **`lapis render`** hands a note to the running app and takes back what the screen shows —
+  app-quality HTML, or the first mermaid diagram as a PNG. `export` still runs without the
+  app, but it has no browser, so mermaid stays a code fence there. The request building, the
+  wait, and the failure check now live in one module that both the CLI and `lapis_render`
+  call; after the move the two produced byte-identical output from the same note.
+
+- **`lapis props rename`** fixes what `props audit` finds. The audit reported `topic`
+  split across `feature` (11 notes) and `feature-selection` (2), and there was no way to
+  act on it — tags had `tag rename`, frontmatter values had nothing. Same discipline as
+  tags: dry-run by default, `--apply` to write, the same backup-and-replace transaction.
+  Unlike tags there is **no prefix hierarchy** — `cross-platform` is not `platform`, so
+  only exact values match.
+
+- **`lapis tasks audit` can be narrowed** with `--under`, `--exclude`, `--top` and
+  `--count`. This vault has 89 open items, 67 of them in a single manual-test checklist, and
+  all 99 lines came out every time. The count of what was filtered away is always printed —
+  otherwise a narrowed list reads as the whole list.
+
+- **Task totals say where they are concentrated.** `lapis_stats` reported
+  `{ open: 90, done: 30 }`, which is true and misleading: three quarters of it was one
+  checklist. It now reports the heaviest note and its share alongside. No new setting — the
+  same call made for orphan notes, where a second number lets a person judge instead of the
+  app deciding what to hide.
+
 ### Fixed
+- **"No unused commands" was a lie.** Asked through a real MCP client, `lapis_usage`
+  reported zero commands used and zero unused. The truth was that it had no denominator: the
+  command list lived in a module that pulls in Svelte stores, so the headless consumers could
+  not read it and passed nothing. The ids now live in an import-free module, a mismatch
+  between them and the real commands is a compile error, and a missing denominator reports
+  `null` rather than an empty list.
+
 - **A render request made while the app was closed silently vanished.** The app took the
   request from argv and held it, but the front end asked for it once at startup — before the
   vault had opened — and the answer is only given to a window whose vault matches. The event
