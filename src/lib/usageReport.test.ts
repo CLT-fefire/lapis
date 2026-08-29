@@ -4,10 +4,16 @@ import { summarize } from "./usageAnalyzer";
 import { serialize } from "./usageSchema";
 
 /**
- * 리포트 — **가림의 경계**.
+ * 분석 문서.
  *
- * 로그 원본은 자세하다(로컬, 나중에 쓴다). 사고는 **이 문서를 붙여넣는 순간** 난다.
- * 그래서 기본이 가림이고, 원본은 명시해야 나온다.
+ * ## ⚠️ 가리지 않는다
+ *
+ * 예전엔 기본이 가림이고 `raw` 를 줘야 원본이 나왔다. 그때는 **저장 버튼으로 밖에 내보내는
+ * 경로**가 있었기 때문이다. 지금은 앱이 로그 옆에 써 두고 끝이라 나갈 경계가 없다 —
+ * 자기가 읽을 것을 가리면 쓸모만 준다.
+ *
+ * 대신 문서 머리가 **가리지 않았다는 사실을 밝힌다.** 그걸 안 적으면 그대로 어디에
+ * 붙여넣게 된다.
  */
 
 const lines = [
@@ -72,21 +78,14 @@ describe("리포트 내용", () => {
   });
 
   /**
-   * 🔴 **질의문은 경로 규칙으로 안 가려진다.**
+   * 🔴 **질의문이 그대로 나온다.**
    *
-   * 질의는 경로처럼 안 생겼다. 경로만 가리고 질의를 그대로 두면 가린 리포트가
-   * **가려졌다고 거짓말**을 한다 — 그리고 질의문은 생각의 내용 그 자체다.
+   * 무엇을 찾다 못 찾았는지가 이 통계의 요점이고, 길이만 남기면 그 답이 사라진다.
+   * 대신 문서 머리가 "그대로 들어 있다"고 밝힌다.
    */
-  it("가리면 질의문이 길이만 남는다", () => {
+  it("질의문이 그대로 나온다", () => {
     const s = summarize([serialize({ k: "query", t: 1, kind: "fulltext", q: "비밀검색어", n: 0 })]);
-    const hidden = buildUsageReport(s);
-    expect(hidden, "질의문이 그대로 남았다").not.toContain("비밀검색어");
-    expect(hidden).toMatch(/…\(5자\)/);
-  });
-
-  it("가리지 않으면 질의문이 그대로다", () => {
-    const s = summarize([serialize({ k: "query", t: 1, kind: "fulltext", q: "비밀검색어", n: 0 })]);
-    expect(buildUsageReport(s, { raw: true })).toContain("비밀검색어");
+    expect(buildUsageReport(s)).toContain("비밀검색어");
   });
 
   it("결과 0건 질의를 절로 낸다", () => {
@@ -94,7 +93,7 @@ describe("리포트 내용", () => {
       serialize({ k: "query", t: 1, kind: "quick", q: "없는말", n: 0 }),
       serialize({ k: "query", t: 2, kind: "quick", q: "없는말", n: 0 }),
     ]);
-    const r = buildUsageReport(s, { raw: true });
+    const r = buildUsageReport(s);
     expect(r).toContain("결과가 0건이던 질의");
     expect(r).toContain("없는말");
   });
@@ -104,7 +103,7 @@ describe("리포트 내용", () => {
       serialize({ k: "open", t: 1, path: "/v/a.md", via: "backlink" }),
       serialize({ k: "open", t: 2, path: "/v/a.md", via: "tree" }),
     ]);
-    const r = buildUsageReport(s, { raw: true });
+    const r = buildUsageReport(s);
     expect(r).toContain("자주 여는 노트");
     expect(r).toMatch(/backlink 1/);
   });
@@ -137,29 +136,27 @@ describe("리포트 내용", () => {
   });
 });
 
-describe("🔴 기본은 가림", () => {
-  it("경로가 그대로 나오지 않는다", () => {
+describe("🔴 가리지 않는다", () => {
+  it("오류 메시지의 경로가 온전하다", () => {
     const r = buildUsageReport(summary);
-    expect(r).not.toContain("C:/Projects/SharedDocs");
-    expect(r).not.toContain("knowledge/lapis");
+    expect(r).toContain("knowledge/lapis");
     expect(r).toContain("STATE.md");
+    expect(r).toContain("readNote 실패");
   });
 
-  /** ⚠️ 가려도 어떤 오류인지는 구별돼야 한다 — 안 그러면 리포트가 쓸모없다. */
-  it("가려도 오류를 알아볼 수 있다", () => {
-    expect(buildUsageReport(summary)).toContain("readNote 실패");
+  /**
+   * 🔴 **경로가 그대로 나온다.** "어느 폴더를 많이 쓰나"는 기능 개선에 쓸 첫 번째
+   * 질문이고, 가리면 그 답이 사라진다. 이 문서는 앱 데이터 폴더를 안 벗어난다.
+   */
+  it("경로를 가리지 않는다", () => {
+    expect(buildUsageReport(summary)).toContain("C:/Projects/SharedDocs");
   });
 
-  /** ⚠️ 원본은 **명시**해야 나온다. 기본이 원본이면 급할 때 안전한 쪽을 놓친다. */
-  it("raw 를 줘야 원본이 나온다", () => {
-    const r = buildUsageReport(summary, { raw: true });
-    expect(r).toContain("C:/Projects/SharedDocs");
-    expect(r).toMatch(/공개된 곳에 붙여넣지 말 것/);
+  /** ⚠️ **가리지 않았다는 사실을 밝힌다.** 안 적으면 그대로 어디에 붙여넣게 된다. */
+  it("가리지 않았다고 문서가 말한다", () => {
+    expect(buildUsageReport(summary)).toMatch(/그대로 들어 있다/);
   });
 
-  it("기본 문서는 가렸다는 것을 밝힌다", () => {
-    expect(buildUsageReport(summary)).toMatch(/가렸다/);
-  });
 });
 
 describe("상한", () => {

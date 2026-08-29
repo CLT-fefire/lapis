@@ -16,6 +16,31 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.7.2] — 2026-08-29
+
+> Both of these were found by reading the first analysis document the app wrote for itself.
+
+### Fixed
+- 🔴 **The analysis document was still redacting, and pointed at an export that no longer exists.**
+  It printed paths as `…/note.md` and told you to "export again with `raw`" — but v3.7.1 removed the
+  export UI. Redaction existed to guard the moment a report *left* the machine; there is no such
+  moment now, and hiding which folders you work in destroys the first question the log is for.
+
+  Paths and queries now appear in full, and the document's first line says so, so it is never
+  pasted somewhere public by accident.
+
+- 🔴 **Command usage was recorded as zero while the app was in use.** The settings gear called
+  `openSettings` directly instead of going through the rail's `activate()`, which is where the
+  logging lived. The document therefore announced "no commands recorded yet" and listed twenty
+  commands as never used — **not merely wrong, but backwards.**
+
+  The gear now logs, and the window menu logs at the one place items are chosen, so a new item
+  cannot be forgotten. A guard pins each entry point.
+
+### Added
+- **The window menu (`⋯`) records which item was chosen** — `via: "menu"`, a surface the schema
+  had reserved and nothing was using.
+
 ## [3.7.1] — 2026-08-29
 
 ### Fixed
@@ -2271,6 +2296,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.7.2]: https://github.com/eren0315/lapis/compare/v3.7.1...v3.7.2
 [3.7.1]: https://github.com/eren0315/lapis/compare/v3.7.0...v3.7.1
 [3.7.0]: https://github.com/eren0315/lapis/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/eren0315/lapis/compare/v3.5.2...v3.6.0
