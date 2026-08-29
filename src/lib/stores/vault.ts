@@ -108,7 +108,8 @@ import {
  * 연다**(2026-08-10 실제 발생). 호출 시점에 계산한다.
  */
 const VAULT_KEY_BASE = "lapis.last-vault-path";
-import { logError, logWarn } from "$lib/stores/usage";
+import { logError, logWarn, logPerf, logOpen } from "$lib/stores/usage";
+import type { OpenSurface } from "$lib/usageSchema";
 import { pushAlert } from "$lib/stores/alerts";
 const vaultStorageKey = () => scopedKey(VAULT_KEY_BASE);
 
@@ -194,7 +195,7 @@ export async function openVault(path: string): Promise<void> {
   if (savedTabs.tabs.length > 0) {
     openTabs.set(savedTabs.tabs);
     if (savedTabs.active && savedTabs.tabs.includes(savedTabs.active)) {
-      await selectNote(savedTabs.active);
+      await selectNote(savedTabs.active, { via: "tab" });
     }
   }
 
@@ -578,9 +579,12 @@ async function reloadNotesInner(force = false): Promise<void> {
   // 풀텍스트 shard를 in-place로 reset→refill해 검색이 torn이므로 사이드바·팔레트를 막아 혼란 방지.
   // watcher 증분/일반 새로고침은 non-blocking strip(읽던 인덱스로 계속 탐색).
   const buildState = force || get(linkIndex) === null ? indexBuilding : indexRefreshing;
-  // dev 모드 측정 — 어느 단계가 cold start 비용을 차지하는지 추적. release는 dead code.
+  // dev 모드 **콘솔** 측정 — 어느 단계가 cold start 비용을 차지하는지 추적.
   const perf = import.meta.env.DEV;
-  const t0 = perf ? performance.now() : 0;
+  // ⚠️ **시각은 항상 잰다.** 예전엔 dev 에서만 채워서 릴리스의 `t0` 가 0 이었다. 사용
+  //    기록에 총 시간을 남기려면 릴리스에서도 진짜 값이어야 한다 — 0 을 빼면 페이지가
+  //    뜬 뒤 흐른 시간이 나오고, 그건 인덱스 시간이 아니다.
+  const t0 = performance.now();
   let tListEnd = 0;
   let tCacheCheckEnd = 0;
   let tEnd = 0;
@@ -747,6 +751,15 @@ async function reloadNotesInner(force = false): Promise<void> {
         `build=${fmt(tCacheCheckEnd, tEnd)}ms total=${fmt(t0, tEnd)}ms`,
     );
   }
+
+  // ⚠️ **콘솔과 별개로 남긴다.** 릴리스 빌드에는 devtools 가 없어 위 `console.debug` 는
+  //    아무도 못 본다 — "내 vault 에서 실제로 느린가"를 나중에 답하려면 기록이 필요하다.
+  //    `perf` 가 아니어도(=릴리스) 재고, `performance.now()` 는 어디서나 있다.
+  logPerf(
+    cacheMode === "hit" ? "index-cache-hit" : cacheMode === "delta" ? "index-delta" : "index-build",
+    performance.now() - t0,
+    noteCount,
+  );
 }
 
 /**
@@ -1001,7 +1014,7 @@ export async function createNewNote(
   try {
     const newPath = await createNoteTauri(vault, parentDir, fileName, content);
     await refreshTreeOnly();
-    await selectNote(newPath);
+    await selectNote(newPath, { via: "history" });
     return newPath;
   } catch (e) {
     logError("stores/vault", "createNewNote failed", e);
@@ -1210,7 +1223,7 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
     return true;
   }
   if (!hit.path) return false;
-  await selectNote(hit.path);
+  await selectNote(hit.path, { via: "wikilink" });
   // ⚠️ **이동한 뒤에** 심는다. 먼저 심으면 아직 **이전 노트의** 헤딩 목록을 보고 있는
   //    한 틱이 생기고, 우연히 같은 이름의 헤딩이 있으면 안 넘어가고 제자리에서
   //    스크롤한다. 늦게 심는 쪽은 최악이 '스크롤이 한 틱 늦다'로 끝난다.
@@ -1220,8 +1233,20 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
 
 export async function selectNote(
   path: string,
-  opts: { fromHistory?: boolean; replaceCurrentTab?: boolean } = {},
+  opts: {
+    fromHistory?: boolean;
+    replaceCurrentTab?: boolean;
+    /**
+     * 🔴 **어디로 들어왔나. 필수다.**
+     *
+     * 여기서 추측하면 틀린다 — 같은 함수를 트리·팔레트·백링크·위키링크가 다 부른다.
+     * 선택 항목으로 두면 대부분의 호출부가 안 주고, 그러면 통계가 **조용히 반쪽**이 된다.
+     * 필수로 두면 타입 검사가 모든 자리를 짚어 준다.
+     */
+    via: OpenSurface;
+  },
 ): Promise<void> {
+  logOpen(path, opts.via);
   // editor 모듈을 lazy import — circular import 회피
   // (editor가 vault store를 import하므로 직접 top-level import 시 초기화 순서 위험)
   let editor: typeof import("./editor") | null = null;
@@ -1268,21 +1293,21 @@ export async function selectNote(
 export async function goBackNote(): Promise<void> {
   const cur = get(currentNotePath);
   const path = navBack();
-  if (path && path !== cur) await selectNote(path, { fromHistory: true });
+  if (path && path !== cur) await selectNote(path, { fromHistory: true, via: "history" });
 }
 
 /** 앞으로 가기 — 뒤로 갔다가 되돌아온 노트로. 히스토리엔 재기록하지 않음. */
 export async function goForwardNote(): Promise<void> {
   const cur = get(currentNotePath);
   const path = navForward();
-  if (path && path !== cur) await selectNote(path, { fromHistory: true });
+  if (path && path !== cur) await selectNote(path, { fromHistory: true, via: "history" });
 }
 
 /** 히스토리 목록에서 특정 index로 점프. 히스토리엔 재기록하지 않음. */
 export async function goToHistory(index: number): Promise<void> {
   const cur = get(currentNotePath);
   const path = navJumpTo(index);
-  if (path && path !== cur) await selectNote(path, { fromHistory: true });
+  if (path && path !== cur) await selectNote(path, { fromHistory: true, via: "history" });
 }
 
 /**
@@ -1298,7 +1323,7 @@ export async function closeTab(path: string): Promise<void> {
     return;
   }
   if (nextActive) {
-    await selectNote(nextActive, { fromHistory: true }); // selectNote가 persistTabs 호출
+    await selectNote(nextActive, { fromHistory: true, via: "history" }); // selectNote가 persistTabs 호출
   } else {
     currentNotePath.set(null);
     currentNoteContent.set("");
@@ -1321,7 +1346,7 @@ export function moveTab(from: number, to: number): void {
 export async function closeOtherTabs(path: string): Promise<void> {
   openTabs.set(closeOthers(get(openTabs), path));
   if (get(currentNotePath) !== path) {
-    await selectNote(path, { fromHistory: true }); // selectNote가 persistTabs 호출
+    await selectNote(path, { fromHistory: true, via: "history" }); // selectNote가 persistTabs 호출
   } else {
     persistTabs();
   }
@@ -1333,7 +1358,7 @@ export async function closeTabsToRight(path: string): Promise<void> {
   openTabs.set(kept);
   const active = get(currentNotePath);
   if (active && !kept.includes(active)) {
-    await selectNote(path, { fromHistory: true });
+    await selectNote(path, { fromHistory: true, via: "history" });
   } else {
     persistTabs();
   }

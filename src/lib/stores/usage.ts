@@ -4,8 +4,11 @@ import {
   serialize,
   monthOf,
   type CommandSurface,
+  type OpenSurface,
+  type PerfOp,
+  type QueryKind,
   type UsageEvent,
-} from "$lib/usageEvent";
+} from "$lib/usageSchema";
 
 /**
  * 사용 로그의 **배선 절반** — 버퍼와 flush.
@@ -120,6 +123,34 @@ export function logCommand(id: string, via: CommandSurface): void {
 }
 
 /**
+ * 검색했다.
+ *
+ * ⚠️ **질의문을 그대로 담는다.** 로컬 파일이고, 무엇을 못 찾았는지가 이 로그의 요점이다.
+ * 밖으로 나갈 때는 `redact(q, { query: true })` 가 길이만 남긴다.
+ *
+ * @param n 결과 수. **0 이 반복되는 질의가 곧 개선 지점이다.**
+ * @param hit 결과 중 하나를 실제로 열었나. 모르면 넘기지 않는다 — 없는 것을 `false` 로
+ *   담으면 "못 찾았다" 비율이 조용히 부풀어 오른다.
+ */
+export function logQuery(kind: QueryKind, q: string, n: number, hit?: boolean): void {
+  push({ k: "query", t: Date.now(), kind, q, n, ...(hit === undefined ? {} : { hit }) });
+}
+
+/** 노트를 열었다. ⚠️ **`via` 는 호출부가 준다** — 같은 함수를 트리·팔레트·백링크가 다 부른다. */
+export function logOpen(path: string, via: OpenSurface): void {
+  push({ k: "open", t: Date.now(), path, via });
+}
+
+/**
+ * 무언가를 쟀다.
+ *
+ * ⚠️ **`n`(규모)을 같이 담는다.** 시간만 보면 큰 vault 가 느린 건지 코드가 느린 건지 모른다.
+ */
+export function logPerf(op: PerfOp, ms: number, n?: number): void {
+  push({ k: "perf", t: Date.now(), op, ms: Math.round(ms), ...(n === undefined ? {} : { n }) });
+}
+
+/**
  * 오류가 났다.
  *
  * ⚠️ **`console.error` 를 대체하지 않고 겸한다.** 개발 중에는 콘솔이 여전히 제일 빠른
@@ -181,7 +212,27 @@ function describeError(err: unknown): string {
 
 /** 세션 시작 — 어느 버전·플랫폼에서 난 것인지 나중에 갈라 보려면 필요하다. */
 export function logSessionStart(version: string, os: string): void {
-  push({ k: "session", t: Date.now(), ev: "start", v: version, os });
+  sessionStartedAt = Date.now();
+  push({ k: "session", t: sessionStartedAt, ev: "start", v: version, os });
+}
+
+/**
+ * 이 창이 시작한 시각. 끝 이벤트의 길이를 여기서 뺀다.
+ *
+ * ⚠️ 로그의 **마지막 start 시각**으로 계산하면 안 된다 — 창이 둘이면 서로의 시작을 본다.
+ */
+let sessionStartedAt: number | null = null;
+
+/**
+ * 세션 끝.
+ *
+ * ⚠️ **시작을 못 봤으면 길이를 안 담는다.** 0 이나 추측을 담으면 "한 번에 얼마나 쓰나"의
+ * 평균이 조용히 내려간다. 길이 없는 끝 이벤트는 분모에서 빠진다.
+ */
+export function logSessionEnd(version: string, os: string): void {
+  const now = Date.now();
+  const ms = sessionStartedAt === null ? undefined : now - sessionStartedAt;
+  push({ k: "session", t: now, ev: "end", v: version, os, ...(ms === undefined ? {} : { ms }) });
 }
 
 /** 테스트용 — 버퍼를 비운다. */

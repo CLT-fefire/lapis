@@ -97,7 +97,7 @@
   });
 
   function onTabClick(path: string) {
-    if (path !== $currentNotePath) void selectNote(path);
+    if (path !== $currentNotePath) void selectNote(path, { via: "tab" });
   }
 
   function onClose(e: MouseEvent, path: string) {

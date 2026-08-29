@@ -333,7 +333,7 @@
           class:changed={$changedNotes.has(entry.path)}
           style="padding-left: {indentPx}px"
           data-leaf-path={entry.path}
-          onclick={() => selectNote(entry.path)}
+          onclick={() => selectNote(entry.path, { via: "tree" })}
           draggable="true"
           ondragstart={(e) => onDragStart(e, entry)}
         >

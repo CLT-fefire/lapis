@@ -2,6 +2,7 @@ import { writable, get } from "svelte/store";
 import { grepVault, type GrepResult } from "$lib/tauri/grep";
 import { vaultPath, reloadNotes } from "$lib/stores/vault";
 import { readNote } from "$lib/tauri/notes";
+import { logQuery, logWarn } from "$lib/stores/usage";
 import { backupAndWrite } from "$lib/stores/vault";
 import { describeFailure } from "$lib/safeWrite";
 import {
@@ -23,7 +24,6 @@ import {
  */
 
 export const grepOpen = writable<boolean>(false);
-import { logWarn } from "$lib/stores/usage";
 export const grepPattern = writable<string>("");
 export const grepRegex = writable<boolean>(false);
 export const grepCase = writable<boolean>(false);
@@ -62,6 +62,10 @@ export async function runGrep(): Promise<void> {
       wholeWord: get(grepWholeWord),
     });
     grepResult.set(r);
+    // ⚠️ **결과 수를 같이 남긴다.** 0 이 반복되는 패턴이 곧 개선 지점이다.
+    //    `hit` 는 안 넘긴다 — 여기서는 열었는지 모른다. 없는 것을 `false` 로 담으면
+    //    "못 찾았다" 비율이 조용히 부풀어 오른다.
+    logQuery("grep", pattern, r.files);
   } catch (e) {
     grepError.set(e instanceof Error ? e.message : String(e));
     grepResult.set(null);

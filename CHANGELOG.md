@@ -16,6 +16,54 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.7.0] — 2026-08-29
+
+> The usage log was added to answer "what should I fix next", but it could only export a Markdown
+> summary — and nobody parses a table back out. This rebuilds it around that purpose.
+
+### Added
+- **The raw log can be exported as JSONL.** That is the shape the log already has on disk and the
+  shape analysis wants. The month files are **concatenated verbatim** rather than re-serialized:
+  parsing and re-writing would silently drop lines the parser could not read, and then the exported
+  file would disagree with the disk with no way to tell.
+
+- **Four more event kinds.** Searches (which query, how many results, whether anything was opened),
+  note opens (which note, reached how), timings (index build, cache hit, vault open — with the note
+  count, because a duration alone cannot say whether the vault is big or the code is slow), and
+  session ends, so "how long is a sitting" has an answer.
+
+  ⚠️ A note open records **where it was reached from, supplied by the caller**. Guessing inside
+  `selectNote` would be wrong — the tree, palette, backlinks and wikilinks all call it. The field is
+  required, so the type checker names every one of the 25 call sites instead of leaving it to
+  vigilance.
+
+- **`UsageAnalyzer` streams.** The settings screen used to load every month into one array before
+  summarizing; with a 16 MB cap per month file, a year is up to 192 MB of strings, and more event
+  kinds make that worse. Months are now fed in one at a time and dropped.
+
+### Fixed
+- 🔴 **Redaction left the username in a bare home path.** The general path rule ran first and
+  collapsed `/Users/name` to `…/name`, so the two username rules underneath never fired — the exact
+  thing redaction exists to prevent. They now run first.
+
+- 🔴 **Redaction did not cover search queries**, which are now logged. Path rules cannot match a
+  query, so a redacted report would have claimed to hide something it printed in full. Redacted
+  queries keep only their length.
+
+- **Warnings were recorded as errors** with the severity smuggled into a `warn: ` prefix on the
+  message, so any analysis had to parse it back out. Severity is now its own field, and the parser
+  converts already-recorded lines so months of existing warnings do not read as errors.
+
+- **A line the parser could not read and a line from a newer version were counted the same.** Roll
+  back one version and a healthy log would report thousands of "corrupt" lines. They are separate
+  counts now, and the report says which is which.
+
+### Changed
+- **One save button instead of two.** "Save report" and "Save unredacted" sat side by side with no
+  way to tell them apart without clicking. There is now a format (raw / summary) and, for the
+  summary only, a redaction checkbox that is **off by default** — the file is written to a location
+  the user picked, and the risk is in pasting it somewhere later, not in saving it.
+
 ## [3.6.0] — 2026-08-28
 
 > Everything left on the open list that could be closed from here. Two of the four fixes were
@@ -2190,6 +2238,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.7.0]: https://github.com/eren0315/lapis/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/eren0315/lapis/compare/v3.5.2...v3.6.0
 [3.5.2]: https://github.com/eren0315/lapis/compare/v3.5.1...v3.5.2
 [3.5.1]: https://github.com/eren0315/lapis/compare/v3.5.0...v3.5.1

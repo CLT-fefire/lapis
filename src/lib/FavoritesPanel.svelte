@@ -18,7 +18,7 @@
   const recent = $derived(existing($recentNotePaths).slice(0, RECENT_LIMIT));
 
   function open(path: string) {
-    if (path !== $currentNotePath) void selectNote(path);
+    if (path !== $currentNotePath) void selectNote(path, { via: "recent" });
   }
 
   function onUnpin(e: MouseEvent, path: string) {

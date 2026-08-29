@@ -1,6 +1,13 @@
 <script lang="ts">
   import { isMacPlatform } from "$lib/platform";
-  import { logError, logWarn, logCommand, logSessionStart } from "$lib/stores/usage";
+  import {
+    logError,
+    logWarn,
+    logCommand,
+    logSessionStart,
+    logSessionEnd,
+    flushUsage,
+  } from "$lib/stores/usage";
   import { enhanceRendered } from "$lib/renderedEnhance";
   import { onMount, tick } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
@@ -123,7 +130,7 @@ import { isPanicChord } from "$lib/userCss";
   import { exportMermaidHostToPng } from "$lib/mermaidExport";
   import { rewriteImageSources } from "$lib/assetPath";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
-  import { newWindow } from "$lib/tauri/window";
+  import { newWindow, onWindowClose } from "$lib/tauri/window";
   import { resolveShortcut } from "$lib/keymap";
   import InDocSearchBar from "$lib/InDocSearchBar.svelte";
   import {
@@ -1180,7 +1187,7 @@ import { isPanicChord } from "$lib/userCss";
         const path = tabPathForShortcut(get(openTabs), hit.index ?? 0);
         if (!path) return; // 그 자리에 탭이 없으면 기본 동작을 남긴다
         e.preventDefault();
-        if (path !== $currentNotePath) void selectNote(path);
+        if (path !== $currentNotePath) void selectNote(path, { via: "tab" });
         return;
       }
     }
@@ -1271,9 +1278,33 @@ import { isPanicChord } from "$lib/userCss";
     // ⚠️ 세션 시작을 남긴다. 기동 중에 난 오류도 이 세션에 묶여야 "어느 버전에서
     //    났나"를 나중에 가를 수 있다. 버전은 비동기라 못 읽으면 빈 문자열로 남긴다 —
     //    기록을 아예 빠뜨리는 것보다 낫다.
+    const osName = isMacPlatform() ? "macos" : "windows";
+    let appVersion = "";
     void getVersion()
-      .then((v) => logSessionStart(v, isMacPlatform() ? "macos" : "windows"))
-      .catch(() => logSessionStart("", isMacPlatform() ? "macos" : "windows"));
+      .then((v) => {
+        appVersion = v;
+        logSessionStart(v, osName);
+      })
+      .catch(() => logSessionStart("", osName));
+
+    /**
+     * 세션 끝 — "한 번에 얼마나 쓰나"는 끝 이벤트가 있어야 나온다.
+     *
+     * 🔴 **`beforeunload` 로는 안 된다.** 버퍼는 메모리에만 있고(`stores/usage`), flush 는
+     * 비동기라 창이 닫히는 동안 안 끝난다 — 끝 이벤트가 **에러 없이 통째로 사라진다.**
+     * Tauri 의 `onCloseRequested` 는 핸들러가 끝날 때까지 닫기를 **기다려 준다.**
+     *
+     * ⚠️ Tauri 밖(브라우저 프리뷰)에서는 없는 API 다. 실패해도 앱은 그대로 돈다.
+     */
+    let unlistenClose: (() => void) | null = null;
+    void onWindowClose(async () => {
+      logSessionEnd(appVersion, osName);
+      await flushUsage();
+    })
+      .then((un) => {
+        unlistenClose = un;
+      })
+      .catch((e) => logWarn("routes/+page", "[usage] 닫기 훅 등록 실패", e));
     restoreTheme();
     restoreDensity();
     restoreMotionPref();

@@ -182,7 +182,7 @@
                   <button
                     class="chip"
                     title={note.source_path}
-                    onclick={() => selectNote(note.source_path)}
+                    onclick={() => selectNote(note.source_path, { via: "backlink" })}
                   >
                     {note.title ?? note.source_name}
                   </button>
@@ -206,7 +206,7 @@
                   <button
                     class="chip"
                     title={note.source_path}
-                    onclick={() => selectNote(note.source_path)}
+                    onclick={() => selectNote(note.source_path, { via: "backlink" })}
                   >
                     {note.title ?? note.source_name}
                   </button>
@@ -239,7 +239,7 @@
                 <button
                   class="chip"
                   title={bl.source_path}
-                  onclick={() => selectNote(bl.source_path)}
+                  onclick={() => selectNote(bl.source_path, { via: "backlink" })}
                 >
                   {bl.title ?? bl.source_name}
                 </button>
@@ -255,7 +255,7 @@
                   {:else}
                     <span class="placeholder">…</span>
                   {/if}
-                  <button class="open-link" type="button" onclick={() => selectNote(bl.source_path)}>
+                  <button class="open-link" type="button" onclick={() => selectNote(bl.source_path, { via: "backlink" })}>
                     {m.nb_open_note()}
                   </button>
                 </div>

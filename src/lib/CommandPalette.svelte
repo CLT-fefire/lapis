@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { logWarn, logCommand } from "$lib/stores/usage";
+  import { logWarn, logCommand, logQuery } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -87,6 +87,13 @@
   // unifiedSearch가 async (matchContent가 readNote × N 동반)이라 $derived 대신 $state + $effect.
   // cancellation으로 빠른 타이핑 시 stale 결과 덮어쓰기 방지.
   let results = $state<PaletteResult[]>([]);
+  /**
+   * 마지막으로 기록한 질의. 열림을 그 질의에 붙이기 위한 것.
+   *
+   * ⚠️ `$state` 가 아니다 — 화면이 안 읽는다. 룬으로 두면 쓸 때마다 재렌더가 돈다.
+   */
+  let lastLoggedQuery: string | null = null;
+  let lastLoggedOpened = false;
 
   $effect(() => {
     if (!$paletteOpen) {
@@ -104,7 +111,16 @@
       void (async () => {
         try {
           const r = await unifiedSearch(q, hint);
-          if (!cancelled) results = r;
+          if (!cancelled) {
+            results = r;
+            // ⚠️ **빈 질의는 안 남긴다.** Recent/Quick Actions 화면이라 검색이 아니다 —
+            //    남기면 "결과 0건 질의"가 빈 문자열로 잔뜩 쌓인다.
+            if (q.trim() !== "") {
+              lastLoggedQuery = q;
+              lastLoggedOpened = false;
+              logQuery(hint === "fulltext" ? "fulltext" : "quick", q, r.length);
+            }
+          }
         } catch (e) {
           if (!cancelled) {
             logWarn("CommandPalette", "unifiedSearch failed", e);
@@ -226,6 +242,12 @@
     const r = displayList[idx];
     if (!r) return;
     const entry = r.entry;
+    // 🔴 **질의가 결실을 봤나.** 결과가 있었는데 아무것도 안 열었으면 못 찾은 것이다.
+    //    한 질의에 한 번만 센다 — 같은 결과를 두 번 열어도 성공은 한 번이다.
+    if (lastLoggedQuery !== null && !lastLoggedOpened) {
+      lastLoggedOpened = true;
+      logQuery($paletteHintMode === "fulltext" ? "fulltext" : "quick", lastLoggedQuery, results.length, true);
+    }
     // ⚠️ **여기 한 곳**에서 기록한다. 아래 switch 의 가지마다 적으면 새 가지를 넣을 때
     //    빼먹고, 빼먹은 가지만 통계에서 사라진다.
     logCommand(
@@ -238,6 +260,7 @@
       case "recent":
         // ⌘P로 연 팔레트만 활성 탭을 갈아끼운다. ⌘K·⌘T는 탭을 추가.
         await selectNote(entry.path, {
+          via: "palette",
           replaceCurrentTab: $paletteIntent === "replace",
         });
         closePalette();

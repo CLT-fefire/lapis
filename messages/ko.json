@@ -57,14 +57,11 @@
   "settings_usage_on": "기록",
   "settings_usage_off": "끔",
   "settings_usage_where": "{dir} · {size}",
-  "settings_usage_report": "리포트 저장…",
-  "settings_usage_report_raw": "가리지 않고 저장…",
   "settings_usage_clear": "기록 지우기",
   "settings_usage_cleared": "{count}개 파일을 지웠습니다.",
   "settings_usage_empty": "아직 기록이 없습니다.",
   "settings_usage_dropped": "⚠️ 상한에 닿아 {count}줄을 버렸습니다.",
   "settings_usage_saved": "저장했습니다: {path}",
-  "settings_usage_raw_warn": "경로와 검색어가 그대로 들어갑니다. 공개된 곳에 붙여넣지 마세요.",
   "settings_search_placeholder": "설정 검색",
   "settings_search_aria": "설정 항목 검색",
   "settings_search_empty": "맞는 설정이 없습니다.",
@@ -532,5 +529,12 @@
   "modal_close": "닫기",
   "newnote_create": "만들고 열기",
   "palette_group_commands": "명령",
-  "palette_group_actions": "빠른 동작"
+  "palette_group_actions": "빠른 동작",
+  "settings_usage_save": "저장…",
+  "settings_usage_format_md": "요약 (.md)",
+  "settings_usage_format_jsonl": "원본 (.jsonl)",
+  "settings_usage_format_label": "형식",
+  "settings_usage_hide": "경로·검색어 가리기",
+  "settings_usage_hide_title": "공개된 곳에 붙여넣을 때만 켜세요. 요약(.md)에만 걸립니다.",
+  "settings_usage_raw_note": "원본은 가려지지 않습니다 — 가리려면 해석해야 하고, 그러면 원본이 아닙니다."
 }

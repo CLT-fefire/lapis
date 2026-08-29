@@ -57,14 +57,11 @@
   "settings_usage_on": "Record",
   "settings_usage_off": "Off",
   "settings_usage_where": "{dir} · {size}",
-  "settings_usage_report": "Save report…",
-  "settings_usage_report_raw": "Save unredacted…",
   "settings_usage_clear": "Clear log",
   "settings_usage_cleared": "Removed {count} file(s).",
   "settings_usage_empty": "Nothing recorded yet.",
   "settings_usage_dropped": "⚠️ {count} line(s) dropped at the size cap.",
   "settings_usage_saved": "Saved: {path}",
-  "settings_usage_raw_warn": "Paths and queries are included verbatim. Do not paste it anywhere public.",
   "settings_search_placeholder": "Search settings",
   "settings_search_aria": "Search settings",
   "settings_search_empty": "No matching setting.",
@@ -532,5 +529,12 @@
   "modal_close": "Close",
   "newnote_create": "Create & Open",
   "palette_group_commands": "COMMANDS",
-  "palette_group_actions": "QUICK ACTIONS"
+  "palette_group_actions": "QUICK ACTIONS",
+  "settings_usage_save": "Save…",
+  "settings_usage_format_md": "Summary (.md)",
+  "settings_usage_format_jsonl": "Raw (.jsonl)",
+  "settings_usage_format_label": "Format",
+  "settings_usage_hide": "Hide paths and queries",
+  "settings_usage_hide_title": "Turn on only when pasting somewhere public. Applies to the summary (.md) only.",
+  "settings_usage_raw_note": "The raw log is never redacted — redacting means parsing it, and parsed is no longer raw."
 }

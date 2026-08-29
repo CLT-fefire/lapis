@@ -1,3 +1,4 @@
+import { logQuery } from "$lib/stores/usage";
 import { writable, get } from "svelte/store";
 
 export type SearchTarget = "editor" | "preview";
@@ -114,8 +115,22 @@ export function setQuery(query: string): void {
 }
 
 export function setMatchInfo(total: number, current: number): void {
-  inDocSearch.update((s) => ({ ...s, total, current }));
+  inDocSearch.update((s) => {
+    /**
+     * ⚠️ **질의당 한 번만 남긴다.** 이 함수는 타이핑 중에도, 다음 일치로 넘어갈 때도
+     * 불린다. 부를 때마다 남기면 한 번의 검색이 로그에 수십 줄로 쌓여 "무엇을 자주
+     * 찾나"의 답이 타자 속도를 재게 된다.
+     */
+    if (s.query !== "" && (s.query !== lastLogged || s.total !== total)) {
+      lastLogged = s.query;
+      logQuery("indoc", s.query, total);
+    }
+    return { ...s, total, current };
+  });
 }
+
+/** 마지막으로 기록한 질의 — 같은 질의를 매 키 입력마다 다시 남기지 않기 위한 것. */
+let lastLogged: string | null = null;
 
 export function setRegexError(regexError: boolean): void {
   inDocSearch.update((s) => (s.regexError === regexError ? s : { ...s, regexError }));
