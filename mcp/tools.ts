@@ -4,8 +4,6 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -23,6 +21,7 @@ import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import { buildIndex } from "$lib/linkIndex";
 import { launchOpen, LaunchError } from "../cli/appLaunch.ts";
+import { requestRender, RENDER_FORMATS, type RenderFormat } from "../cli/renderRequest.ts";
 import { runIndex, IndexError } from "../cli/indexRun.ts";
 import { runExport, ExportError } from "../cli/exportRun.ts";
 
@@ -373,13 +372,17 @@ const renderTool: ToolDef = {
         "저장할 절대 경로까지 줄 것",
       );
     }
-    const format = str(args.format) ?? "html";
-    if (format !== "html" && format !== "png") {
-      throw new LapisError("usage", `모르는 형식: ${format}`, "html 또는 png");
+    const format = (str(args.format) ?? "html") as RenderFormat;
+    // ⚠️ 목록은 `renderRequest.ts` 것을 쓴다 — Rust 의 `FORMATS` 와 짝을 맞춘 자리다.
+    if (!(RENDER_FORMATS as readonly string[]).includes(format)) {
+      throw new LapisError(
+        "usage",
+        `모르는 형식: ${format}`,
+        RENDER_FORMATS.join(" 또는 "),
+      );
     }
     const resolved = resolveNotePath(note, str(args.vault));
     const timeout = typeof args.timeout_ms === "number" ? args.timeout_ms : 2e4;
-    cleanup(out);
 
     // 🔴 **두 모양을 나눠 둔다.**
     //
@@ -390,71 +393,22 @@ const renderTool: ToolDef = {
     //    `path` · `vault` 는 `/`, `out` 만 역슬래시였다.
     const outNative = path.resolve(out);
     const outUi = normPath(outNative);
-    mkdirSync(path.dirname(outNative), { recursive: true });
-    try {
-      launchOpen({
-        path: resolved.path,
-        vault: resolved.vault,
-        extraArgs: [
-          "--render",
-          resolved.path,
-          "--render-vault",
-          resolved.vault,
-          "--render-out",
-          outNative,
-          "--render-format",
-          format,
-        ],
-      });
-    } catch (e) {
-      if (e instanceof LaunchError)
-        throw new LapisError("app_not_found", e.message, e.remedy ?? "");
-      throw e;
-    }
-    if (!waitForFile(outNative, timeout)) {
-      throw new LapisError(
-        "app_timeout",
-        `앱이 ${timeout}ms 안에 결과를 안 냈다`,
-        // 🔴 **원인이 둘인데 하나만 말하면 맞는 것을 확인하고 막힌다.**
-        //    실측: 앱이 떠 있는데도 "떠 있는지 확인할 것"이 나왔다 — 진짜 원인은 그 앱이
-        //    `--render` 를 모르는 구버전이라는 것이었다. 옛 빌드는 모르는 인자를 조용히
-        //    무시하고, 두 번째 프로세스는 argv 를 넘긴 뒤 그냥 끝난다. 아무도 실패를 안 쓴다.
-        //
-        //    ⚠️ 떠 있는 앱에게 버전을 물을 통로가 없다 — 네트워킹 코드가 없고 argv 는
-        //    한 방향이다. CLI 의 `cache-info` 프로브는 헤드리스 확인이라 여기 못 쓴다.
-        //    그래서 탐지 대신 두 원인을 다 적는다.
-        "① 앱 버전이 3.10.0 이상인지 — 그 아래는 --render 를 모르고 조용히 무시한다. " +
-          "② 앱이 떠 있는지 — 꺼져 있으면 켜지는 시간이 더 든다(timeout_ms 로 늘릴 수 있다).",
-      );
-    }
-    const failure = readFailure(outNative);
-    if (failure)
-      throw new LapisError("export_failed", failure, "앱 쪽 로그를 볼 것");
+
+    // ⚠️ 요청 조립·대기·실패 판정은 **`cli/renderRequest.ts` 한 곳**에 있다.
+    //    여기에 다시 적으면 argv 이름과 타임아웃 규칙이 두 벌이 된다.
+    const r = requestRender(
+      { notePath: resolved.path, vault: resolved.vault, outNative, format },
+      timeout,
+    );
+    if (!r.ok) throw new LapisError(r.kind, r.message, r.remedy);
     return {
       ...resolved,
       out: outUi,
       format: format,
-      bytes: statSync(outNative).size,
+      bytes: r.bytes,
     };
   },
 };
-/**
- * 결과 파일이 실패 보고인가.
- *
- * 🔴 앱은 실패해도 **같은 경로에** 쓴다(`write_render_failure`). 그걸 성공으로 읽으면
- * 부른 쪽이 에러 JSON 을 PNG 로 알고 넘어간다.
- */
-function readFailure(file: string): string | null {
-  try {
-    if (statSync(file).size > 4096) return null;
-    const raw = readFileSync(file, "utf-8");
-    if (!raw.startsWith("{")) return null;
-    const v = JSON.parse(raw);
-    return v.ok === false ? (v.error ?? "앱이 실패를 보고했다") : null;
-  } catch {
-    return null;
-  }
-}
 export const TOOLS: ToolDef[] = [
   openTool,
   revealTool,
@@ -464,27 +418,3 @@ export const TOOLS: ToolDef[] = [
   exportTool,
   renderTool,
 ];
-/**
- * 결과 파일이 생길 때까지 기다린다.
- *
- * ⚠️ **크기가 0 이면 아직이다.** 쓰는 중인 파일을 보고 끝났다 하면 잘린 것을 읽는다.
- *
- * ⚠️ MCP 서버는 stdio 를 잡고 있어 비동기 대기가 간단하지 않다 — 자식 프로세스로
- * 재운다. 바쁘 기다림보다 싸다.
- */
-function waitForFile(file: string, timeoutMs: number, pollMs = 60): boolean {
-  const until = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      if (statSync(file).size > 0) return true;
-    } catch {}
-    if (Date.now() >= until) return false;
-    spawnSync(process.execPath, ["-e", `setTimeout(()=>{}, ${pollMs})`]);
-  }
-}
-/** 🔴 지난 실행의 파일이 남아 있으면 그걸 보고 **즉시 성공**이라 한다. */
-function cleanup(file: string): void {
-  try {
-    rmSync(file, { force: true });
-  } catch {}
-}

@@ -30,13 +30,15 @@ import {
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computePropRewritePreview, SCALAR_PROP_KEYS } from "$lib/propsRewrite";
+import { requestRender, RENDER_FORMATS, type RenderFormat } from "./renderRequest.ts";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { applyTemplate, defaultBody, TEMPLATE_DIR } from "$lib/noteTemplate";
-import { usageDirs } from "../mcp/cache.ts";
+import { usageDirs, normPath } from "../mcp/cache.ts";
+import { homedir, tmpdir } from "node:os";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
 import { runIndex, IndexError } from "./indexRun.ts";
@@ -1585,6 +1587,68 @@ async function cmdPropsRename(p: ParsedCommand, out: Out): Promise<void> {
 }
 
 /**
+ * `lapis render <노트> --out <파일> --format html|png`
+ *
+ * ## 🔴 `export` 와 무엇이 다른가
+ *
+ * `export` 는 **앱 없이** 도는 자체 변환기다 — 브라우저가 없어 mermaid 가 코드 펜스로
+ * 남고 사용자 정의 CSS 도 안 붙는다. 이건 **떠 있는 앱에게 시켜서** 화면에 보이는 것을
+ * 그대로 받는다. 느리지만 미리보기와 어긋날 수가 없다.
+ *
+ * ⚠️ 요청 조립·대기·실패 판정은 `renderRequest.ts` 한 곳에 있다. MCP 의
+ * `lapis_render` 도 같은 함수를 부른다 — argv 이름이 두 벌이 되면 갈린다.
+ */
+function cmdRender(p: ParsedCommand, out: Out): void {
+  const target = p.positional[0] === "-" ? readStdinLine() : p.positional[0];
+  if (!target) {
+    out.fail("no_criteria", "노트가 필요하다", "lapis render <노트> --out <파일>", 2);
+  }
+  const format = (typeof p.options.format === "string" ? p.options.format : "html") as RenderFormat;
+  if (!(RENDER_FORMATS as readonly string[]).includes(format)) {
+    out.fail("no_criteria", `모르는 형식: ${format}`, RENDER_FORMATS.join(" 또는 "), 2);
+  }
+
+  const resolved = resolveNotePath(target, vaultOf(p));
+  const outNative = nodePath.resolve(
+    typeof p.options.out === "string" && p.options.out
+      ? p.options.out
+      : defaultRenderOut(resolved.path, format),
+  );
+  const timeout = typeof p.options.timeout === "number" ? p.options.timeout : 20_000;
+
+  const r = requestRender(
+    { notePath: resolved.path, vault: resolved.vault, outNative, format },
+    timeout,
+  );
+  if (!r.ok) {
+    out.fail(r.kind, r.message, r.remedy, 1);
+    return;
+  }
+
+  const outUi = normPath(outNative);
+  if (out.json) {
+    return out.json_({ ...resolved, out: outUi, format, bytes: r.bytes });
+  }
+  out.line(outUi);
+  if (p.options.quiet !== true) out.line(`  ${r.bytes} 바이트 · ${format}`);
+}
+
+/**
+ * `--out` 을 안 주면 어디에 쓸까.
+ *
+ * ⚠️ **vault 안은 안 된다.** 노트 옆에 두면 앱이 감지해 재색인하고, 사용자는 자기가
+ * 안 만든 파일이 노트 사이에 쌓이는 걸 나중에야 본다. `lapis_export_html` 이 같은
+ * 이유로 같은 자리를 쓴다.
+ */
+function defaultRenderOut(notePath: string, format: RenderFormat): string {
+  const stem = nodePath.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  const home = homedir();
+  const downloads = home ? nodePath.join(home, "Downloads") : "";
+  const dir = downloads && existsSync(downloads) ? downloads : tmpdir();
+  return nodePath.join(dir, `${stem}.${format}`);
+}
+
+/**
  * `lapis tasks audit` — 본문의 미완 `- [ ]`.
  *
  * ⚠️ **본문을 전부 읽는다.** `links --unlinked` 와 같은 부류다 — 인덱스로는 안 된다.
@@ -1606,24 +1670,76 @@ export function cmdTasks(p: ParsedCommand, out: Out): void {
       }
     }),
   );
-  const total = countOpenTasks(groups);
+  // ⚠️ **거르기는 전체를 센 뒤에 한다.** 거른 것을 분모로 삼으면 "몇 건 숨겼는지"를
+  //    말할 수 없고, 그러면 `--under` 한 번에 나머지가 조용히 사라진다.
+  const totalAll = countOpenTasks(groups);
+  const conc = taskConcentration(groups);
+
+  const under = strList(p.options.under);
+  const exclude = strList(p.options.exclude);
+  const rel = relativizer(vc.root);
+  let shown = groups.filter((g) => {
+    const r = rel(g.path);
+    // exclude 가 이긴다 — `search` 의 축과 같은 규칙이다.
+    if (exclude.some((x) => r.startsWith(x))) return false;
+    return under.length === 0 || under.some((x) => r.startsWith(x));
+  });
+
+  const topN = typeof p.options.top === "number" ? p.options.top : 0;
+  if (topN > 0) {
+    shown = [...shown].sort((a, b) => b.open.length - a.open.length || a.path.localeCompare(b.path));
+    shown = shown.slice(0, topN);
+  }
+  const totalShown = countOpenTasks(shown);
+  const hidden = totalAll.open - totalShown.open;
 
   if (out.json) {
-    return out.json_({ vault: vc.root, ...staleField(vc), total, groups });
+    return out.json_({
+      vault: vc.root,
+      ...staleField(vc),
+      total: totalAll,
+      shown: totalShown,
+      hidden,
+      concentration: conc,
+      groups: p.options.count === true ? [] : shown,
+    });
   }
-  if (groups.length === 0) {
+
+  if (totalAll.open === 0) {
     out.line("미완 작업이 없다.");
-  } else {
-    out.line(`${total.open}건 미완 · ${total.done}건 완료`);
-    for (const g of groups) {
-      out.line("");
-      out.line(`${g.path}  (${g.open.length})`);
-      for (const t of g.open) {
-        out.line(`${"  ".repeat(t.depth + 1)}- ${t.text}`);
-      }
+    reportStale(out, vc);
+    return;
+  }
+
+  out.line(`${totalAll.open}건 미완 · ${totalAll.done}건 완료`);
+  if (conc.top) {
+    // 🔴 맨숫자 하나는 어디에 몰렸는지를 감춘다 — `stats` 와 같은 이유다.
+    out.line(
+      `  가장 많은 노트: ${conc.top.open}건 (${Math.round(conc.top.share * 100)}%) · ${rel(conc.top.path)}`,
+    );
+  }
+  // ⚠️ **숨긴 건수를 반드시 말한다.** 안 말하면 거른 목록이 전부로 읽힌다.
+  if (hidden > 0) out.line(`  ${hidden}건은 걸러져 안 보인다`);
+
+  if (p.options.count === true) {
+    reportStale(out, vc);
+    return;
+  }
+
+  for (const g of shown) {
+    out.line("");
+    out.line(`${g.path}  (${g.open.length})`);
+    for (const t of g.open) {
+      out.line(`${"  ".repeat(t.depth + 1)}- ${t.text}`);
     }
   }
   reportStale(out, vc);
+}
+
+/** `--under a --under b` 를 배열로. 하나만 줘도 배열이다. */
+function strList(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  return typeof v === "string" && v ? [v] : [];
 }
 
 /**
@@ -1683,5 +1799,6 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   completion: cmdCompletion,
   config: cmdConfig,
   diff: cmdDiff,
+  render: cmdRender,
   replace: cmdReplace,
 };

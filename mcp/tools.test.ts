@@ -90,40 +90,41 @@ describe("쓰기 도구가 없다", () => {
 });
 
 /**
- * 🔴 `lapis_render` 는 **결과 파일을 먼저 지운다.**
+ * `lapis_render` — **요청 조립·대기·실패 판정은 여기 없다.**
  *
- * 지난 실행의 파일이 남아 있으면 그걸 보고 즉시 성공이라 한다 — 앱이 아무것도 안 했는데
- * "됐다"가 되고, 부른 쪽은 옛 그림을 새 그림으로 읽는다.
+ * ## 🔴 왜 옮겼나
+ *
+ * CLI 에도 같은 기능이 필요해졌는데, 그대로 두면 argv 이름·타임아웃·실패 판정이
+ * **세 곳(Rust · MCP · CLI)** 에 흩어진다. 이 저장소에서 가장 자주 나온 결함이
+ * "규칙이 두 곳에 있어 갈린 것"이다.
+ *
+ * 그래서 `cli/renderRequest.ts` 한 곳에 두고 둘이 부른다. 그 규칙들(옛 결과 먼저
+ * 지우기 · 크기 0 은 아직 · 실패 보고 가려내기 · 두 원인을 다 말하기)은
+ * `cli/renderRequest.test.ts` 가 지킨다. 여기서는 **두 벌이 안 생겼는지**만 본다.
+ *
+ * 실측 근거: 리팩터 뒤 CLI 와 MCP 가 같은 노트에서 **정확히 같은 16,765 바이트**를 냈다.
  */
 describe("lapis_render", () => {
-  it("기다리기 전에 옛 결과를 지운다", () => {
-    const at = src.indexOf("cleanup(out)");
-    const wait = src.indexOf("waitForFile(");
-    expect(at).toBeGreaterThan(-1);
-    expect(at, "지우기가 기다리기보다 뒤에 있다").toBeLessThan(wait);
+  it("공유 모듈에 맡긴다", () => {
+    expect(src).toMatch(/requestRender\(/);
+    expect(src).toMatch(/from "\.\.\/cli\/renderRequest\.ts"/);
   });
 
-  /** ⚠️ 앱이 실패를 같은 경로에 JSON 으로 쓴다 — 그걸 성공으로 읽으면 안 된다. */
-  it("실패 보고를 성공으로 안 읽는다", () => {
-    expect(src).toMatch(/readFailure\(/);
-    expect(src).toMatch(/v\.ok === false/);
+  /** ⚠️ 옮긴 것을 여기 다시 적으면 두 벌이 된다 — 옮긴 의미가 사라진다. */
+  it("대기·판정을 다시 안 적는다", () => {
+    expect(src, "대기 루프가 남아 있다").not.toMatch(/function waitForFile/);
+    expect(src, "실패 판정이 남아 있다").not.toMatch(/function readFailure/);
+    expect(src, "지우기가 남아 있다").not.toMatch(/function cleanup/);
   });
 
-  /**
-   * 타임아웃만 주면 "느린 건지 안 뜬 건지"를 못 가른다.
-   *
-   * ⚠️ **문구를 그대로 못 박지 않는다.** 처음엔 `"앱이 떠 있는지 확인할 것"` 을 통째로
-   * 비교했는데, 조치문을 **더 정확하게** 고치자 테스트가 빨개졌다 — 개선을 막는 검사다.
-   * 지켜야 할 것은 문장이 아니라 **조치가 붙어 있다는 것**이다(아래 `app_timeout 조치문`
-   * 절이 그 내용을 본다).
-   */
-  it("타임아웃에 조치를 적는다", () => {
-    const at = src.indexOf('"app_timeout"');
-    expect(at).toBeGreaterThan(-1);
-    const args = src.slice(at, at + 900);
-    // 종류 · 메시지 · 조치 셋을 준다 — 조치가 빈 문자열이면 안 된다.
-    expect(args).toMatch(/안에 결과를 안 냈다/);
-    expect(args, "조치가 비어 있다").not.toMatch(/"app_timeout",[\s\S]{0,120}""\s*\)/);
+  /** 형식 목록도 공유한다 — Rust 의 `FORMATS` 와 짝을 맞춘 자리가 거기다. */
+  it("형식 목록을 공유한다", () => {
+    expect(src).toMatch(/RENDER_FORMATS/);
+  });
+
+  /** ⚠️ 실패 종류는 그대로 MCP 오류로 넘어가야 한다 — 삼키면 성공으로 읽힌다. */
+  it("실패를 그대로 올린다", () => {
+    expect(src).toMatch(/if \(!r\.ok\) throw new LapisError\(r\.kind, r\.message, r\.remedy\)/);
   });
 });
 
@@ -148,11 +149,8 @@ describe("경로는 한 모양으로 나간다", () => {
 
   /** ⚠️ **비교·파일 접근에는 정규화한 문자열을 쓰지 않는다.** OS 에 넘기는 건 native 여야 한다. */
   it("파일 접근은 native 경로로 한다", () => {
-    // 앱에 넘기는 argv 와 존재 확인·크기 재기는 native 여야 한다.
-    expect(src).toMatch(/"--render-out",\s*outNative/);
-    expect(src).toMatch(/waitForFile\(outNative/);
-    expect(src).toMatch(/statSync\(outNative\)/);
-    // ⚠️ 응답에 담기는 건 반대다.
+    // 공유 모듈에 넘기는 것은 native, 응답에 담는 것은 `/` 다.
+    expect(src).toMatch(/outNative,\s*format\s*\}/);
     expect(src).toMatch(/out: outUi/);
   });
 });
@@ -249,10 +247,17 @@ describe("내보내기 기본 경로", () => {
  * 못 쓴다(single-instance 가 삼킨다). 그래서 탐지 대신 **정직한 조치문**을 고른다.
  */
 describe("app_timeout 조치문", () => {
+  /** ⚠️ 조치문 본문은 `cli/renderRequest.ts` 에 있다 — CLI 도 같은 말을 해야 한다. */
   it("두 원인을 다 말한다", () => {
-    const at = src.indexOf('"app_timeout"');
-    expect(at).toBeGreaterThan(-1);
-    const around = src.slice(at, at + 500);
+    const rr = readFileSync(
+      fileURLToPath(new URL("../cli/renderRequest.ts", import.meta.url)),
+      "utf-8",
+    );
+    // ⚠️ 타입 선언(`kind: "app_timeout";`)이 아니라 **구현부**를 찾는다. 앞의 것을
+    //    집으면 조치문이 없는 자리를 보고 운다.
+    const at = rr.indexOf('kind: "app_timeout",');
+    expect(at, "구현부를 못 찾았다").toBeGreaterThan(-1);
+    const around = rr.slice(at, at + 1200);
     expect(around, "앱이 안 떠 있는 경우").toMatch(/떠 있는지/);
     expect(around, "버전이 낮은 경우").toMatch(/3\.10/);
   });

@@ -179,7 +179,14 @@ export const COMMANDS: CommandSpec[] = [
     name: "tasks",
     desc: "본문의 미완 `- [ ]` 를 모은다. 코드 블록 안은 안 센다",
     positional: [{ name: "동작", required: true, desc: "audit" }],
-    options: [],
+    options: [
+      // ⚠️ 실측: 이 vault 는 89건 중 67건이 체크리스트 한 파일이었다. 거를 길이
+      //    없으면 "무엇이 남았나"를 물을 때마다 그게 화면을 덮는다.
+      { name: "under", kind: "string[]", desc: "이 아래에서만. vault 상대 prefix, 여러 번" },
+      { name: "exclude", kind: "string[]", desc: "이 아래는 뺀다. under 와 겹치면 이쪽이 이긴다" },
+      { name: "top", kind: "number", desc: "노트를 미완 많은 순으로 이만큼만" },
+      { name: "count", kind: "boolean", desc: "숫자만. 목록을 안 낸다" },
+    ],
   },
   {
     name: "export",
@@ -256,6 +263,16 @@ export const COMMANDS: CommandSpec[] = [
     desc: "노트의 git 변경을 본다. vault 가 git 저장소여야 한다",
     positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
     options: [{ name: "rev", kind: "string", desc: "비교할 리비전. 기본은 작업 트리" }],
+  },
+  {
+    name: "render",
+    desc: "앱에게 렌더를 시켜 파일로 받는다 — 앱 품질 HTML 또는 mermaid PNG",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나. `-` 면 표준입력" }],
+    options: [
+      { name: "out", kind: "string", desc: "저장할 경로. 안 주면 ~/Downloads" },
+      { name: "format", kind: "string", desc: "html(기본) · png" },
+      { name: "timeout", kind: "number", desc: "앱을 기다릴 ms. 기본 20000" },
+    ],
   },
   {
     name: "completion",

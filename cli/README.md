@@ -100,6 +100,8 @@ PowerShell에서 `cli/lapis`를 치면 **"이 파일을 열 앱을 고르라"는
 | `new <이름>` | 노트를 만든다. `--template`은 앱과 같은 목록 |
 | `config [키] [값]` | 앱 설정을 보고 바꾼다. `mcp_enabled`를 여기서 켤 수 있다 |
 | `diff <노트>` | 노트의 git 변경. `--rev`로 리비전 지정 |
+| `render <노트>` | **떠 있는 앱**에게 시켜 앱 품질 HTML · mermaid PNG 를 받는다 |
+| `props rename <키> <이전> <새값>` | frontmatter 값 바꾸기. **기본은 dry-run** |
 | `completion <셸>` | 자동완성 스크립트. bash · zsh · pwsh |
 
 ### 공통 옵션
@@ -136,6 +138,34 @@ test -n "$(lapis config mcp_enabled --quiet)" && echo "설정돼 있다"
 
 설정 쓰기는 **원자적**이다(임시 파일 → 같은 디렉터리에서 rename). 설정 파일 하나에 앱
 설정 전부가 들어 있어서, 직접 덮다 끊기면 키 하나가 아니라 전부 날아간다.
+
+### `render` 와 `export` 는 다른 것을 판다
+
+`export` 는 **앱 없이** 도는 자체 변환기다 — 브라우저가 없어 mermaid 가 코드 펜스로 남고
+사용자 정의 CSS 도 안 붙는다. `render` 는 **떠 있는 앱에게 시켜서** 화면에 보이는 것을
+그대로 받는다. 느리지만 미리보기와 어긋날 수가 없다.
+
+```bash
+lapis render 아키텍처 --format png --out ~/Desktop/arch.png
+```
+
+⚠️ **앱이 떠 있어야 하고 버전이 3.10.0 이상이어야 한다.** 그 아래는 이 인자를 모르고
+조용히 무시해서 `app_timeout` 으로만 드러난다 — 앱이 떠 있는데도 그렇다.
+
+⚠️ 요청 조립·대기·실패 판정은 `renderRequest.ts` 한 곳에 있고 MCP 의 `lapis_render` 도
+같은 함수를 부른다. 실측으로 둘이 같은 노트에서 **정확히 같은 바이트 수**를 냈다.
+
+### `tasks` 를 거를 수 있다
+
+실측: 이 vault 는 미완 89건 중 **67건이 체크리스트 한 파일**이었다. 거를 길이 없으면
+"무엇이 남았나"를 물을 때마다 그게 화면을 덮는다.
+
+```bash
+lapis tasks audit --exclude knowledge/lapis/reference --count
+```
+
+⚠️ **숨긴 건수를 항상 말한다.** 안 말하면 거른 목록이 전부로 읽힌다. 분모도 거르기
+**전** 숫자다 — 거른 것을 분모로 삼으면 몇 건 숨겼는지를 계산할 수 없다.
 
 ### 낡은 인덱스
 
