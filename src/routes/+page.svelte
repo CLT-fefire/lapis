@@ -8,7 +8,6 @@
   } from "$lib/stores/usage";
   import { enhanceRendered } from "$lib/renderedEnhance";
   import { onMount, tick } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
   import Sidebar from "$lib/Sidebar.svelte";
   import SidebarRail from "$lib/SidebarRail.svelte";
@@ -133,7 +132,7 @@ import { isPanicChord } from "$lib/userCss";
   import type { HeadingInfo } from "$lib/markdownPlugins/headingAnchor";
   import { groupRelations, type RelationGroup } from "$lib/relations";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
-  import { exportMermaidHostToPng } from "$lib/mermaidExport";
+  import { handleRenderedClick } from "$lib/previewClick";
   import { rewriteImageSources } from "$lib/assetPath";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
   import { newWindow } from "$lib/tauri/window";
@@ -301,68 +300,12 @@ import { isPanicChord } from "$lib/userCss";
   // - <a href="http..."> 외부: 시스템 브라우저로 (Tauri opener)
   // - <a href="..."> 내부 (./, ../, *.md, 상대 경로): 노트 점프 시도
   // - 그 외: SvelteKit SPA navigation 절대 막음 (앱이 /파일명 으로 가서 404 화이트스크린 되는 사고 방지)
+  /**
+   * 그려진 본문 안의 클릭. 🔴 규칙은 `previewClick.ts` **한 곳**에 있다 —
+   * 옆칸(`ComparePane`)이 같은 함수를 부른다.
+   */
   async function handlePreviewClick(e: MouseEvent) {
-    const el = e.target as HTMLElement | null;
-    if (!el) return;
-
-    // 0) mermaid PNG 내보내기 버튼 — 반드시 anchor 체크보다 앞.
-    //    <button>은 closest("a")에 안 걸려 아래 `if (!anchor) return`에서 무시됨.
-    const exportBtn = el.closest(".mermaid-export-btn") as HTMLElement | null;
-    if (exportBtn) {
-      e.preventDefault();
-      const host = exportBtn.closest(".mermaid-host") as HTMLElement | null;
-      if (host) {
-        const fileName = $currentNotePath?.split("/").pop() ?? "diagram";
-        const base = fileName.replace(/\.(md|mmd)$/i, "");
-        try {
-          await exportMermaidHostToPng(host, base);
-        } catch (err) {
-          logError("routes/+page", m.page_mermaid_export_failed(), err);
-        }
-      }
-      return;
-    }
-
-    // 1) wikilink (span)
-    const wikilink = el.closest(".wikilink") as HTMLElement | null;
-    if (wikilink) {
-      e.preventDefault();
-      const target = wikilink.getAttribute("data-target");
-      if (target) {
-        const ok = await jumpToWikilink(target);
-        if (!ok) console.info("wikilink unresolved:", target);
-      }
-      return;
-    }
-
-    // 2) 일반 <a> 태그 — markdown 링크 [텍스트](경로)
-    const anchor = el.closest("a") as HTMLAnchorElement | null;
-    if (!anchor) return;
-    const href = anchor.getAttribute("href") ?? "";
-
-    // 외부 링크 → 시스템 브라우저
-    if (/^(https?:|mailto:|tel:)/i.test(href)) {
-      e.preventDefault();
-      try {
-        await openUrl(href);
-      } catch (err) {
-        logError("routes/+page", "openUrl failed", err);
-      }
-      return;
-    }
-
-    // 빈 href / # / 내부 경로 → SPA 라우팅 차단
-    e.preventDefault();
-    if (!href || href === "#") return;
-
-    // .md 확장자나 상대 경로 → wikilink 매칭 시도 (확장자 제거 + 마지막 segment)
-    const cleaned = href
-      .replace(/^\.\//, "")
-      .replace(/^\//, "")
-      .replace(/\.md$/i, "");
-    const lastSegment = cleaned.split("/").pop() ?? cleaned;
-    const ok = await jumpToWikilink(lastSegment);
-    if (!ok) console.info("note link unresolved:", href);
+    await handleRenderedClick(e, $currentNotePath, "wikilink");
   }
 
   let previewBodyEl: HTMLElement | null = $state(null);

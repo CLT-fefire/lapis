@@ -8,7 +8,7 @@
   import { noteStem, noteDisplayName } from "$lib/notePath";
   import { readingFontSize, readingMeasureEm, readingMeasureLimited } from "$lib/stores/reading";
   import { closeCompare } from "$lib/stores/compare";
-  import { selectNote } from "$lib/stores/vault";
+  import { handleRenderedClick } from "$lib/previewClick";
   import { logWarn } from "$lib/stores/usage";
 
   /**
@@ -80,15 +80,14 @@
   });
 
   /**
-   * ⚠️ 위키링크만 가로챈다. 바깥 URL 은 본문과 같은 기본 동작에 맡긴다.
+   * 🔴 **본문 칸과 같은 함수를 쓴다.** 예전엔 여기 사본이 있었고 그 사본이 선택자도
+   * 속성도 틀려서 링크가 통째로 죽어 있었다 — 에러 없이. 두 칸이 같은 부품으로 그리면
+   * 나오는 HTML 이 같고, 그러면 그것을 읽는 규칙도 하나여야 한다.
+   *
+   * `via: "compare"` — 옆칸은 스스로 안 움직이고 **본문**을 보낸다.
    */
   function onClick(e: MouseEvent) {
-    const el = (e.target as HTMLElement | null)?.closest?.("a.wikilink");
-    if (!el) return;
-    const target = el.getAttribute("data-target-path");
-    if (!target) return;
-    e.preventDefault();
-    void selectNote(target, { via: "compare" });
+    void handleRenderedClick(e, path, "compare");
   }
 </script>
 

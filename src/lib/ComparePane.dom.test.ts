@@ -14,16 +14,20 @@ import { mount, unmount } from "svelte";
 
 const readNote = vi.fn<(p: string) => Promise<string>>();
 const selectNote = vi.fn();
+const jumpToWikilink = vi.fn(async () => true);
+const openUrl = vi.fn(async () => {});
 
 vi.mock("$lib/tauri/notes", () => ({ readNote: (p: string) => readNote(p) }));
 vi.mock("$lib/stores/vault", async () => {
   const { writable } = await import("svelte/store");
   return {
     selectNote: (...a: unknown[]) => selectNote(...a),
+    jumpToWikilink: (...a: unknown[]) => jumpToWikilink(...(a as [])),
     currentNotePath: writable<string | null>(null),
     linkIndex: writable(null),
   };
 });
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (...a: unknown[]) => openUrl(...(a as [])) }));
 // mermaid 는 동적 import 로 브라우저 모듈을 끌어온다 — 여기서 볼 것이 아니다.
 vi.mock("$lib/mermaid-runtime", () => ({ renderMermaidIn: () => {} }));
 
@@ -46,6 +50,8 @@ const show = (path: string) => {
 beforeEach(() => {
   readNote.mockReset();
   selectNote.mockReset();
+  jumpToWikilink.mockClear();
+  openUrl.mockClear();
   document.body.replaceChildren();
   target = document.createElement("div");
   document.body.appendChild(target);
@@ -144,38 +150,88 @@ describe("경로가 바뀔 때", () => {
 });
 
 /**
- * ⚠️ 옆칸의 링크는 **본문**을 움직인다. 옆칸이 스스로 이동하면 "어느 쪽이 지금 보는
- * 것인가"가 흐려진다.
+ * 🔴 **여기 있던 테스트 둘을 지웠다 — 그것들이 버그를 못 박고 있었다.**
+ *
+ * 두 테스트는 `<a class="wikilink" data-target-path="…">` 를 **손으로 만들어** 붙이고
+ * 눌렀다. 즉 **렌더러가 실제로 내는 DOM 이 아니라, 망가진 컴포넌트가 기대하던 DOM** 을
+ * 지어 놓고 잰 것이다. 그래서 기능이 통째로 죽은 채로 둘 다 초록이었다.
+ *
+ * ⚠️ 이 저장소가 같은 모양으로 반복해서 당한다: 5차 때 `scopeOptions` 의 단위 테스트가
+ * **vault 상대경로**를 먹여서 함수는 통과하고 기능만 비어 있었다. 호출부는 절대경로를
+ * 넘기고 있었다.
+ *
+ * 교훈: **입력을 지어내지 말고 파이프라인이 내는 것을 쓴다.** 아래 「링크를 누르면」은
+ * 마크다운을 넣어 `parseNote` 가 낸 결과를 누른다.
+ *
+ * (둘째 테스트는 그 위에 공허하기까지 했다 — `.wikilink` 에 `data-target` 이 없는 상태는
+ * 플러그인이 만들지 않는다. 일어날 수 없는 상황을 재고 있었다.)
  */
-describe("링크", () => {
-  it("위키링크가 본문을 움직인다", async () => {
-    readNote.mockResolvedValue("본문");
+
+/**
+ * 🔴 **눌리나.** 이 절이 이 파일에서 가장 값을 했다 — 셋 다 죽어 있었다.
+ *
+ * 옆칸은 본문과 **같은 부품**으로 그리니 결과 HTML 도 같다. 그런데 클릭 처리만 따로
+ * 적혀 있었고 그 사본이 틀렸다:
+ *
+ * | 옆칸이 찾던 것 | 실제로 나오는 것 |
+ * |---|---|
+ * | `a.wikilink` | `span.wikilink` (플러그인 주석: "a 태그의 default navigation 위험 회피") |
+ * | `data-target-path` | `data-target` — 앞 이름은 **저장소 어디서도 안 만든다** |
+ *
+ * 게다가 이름은 경로가 아니다. 푸는 것은 `jumpToWikilink` 다(같은 이름의 노트가 둘일 때
+ * 지금 보는 노트를 맥락으로 쓴다). 그래서 눌러도 아무 일도 안 났고 **에러도 안 났다.**
+ */
+describe("링크를 누르면", () => {
+  const click = (el: Element) => {
+    const e = new MouseEvent("click", { bubbles: true, cancelable: true });
+    el.dispatchEvent(e);
+    return e;
+  };
+
+  it("위키링크는 이름을 풀어서 간다", async () => {
+    readNote.mockResolvedValue("[[대상 노트]] 를 보라");
     show("/v/a.md");
     await flush();
-
-    const article = target.querySelector("article.rendered")!;
-    const a = document.createElement("a");
-    a.className = "wikilink";
-    a.setAttribute("data-target-path", "/v/target.md");
-    a.textContent = "가기";
-    article.replaceChildren(a);
-    a.click();
-
-    expect(selectNote).toHaveBeenCalledWith("/v/target.md", { via: "compare" });
+    const el = target.querySelector(".wikilink");
+    expect(el, "위키링크가 안 그려졌다").toBeTruthy();
+    click(el!);
+    await flush();
+    expect(jumpToWikilink).toHaveBeenCalledWith("대상 노트", "compare");
   });
 
-  it("대상 없는 링크는 아무 일도 안 한다", async () => {
-    readNote.mockResolvedValue("본문");
+  /** ⚠️ 바깥 URL 은 시스템 브라우저로. 웹뷰가 그리로 가 버리면 앱이 사라진다. */
+  it("바깥 링크는 시스템 브라우저로 보내고 기본 동작을 막는다", async () => {
+    readNote.mockResolvedValue("[바깥](https://example.com)");
     show("/v/a.md");
     await flush();
+    const a = target.querySelector("a[href^='https']");
+    expect(a, "링크가 안 그려졌다").toBeTruthy();
+    const e = click(a!);
+    await flush();
+    expect(openUrl).toHaveBeenCalledWith("https://example.com");
+    expect(e.defaultPrevented, "기본 동작을 안 막았다").toBe(true);
+  });
 
-    const article = target.querySelector("article.rendered")!;
-    const a = document.createElement("a");
-    a.className = "wikilink";
-    a.textContent = "대상 없음";
-    article.replaceChildren(a);
-    a.click();
+  /** 마크다운 링크 `[글](b.md)` 도 노트다 — 확장자를 떼고 위키링크와 같은 판정을 쓴다. */
+  it("안쪽 .md 링크도 노트로 간다", async () => {
+    readNote.mockResolvedValue("[비](./sub/b.md)");
+    show("/v/a.md");
+    await flush();
+    const a = target.querySelector("a[href$='b.md']");
+    expect(a, "링크가 안 그려졌다").toBeTruthy();
+    const e = click(a!);
+    await flush();
+    expect(jumpToWikilink).toHaveBeenCalledWith("b", "compare");
+    expect(e.defaultPrevented, "SPA 라우팅을 안 막았다").toBe(true);
+  });
 
-    expect(selectNote).not.toHaveBeenCalled();
+  it("아무 데나 누르면 아무 일도 안 한다", async () => {
+    readNote.mockResolvedValue("그냥 글");
+    show("/v/a.md");
+    await flush();
+    click(target.querySelector("article.rendered")!);
+    await flush();
+    expect(jumpToWikilink).not.toHaveBeenCalled();
+    expect(openUrl).not.toHaveBeenCalled();
   });
 });
