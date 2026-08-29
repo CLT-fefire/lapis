@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { homedir, tmpdir } from "node:os";
 import { resolveNotePath } from "./query.ts";
 import {
   LapisError,
@@ -79,7 +80,8 @@ const openTool: ToolDef = {
         path: resolved.path,
         vault: resolved.vault,
       });
-      return { ...resolved, sent: true, app: exe };
+      // ⚠️ 응답에 담기는 경로는 전부 `/` 다 — 소비자가 `split("/")` 로 다룬다.
+      return { ...resolved, sent: true, app: normPath(exe) };
     } catch (e) {
       if (e instanceof LaunchError) {
         throw new LapisError("app_not_found", e.message, e.remedy ?? "");
@@ -241,7 +243,7 @@ const usageTool: ToolDef = {
           .filter((l) => l.trim()),
       );
     }
-    return { dir, months, ...a.result() };
+    return { dir: normPath(dir), months, ...a.result() };
   },
 };
 /** 폴더가 없는 것과 비어 있는 것을 같게 다룬다 — 둘 다 "기록이 없다"다. */
@@ -304,7 +306,7 @@ const exportTool: ToolDef = {
     }
     return {
       ...resolved,
-      out,
+      out: normPath(out),
       bytes: Buffer.byteLength(html, "utf-8"),
       // ⚠️ 부르는 쪽이 이걸 모르면 "왜 다이어그램이 안 나오지"가 된다.
       differs_from_app: [
@@ -314,10 +316,23 @@ const exportTool: ToolDef = {
     };
   },
 };
-/** `out` 을 안 주면 노트 이름으로 바탕 화면에 둔다. */
-function defaultHtmlPath(notePath: string): string {
-  const dir = path.dirname(notePath);
+/**
+ * `out` 을 안 주면 어디에 쓸까.
+ *
+ * ## 🔴 vault 안은 안 된다
+ *
+ * 처음엔 노트 **옆에** 뒀다 — 즉 vault 안이다. 이 모듈은 "vault 밖으로만 쓴다"고
+ * 선언해 놓고 기본값이 그걸 어겼다. 조용한 부작용이다: 앱이 감시 중이면 그 쓰기가
+ * 재색인을 부르고, 사용자는 자기가 안 만든 파일이 vault 에 쌓이는 걸 나중에야 본다.
+ *
+ * ⚠️ 홈 폴더가 없을 수 있다(서비스 계정 등). 그때는 임시 폴더로 물러난다 —
+ * 없는 곳에 쓰려다 실패하는 것보다, 찾기 어려운 곳이라도 쓰고 **어디 썼는지 말하는** 게 낫다.
+ */
+export function defaultHtmlPath(notePath: string): string {
   const stem = path.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  const home = homedir();
+  const downloads = home ? path.join(home, "Downloads") : "";
+  const dir = downloads && existsSync(downloads) ? downloads : tmpdir();
   return path.join(dir, `${stem}.html`);
 }
 const renderTool: ToolDef = {

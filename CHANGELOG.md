@@ -64,6 +64,18 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   result rather than the attribute, and reports three outcomes separately, because
   "too slow", "bad syntax" and "done" call for different responses.
 
+- **Every path in a reply now has one shape.** Fixing `out` in `lapis_render` left the same
+  leak in its neighbours: `lapis_usage` returned its log directory with backslashes, and
+  `lapis_open` returned the executable path the same way. Consumers split these on `/`, so an
+  odd one out silently loses its file name and parent directory. Found by calling the tools
+  through a real MCP client rather than a test harness.
+
+- **Exporting no longer writes into the vault.** With no `out`, `lapis_export_html` put the
+  HTML next to the note — inside the vault — while the module declared it writes only outside
+  it. The app is watching, so that write triggered a reindex, and files the user never created
+  accumulated where their notes live. It now goes to `~/Downloads` (or the temp directory if
+  that is missing), and the reply says where.
+
 - **`lapis_render` mixed two path shapes in one reply.** `path` and `vault` came back with
   forward slashes and `out` with backslashes. Consumers split these on `/`, so the odd one
   out silently loses its file name and parent directory.

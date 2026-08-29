@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { TOOLS } from "./tools.ts";
+import nodePath from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { TOOLS, defaultHtmlPath } from "./tools.ts";
 
 /**
  * MCP 도구들 — 질의 하나였던 것이 여덟이 됐다.
@@ -141,5 +143,80 @@ describe("경로는 한 모양으로 나간다", () => {
     expect(src).toMatch(/statSync\(outNative\)/);
     // ⚠️ 응답에 담기는 건 반대다.
     expect(src).toMatch(/out: outUi/);
+  });
+});
+
+/**
+ * 🔴 **응답에 담기는 경로는 전부 `/` 다.**
+ *
+ * `lapis_render` 의 `out` 하나만 고쳤더니 같은 결함이 다른 도구에 그대로 남아 있었다 —
+ * 실제 MCP 클라이언트로 불러 보고 나왔다:
+ *
+ * - `lapis_usage` 의 `dir` → `C:\Users\...\usage`
+ * - `lapis_open` 의 `app` → 실행파일 native 경로
+ *
+ * 한 자리를 고치고 끝내면 나머지는 **다음에 누가 걸릴 때까지** 남는다. 그래서 도구별이
+ * 아니라 **나가는 자리 전부**를 본다.
+ */
+describe("경로가 새는 곳이 없다", () => {
+  it("usage 의 dir 을 정규화한다", () => {
+    expect(src, "native dir 이 그대로 나간다").not.toMatch(/return \{ dir, months,/);
+    expect(src).toMatch(/dir: normPath\(dir\)/);
+  });
+
+  it("open 의 app 을 정규화한다", () => {
+    expect(src, "native exe 경로가 그대로 나간다").not.toMatch(/app: exe\b/);
+    expect(src).toMatch(/app: normPath\(exe\)/);
+  });
+
+  it("export 의 out 을 정규화한다", () => {
+    expect(src).toMatch(/out: normPath\(out\)/);
+  });
+});
+
+/**
+ * 🔴 **내보내기 기본값이 vault 를 더럽히면 안 된다.**
+ *
+ * `defaultHtmlPath` 가 노트 **옆에** `.html` 을 뒀다 — 즉 vault 안이다. 이 모듈은
+ * "vault 밖으로만 쓴다"고 선언해 놓고 기본 경로가 그걸 어겼다.
+ *
+ * ⚠️ 조용한 부작용이다: 앱이 감시 중이면 그 쓰기가 재색인을 부르고, 사용자는 자기가
+ * 안 만든 파일이 vault 에 쌓이는 것을 나중에야 본다.
+ */
+describe("내보내기 기본 경로", () => {
+  /**
+   * 🔴 **동작으로 본다.** 예전 테스트는 `path.join(dir, ...)` 라는 **변수 이름**을 봤는데,
+   * `dir` 이 가리키는 곳만 바꾸면 이름은 그대로라 통과해 버렸다 — 고쳤는데도 빨갛거나,
+   * 더 나쁘게는 안 고쳤는데 초록이 된다.
+   */
+  it("노트가 있는 폴더 밖으로 나간다", () => {
+    const note = nodePath.join("C:", "vault", "sub", "노트.md");
+    const out = defaultHtmlPath(note);
+    expect(nodePath.dirname(nodePath.resolve(out))).not.toBe(
+      nodePath.dirname(nodePath.resolve(note)),
+    );
+  });
+
+  it("노트 이름은 지킨다", () => {
+    expect(nodePath.basename(defaultHtmlPath("/vault/어떤 노트.md"))).toBe("어떤 노트.html");
+  });
+
+  /** ⚠️ `.mmd` · `.markdown` 도 확장자다. 안 벗기면 `x.md.html` 이 된다. */
+  it("확장자를 벗긴다", () => {
+    for (const ext of ["md", "mmd", "markdown", "MD"]) {
+      expect(nodePath.basename(defaultHtmlPath(`/v/x.${ext}`)), ext).toBe("x.html");
+    }
+  });
+
+  /** vault 밖의 사람이 찾을 수 있는 자리 — 없으면 임시 폴더로 물러난다. */
+  it("사용자 폴더 아니면 임시 폴더다", () => {
+    const dir = nodePath.resolve(nodePath.dirname(defaultHtmlPath("/v/x.md")));
+    const ok = [nodePath.resolve(homedir(), "Downloads"), nodePath.resolve(tmpdir())];
+    expect(ok).toContain(dir);
+  });
+
+  /** ⚠️ 어디에 썼는지 응답이 말해야 한다 — 안 그러면 찾으러 다녀야 한다. */
+  it("어디 썼는지 응답에 담는다", () => {
+    expect(src).toMatch(/out: normPath\(out\)/);
   });
 });
