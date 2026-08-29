@@ -1,7 +1,7 @@
 import { m } from "$lib/paraglide/messages.js";
 import type { CommandId } from "$lib/commandIds";
 import { get } from "svelte/store";
-import { fuzzyMatch } from "$lib/searchIndex";
+import { fuzzyMatch, fuzzyMatchLabel } from "$lib/searchIndex";
 import {
   vaultPath,
   currentNotePath,
@@ -291,7 +291,9 @@ export function matchCommands(query: string, limit = 20): CommandHit[] {
   }
   const hits: CommandHit[] = [];
   for (const command of visible) {
-    const labelScore = fuzzyMatch(q, command.label);
+    // ⚠️ 라벨은 **초성을 아는** 쪽으로 본다. `fuzzyMatch` 를 그대로 걸면
+    //    초성 질의가 언제나 `null` 이 된다 — 라벨에 낱자가 있을 리가 없다.
+    const labelScore = fuzzyMatchLabel(q, command.label);
     const idScore = fuzzyMatch(q, command.id);
     let best: { score: number; key: string } | null = null;
     if (labelScore !== null) best = { score: labelScore, key: command.label };

@@ -546,5 +546,7 @@
   "hygiene_stale_summary": "{count} notes have sat unchanged for six months.",
   "hygiene_stale_days": "{days} days",
   "hygiene_stale_hint": "Not a list of things to fix — a list of things to look at again. Uses whichever is later: the file's modified time or the frontmatter <code>date</code>.",
-  "wikilink_ambiguous": "{count} notes share this name — goes to the nearest: {paths}"
+  "wikilink_ambiguous": "{count} notes share this name — goes to the nearest: {paths}",
+  "fav_reading_mark": "Where you left off",
+  "fav_reading_line": "Line {line}"
 }

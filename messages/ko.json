@@ -546,5 +546,7 @@
   "hygiene_stale_summary": "{count}개가 반년 넘게 그대로입니다.",
   "hygiene_stale_days": "{days}일",
   "hygiene_stale_hint": "고치라는 뜻이 아닙니다 — 다시 볼 때가 됐는지 묻는 목록입니다. 파일 수정 시각과 frontmatter <code>date</code> 중 더 최근을 봅니다.",
-  "wikilink_ambiguous": "같은 이름의 노트가 {count}개입니다 — 가장 가까운 것으로 갑니다: {paths}"
+  "wikilink_ambiguous": "같은 이름의 노트가 {count}개입니다 — 가장 가까운 것으로 갑니다: {paths}",
+  "fav_reading_mark": "읽던 자리",
+  "fav_reading_line": "{line}줄"
 }

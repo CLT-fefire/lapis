@@ -1,4 +1,5 @@
 import { get } from "svelte/store";
+import { chosungOf, isChosungQuery } from "$lib/hangul";
 import {
   fuzzyMatch,
   searchQuickIncremental,
@@ -280,10 +281,26 @@ async function fillContentSnippets(results: PaletteResult[], query: string): Pro
 export function isStrongCommandMatch(query: string, label: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return false;
-  const l = label.toLowerCase();
+  if (prefixesAWord(q, label.toLowerCase())) return true;
+
+  /**
+   * 🔴 **초성도 승격 대상이다.**
+   *
+   * 찾히기만 하고 맨 아래 그룹에 있으면 반쪽이다 — `GROUP_ORDER` 에서 `commands` 는
+   * 본문 검색 결과보다 **뒤**다. 초성으로 친 사람도 명령을 먼저 봐야 한다.
+   */
+  if (!isChosungQuery(q)) return false;
+  const folded = chosungOf(label);
+  if (prefixesAWord(q, folded)) return true;
+  // ⚠️ 낱말을 가로지르는 초성 — `ㅅㄴㅌ` 이 `새 노트` 를 가리킨다.
+  return folded.replace(/\s+/g, "").startsWith(q);
+}
+
+/** 질의가 라벨 전체 또는 **어느 낱말의 접두**인가. */
+function prefixesAWord(q: string, l: string): boolean {
   if (l.startsWith(q)) return true;
-  // 단어 경계마다 본다. 구분자는 공백과 흔한 구두점 — 라벨이 `vault 위생 (…)` 꼴이다.
-  for (const word of l.split(/[\s(){}[\]·,./|-]+/)) {
+  // 구분자는 공백과 흔한 구두점 — 라벨이 `vault 진단 (…)` 꼴이다.
+  for (const word of l.split(/[\s(){}[\]·,./|—-]+/)) {
     if (word && word.startsWith(q)) return true;
   }
   return false;

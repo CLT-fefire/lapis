@@ -4,6 +4,8 @@
   import { recentNotePaths } from "$lib/stores/recent";
   import { currentNotePath, selectNote, linkIndex } from "$lib/stores/vault";
   import { noteStem, noteDisplayName } from "$lib/notePath";
+  import { posFor, positions } from "$lib/stores/readingPos";
+  import { readingMarkFor } from "$lib/readingMark";
 
   const RECENT_LIMIT = 8;
 
@@ -16,6 +18,19 @@
 
   const pinned = $derived(existing($pinnedNotePaths));
   const recent = $derived(existing($recentNotePaths).slice(0, RECENT_LIMIT));
+
+  /**
+   * 읽던 자리 표식 — **최근 목록에만** 붙는다.
+   *
+   * ⚠️ 핀에는 안 붙인다. 핀은 "보관한 것"이지 "읽던 것"이 아니다.
+   *
+   * ⚠️ `$positions` 를 읽어 두는 이유는 **반응성** 때문이다. `posFor` 는 스토어를
+   *    `get` 으로 한 번 보므로, 이걸 안 건드리면 자리가 바뀌어도 표식이 안 따라온다.
+   */
+  function markOf(path: string) {
+    void $positions;
+    return readingMarkFor(posFor(path));
+  }
 
   function open(path: string) {
     if (path !== $currentNotePath) void selectNote(path, { via: "recent" });
@@ -63,6 +78,9 @@
       <h3 class="group-title">{m.fav_recent_title()}</h3>
       <ul class="list">
         {#each recent as path (path)}
+          <!-- ⚠️ `{@const}` 는 `{#each}` 의 **바로 아래**여야 한다 — 버튼 안에 두면
+               컴파일이 안 된다. -->
+          {@const mark = markOf(path)}
           <li>
             <button
               class="item"
@@ -70,7 +88,22 @@
               title={path}
               onclick={() => open(path)}
             >
-              <span class="label">{noteStem(path)}</span>
+              <!-- ⚠️ 라벨과 표식을 한 줄에 둔다. `.item` 이 세로 배치라 그냥 넣으면
+                   표식이 아래로 떨어진다. -->
+              <span class="row">
+                <span class="label">{noteStem(path)}</span>
+                {#if mark}
+                  <span
+                    class="mark"
+                    class:mark--line={mark.kind === "editor"}
+                    title={mark.kind === "editor"
+                      ? m.fav_reading_line({ line: String(mark.line) })
+                      : m.fav_reading_mark()}
+                  >
+                    {mark.kind === "editor" ? mark.line : "•"}
+                  </span>
+                {/if}
+              </span>
               <span class="sub">{noteDisplayName(path)}</span>
             </button>
           </li>
@@ -160,6 +193,46 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 100%;
+  }
+
+  /* 라벨과 표식을 한 줄에 — `.item` 이 세로 배치라 감싸 준다. */
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-1);
+    width: 100%;
+    min-width: 0;
+  }
+
+  .row .label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /**
+   * 읽던 자리 표식.
+   *
+   * ⚠️ 색을 하드코딩하지 않는다 — 테마 3종이 `app.css` 의 토큰에서 갈린다.
+   */
+  .mark {
+    flex-shrink: 0;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    line-height: 1;
+    opacity: 0.75;
+  }
+
+  /* 줄 번호는 점보다 넓다 — 숫자꼴을 고정해 목록이 들쭉날쭉하지 않게. */
+  .mark--line {
+    font-variant-numeric: tabular-nums;
+    padding: 0 var(--sp-1);
+    border-radius: var(--r-sm);
+    background: var(--surface-sunken);
+  }
+
+  .item:hover .mark,
+  .item.active .mark {
+    opacity: 1;
   }
 
   .unpin {
