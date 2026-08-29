@@ -95,6 +95,19 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   ever looking wrong.
 
 ### Fixed
+- **Tasks the app drew were not counted by the audit.** `+ [ ] something` and
+  `1. [ ] something` rendered as real checkboxes but were invisible to `tasks audit`,
+  `stats` and the MCP server — the screen showed work left while the tools answered
+  "no open tasks". The rule for what counts as a task lived in two places: the renderer
+  sits on top of markdown-it and therefore accepted all three CommonMark bullets and
+  ordered lists, while the audit scanned lines with a regex that only allowed `-` and `*`.
+
+  The two cannot be merged — one reads parser output, the other reads raw text without an
+  index. So a test now feeds the same input to both and fails when their answers differ.
+
+  On this vault the gap was **zero** — nothing here is written with `+`. This is
+  insurance, not a win.
+
 - **Every link in the side-by-side pane was dead.** Wikilinks, markdown links and the mermaid
   export button all did nothing when clicked, and nothing reported an error. The click rules
   lived inside `+page.svelte`, where nothing could call them, so the side pane got its own
