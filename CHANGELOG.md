@@ -16,6 +16,72 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.10.0] — 2026-08-29
+
+> The MCP server can now drive the app, and the CLI can sit in the middle of a pipe.
+> One tool became eight; fourteen commands became twenty-one.
+
+### Added
+- **Seven new MCP tools.** `lapis_query` was the only one, and it could only read. Now:
+  `lapis_stats` (vault totals), `lapis_usage` (usage-log rollup), `lapis_index` (headless
+  reindex), `lapis_export_html`, `lapis_open` (open a note in the running app),
+  `lapis_reveal` (open the containing folder), and `lapis_render` (app-quality HTML, and
+  mermaid diagrams as PNG).
+
+- **`lapis_render` renders through the app, not beside it.** Mermaid, math and user CSS only
+  exist in a browser. Rendering them a second time inside the MCP server would mean two
+  renderers that drift — the single most common defect in this repository. Instead the request
+  goes over the existing argv channel, the app draws it, and the file lands where you asked.
+  Slower, but it cannot disagree with what you see on screen.
+
+- **`lapis_export_html` runs without the app** and says where it differs. Its `differs_from_app`
+  field names what the standalone converter cannot reproduce (mermaid, math, user CSS, wikilink
+  resolution). A difference is **not** an error; an unreported difference is.
+
+- **Seven new CLI commands.** `read` (note body; `-` reads the path from stdin), `stats`,
+  `usage`, `new`, `config`, `diff`, and `completion` for bash/zsh/pwsh.
+
+- **The CLI fits in a pipe.** `--quiet` drops the human-facing lines, and `read -` takes its
+  path from stdin, so this works:
+  `lapis search q --json | jq -r '.results[0].path' | lapis read -`
+
+- **`config` gives settings a second pair of eyes.** `mcp_enabled` could only be flipped from
+  the app. When that toggle silently did nothing there was no other way to look, so the search
+  for a cause started in the wrong place. Two readers disagree loudly.
+
+### Fixed
+- **A render request made while the app was closed silently vanished.** The app took the
+  request from argv and held it, but the front end asked for it once at startup — before the
+  vault had opened — and the answer is only given to a window whose vault matches. The event
+  that would prompt a second ask had already gone out before anything subscribed. Rust logged
+  "staged", never "taken"; no output file, and no failure file either, because nothing had
+  failed. The caller learned about it only as a timeout. It now asks again once the vault opens.
+
+- **`data-rendered` was read as "finished".** Mermaid sets that attribute to `pending` the
+  moment it *starts*, and the wait counted any host carrying the attribute as done — so the
+  next line looked for an `<svg>` that was not there yet and reported "the diagram is not
+  drawn yet, or its syntax is wrong". It was neither. The wait now looks at the rendered
+  result rather than the attribute, and reports three outcomes separately, because
+  "too slow", "bad syntax" and "done" call for different responses.
+
+- **`lapis_render` mixed two path shapes in one reply.** `path` and `vault` came back with
+  forward slashes and `out` with backslashes. Consumers split these on `/`, so the odd one
+  out silently loses its file name and parent directory.
+
+- **Settings are written atomically.** The CLI wrote the settings file in place. One file holds
+  *every* app setting, so an interrupted write loses not one key but all of them — and the app
+  reads that as "no settings", which closes the MCP gate. Now: temp file, then rename, in the
+  same directory.
+
+- **stdin paths keep their `\r`.** A Windows pipe hands over CRLF. Splitting on `\n` alone left
+  a carriage return glued to the end of the path, and the file came back **missing** while
+  looking perfectly fine on screen.
+
+### Changed
+- The MCP failure table is now a table, with a remedy per kind. `app_not_found` and
+  `app_timeout` are deliberately separate: one is an install problem, the other means the app
+  simply is not running, and a caller told the wrong one digs in the wrong place.
+
 ## [3.9.0] — 2026-08-29
 
 > The rest of the fifth analysis, and five new CLI commands. Cut as one release rather than four —

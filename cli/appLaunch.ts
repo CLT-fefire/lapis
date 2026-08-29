@@ -34,11 +34,23 @@ export interface LaunchOptions {
   platform?: NodeJS.Platform;
   /** 테스트용 주입. 기본은 실제 `spawn`. */
   spawnFn?: typeof spawn;
+  /**
+   * `--open` 뒤에 덧붙일 인자.
+   *
+   * ⚠️ **`--open` 을 대체하지 않는다.** 렌더 요청은 노트를 열어야 성립하므로(라이브 DOM 을
+   * 읽는다) 둘이 같이 간다. 앱 쪽도 둘을 **독립으로** 파싱한다 — 하나가 없다고 다른
+   * 하나를 건너뛰지 않는다.
+   */
+  extraArgs?: readonly string[];
 }
 
 /** 앱에 넘길 인자. 순수 함수라 테스트가 문자열만 본다. */
-export function openArgs(path: string, vault: string): string[] {
-  return ["--open", path, "--open-vault", vault];
+export function openArgs(
+  path: string,
+  vault: string,
+  extra: readonly string[] = [],
+): string[] {
+  return ["--open", path, "--open-vault", vault, ...extra];
 }
 
 export function launchOpen(opts: LaunchOptions): { exe: string } {
@@ -49,7 +61,7 @@ export function launchOpen(opts: LaunchOptions): { exe: string } {
     throw new LaunchError("Lapis 실행파일을 찾지 못했다", locateRemedy(located.tried));
   }
 
-  const child = (opts.spawnFn ?? spawn)(located.exe, openArgs(opts.path, opts.vault), {
+  const child = (opts.spawnFn ?? spawn)(located.exe, openArgs(opts.path, opts.vault, opts.extraArgs ?? []), {
     detached: true,
     stdio: "ignore",
     windowsHide: false,

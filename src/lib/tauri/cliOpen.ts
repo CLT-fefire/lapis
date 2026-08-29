@@ -43,3 +43,15 @@ export function onCliOpen(handler: () => void | Promise<void>): Promise<Unlisten
     void handler();
   });
 }
+
+/**
+ * 밖에서 시킨 렌더 요청 알림. 해제 함수를 돌려준다.
+ *
+ * ⚠️ `cli:open` 과 **별개 이벤트**다. 같은 argv 에 둘 다 올 수 있고(보여주면서 저장),
+ * 하나로 합치면 한쪽만 처리하고 끝나는 길이 생긴다.
+ */
+export function onCliRender(handler: () => void | Promise<void>): Promise<UnlistenFn> {
+  return listen("cli:render", () => {
+    void handler();
+  });
+}

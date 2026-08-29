@@ -71,6 +71,13 @@ export function renderRootHelp(): string {
     "공통 옵션",
     table(GLOBAL_OPTIONS.map((o) => ["  --" + o.name, o.desc])),
     "",
+    "종료 코드",
+    table([
+      ["  0", "성공. `doctor` 는 문제를 못 찾았다는 뜻"],
+      ["  1", "질의·실행 실패. `doctor` 는 문제를 찾았다는 뜻"],
+      ["  2", "쓰는 법이 틀렸다 — 인자·옵션 문제. 낡은 인덱스로 쓰기를 막을 때도 이 코드다"],
+    ]),
+    "",
     "자세한 것은 cli/README.md. 명령별 사용법은 `lapis <명령> --help`.",
   ];
   return lines.join("\n");

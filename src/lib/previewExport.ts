@@ -89,6 +89,41 @@ async function inlineImages(root: HTMLElement): Promise<ImageInlineResult> {
  * throw 하지 않는다. save 취소는 정상 흐름(알림 없이 종료), 그 외 실패는
  * 네이티브 에러 다이얼로그로 알린다 — mermaid PNG 내보내기와 같은 규약.
  */
+/**
+ * 라이브 DOM → 자립 HTML **문자열**. 저장은 부르는 쪽이 한다.
+ *
+ * ## ⚠️ 왜 갈랐나
+ *
+ * 이 조립을 쓰는 곳이 둘이 됐다 — 사용자가 고르는 저장 대화상자와, **밖에서 시킨
+ * 렌더**(`lapis_render`). 각자 조립하면 두 문서가 달라지고, 그건 "앱에서 내보낸 것과
+ * MCP 로 뽑은 것이 다르다"가 된다.
+ *
+ * ⚠️ 토큰 해석 기준을 **article** 로 잡는다(`:root` 가 아니라). 커스텀 프로퍼티는
+ * 상속되므로 article 의 computed style 에는 `:root` 토큰이 전부 들어 있고, 거기에 더해
+ * 인라인으로 걸린 `--reading-font-size` 까지 잡힌다 — 사용자가 `Aa` 로 키운 글꼴 크기가
+ * 내보낸 문서에도 그대로 반영되는 이유다.
+ */
+export async function buildPreviewHtml(
+  article: HTMLElement,
+  notePath: string | null | undefined,
+): Promise<{ html: string; images: ImageInlineResult }> {
+  const clone = article.cloneNode(true) as HTMLElement;
+  stripAppOnlyNodes(clone);
+  const images = await inlineImages(clone);
+  const computed = getComputedStyle(article);
+  const tokenBlock = buildRootTokenBlock(
+    `${EXPORT_BASE_CSS}\n${renderedCss}`,
+    (name) => computed.getPropertyValue(name),
+  );
+  const html = buildHtmlDocument({
+    title: documentTitle(notePath),
+    tokenBlock,
+    renderedCss,
+    bodyHtml: clone.innerHTML,
+  });
+  return { html, images };
+}
+
 export async function exportPreviewToHtml(
   article: HTMLElement | null | undefined,
   notePath: string | null | undefined,
@@ -98,26 +133,9 @@ export async function exportPreviewToHtml(
   let html: string;
   let images: ImageInlineResult;
   try {
-    const clone = article.cloneNode(true) as HTMLElement;
-    stripAppOnlyNodes(clone);
-    images = await inlineImages(clone);
-
-    // 토큰 해석 기준을 **article**로 잡는다(:root가 아니라).
-    // 커스텀 프로퍼티는 상속되므로 article의 computed style에는 :root의 토큰이
-    // 전부 들어 있고, 거기에 더해 인라인으로 걸린 `--reading-font-size`까지 잡힌다
-    // → 사용자가 Aa로 키운 글꼴 크기가 내보낸 문서에도 그대로 반영된다.
-    const computed = getComputedStyle(article);
-    const tokenBlock = buildRootTokenBlock(
-      `${EXPORT_BASE_CSS}\n${renderedCss}`,
-      (name) => computed.getPropertyValue(name),
-    );
-
-    html = buildHtmlDocument({
-      title: documentTitle(notePath),
-      tokenBlock,
-      renderedCss,
-      bodyHtml: clone.innerHTML,
-    });
+    const built = await buildPreviewHtml(article, notePath);
+    html = built.html;
+    images = built.images;
   } catch (err) {
     await notifyExportError(m.export_html_convert_failed(), err);
     return;

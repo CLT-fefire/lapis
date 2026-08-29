@@ -7,8 +7,11 @@ import {
   type QueryArgs,
 } from "../mcp/query.ts";
 import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
+import { spawnSync } from "node:child_process";
 import {
   resolveVault,
+  readSettings,
+  writeSetting,
   checkStale,
   type VaultCache,
   type Staleness,
@@ -621,7 +624,20 @@ function cmdIndex(p: ParsedCommand, out: Out): void {
  * 필요하면 `--meta`.
  */
 function cmdRead(p: ParsedCommand, out: Out): void {
-  const resolved = resolveNotePath(p.positional[0], vaultOf(p));
+  /**
+   * ⚠️ `-` 는 **표준입력에서 노트 이름을 읽는다**는 뜻이다.
+   *
+   * 명령이 스물인데 서로 못 엮였다. 이제 이렇게 된다:
+   * `lapis search --json | jq -r .results[0].path | lapis read -`
+   *
+   * ⚠️ 첫 줄만 쓴다. 여러 줄을 받아 여러 노트를 내면 어디서 끊기는지 알 수 없다 —
+   * 그건 `xargs` 가 할 일이다.
+   */
+  const target = p.positional[0] === "-" ? readStdinLine() : p.positional[0];
+  if (!target) {
+    return out.fail("usage", "노트를 못 읽었다", "표준입력이 비어 있다", 2);
+  }
+  const resolved = resolveNotePath(target, vaultOf(p));
   let raw: string;
   try {
     raw = readFileSync(resolved.path, "utf-8");
@@ -897,6 +913,122 @@ function cmdCompletion(p: ParsedCommand, out: Out): void {
     );
   }
   out.fail("usage", `모르는 셸: ${shell}`, "bash · zsh · pwsh 중 하나", 2);
+}
+
+/**
+ * 앱 설정을 보고 바꾼다.
+ *
+ * ## ⚠️ 왜 CLI 에 있나
+ *
+ * `mcp_enabled` 를 **앱에서만** 켤 수 있었다. 그 토글이 조용히 안 먹은 적이 있고
+ * (같은 값이면 아무것도 안 했고, dev/릴리스 설정이 갈렸다) 확인할 다른 경로가 없어서
+ * 원인을 앱이 아닌 MCP 쪽에서 찾느라 시간을 썼다. **경로가 둘이면 그때 바로 갈린다.**
+ *
+ * ⚠️ 쓰기는 `writeSetting` 이 한다 — 모르는 키를 보존하고 후보 파일 전부에 쓴다.
+ */
+function cmdConfig(p: ParsedCommand, out: Out): void {
+  const key = p.positional[0];
+  const raw = p.positional[1];
+
+  if (!key) {
+    const s = readSettings();
+    if (!s) {
+      return out.fail(
+        "cache_absent",
+        "설정 파일이 없다",
+        "Lapis 앱을 한 번 실행하면 만들어진다",
+        1,
+      );
+    }
+    if (out.json) return out.json_({ file: s.file, values: s.values });
+    out.line(table([["파일", s.file]]));
+    out.line("");
+    out.line(
+      table(Object.entries(s.values).map(([k, v]) => ["  " + k, summarizeValue(v)])),
+    );
+    return;
+  }
+
+  if (raw === undefined) {
+    const s = readSettings();
+    const v = s?.values[key];
+    if (out.json) return out.json_({ key, value: v ?? null, file: s?.file ?? null });
+    // ⚠️ `--quiet` 면 값만 낸다 — 스크립트가 받아쓰는 자리다.
+    return out.line(p.options.quiet === true ? String(v ?? "") : `${key} = ${summarizeValue(v)}`);
+  }
+
+  const value = parseSettingValue(raw);
+  const touched = writeSetting(key, value);
+  if (touched.length === 0) {
+    return out.fail(
+      "cache_absent",
+      "설정 파일이 없다",
+      "Lapis 앱을 한 번 실행하면 만들어진다",
+      1,
+    );
+  }
+  if (out.json) return out.json_({ key, value, files: touched });
+  out.line(`${key} = ${summarizeValue(value)}`);
+  if (p.options.quiet !== true) {
+    // ⚠️ 앱이 떠 있으면 메모리의 값이 이긴다 — 안 적으면 "썼는데 안 먹는다"가 된다.
+    out.line(`  ${touched.length}개 파일에 썼다. 앱이 떠 있으면 다시 켜야 반영된다.`);
+  }
+}
+
+/**
+ * 표준입력의 **첫 줄**.
+ *
+ * ⚠️ 파이프가 아니면 여기서 멈춘다. 그래서 `-` 를 명시했을 때만 부른다.
+ */
+function readStdinLine(): string {
+  try {
+    const raw = readFileSync(0, "utf-8");
+    return raw.split(/\r?\n/).find((l) => l.trim() !== "")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** `true` · `false` · 숫자는 그 타입으로, 나머지는 문자열. */
+function parseSettingValue(raw: string): unknown {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (/^-?\d+$/.test(raw)) return Number(raw);
+  return raw;
+}
+
+/** 긴 값(사용자 CSS 본문 등)은 줄여서 — 터미널을 덮지 않게. */
+function summarizeValue(v: unknown): string {
+  if (typeof v === "string" && v.length > 60) return `${v.slice(0, 57)}… (${v.length}자)`;
+  return JSON.stringify(v) ?? String(v);
+}
+
+/**
+ * 노트의 git 변경을 본다.
+ *
+ * ⚠️ **git 을 직접 부른다.** 앱의 `git_show_diff` 는 Tauri 커맨드라 여기서 못 쓴다.
+ * 인자 모양은 앱 쪽과 같게 맞춘다 — 두 도구가 다른 diff 를 내면 안 된다.
+ */
+function cmdDiff(p: ParsedCommand, out: Out): void {
+  const resolved = resolveNotePath(p.positional[0], vaultOf(p));
+  const rev = typeof p.options.rev === "string" ? p.options.rev : "";
+  const args = rev
+    ? ["diff", rev, "--", resolved.path]
+    : ["diff", "--", resolved.path];
+  const r = spawnSync("git", args, { cwd: resolved.vault, encoding: "utf-8" });
+  if (r.error) {
+    return out.fail("internal", "git 을 못 불렀다", "git 이 PATH 에 있는지 볼 것", 1);
+  }
+  if (r.status !== 0 && r.stderr) {
+    return out.fail("internal", r.stderr.trim(), "vault 가 git 저장소인지 볼 것", 1);
+  }
+  const diff = r.stdout ?? "";
+  if (out.json) return out.json_({ ...resolved, rev: rev || null, diff });
+  if (!diff.trim()) {
+    // ⚠️ 변경이 없는 것은 **오류가 아니다.** 종료 코드 0 으로 끝낸다.
+    return out.line(p.options.quiet === true ? "" : "변경 없음");
+  }
+  out.line(diff);
 }
 
 function cmdOpen(p: ParsedCommand, out: Out): void {
@@ -1419,5 +1551,7 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   usage: cmdUsage,
   new: cmdNew,
   completion: cmdCompletion,
+  config: cmdConfig,
+  diff: cmdDiff,
   replace: cmdReplace,
 };

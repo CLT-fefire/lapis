@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `lapis-mcp` — stdio JSON-RPC MCP 서버. 도구 하나.
+ * `lapis-mcp` — stdio JSON-RPC MCP 서버.
  *
  * SDK 의존성이 없다. 필요한 메서드가 `initialize` · `tools/list` · `tools/call` 셋이라
  * 프로토콜을 직접 다루는 게 의존성을 하나 더 지는 것보다 싸다.
@@ -8,6 +8,7 @@
 
 import { lapisQuery, type QueryArgs } from "./query.ts";
 import { LapisError, mcpDisabledError, readMcpGate } from "./cache.ts";
+import { TOOLS } from "./tools.ts";
 
 const TOOL = {
   name: "lapis_query",
@@ -142,11 +143,14 @@ function handle(line: string): void {
     case "notifications/cancelled":
       return;
     case "tools/list":
-      return reply({ tools: [TOOL] });
+      // ⚠️ 질의 도구가 먼저다 — 목록 순서가 클라이언트의 기본 선택에 영향을 준다.
+      return reply({ tools: [TOOL, ...TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))] });
     case "tools/call": {
-      if (params?.name !== TOOL.name) {
+      const called = String(params?.name ?? "");
+      const tool = TOOLS.find((t) => t.name === called);
+      if (called !== TOOL.name && !tool) {
         if (id !== undefined) {
-          send({ jsonrpc: "2.0", id, error: { code: -32601, message: `unknown tool: ${params?.name}` } });
+          send({ jsonrpc: "2.0", id, error: { code: -32601, message: `unknown tool: ${called}` } });
         }
         return;
       }
@@ -154,9 +158,13 @@ function handle(line: string): void {
         // ⚠️ 게이트는 **호출마다** 본다. `tools/list`에서 도구를 숨기면 클라이언트가
         // 목록을 연결 시점에 캐시해 앱에서 토글해도 재시작 전엔 안 먹는다. 여기서
         // 판정하면 즉시 반영되고, 비용은 작은 JSON 파일 하나 읽기다.
+        //
+        // ⚠️ **도구가 늘어도 게이트는 하나다.** 도구마다 검사하게 두면 새 도구가 하나
+        //    빠뜨려져도 아무도 모른다 — 그게 게이트를 무력화하는 가장 쉬운 길이다.
         const gate = readMcpGate();
         if (!gate.enabled) throw mcpDisabledError(gate);
-        const out = lapisQuery((params.arguments ?? {}) as QueryArgs);
+        const args = (params?.arguments ?? {}) as Record<string, unknown>;
+        const out = tool ? tool.run(args) : lapisQuery(args as QueryArgs);
         return reply({ content: [{ type: "text", text: JSON.stringify(out) }] });
       } catch (e) {
         // 실패는 **소리내어** 낸다 — kind + remedy. isError로 표시해 성공과 섞이지 않게.

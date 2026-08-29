@@ -136,6 +136,18 @@ import { isPanicChord } from "$lib/userCss";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
   import { newWindow } from "$lib/tauri/window";
   import { writeUsageAnalysis } from "$lib/usageAutoReport";
+  import { onCliRender } from "$lib/tauri/cliOpen";
+  import {
+    takePendingRender,
+    reportRenderFailure,
+    writeRenderResult,
+    pickMermaidHost,
+    waitForMermaidIn,
+  } from "$lib/stores/cliRender";
+  import { buildPreviewHtml } from "$lib/previewExport";
+  import { buildMermaidPng } from "$lib/mermaidExport";
+  /** 창이 닫힐 때 뗄 구독들 — 안 떼면 죽은 창의 핸들러가 요청을 가로챈다. */
+  const cliRenderUnlisten: (() => void)[] = [];
   import { rememberPos, posFor } from "$lib/stores/readingPos";
   import { BUILTIN_COMMANDS } from "$lib/commands";
   import { resolveShortcut } from "$lib/keymap";
@@ -627,6 +639,84 @@ import { isPanicChord } from "$lib/userCss";
     if (!el || !path) return;
     rememberPos(path, { scroll: el.scrollTop });
   }
+
+  /**
+   * 🔴 **밖에서 시킨 렌더** — `lapis_render` 의 프런트 절반.
+   *
+   * 헤드리스에는 캔버스가 없어 mermaid PNG 를 만들 수 없다. 앱 품질 HTML 도 마찬가지다
+   * (mermaid 가 마운트 후 `<svg>` 가 되므로 라이브 DOM 이 필요하다). 그래서 실행 중인
+   * 창이 대신 해 준다.
+   *
+   * ⚠️ **실패해도 반드시 무언가를 쓴다.** 부른 쪽은 파일이 생기기를 기다리므로, 아무것도
+   * 안 쓰면 타임아웃으로만 알게 된다 — "앱이 느린가"와 "렌더가 깨졌나"가 구별이 안 된다.
+   *
+   * ⚠️ 노트를 **실제로 연다.** 렌더는 라이브 DOM 을 읽으므로 그 노트가 화면에 떠 있어야
+   * 한다. 사람이 보던 것이 바뀌는 부작용이 있지만, 숨기면 무엇을 내보내는지 안 보인다.
+   */
+  /**
+   * 🔴 **차가운 기동** — 앱이 꺼져 있을 때 온 요청.
+   *
+   * 그때는 이벤트가 아니라 `setup` 에서 슬롯에 담긴 채로 기다린다. 그런데
+   * `take_pending_render` 는 **vault 가 맞을 때만** 내주고(창이 여럿일 때 엉뚱한 창이
+   * 가져가지 않도록), 기동 직후엔 `$vaultPath` 가 아직 `null` 이다.
+   *
+   * ⚠️ 그래서 기동 때 한 번만 물으면 **조용히 아무 일도 안 일어난다** — Rust 는 담았고
+   * 프런트는 못 가져갔고, 이벤트는 구독보다 먼저 지나갔다. 부른 쪽은 타임아웃으로만
+   * 알고, 실패 파일조차 안 생긴다(실패한 적이 없으므로).
+   *
+   * vault 가 열린 **뒤에** 다시 묻는다. 불일치일 때 슬롯을 비우지 않으므로 요청은 살아 있다.
+   */
+  // ⚠️ `$state` 가 **아니다.** 효과 안에서 읽고 쓰는 `$state` 는 순환이 된다(이 파일에서
+  //    이미 한 번 겪었다). 이건 화면에 안 나가는 장부이므로 평범한 변수면 된다.
+  let coldRenderChecked: string | null = null;
+  $effect(() => {
+    const vault = $vaultPath;
+    if (!vault || coldRenderChecked === vault) return;
+    // [cli-render] 차가운 기동 — vault 가 열렸으니 이제 물어본다.
+    coldRenderChecked = vault;
+    void handleRenderRequest();
+  });
+
+  async function handleRenderRequest(): Promise<void> {
+    const req = await takePendingRender($vaultPath).catch(() => null);
+    if (!req) return;
+    try {
+      await selectNote(req.path, { via: "cli" });
+      // 본문이 그려지고 mermaid 가 **SVG 가 될 때까지** 기다린다.
+      //
+      // ⚠️ 본문 노드를 매번 다시 읽는다. 노트를 여는 도중이면 통째로 갈리므로, 한 번
+      //    잡아 두면 화면에서 떨어져 나간 옛 노드를 보며 영영 기다린다.
+      await tick();
+      const state = await waitForMermaidIn(() => renderedArticleEl ?? null);
+      const article = renderedArticleEl;
+      if (!article) throw new Error("본문이 아직 없다");
+      // ⚠️ 세 결과를 **따로** 말한다 — 조치가 다르다. 뭉치면 타임아웃을 늘려야 할 사람이
+      //    다이어그램 문법을 들여다본다.
+      if (state === "error") throw new Error("다이어그램 문법이 틀렸다");
+      if (state === "pending") throw new Error("다이어그램이 제때 안 그려졌다 (앱이 바쁘다)");
+
+      if (req.format === "png") {
+        const { host, total } = pickMermaidHost(article);
+        if (!host) throw new Error("이 노트에 mermaid 다이어그램이 없다");
+        const blob = await buildMermaidPng(host);
+        if (!blob) throw new Error("다이어그램 안에 SVG 가 없다");
+        await writeRenderResult(req.out, new Uint8Array(await blob.arrayBuffer()));
+        if (total > 1) {
+          // ⚠️ 여럿이면 첫 번째를 썼다는 사실을 남긴다 — 왜 다른 그림이 아닌지 알아야 한다.
+          logWarn("routes/+page", `[cli-render] 다이어그램 ${total}개 중 첫 번째를 썼다`);
+        }
+        return;
+      }
+
+      const { html } = await buildPreviewHtml(article, req.path);
+      await writeRenderResult(req.out, new TextEncoder().encode(html));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logWarn("routes/+page", "[cli-render] 실패", e);
+      await reportRenderFailure(req.out, msg);
+    }
+  }
+
 
   /** 복원이 부른 스크롤인지 — `onscroll` 이 자기 값을 덮어쓰지 않게. */
   let restoringPos = false;
@@ -1453,6 +1543,16 @@ import { isPanicChord } from "$lib/userCss";
       void writeUsageAnalysis(BUILTIN_COMMANDS.map((c) => c.id));
     }, 3_000);
 
+    /**
+     * 밖에서 시킨 렌더를 듣는다.
+     *
+     * ⚠️ 기동 때도 한 번 확인한다 — 앱이 꺼져 있을 때 요청이 오면 이벤트가 아니라
+     *    `setup` 에서 담긴 채로 기다린다(차가운 기동).
+     */
+    void onCliRender(() => handleRenderRequest())
+      .then((un) => cliRenderUnlisten.push(un))
+      .catch((e) => logWarn("routes/+page", "[cli-render] 구독 실패", e));
+
     restoreTheme();
     restoreDensity();
     restoreMotionPref();
@@ -1490,6 +1590,9 @@ import { isPanicChord } from "$lib/userCss";
     return () => {
       unlistenCliOpen?.();
       unlistenCliOpen = null;
+      // ⚠️ 렌더 구독도 뗀다 — 안 떼면 죽은 창의 핸들러가 요청을 가로채고,
+      //    그 창에는 본문이 없어 부른 쪽은 "다이어그램이 없다"를 받는다.
+      for (const un of cliRenderUnlisten.splice(0)) un();
     };
   });
 </script>

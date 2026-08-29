@@ -34,6 +34,7 @@ export interface CommandSpec {
 export const GLOBAL_OPTIONS: OptionSpec[] = [
   { name: "vault", kind: "string", desc: "vault 루트 절대 경로. 캐시에 여러 vault가 있을 때" },
   { name: "json", kind: "boolean", desc: "기계가 읽을 형태로. 스크립트·AI는 이걸 쓴다" },
+  { name: "quiet", kind: "boolean", desc: "사람용 안내 줄을 뺀다. 값만 필요할 때" },
   { name: "help", kind: "boolean", desc: "이 명령의 사용법" },
 ];
 
@@ -227,6 +228,21 @@ export const COMMANDS: CommandSpec[] = [
       { name: "template", kind: "string", desc: ".lapis/templates 안의 이름. 앱과 같은 목록" },
       { name: "title", kind: "string", desc: "{{title}} 에 넣을 값. 기본은 파일 이름" },
     ],
+  },
+  {
+    name: "config",
+    desc: "앱 설정을 보고 바꾼다. `mcp_enabled` 를 여기서 켤 수 있다",
+    positional: [
+      { name: "키", required: false, desc: "생략하면 전부 본다" },
+      { name: "값", required: false, desc: "주면 쓴다. true · false · 숫자 · 문자열" },
+    ],
+    options: [],
+  },
+  {
+    name: "diff",
+    desc: "노트의 git 변경을 본다. vault 가 git 저장소여야 한다",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
+    options: [{ name: "rev", kind: "string", desc: "비교할 리비전. 기본은 작업 트리" }],
   },
   {
     name: "completion",

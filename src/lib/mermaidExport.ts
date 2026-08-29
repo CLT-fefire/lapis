@@ -131,6 +131,21 @@ let exportSeq = 0;
  * 실패 시 네이티브 에러 다이얼로그로 사용자에게 알린다(throw 하지 않음).
  * save 취소는 정상 흐름 — 알림 없이 종료.
  */
+/**
+ * mermaid 호스트 → PNG **Blob**. 저장은 부르는 쪽이 한다.
+ *
+ * ⚠️ 조립을 가른 이유는 `buildPreviewHtml` 과 같다 — 쓰는 곳이 둘이 됐고(대화상자 ·
+ * 밖에서 시킨 렌더), 각자 만들면 결과가 갈린다.
+ *
+ * ⚠️ `svg` 가 없으면 `null` 이다 — 아직 렌더 중이거나 문법이 틀린 다이어그램이다.
+ * 빈 PNG 를 만들어 성공이라 말하지 않는다.
+ */
+export async function buildMermaidPng(host: HTMLElement): Promise<Blob | null> {
+  const svg = host.querySelector("svg");
+  if (!svg) return null;
+  return await svgElementToPngBlob(svg as SVGSVGElement);
+}
+
 export async function exportMermaidHostToPng(
   host: HTMLElement,
   defaultBaseName: string,
