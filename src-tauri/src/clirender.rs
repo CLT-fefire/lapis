@@ -100,14 +100,30 @@ pub fn parse_render<I: Iterator<Item = String>>(args: I) -> Option<PendingRender
 pub fn stage(app: &AppHandle, render: PendingRender) {
     let desc = format!("{} → {} ({})", render.path, render.out, render.format);
     if let Some(state) = app.try_state::<PendingRenderState>() {
-        if let Ok(mut slot) = state.slot.lock() {
-            *slot = Some(render);
-        }
+        stage_into(&state, render);
     }
     // ⚠️ 성공해도 실패해도 흔적이 없는 기능이라 로그를 남긴다 — `cliopen` 과 같은 이유.
     eprintln!("[lapis/cli-render] 담음: {desc}");
     if let Err(e) = app.emit("cli:render", ()) {
         eprintln!("[lapis/cli-render] 알림 실패: {e}");
+    }
+}
+
+/// 담기의 순수한 절반 — Tauri 없이 테스트할 수 있게 뗐다.
+///
+/// 🔴 **새 요청은 지난 창 표식을 무효로 만든다.**
+///
+/// 차가운 기동이 `main` 을 지목해 두는데(`lib.rs`), 그 표식을 안 지우면 그 뒤로 오는
+/// 모든 렌더 요청을 `main` 이 **vault 와 무관하게** 가로챈다. 프런트는 요청받은 vault 를
+/// 열게 돼 있으므로 사용자가 보던 창의 vault 가 통째로 바뀐다.
+///
+/// `cliopen::stage` 가 같은 이유로 이미 지운다. 렌더만 빠져 있었다.
+fn stage_into(state: &PendingRenderState, render: PendingRender) {
+    if let Ok(mut slot) = state.slot.lock() {
+        *slot = Some(render);
+    }
+    if let Ok(mut w) = state.cli_window.lock() {
+        *w = None;
     }
 }
 
@@ -411,5 +427,58 @@ mod unclaimed_tests {
 
         let plain = state_with(Some(pending("C:/v")), None);
         assert!(claim(&plain, "main", None).is_none());
+    }
+}
+
+#[cfg(test)]
+mod stage_reset_tests {
+    use super::*;
+
+    /// 🔴 **새 요청은 지난 창 표식을 무효로 만든다.**
+    ///
+    /// 차가운 기동이 `main` 을 지목해 두는데(`lib.rs`), 그 표식을 안 지우면 **그 뒤로
+    /// 오는 모든 렌더 요청을 `main` 이 vault 와 무관하게 가로챈다.** 프런트는 요청받은
+    /// vault 를 열게 돼 있으므로, 사용자가 보던 창의 vault 가 통째로 바뀐다.
+    ///
+    /// `cliopen::stage` 는 같은 이유로 이미 지운다("새 요청이 왔으니 지난 요청의 창
+    /// 표식은 무효다"). 렌더만 빠져 있었다.
+    fn pending(vault: &str) -> PendingRender {
+        PendingRender {
+            path: format!("{vault}/n.md"),
+            vault: vault.to_string(),
+            out: "C:/out/n.png".to_string(),
+            format: "png".to_string(),
+        }
+    }
+
+    #[test]
+    fn new_request_clears_the_window_mark() {
+        let state = PendingRenderState {
+            slot: Mutex::new(None),
+            // 차가운 기동이 남겨 둔 표식.
+            cli_window: Mutex::new(Some("main".to_string())),
+        };
+
+        stage_into(&state, pending("C:/other-vault"));
+
+        assert_eq!(
+            *state.cli_window.lock().unwrap(),
+            None,
+            "지난 창 표식이 남아 main 이 남의 vault 요청을 가로챈다"
+        );
+        // 표식이 없으니 vault 가 다른 창은 못 받는다.
+        assert!(claim(&state, "main", Some("C:/my-vault")).is_none());
+    }
+
+    /// ⚠️ 표식을 지운 **뒤에** 새로 지목하는 순서여야 한다 — 반대면 방금 띄운 창이 못 받는다.
+    #[test]
+    fn marking_after_stage_still_works() {
+        let state = PendingRenderState {
+            slot: Mutex::new(None),
+            cli_window: Mutex::new(Some("main".to_string())),
+        };
+        stage_into(&state, pending("C:/other-vault"));
+        *state.cli_window.lock().unwrap() = Some("w2".to_string());
+        assert!(claim(&state, "w2", None).is_some());
     }
 }

@@ -133,3 +133,47 @@ describe("다룰 수 있는 키", () => {
     expect(SCALAR_PROP_KEYS as readonly string[]).not.toContain("related");
   });
 });
+
+/**
+ * 🔴 **`#` 는 앞에 공백이 있어야 주석이다.**
+ *
+ * YAML 에서 `C#` 은 스칼라 `C#` 하나이지 "값 `C` + 주석 `#`" 이 아니다. 그런데 주석
+ * 인식을 `\s*#` 로 했더니 —
+ *
+ * ```
+ * rewritePropInFrontmatter("topic: C#", "topic", "C", "D")
+ *   → count=1, "topic: D#"      ← 안 건드려야 할 것을 건드렸다
+ * ```
+ *
+ * 반대 방향도 막혀 있었다: 진짜 값 `C#` 을 바꾸려 해도 값이 `C` 로 잘려 **영영 안 맞는다.**
+ *
+ * ⚠️ 프로그래밍 노트에서 `C#` · `F#` 은 흔한 값이다. 그리고 이 결함은 **조용하다** —
+ * dry-run 미리보기에도 "바뀐다"고 나오므로 사람이 보고도 이상한 줄 모른다.
+ */
+describe("값 안의 #", () => {
+  it("공백 없는 # 는 주석이 아니다", () => {
+    const r = rewritePropInFrontmatter("topic: C#", "topic", "C", "D");
+    expect(r.count, "C# 을 C 로 읽고 바꿨다").toBe(0);
+    expect(r.text).toBe("topic: C#");
+  });
+
+  it("진짜 값 C# 은 바꿀 수 있다", () => {
+    const r = rewritePropInFrontmatter("topic: C#", "topic", "C#", "csharp");
+    expect(r.count).toBe(1);
+    expect(r.text).toBe("topic: csharp");
+  });
+
+  /** 공백이 있으면 진짜 주석이다 — 그건 그대로 남긴다. */
+  it("공백 있는 # 는 주석이다", () => {
+    const r = rewritePropInFrontmatter("topic: old  # 왜 이 값인지", "topic", "old", "new");
+    expect(r.count).toBe(1);
+    expect(r.text).toBe("topic: new  # 왜 이 값인지");
+  });
+
+  /** ⚠️ 따옴표 안의 `#` 도 값의 일부다. */
+  it("따옴표 안의 # 는 값이다", () => {
+    const r = rewritePropInFrontmatter('topic: "a # b"', "topic", "a # b", "c");
+    expect(r.count).toBe(1);
+    expect(r.text).toBe('topic: "c"');
+  });
+});

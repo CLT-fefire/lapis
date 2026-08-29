@@ -65,13 +65,13 @@ export function rewritePropInFrontmatter(
   let count = 0;
 
   for (const line of lines) {
-    // `topic: 값` 또는 `topic: "값"  # 주석`
-    const m = new RegExp(`^(${escapeRe(key)}:\\s*)(.*?)(\\s*#.*)?$`).exec(line);
-    if (!m) {
+    const head = new RegExp(`^(${escapeRe(key)}:\\s*)`).exec(line);
+    if (!head) {
       out.push(line);
       continue;
     }
-    const [, head, rawValue, comment = ""] = m;
+    const { value: rawValue, comment } = splitValueAndComment(line.slice(head[1].length));
+
     // 배열은 이 도구가 다루지 않는다 — `tags` 는 `tag rename` 몫이다.
     if (rawValue.trim().startsWith("[")) {
       out.push(line);
@@ -83,10 +83,56 @@ export function rewritePropInFrontmatter(
     }
     count++;
     // 따옴표 스타일 보존 — 값만 갈아끼운다.
-    out.push(`${head}${rawValue.replace(oldValue, newValue)}${comment}`);
+    out.push(`${head[1]}${rawValue.replace(oldValue, newValue)}${comment}`);
   }
 
   return { text: out.join("\n"), count };
+}
+
+/**
+ * 값과 줄 끝 주석을 가른다.
+ *
+ * ## 🔴 정규식 하나로는 못 가른다
+ *
+ * 처음엔 값과 주석을 한 정규식에서 `\s*#` 로 갈랐다. 두 가지가 조용히 틀렸다:
+ *
+ * 1. **공백 없는 `#`** — YAML 에서 `#` 은 **앞에 공백이 있어야** 주석이다.
+ *    `C#` 은 스칼라 `C#` 하나다. 그래서 `topic: C#` 이 값 `C` 로 읽혀 안 건드려야 할
+ *    것을 건드렸고(`props rename topic C D` → `topic: D#`), 반대로 진짜 값 `C#` 은
+ *    영영 안 맞았다. 프로그래밍 노트에서 `C#` · `F#` 은 흔하다.
+ * 2. **따옴표 안** — `topic: "a # b"` 는 `#` 앞에 공백이 있지만 그건 값의 일부다.
+ *
+ * ⚠️ 그래도 **YAML 을 파싱하지 않는다.** 따옴표 경계만 훑는 줄 단위 작업이다 —
+ * 파싱 후 재직렬화는 #184 에서 frontmatter 를 통째로 날렸다.
+ */
+function splitValueAndComment(rest: string): { value: string; comment: string } {
+  const trimmed = rest.trimStart();
+  const lead = rest.length - trimmed.length;
+  const q = trimmed[0];
+
+  if (q === '"' || q === "'") {
+    for (let i = 1; i < trimmed.length; i++) {
+      // 큰따옴표는 백슬래시로, 작은따옴표는 겹쳐서(`''`) 이스케이프한다.
+      if (q === '"' && trimmed[i] === "\\") {
+        i++;
+        continue;
+      }
+      if (trimmed[i] !== q) continue;
+      if (q === "'" && trimmed[i + 1] === "'") {
+        i++;
+        continue;
+      }
+      const end = lead + i + 1;
+      return { value: rest.slice(0, end), comment: rest.slice(end) };
+    }
+    // 닫는 따옴표가 없다 — 줄 전체를 값으로 본다. 잘라내는 것보다 안 건드리는 게 낫다.
+    return { value: rest, comment: "" };
+  }
+
+  // ⚠️ 공백 **뒤의** `#` 만 주석이다.
+  const at = rest.search(/\s#/);
+  if (at < 0) return { value: rest, comment: "" };
+  return { value: rest.slice(0, at), comment: rest.slice(at) };
 }
 
 function escapeRe(s: string): string {
