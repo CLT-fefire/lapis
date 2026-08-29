@@ -33,6 +33,7 @@ import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
+import { COMMAND_IDS } from "$lib/commandIds";
 import { applyTemplate, defaultBody, TEMPLATE_DIR } from "$lib/noteTemplate";
 import { usageDirs } from "../mcp/cache.ts";
 import nodePath from "node:path";
@@ -754,7 +755,8 @@ function cmdUsage(p: ParsedCommand, out: Out): void {
     return out.fail("no_usage_log", `${dir} 에 로그 파일이 없다`, "앱을 한 번 켜 볼 것", 1);
   }
 
-  const analyzer = new UsageAnalyzer();
+  // ⚠️ 분모를 넘긴다 — 앱과 같은 명령 목록을 써야 같은 숫자가 나온다.
+  const analyzer = new UsageAnalyzer({ knownCommands: COMMAND_IDS });
   for (const f of months) {
     const raw = readFileSync(nodePath.join(dir, f), "utf-8");
     analyzer.feedAll(raw.split(/\r?\n/).filter((l) => l.trim() !== ""));

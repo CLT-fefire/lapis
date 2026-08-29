@@ -19,6 +19,7 @@ import {
   checkStale,
 } from "./cache.ts";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
+import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
 import { buildIndex } from "$lib/linkIndex";
 import { launchOpen, LaunchError } from "../cli/appLaunch.ts";
@@ -235,7 +236,9 @@ const usageTool: ToolDef = {
         "앱을 한 번 켜 볼 것",
       );
     }
-    const a = new UsageAnalyzer();
+    // ⚠️ 분모를 넘긴다. 안 넘기면 `unusedCommands` 가 `null` 로 나가고,
+    //    그건 "안 쓴 명령이 없다"가 아니라 "모른다"다.
+    const a = new UsageAnalyzer({ knownCommands: COMMAND_IDS });
     for (const f of months) {
       a.feedAll(
         readFileSync(path.join(dir, f), "utf-8")

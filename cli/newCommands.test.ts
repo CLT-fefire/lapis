@@ -67,9 +67,14 @@ describe("usage", () => {
 describe("집계는 한 곳", () => {
   const src = readFileSync(fileURLToPath(new URL("./handlers.ts", import.meta.url)), "utf-8");
 
+  /**
+   * ⚠️ **호출 형태를 못 박지 않는다.** 처음엔 `new UsageAnalyzer()` 를 그대로 비교했는데,
+   * 분모(`knownCommands`)를 넘기도록 고치자 빨개졌다 — 개선을 막는 검사다.
+   * 지켜야 할 것은 인자 모양이 아니라 **앱과 같은 클래스를 쓴다**는 것이다.
+   */
   it("앱과 같은 UsageAnalyzer 를 쓴다", () => {
     expect(src).toMatch(/from "\$lib\/usageAnalyzer"/);
-    expect(src).toMatch(/new UsageAnalyzer\(\)/);
+    expect(src).toMatch(/new UsageAnalyzer\(/);
   });
 
   /** ⚠️ 경로 지식도 한 곳이다 — 두 곳에 적으면 CLI 가 앱과 다른 폴더를 본다. */

@@ -100,8 +100,14 @@ export interface UsageSummary {
   /** 노트에 닿은 입구 분포 — "무엇으로 이동하나". */
   openVia: Record<string, number>;
   perf: PerfStat[];
-  /** 한 번도 안 쓰인 명령. 이 목록이 "지워도 되나"를 말해 준다. */
-  unusedCommands: string[];
+  /**
+   * 한 번도 안 쓰인 명령. 이 목록이 "지워도 되나"를 말해 준다.
+   *
+   * 🔴 **분모를 모르면 `null` 이다.** 빈 배열은 "다 썼다"로 읽힌다 — 실제로 그렇게
+   * 읽혔다. 명령이 0건 쓰인 로그를 두고 `lapis_usage` 가 "안 쓴 명령 없음"을 냈다.
+   * 부른 쪽은 알 방법이 없었다. 모르면 모른다고 말한다.
+   */
+  unusedCommands: string[] | null;
 }
 
 export interface AnalyzerOptions {
@@ -119,7 +125,8 @@ const bump = (m: Record<string, number>, k: string) => {
 };
 
 export class UsageAnalyzer {
-  readonly #known: readonly string[];
+  /** ⚠️ `null` 은 **안 받았다**는 뜻이다. 빈 배열(`[]`)과 다르다. */
+  readonly #known: readonly string[] | null;
   readonly #top: number;
 
   #events = 0;
@@ -146,7 +153,7 @@ export class UsageAnalyzer {
   readonly #perf = new Map<PerfOp, { count: number; sum: number; max: number }>();
 
   constructor(opts: AnalyzerOptions = {}) {
-    this.#known = opts.knownCommands ?? [];
+    this.#known = opts.knownCommands ?? null;
     this.#top = opts.top ?? Number.POSITIVE_INFINITY;
   }
 
@@ -283,7 +290,8 @@ export class UsageAnalyzer {
       .sort((a, b) => b.count - a.count || a.op.localeCompare(b.op));
 
     const used = new Set([...this.#cmd.keys()]);
-    const unusedCommands = this.#known.filter((c) => !used.has(c)).sort();
+    const unusedCommands =
+      this.#known === null ? null : this.#known.filter((c) => !used.has(c)).sort();
 
     return {
       events: this.#events,
