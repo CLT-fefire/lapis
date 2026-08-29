@@ -81,6 +81,9 @@ The full-text index is built in a **Web Worker** and **cached to disk per shard*
 - `⌘T` new tab · `⌘P` replaces the active tab · `⌘W` close · `⌘1`–`⌘9` select
 - `⌘,` / `⌘.` (or `⌘⌃←` / `⌘⌃→`) walk back and forward through visit history
 - **`⌘⇧T` opens a new window — each window can hold a different vault.** Useful for keeping personal notes and project docs side by side.
+- **Side-by-side in one window** — right-click a note in the tree and open it beside what you are reading.
+  The side pane is **read-only** (no tabs, no editor, no in-document search); its links move the main pane,
+  and it closes itself if the main pane arrives at the same note.
 
 ### Getting content out
 

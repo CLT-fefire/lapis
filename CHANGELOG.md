@@ -74,6 +74,26 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   same call made for orphan notes, where a second number lets a person judge instead of the
   app deciding what to hide.
 
+- **Side-by-side reading.** Right-click a note in the tree and open it beside the one you
+  are reading — until now that meant a second window, which is awkward on one monitor. The
+  side pane is **read-only**: no tabs, no editor, no in-document search. Every piece of body
+  state is a singleton today, and splitting all of it per pane is a restructuring of a
+  2,400-line file; the value is in "keep B up while I read A", and that part is here. Links
+  in the side pane move the **main** pane, and the side pane closes itself if the main pane
+  arrives at the same note — otherwise the same document renders twice, side by side.
+
+- **The command palette answers to initial consonants.** Typing `ㅅㅌ` already found files
+  (`새 탭`), because the file index precomputes their initials — but commands went through
+  a different path that compared the query against the label as written, so a jamo-only query
+  could never match. It now folds the label the same way, including across word boundaries
+  (`ㅅㄴㅌ` → `새 노트`), and such a match is promoted to the top group like any other.
+
+- **Recently-opened notes show where you left off.** The list already existed; what it did not
+  say was which of those you actually read into. A dot marks a remembered position, and the
+  line number appears when it was the editor. **No percentage** — the stored position knows
+  scroll offset and line, not document length, and a guessed progress bar is wrong without
+  ever looking wrong.
+
 ### Fixed
 - **"No unused commands" was a lie.** Asked through a real MCP client, `lapis_usage`
   reported zero commands used and zero unused. The truth was that it had no denominator: the
