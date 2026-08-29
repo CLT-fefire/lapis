@@ -5,8 +5,9 @@
   import CustomCssEditor from "$lib/CustomCssEditor.svelte";
   import { usageEnabled, usageDropped, flushUsage } from "$lib/stores/usage";
   import { usageMonths, usageRead, usageClear } from "$lib/tauri/usage";
-  import { summarize } from "$lib/usageEvent";
+  import { UsageAnalyzer } from "$lib/usageAnalyzer";
   import { buildUsageReport } from "$lib/usageReport";
+  import { buildUsageJsonl, suggestUsageFileName } from "$lib/usageExport";
   import { BUILTIN_COMMANDS } from "$lib/commands";
   import { save } from "@tauri-apps/plugin-dialog";
   import { writeBinaryFile } from "$lib/tauri/notes";
@@ -286,32 +287,85 @@
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  async function saveUsageReport(raw: boolean): Promise<void> {
+  /**
+   * 무엇을 저장할지.
+   *
+   * ⚠️ 기본이 **원본**이다. 이 기능의 목적이 "나중에 기능 개선에 쓴다"이고, 마크다운 표는
+   * 다시 파싱해 분석하는 사람이 없다.
+   */
+  let usageFormat = $state<"jsonl" | "md">("jsonl");
+  /** ⚠️ 기본이 **끔**. 가림은 공개된 곳에 붙여넣을 때만 켠다. */
+  let usageHide = $state(false);
+
+  async function saveUsage(): Promise<void> {
     usageNote = "";
     try {
-      // ⚠️ 버퍼를 먼저 내린다 — 안 그러면 방금 한 일이 리포트에 없다.
+      // ⚠️ 버퍼를 먼저 내린다 — 안 그러면 방금 한 일이 결과에 없다.
       await flushUsage();
       await refreshUsage();
-      const lines: string[] = [];
-      for (const mo of usageMonthList) lines.push(...(await usageRead(mo)));
-      if (lines.length === 0) {
+      if (usageMonthList.length === 0) {
         usageNote = m.settings_usage_empty();
         return;
       }
-      const known = BUILTIN_COMMANDS.map((c) => c.id);
-      const label = usageMonthList.length === 1 ? usageMonthList[0] : `${usageMonthList.at(-1)} ~ ${usageMonthList[0]}`;
-      const text = buildUsageReport(summarize(lines, known), { raw, label });
+      const text =
+        usageFormat === "jsonl" ? await buildRawJsonl() : await buildMarkdownReport();
+      if (text === null) return;
       const target = await save({
-        defaultPath: `lapis-usage-${usageMonthList[0] ?? "report"}${raw ? "-raw" : ""}.md`,
-        filters: [{ name: "Markdown", extensions: ["md"] }],
+        defaultPath: suggestUsageFileName(usageMonthList, usageFormat),
+        filters:
+          usageFormat === "jsonl"
+            ? [{ name: "JSON Lines", extensions: ["jsonl"] }]
+            : [{ name: "Markdown", extensions: ["md"] }],
       });
       if (!target) return;
       await writeBinaryFile(target, new TextEncoder().encode(text));
       usageNote = m.settings_usage_saved({ path: target });
     } catch (e) {
-      logError("SettingsModal", "사용 리포트 저장 실패", e);
+      logError("SettingsModal", "사용 기록 저장 실패", e);
       usageNote = String(e);
     }
+  }
+
+  /**
+   * 🔴 **원본은 그대로 잇는다.** 파싱해서 다시 쓰면 못 읽은 줄이 조용히 사라지고,
+   * 그러면 내보낸 파일이 디스크의 진실과 달라진다.
+   */
+  async function buildRawJsonl(): Promise<string | null> {
+    const months: { month: string; lines: string[] }[] = [];
+    for (const mo of usageMonthList) months.push({ month: mo, lines: await usageRead(mo) });
+    const text = buildUsageJsonl(months);
+    if (text === "") {
+      usageNote = m.settings_usage_empty();
+      return null;
+    }
+    return text;
+  }
+
+  /**
+   * 읽는 용도의 요약.
+   *
+   * 🔴 **달을 하나씩 흘려보낸다.** 예전엔 모든 달을 한 배열로 모았는데, 월 파일 상한이
+   * 16 MB 라 열두 달이면 최악 192 MB 의 문자열 배열이었다. 담는 종류가 늘수록 빨리 커진다 —
+   * 그래서 `UsageAnalyzer` 가 상태를 들고 한 줄씩 받는다.
+   */
+  async function buildMarkdownReport(): Promise<string | null> {
+    const analyzer = new UsageAnalyzer({ knownCommands: BUILTIN_COMMANDS.map((c) => c.id) });
+    let any = false;
+    for (const mo of usageMonthList) {
+      const lines = await usageRead(mo);
+      if (lines.length > 0) any = true;
+      analyzer.feedAll(lines);
+    }
+    if (!any) {
+      usageNote = m.settings_usage_empty();
+      return null;
+    }
+    const label =
+      usageMonthList.length === 1
+        ? usageMonthList[0]
+        : `${usageMonthList.at(-1)} ~ ${usageMonthList[0]}`;
+    // ⚠️ `raw` 는 **가리지 않음**이다. 체크박스가 켜졌을 때만 가린다.
+    return buildUsageReport(analyzer.result(), { raw: !usageHide, label });
   }
 
   async function clearUsage(): Promise<void> {
@@ -713,20 +767,31 @@
                 onclick={() => usageEnabled.set(false)}>{m.settings_usage_off()}</button
               >
             </div>
-            <button type="button" class="btn btn--sm" onclick={() => saveUsageReport(false)}>
-              {m.settings_usage_report()}
-            </button>
             <!--
-              ⚠️ 가리지 않은 리포트는 **따로** 둔다. 기본 버튼 옆에 두되 경고를 붙인다 —
-              경로와 검색어가 그대로 들어가고, 이 저장소는 공개다.
+              ⚠️ **버튼 하나.** 예전엔 "리포트 저장"과 "가리지 않고 저장"이 나란히 있어서
+              눌러 보기 전엔 뭐가 다른지 몰랐다. 무엇을 낼지는 형식이 정한다.
             -->
-            <button
-              type="button"
-              class="btn btn--sm btn--plain"
-              title={m.settings_usage_raw_warn()}
-              onclick={() => saveUsageReport(true)}
-            >
-              {m.settings_usage_report_raw()}
+            <label class="usage-format">
+              <span class="usage-format-label">{m.settings_usage_format_label()}</span>
+              <select bind:value={usageFormat}>
+                <option value="jsonl">{m.settings_usage_format_jsonl()}</option>
+                <option value="md">{m.settings_usage_format_md()}</option>
+              </select>
+            </label>
+            <!--
+              ⚠️ **기본은 가리지 않음.** 저장은 사용자가 고른 위치로 나가는 로컬 파일이고,
+              위험은 저장이 아니라 나중의 붙여넣기에 있다. 비용을 매번 낼 이유가 없다.
+            -->
+            {#if usageFormat === "md"}
+              <label class="usage-hide" title={m.settings_usage_hide_title()}>
+                <input type="checkbox" bind:checked={usageHide} />
+                <span>{m.settings_usage_hide()}</span>
+              </label>
+            {:else}
+              <span class="usage-raw-note">{m.settings_usage_raw_note()}</span>
+            {/if}
+            <button type="button" class="btn btn--sm" onclick={saveUsage}>
+              {m.settings_usage_save()}
             </button>
             <button type="button" class="btn btn--sm btn--plain" onclick={clearUsage}>
               {m.settings_usage_clear()}
@@ -1004,6 +1069,42 @@
   /* 액션 버튼은 app.css의 .btn 프리미티브 사용 (.btn / .btn--ghost / .btn--primary) */
 
   /* 테마 세그먼트 컨트롤 (디자인 토큰 사용) */
+  /* 저장 형식·가림 — 버튼 줄에 나란히 선다. */
+  .usage-format,
+  .usage-hide {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .usage-format-label {
+    color: var(--text-muted);
+  }
+
+  .usage-format select {
+    padding: var(--sp-1) var(--sp-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-sm);
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+    font-size: var(--fs-xs);
+    font-family: inherit;
+  }
+
+  /*
+    원본을 고르면 가림 체크박스 대신 이 줄이 선다 — 왜 체크박스가 사라졌는지 말해 주지
+    않으면 "가림이 꺼진 채로 저장됐다"고 오해한다.
+  */
+  .usage-raw-note {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    max-width: 34ch;
+    line-height: 1.4;
+  }
+
   .segmented {
     display: inline-flex;
     gap: var(--sp-1);

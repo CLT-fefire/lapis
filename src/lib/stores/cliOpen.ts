@@ -37,7 +37,7 @@ export interface CliOpenDeps {
 const defaultDeps: CliOpenDeps = {
   take: takePendingOpen,
   openVault,
-  selectNote: (p) => selectNote(p),
+  selectNote: (p) => selectNote(p, { via: "cli" }),
   restoreVault: restoreLastVault,
   currentVault: () => get(vaultPath),
   focus: async () => {

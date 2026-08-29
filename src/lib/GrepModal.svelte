@@ -52,7 +52,7 @@
 
   async function go(hit: GrepHit) {
     closeGrep();
-    await selectNote(hit.path);
+    await selectNote(hit.path, { via: "search" });
     // 문서 맨 위가 아니라 **찾은 자리**에서 시작하게 한다.
     applySearch(
       $grepPattern,

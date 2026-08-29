@@ -89,7 +89,7 @@
   }
 
   function open(path: string): void {
-    void selectNote(path);
+    void selectNote(path, { via: "search" });
     closeTableView();
   }
 

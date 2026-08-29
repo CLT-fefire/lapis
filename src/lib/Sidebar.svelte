@@ -206,7 +206,7 @@
     } else if (e.key === "Enter") {
       e.preventDefault();
       const path = activeFilterPath;
-      if (path) void selectNote(path);
+      if (path) void selectNote(path, { via: "tree" });
     }
   }
 

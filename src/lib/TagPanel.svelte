@@ -70,7 +70,7 @@
           class="note-row"
           class:active={$currentNotePath === item.path}
           title={item.path}
-          onclick={() => selectNote(item.path)}
+          onclick={() => selectNote(item.path, { via: "search" })}
         >
           <span class="dot">•</span>
           <span class="name">{item.label}</span>

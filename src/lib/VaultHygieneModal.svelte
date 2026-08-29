@@ -231,7 +231,7 @@
 
   async function go(path: string) {
     closeBrokenLinks();
-    await selectNote(path);
+    await selectNote(path, { via: "search" });
   }
 
   function shortName(path: string): string {
