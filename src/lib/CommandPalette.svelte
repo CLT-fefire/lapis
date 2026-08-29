@@ -1,5 +1,6 @@
 <script lang="ts">
   import { logWarn, logCommand, logQuery } from "$lib/stores/usage";
+  import { readNote } from "$lib/tauri/notes";
   import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -189,6 +190,73 @@
   function displayIndexOf(entry: PaletteEntry): number {
     return indexByEntry.get(entry) ?? -1;
   }
+
+  /**
+   * 지금 고른 항목의 **앞부분 미리보기**.
+   *
+   * ## ⚠️ 팔레트를 늦추지 않는다
+   *
+   * 팔레트는 계측으로 맞춰 놓은 경로다(디바운스 · 점진 필터 · 스니펫 지연). 방향키로
+   * 내려갈 때마다 파일을 읽으면 그 조정이 깨진다 — 그래서 **디바운스**하고, 노트류가
+   * 아니면 아예 안 읽는다.
+   *
+   * ⚠️ **읽어 온 뒤 다시 확인한다.** 읽는 사이에 다른 항목으로 옮겨 갔을 수 있고, 그러면
+   * 남의 본문이 붙는다. 지금 경로가 아니면 버린다.
+   */
+  const PEEK_DEBOUNCE_MS = 140;
+  /** 앞부분만 — 팔레트에서 문서를 읽는 게 아니라 "이거 맞나"를 가리는 것이다. */
+  const PEEK_CHARS = 1200;
+
+  let peekPath = $state<string | null>(null);
+  let peekText = $state<string>("");
+  let peekTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * 🔴 **effect 가 읽는 값을 effect 가 쓰면 순환이 된다.**
+   *
+   * 처음엔 `peekPath` 를 "이미 읽었나" 판정에 썼는데, 그 값을 같은 effect 가 쓰므로
+   * 스스로를 다시 깨웠다. 결과는 조용했다 — 미리보기가 **이전 항목의 본문**에 굳었다.
+   * 그래서 판정용 값은 반응 밖(`let`)에 둔다.
+   */
+  let peekRequested: string | null = null;
+
+  /** 미리볼 수 있는 항목인가 — 경로가 있는 것만. */
+  function peekablePath(r: PaletteResult | undefined): string | null {
+    if (!r) return null;
+    const e = r.entry;
+    return e.kind === "note" || e.kind === "content" || e.kind === "recent" || e.kind === "changed"
+      ? e.path
+      : null;
+  }
+
+  $effect(() => {
+    const path = peekablePath(displayList[activeIndex]);
+    if (peekTimer !== null) clearTimeout(peekTimer);
+    if (!path) {
+      peekRequested = null;
+      peekPath = null;
+      peekText = "";
+      return;
+    }
+    if (path === peekRequested) return;
+    peekRequested = path;
+    peekTimer = setTimeout(() => {
+      peekTimer = null;
+      void readNote(path)
+        .then((body) => {
+          // ⚠️ 읽는 사이에 옮겨 갔으면 버린다 — 남의 본문이 붙는다.
+          if (peekablePath(displayList[activeIndex]) !== path) return;
+          peekPath = path;
+          peekText = body.slice(0, PEEK_CHARS);
+        })
+        .catch(() => {
+          // 못 읽어도 팔레트는 계속 돈다. 미리보기만 빈다.
+          if (peekablePath(displayList[activeIndex]) !== path) return;
+          peekPath = path;
+          peekText = "";
+        });
+    }, PEEK_DEBOUNCE_MS);
+  });
+
 
   // active 인덱스가 범위 벗어나면 보정
   $effect(() => {
@@ -737,6 +805,19 @@
         {/if}
       </div>
 
+      <!--
+        미리보기 — 고른 항목의 앞부분. **노트류일 때만** 나온다.
+
+        ⚠️ 없을 때 자리를 차지하면 팔레트가 늘 두 배로 커진다. 명령·태그·facet 을 고를
+           때는 미리볼 것이 없다.
+      -->
+      {#if peekPath}
+        <div class="peek" aria-hidden="true">
+          <div class="peek-path">{peekPath.split("/").pop()}</div>
+          <pre class="peek-body">{peekText}</pre>
+        </div>
+      {/if}
+
       <footer class="palette-foot">
         <span>{m.palette_key_navigate()}</span>
         <span>{m.palette_key_save()}</span>
@@ -758,6 +839,36 @@
     justify-content: center;
     padding-top: 10vh;
     z-index: var(--z-modal);
+  }
+
+  /*
+    미리보기 — 목록 아래. 옆이 아니라 아래인 이유는 팔레트 폭이 계측으로 맞춰져 있고,
+    옆으로 넓히면 결과 글자가 줄어들기 때문이다.
+  */
+  .peek {
+    flex: none;
+    max-height: 22vh;
+    overflow: hidden;
+    border-top: 1px solid var(--border-subtle, var(--border-default));
+    padding: var(--sp-3) var(--sp-5);
+    background: var(--surface-sunken);
+  }
+
+  .peek-path {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    margin-bottom: var(--sp-2);
+  }
+
+  .peek-body {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    /* 넘치는 부분은 잘린다 — 여기서 읽는 게 아니라 "이거 맞나"를 가리는 자리다. */
+    overflow: hidden;
   }
 
   .modal {

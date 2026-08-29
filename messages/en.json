@@ -539,5 +539,12 @@
   "settings_usage_raw_note": "The raw log is never redacted — redacting means parsing it, and parsed is no longer raw.",
   "brokenlinks_create": "Create",
   "outline_copy_link": "Copy link to heading",
-  "cmd_reopen_tab": "Reopen closed tab"
+  "cmd_reopen_tab": "Reopen closed tab",
+  "statusbar_errors_title": "This session: {errors} errors, {warns} warnings",
+  "hygiene_tab_stale": "Untouched",
+  "hygiene_stale_empty": "No note has gone six months untouched.",
+  "hygiene_stale_summary": "{count} notes have sat unchanged for six months.",
+  "hygiene_stale_days": "{days} days",
+  "hygiene_stale_hint": "Not a list of things to fix — a list of things to look at again. Uses whichever is later: the file's modified time or the frontmatter <code>date</code>.",
+  "wikilink_ambiguous": "{count} notes share this name — goes to the nearest: {paths}"
 }

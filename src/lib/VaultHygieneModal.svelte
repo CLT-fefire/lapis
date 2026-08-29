@@ -1,6 +1,9 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
   import { noteStem } from "$lib/notePath";
+  import { findStaleNotes } from "$lib/staleNotes";
+  import { mtimeOf } from "$lib/stores/mtimes";
+  import { parseFrontmatterDate } from "$lib/recency";
   import { get } from "svelte/store";
   import { applySearch } from "$lib/stores/inDocSearch";
   import { mainPane } from "$lib/stores/layout";
@@ -52,7 +55,7 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks" | "changes";
+  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks" | "changes" | "stale";
   let tab = $state<Tab>("broken");
 
   // 열릴 때 팔레트가 지정한 탭으로 간다. ⚠️ **열릴 때만** — 열려 있는 동안 store 가
@@ -96,6 +99,29 @@
   const tagIssues = $derived(idx ? findTagIssues([...idx.byPath.values()]) : []);
   const ambiguous = $derived(idx ? findAmbiguousNames(idx) : []);
   const fmIssues = $derived(idx ? findFrontmatterIssues(idx) : []);
+
+  /**
+   * 오래 안 건드린 노트.
+   *
+   * ⚠️ **인덱스만으로 된다** — `mtimes` 지도와 frontmatter `date` 가 이미 있다.
+   *    본문을 안 읽으므로 탭을 열 때 기다릴 것이 없다.
+   *
+   * ⚠️ `Date.now()` 를 여기서 읽는다. 판정은 `findStaleNotes` 가 하고 시계는 화면이 준다 —
+   *    그래야 그 함수가 테스트 가능하다.
+   */
+  const stale = $derived(
+    idx
+      ? findStaleNotes(
+          [...idx.byPath.values()].map((i) => ({
+            path: i.source_path,
+            mtimeMs: mtimeOf(i.source_path),
+            // ⚠️ parseFrontmatterDate 는 문자열만 받는다 — 없는 값을 넘기면 죽는다.
+            dateMs: i.props?.date?.[0] ? parseFrontmatterDate(i.props.date[0]) : null,
+          })),
+          Date.now(),
+        )
+      : [],
+  );
 
   // 모달을 닫으면 버린다 — 다음에 열 때 vault가 그대로라는 보장이 없다.
   // 감사 셋이 캐시를 안 두는 것과 같은 이유다(무효화 경로를 둘로 만들지 않는다).
@@ -194,6 +220,7 @@
     // null = 아직 안 셌다. 0 을 띄우면 안 본 것을 "할 일 없음"이라고 말하게 된다.
     tasks: tasks === null ? null : countOpenTasks(tasks).open,
     changes: changes === null ? null : changes.length,
+    stale: stale.length,
   });
 
   /**
@@ -229,7 +256,10 @@
     {
       // 나머지는 vault 의 **지금**을 본다. 이건 **지나온 것**을 본다.
       label: m.hygiene_group_history(),
-      tabs: [["changes", m.hygiene_tab_changes()]],
+      tabs: [
+        ["changes", m.hygiene_tab_changes()],
+        ["stale", m.hygiene_tab_stale()],
+      ],
     },
   ]);
 
@@ -313,7 +343,24 @@
         </div>
 
         <div class="pane">
-        {#if tab === "broken"}
+        {#if tab === "stale"}
+          {#if stale.length === 0}
+            <p class="empty">{m.hygiene_stale_empty()}</p>
+          {:else}
+            <p class="summary">{m.hygiene_stale_summary({ count: stale.length })}</p>
+            <ul class="rows">
+              {#each stale.slice(0, 100) as n (n.path)}
+                <li class="stale-row">
+                  <button class="src" title={n.path} onclick={() => go(n.path)}>
+                    {shortName(n.path)}
+                  </button>
+                  <span class="count">{m.hygiene_stale_days({ days: n.days })}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <p class="hint">{m.hygiene_stale_hint()}</p>
+        {:else if tab === "broken"}
           {#if targets.length === 0}
             <p class="empty">{m.brokenlinks_empty()}</p>
           {:else}
@@ -784,6 +831,13 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: var(--r-sm);
+  }
+
+  .stale-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    justify-content: space-between;
   }
 
   .task-row {

@@ -50,7 +50,7 @@ export const CACHE_VERSION = 9;
  * | Windows | `%APPDATA%` (Roaming)                    |
  * | Linux   | `$XDG_DATA_HOME` 또는 `~/.local/share`   |
  */
-function appDataBase(): string {
+export function appDataBase(): string {
   if (process.platform === "win32") {
     return process.env.APPDATA ?? path.join(homedir(), "AppData", "Roaming");
   }
@@ -58,6 +58,23 @@ function appDataBase(): string {
     return path.join(homedir(), "Library", "Application Support");
   }
   return process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share");
+}
+
+/**
+ * 사용 로그가 쌓이는 폴더 후보 — 릴리스 · dev 순.
+ *
+ * ⚠️ **경로 지식을 여기 모은다.** 캐시와 같은 규칙(`com.lapis.dev` vs `-dev`)이고,
+ * 두 곳에 적으면 한쪽만 고쳐져서 CLI 가 앱과 다른 폴더를 보게 된다.
+ *
+ * ⚠️ 확장자는 `.log` 다. 내용은 JSONL 이고 확장자만 그렇다(v3.7.1).
+ */
+export function usageDirs(): string[] {
+  const override = process.env.LAPIS_USAGE_DIR;
+  if (override) return [override];
+  return [
+    path.join(appDataBase(), "com.lapis.dev", "usage"),
+    path.join(appDataBase(), "com.lapis.dev-dev", "usage"),
+  ];
 }
 
 function cacheDirs(): string[] {

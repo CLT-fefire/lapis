@@ -123,14 +123,15 @@ afterEach(() => {
 });
 
 describe("탭 바", () => {
-  it("탭이 일곱이고 각각 숫자를 단다", () => {
+  it("탭이 여덟이고 각각 숫자를 단다", () => {
     const badges = textOf(".tab .badge");
-    expect(badges).toHaveLength(7);
+    expect(badges).toHaveLength(8);
     // 끊긴 링크 1(없는문서) · 고아 4(hub·lonely·dup 둘) · 태그 2묶음 + 모호한 이름 1 = 3
     // 넷째(안 걸린 언급) · 여섯째(미완 작업) · 일곱째(최근 변경)는 아직 안 셌다 —
     // 본문이나 git 을 읽어야 알 수 있고, 탭을 열기 전에는 안 읽는다.
     // 다섯째(속성)는 픽스처에 frontmatter 값이 없어 0이다.
-    expect(badges).toEqual(["1", "4", "3", "–", "0", "–", "–"]);
+    // 여덟째(오래된 것)는 픽스처에 mtime·date 가 없어 0이다 — **모르는 것은 안 센다.**
+    expect(badges).toEqual(["1", "4", "3", "–", "0", "–", "–", "0"]);
   });
 
   /**
@@ -258,13 +259,13 @@ describe("빈 상태", () => {
    * 깨끗한 vault에서 **탭이 사라지지 않는지** 본다. 숫자 0을 보여주는 것이
    * 이 화면의 값이다 — 목록이 비면 탭까지 없애는 구현이면 "왜 안 보이지"가 된다.
    */
-  it("문제가 없어도 탭 일곱과 0이 남는다", () => {
+  it("문제가 없어도 탭 여덟과 0이 남는다", () => {
     // 서로 가리키는 두 노트 — 어느 쪽도 고아가 아니고 끊긴 링크도 없다.
     linkIndex.set(
       buildIndex([mkInfo("/v/a.md", { targets: ["b"] }), mkInfo("/v/b.md", { targets: ["a"] })]),
     );
     flushSync();
-    expect(textOf(".tab .badge")).toEqual(["0", "0", "0", "–", "0", "–", "–"]);
+    expect(textOf(".tab .badge")).toEqual(["0", "0", "0", "–", "0", "–", "–", "0"]);
     expect(document.querySelector(".empty")).not.toBeNull();
   });
 });

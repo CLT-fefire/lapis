@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logCommand } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { ChevronDown, Search, PanelRight } from "@lucide/svelte";
   import PaneMenu, { type PaneMenuItem } from "./PaneMenu.svelte";
@@ -106,13 +107,13 @@
         {/snippet}
       </PaneMenu>
     {:else}
-      <button class="btn btn--sm" onclick={pickAndOpenVault}>{m.sidebar_open_vault()}</button>
+      <button class="btn btn--sm" onclick={() => { logCommand("open-vault", "titlebar"); pickAndOpenVault(); }}>{m.sidebar_open_vault()}</button>
     {/if}
   </div>
 
   <!-- 드래그는 위 header 의 `deep` 이 전부 덮는다 — 여기 따로 줄 필요가 없다. -->
   <div class="tb-center">
-    <button class="commandbar" title={m.titlebar_command_title()} onclick={() => openPaletteAtLastMode()}>
+    <button class="commandbar" title={m.titlebar_command_title()} onclick={() => { logCommand("palette", "titlebar"); openPaletteAtLastMode(); }}>
       <Search size={13} strokeWidth={2.2} aria-hidden="true" />
       <span class="cb-label">{m.titlebar_command_label()}</span>
     </button>
@@ -144,7 +145,7 @@
       class:active={!$contextCollapsed}
       title={m.cmd_toggle_context()}
       aria-pressed={!$contextCollapsed}
-      onclick={toggleContext}
+      onclick={() => { logCommand("toggle-context-panel", "titlebar"); toggleContext(); }}
     >
       <PanelRight size={15} strokeWidth={2} aria-hidden="true" />
     </button>

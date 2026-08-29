@@ -104,6 +104,12 @@
     sidebarWidth,
     setSidebarWidth,
     resetSidebarWidth,
+    // ⚠️ ARIA 상 `separator` 는 값(min·now·max)이 있어야 초점을 받는 컨트롤이 된다.
+    //    값 없이 tabindex 만 주면 도구가 "초점 받는 장식"으로 본다.
+    MIN_SIDEBAR_WIDTH,
+    MAX_SIDEBAR_WIDTH,
+    MIN_CONTEXT_WIDTH,
+    MAX_CONTEXT_WIDTH,
     toggleSidebar,
     restorePaneState,
     contextCollapsed,
@@ -390,6 +396,20 @@ import { isPanicChord } from "$lib/userCss";
     return hit.path !== null;
   }
 
+  /**
+   * 이 이름이 여러 노트에 걸리나. 걸리면 후보 경로들, 아니면 `null`.
+   *
+   * ⚠️ **해소기의 키를 그대로 쓴다** — 여기서 이름을 다시 정규화하면 링크가 실제로 가는
+   * 곳과 판정이 갈린다. 그건 "표시는 모호한데 잘 가는" 또는 그 반대를 만든다.
+   */
+  function ambiguousPaths(target: string, idx: LinkIndex): string[] | null {
+    // `[[노트#헤딩]]` · `[[노트|별칭]]` 에서 이름만 뗀다.
+    const name = target.split(/[#|]/)[0].trim();
+    if (!name) return null;
+    const paths = idx.resolver.get(name.toLowerCase()) ?? idx.resolver.get(name);
+    return paths && paths.length >= 2 ? [...paths] : null;
+  }
+
   // Preview 렌더 후 wikilink에 resolved/unresolved 클래스 부여 (인덱스 기반)
   $effect(() => {
     trackPreviewHtml();
@@ -406,6 +426,21 @@ import { isPanicChord } from "$lib/userCss";
         const resolved = idx && target ? isLive(target, idx, from, headings) : false;
         a.classList.toggle("resolved", resolved);
         a.classList.toggle("unresolved", !resolved);
+
+        /**
+         * 🔴 **같은 이름의 노트가 둘이면 어디로 가는지 모른다.**
+         *
+         * 진단 모달은 동명 목록을 내지만, 정작 `[[open-items]]` 를 **읽고 있을 때는**
+         * 아무 표시가 없다. 이 vault 에는 그런 쌍이 일곱이다(lapis/slate 두 프로젝트).
+         *
+         * ⚠️ **막지 않는다.** 링크는 그대로 동작한다(가장 가까운 것으로 간다) —
+         * 표시만 하고 어디로 갈지는 `title` 에 적는다. 감사가 판단하지 않는 것과 같은 태도다.
+         */
+        const ambiguous = idx && target ? ambiguousPaths(target, idx) : null;
+        a.classList.toggle("ambiguous", ambiguous !== null);
+        if (ambiguous) {
+          a.title = m.wikilink_ambiguous({ count: ambiguous.length, paths: ambiguous.join(" · ") });
+        }
       }
     });
   });
@@ -1073,6 +1108,41 @@ import { isPanicChord } from "$lib/userCss";
 
   // 사이드바 폭 리사이저 — mousedown → 전역 mousemove/mouseup으로 드래그.
   // 더블클릭은 기본값(260) 복원.
+  /**
+   * 🔴 **드래그만 되던 것을 키보드로도 연다.**
+   *
+   * 리사이저에 `role="separator"` 와 이름은 이미 있었는데 `tabindex` 도 키 처리도 없었다 —
+   * 보조기술은 있는 줄 아는데 **닿을 수가 없다.** 이 앱은 단축키로 도는 앱이다.
+   *
+   * ⚠️ 한 번에 많이 움직이지 않는다. 화살표는 조금씩, `Shift` 면 크게 — 폭 조절은
+   * 정밀 작업이라 한 번에 크게 뛰면 원하는 자리를 못 잡는다.
+   */
+  const RESIZE_STEP = 16;
+  const RESIZE_STEP_BIG = 64;
+
+  function resizeByKey(
+    e: KeyboardEvent,
+    current: () => number,
+    apply: (px: number) => void,
+    reset: () => void,
+  ): void {
+    const step = e.shiftKey ? RESIZE_STEP_BIG : RESIZE_STEP;
+    if (e.key === "ArrowLeft") apply(current() - step);
+    else if (e.key === "ArrowRight") apply(current() + step);
+    // 더블클릭이 하던 일 — 키보드에도 같은 길을 준다.
+    else if (e.key === "Home" || e.key === "Enter") reset();
+    else return;
+    e.preventDefault();
+  }
+
+  function onSidebarResizeKey(e: KeyboardEvent) {
+    resizeByKey(e, () => get(sidebarWidth), setSidebarWidth, resetSidebarWidth);
+  }
+
+  function onContextResizeKey(e: KeyboardEvent) {
+    resizeByKey(e, () => get(contextWidth), setContextWidth, resetContextWidth);
+  }
+
   function startSidebarResize(e: MouseEvent) {
     e.preventDefault();
     const startX = e.clientX;
@@ -1487,6 +1557,15 @@ import { isPanicChord } from "$lib/userCss";
          새로 그려서, 12,000 노트에서 펼침이 눈에 띄게 느렸다. 접힘은 34px 스트립이고
          무거운 내용은 `Sidebar` 안에서 조건 렌더한다. -->
     <Sidebar />
+    <!--
+      ⚠️ **린터가 ARIA 를 덜 안다.** `separator` 에 `aria-valuenow` 가 붙으면 ARIA 상
+      **focusable separator**(창 분할자)라는 위젯이고 초점을 받는 것이 맞다. 값 없는
+      장식용 separator 와 규칙이 같아서 나는 경고다.
+
+      드래그로만 되던 것을 키보드로 여는 것이 요점이다 — 화살표로 조금씩, Shift 로 크게,
+      Home/Enter 로 기본값.
+    -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
@@ -1496,8 +1575,13 @@ import { isPanicChord } from "$lib/userCss";
       aria-orientation="vertical"
       aria-label={m.page_sidebar_resize()}
       title={m.page_pane_resize()}
+      aria-valuenow={$sidebarWidth}
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemax={MAX_SIDEBAR_WIDTH}
+      tabindex="0"
       onmousedown={startSidebarResize}
       ondblclick={resetSidebarWidth}
+      onkeydown={onSidebarResizeKey}
     ></div>
 
     <!-- 본문 페인 — Editor와 Preview가 **교대**한다(2026-08-10, split 제거).
@@ -1677,6 +1761,8 @@ import { isPanicChord } from "$lib/userCss";
     </section>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- 위 사이드바 리사이저와 같은 이유. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="sidebar-resizer"
@@ -1685,8 +1771,13 @@ import { isPanicChord } from "$lib/userCss";
       aria-orientation="vertical"
       aria-label={m.page_context_resize()}
       title={m.page_pane_resize()}
+      aria-valuenow={$contextWidth}
+      aria-valuemin={MIN_CONTEXT_WIDTH}
+      aria-valuemax={MAX_CONTEXT_WIDTH}
+      tabindex="0"
       onmousedown={startContextResize}
       ondblclick={resetContextWidth}
+      onkeydown={onContextResizeKey}
     ></div>
 
     <section class="pane context-pane" class:collapsed={$contextCollapsed}>

@@ -28,7 +28,10 @@ import {
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { UsageAnalyzer } from "$lib/usageAnalyzer";
+import { applyTemplate, defaultBody, TEMPLATE_DIR } from "$lib/noteTemplate";
+import { usageDirs } from "../mcp/cache.ts";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
 import { runIndex, IndexError } from "./indexRun.ts";
@@ -36,7 +39,7 @@ import { runExport, ExportError } from "./exportRun.ts";
 import { launchOpen, LaunchError } from "./appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
-import { FACETS, TAG_ACTIONS, PROPS_ACTIONS } from "./spec.ts";
+import { FACETS, TAG_ACTIONS, PROPS_ACTIONS, COMMANDS } from "./spec.ts";
 import {
   renderResults,
   renderFacet,
@@ -605,6 +608,297 @@ function cmdIndex(p: ParsedCommand, out: Out): void {
  * ⚠️ **결과를 확인할 방법이 없다.** 떼어내 보내고 즉시 돌아오므로(`appLaunch.ts`), 앱이
  * 실제로 열었는지는 여기서 모른다. 그래서 "열었다"가 아니라 "보냈다"라고 말한다.
  */
+/**
+ * 노트 본문을 낸다.
+ *
+ * ## ⚠️ `cat` 이 못 하는 일
+ *
+ * `cat` 은 경로를 알아야 한다. 이 앱에서 노트를 부르는 이름은 **경로가 아니라 이름**이고
+ * (`[[STATE]]`), 같은 이름이 둘이면 해소 규칙이 필요하다. 그 규칙은 `resolveNotePath` 에
+ * 이미 있다 — `backlinks` · `open` 이 쓰는 **같은 함수**다.
+ *
+ * ⚠️ **기본은 본문만.** frontmatter 를 항상 붙이면 파이프로 넘길 때마다 잘라내야 한다.
+ * 필요하면 `--meta`.
+ */
+function cmdRead(p: ParsedCommand, out: Out): void {
+  const resolved = resolveNotePath(p.positional[0], vaultOf(p));
+  let raw: string;
+  try {
+    raw = readFileSync(resolved.path, "utf-8");
+  } catch (e) {
+    return out.fail(
+      "read_failed",
+      `노트를 못 읽었다: ${resolved.path}`,
+      (e as Error)?.message ?? "",
+      1,
+    );
+  }
+  const withMeta = p.options.meta === true;
+  const body = withMeta ? raw : stripFrontmatter(raw);
+  if (out.json) return out.json_({ ...resolved, body });
+  out.line(body);
+}
+
+/**
+ * frontmatter 를 뗀다.
+ *
+ * ⚠️ **`---` 로 시작할 때만** 뗀다. 본문 중간의 수평선(`---`)을 구분자로 오인하면
+ * 문서의 앞부분이 통째로 사라진다 — 에러 없이.
+ */
+function stripFrontmatter(raw: string): string {
+  if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) return raw;
+  const end = raw.indexOf("\n---", 3);
+  if (end === -1) return raw;
+  const after = raw.indexOf("\n", end + 1);
+  return after === -1 ? "" : raw.slice(after + 1);
+}
+
+/**
+ * vault 한눈.
+ *
+ * ⚠️ `status` 와 **다른 질문**이다. 저쪽은 "어느 캐시를 어떻게 읽고 있나"(도구의 상태),
+ * 이쪽은 "vault 에 무엇이 있나"(내용의 상태)다.
+ */
+function cmdStats(p: ParsedCommand, out: Out): void {
+  const vc = resolveVault(vaultOf(p));
+  const infos = vc.infos;
+
+  const count = (pick: (i: (typeof infos)[number]) => string | null | undefined) => {
+    const m = new Map<string, number>();
+    for (const i of infos) {
+      const v = pick(i);
+      if (!v) continue;
+      m.set(v, (m.get(v) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  };
+
+  const docKinds = count((i) => i.doc_kind);
+  const topics = count((i) => i.topic);
+  const tags = new Set<string>();
+  for (const i of infos) for (const t of i.tags ?? []) tags.add(t);
+  const openTasks = countOpenTasks(
+    collectOpenTasks([...readBodies(vc)].map(([path, body]) => ({ path, body }))),
+  );
+
+  if (out.json) {
+    return out.json_({
+      vault: vc.root,
+      notes: infos.length,
+      doc_kinds: Object.fromEntries(docKinds),
+      topics: Object.fromEntries(topics),
+      tags: tags.size,
+      tasks: openTasks,
+      stale: checkStale(vc),
+    });
+  }
+
+  const top = (rows: [string, number][], n = 8) =>
+    rows.slice(0, n).map(([k, v]) => `${k} ${v}`).join(" · ") || "없음";
+
+  out.line(
+    table([
+      ["vault", vc.root],
+      ["노트", String(infos.length)],
+      ["doc_kind", top(docKinds)],
+      ["topic", top(topics)],
+      ["태그", String(tags.size)],
+      ["미완 작업", `${openTasks.open}건 미완 · ${openTasks.done}건 완료`],
+    ]),
+  );
+}
+
+/**
+ * 사용 기록 요약.
+ *
+ * ## ⚠️ 앱이 쓰는 로그를 그대로 읽는다
+ *
+ * 집계는 `$lib/usageAnalyzer` — 앱이 `analysis.md` 를 만들 때 쓰는 **같은 클래스**다.
+ * 여기서 따로 세면 두 숫자가 갈리고, 갈린 통계는 둘 다 못 믿게 된다.
+ *
+ * ⚠️ **달을 하나씩 흘려보낸다.** 월 파일 상한이 16 MB 라 열두 달을 한 배열로 모으면
+ * 최악 192 MB 다.
+ */
+function cmdUsage(p: ParsedCommand, out: Out): void {
+  const dirs = typeof p.options.dir === "string" ? [p.options.dir] : usageDirs();
+  const dir = dirs.find((d) => existsSync(d));
+  if (!dir) {
+    return out.fail(
+      "no_usage_log",
+      "사용 기록이 없다",
+      "앱을 한 번 켜면 로그가 쌓이기 시작한다",
+      1,
+    );
+  }
+
+  const months = readdirSync(dir)
+    .filter((f) => /^\d{4}-\d{2}\.log$/.test(f))
+    .sort();
+  if (months.length === 0) {
+    return out.fail("no_usage_log", `${dir} 에 로그 파일이 없다`, "앱을 한 번 켜 볼 것", 1);
+  }
+
+  const analyzer = new UsageAnalyzer();
+  for (const f of months) {
+    const raw = readFileSync(nodePath.join(dir, f), "utf-8");
+    analyzer.feedAll(raw.split(/\r?\n/).filter((l) => l.trim() !== ""));
+  }
+  const r = analyzer.result();
+  const top = typeof p.options.limit === "number" ? p.options.limit : 10;
+
+  if (out.json) return out.json_({ dir, months, ...r });
+
+  const via = (m: Record<string, number>) =>
+    Object.entries(m)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${v}`)
+      .join(" · ") || "없음";
+
+  out.line(
+    table([
+      ["로그", dir],
+      ["기간", months.length === 1 ? months[0] : `${months[0]} ~ ${months.at(-1)}`],
+      ["이벤트", String(r.events)],
+      ["세션", String(r.sessions)],
+      ["오류 · 경고", `${r.errorCount} · ${r.warnCount}`],
+      ["못 읽은 줄", `깨짐 ${r.malformed} · 모르는 종류 ${r.unknownKind}`],
+    ]),
+  );
+  out.line("");
+  out.line("많이 쓴 명령");
+  out.line(
+    table(r.commands.slice(0, top).map((c) => ["  " + c.id, `${c.total} (${via(c.via)})`])) ||
+      "  없음",
+  );
+  if (r.queries.empty.length > 0) {
+    out.line("");
+    out.line("결과가 0건이던 질의");
+    out.line(
+      table(r.queries.empty.slice(0, top).map((q) => ["  " + q.q, `${q.count}회 · ${q.kind}`])),
+    );
+  }
+  if (r.perf.length > 0) {
+    out.line("");
+    out.line("성능");
+    out.line(
+      table(
+        r.perf.map((x) => [
+          "  " + x.op,
+          `${x.count}회 · 평균 ${Math.round(x.avgMs)}ms · 최대 ${Math.round(x.maxMs)}ms`,
+        ]),
+      ),
+    );
+  }
+}
+
+/**
+ * 노트를 만든다.
+ *
+ * ## ⚠️ 쓰기다 — 3층의 규율을 따른다
+ *
+ * `replace` · `tag rename` 과 같은 자리에 선다. 다만 훨씬 단순하다: **새 파일 하나**라
+ * 백업할 것도 롤백할 것도 없다. 대신 두 가지를 지킨다.
+ *
+ * 1. **이미 있으면 거부한다.** 덮어쓰면 되돌릴 방법이 없다.
+ * 2. **vault 밖으로 못 나간다.** `../` 가 섞인 이름을 그대로 이으면 vault 밖을 쓴다.
+ *
+ * ⚠️ 템플릿 적용은 `$lib/noteTemplate` — 앱이 새 노트를 만들 때 쓰는 **같은 함수**다.
+ * 여기서 따로 채우면 앱과 CLI 가 다른 문서를 만든다.
+ */
+function cmdNew(p: ParsedCommand, out: Out): void {
+  const vc = resolveVault(vaultOf(p));
+  const raw = String(p.positional[0] ?? "").trim();
+  if (!raw) return out.fail("usage", "이름이 필요하다", "lapis new <이름>", 2);
+
+  const rel = raw.endsWith(".md") ? raw : `${raw}.md`;
+  const target = nodePath.resolve(vc.root, rel);
+  // 🔴 vault 밖으로 못 나간다. 문자열이 아니라 **해소한 경로**로 본다.
+  const root = nodePath.resolve(vc.root);
+  if (target !== root && !target.startsWith(root + nodePath.sep)) {
+    return out.fail("outside_vault", `vault 밖이다: ${rel}`, "vault 안의 경로를 줄 것", 2);
+  }
+  if (existsSync(target)) {
+    return out.fail("exists", `이미 있다: ${rel}`, "다른 이름을 쓰거나 직접 열어 볼 것", 1);
+  }
+
+  const title = typeof p.options.title === "string" ? p.options.title : nodePath.basename(rel, ".md");
+  let body = defaultBody(title);
+  const tpl = p.options.template;
+  if (typeof tpl === "string" && tpl) {
+    const tplPath = nodePath.join(vc.root, TEMPLATE_DIR, tpl.endsWith(".md") ? tpl : `${tpl}.md`);
+    if (!existsSync(tplPath)) {
+      return out.fail(
+        "no_template",
+        `템플릿이 없다: ${tpl}`,
+        `${TEMPLATE_DIR} 안의 파일 이름을 줄 것`,
+        1,
+      );
+    }
+    body = applyTemplate(readFileSync(tplPath, "utf-8"), { title, now: new Date() });
+  }
+
+  try {
+    mkdirSync(nodePath.dirname(target), { recursive: true });
+    // ⚠️ `wx` — 있으면 던진다. 위 검사와 파일 생성 사이의 틈을 파일시스템이 막는다.
+    writeFileSync(target, body, { encoding: "utf-8", flag: "wx" });
+  } catch (e) {
+    return out.fail("write_failed", `못 만들었다: ${rel}`, (e as Error)?.message ?? "", 1);
+  }
+
+  if (out.json) return out.json_({ vault: vc.root, path: target, created: true });
+  out.line(`만들었다: ${rel}`);
+  out.line("(앱의 인덱스는 아직 모른다 — `lapis index` 나 앱을 켜면 반영된다)");
+}
+
+/**
+ * 셸 자동완성.
+ *
+ * ⚠️ **명령 목록을 손으로 안 적는다.** `COMMANDS` 에서 뽑는다 — 손으로 적으면 명령을
+ * 추가할 때마다 여기를 잊고, 잊으면 새 명령만 완성이 안 된다(에러는 안 난다).
+ */
+function cmdCompletion(p: ParsedCommand, out: Out): void {
+  const shell = String(p.positional[0] ?? "").toLowerCase();
+  const names = COMMANDS.map((c) => c.name).join(" ");
+  if (shell === "bash") {
+    return out.line(
+      [
+        "_lapis() {",
+        '  local cur="${COMP_WORDS[COMP_CWORD]}"',
+        "  if [ $COMP_CWORD -eq 1 ]; then",
+        `    COMPREPLY=( $(compgen -W "${names}" -- "$cur") )`,
+        "  fi",
+        "}",
+        "complete -F _lapis lapis",
+      ].join("\n"),
+    );
+  }
+  if (shell === "zsh") {
+    return out.line(
+      [
+        "#compdef lapis",
+        "_lapis() {",
+        `  local -a cmds; cmds=(${names})`,
+        '  if (( CURRENT == 2 )); then _describe "명령" cmds; fi',
+        "}",
+        "compdef _lapis lapis",
+      ].join("\n"),
+    );
+  }
+  if (shell === "pwsh" || shell === "powershell") {
+    return out.line(
+      [
+        "Register-ArgumentCompleter -Native -CommandName lapis -ScriptBlock {",
+        "  param($wordToComplete, $commandAst, $cursorPosition)",
+        `  @(${COMMANDS.map((c) => `'${c.name}'`).join(",")}) |`,
+        "    Where-Object { $_ -like \"$wordToComplete*\" } |",
+        "    ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }",
+        "}",
+      ].join("\n"),
+    );
+  }
+  out.fail("usage", `모르는 셸: ${shell}`, "bash · zsh · pwsh 중 하나", 2);
+}
+
 function cmdOpen(p: ParsedCommand, out: Out): void {
   const target = p.positional[0];
   const resolved = resolveNotePath(target, vaultOf(p));
@@ -1120,5 +1414,10 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   tasks: cmdTasks,
   index: cmdIndex,
   open: cmdOpen,
+  read: cmdRead,
+  stats: cmdStats,
+  usage: cmdUsage,
+  new: cmdNew,
+  completion: cmdCompletion,
   replace: cmdReplace,
 };
