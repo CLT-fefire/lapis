@@ -212,27 +212,7 @@ function describeError(err: unknown): string {
 
 /** 세션 시작 — 어느 버전·플랫폼에서 난 것인지 나중에 갈라 보려면 필요하다. */
 export function logSessionStart(version: string, os: string): void {
-  sessionStartedAt = Date.now();
-  push({ k: "session", t: sessionStartedAt, ev: "start", v: version, os });
-}
-
-/**
- * 이 창이 시작한 시각. 끝 이벤트의 길이를 여기서 뺀다.
- *
- * ⚠️ 로그의 **마지막 start 시각**으로 계산하면 안 된다 — 창이 둘이면 서로의 시작을 본다.
- */
-let sessionStartedAt: number | null = null;
-
-/**
- * 세션 끝.
- *
- * ⚠️ **시작을 못 봤으면 길이를 안 담는다.** 0 이나 추측을 담으면 "한 번에 얼마나 쓰나"의
- * 평균이 조용히 내려간다. 길이 없는 끝 이벤트는 분모에서 빠진다.
- */
-export function logSessionEnd(version: string, os: string): void {
-  const now = Date.now();
-  const ms = sessionStartedAt === null ? undefined : now - sessionStartedAt;
-  push({ k: "session", t: now, ev: "end", v: version, os, ...(ms === undefined ? {} : { ms }) });
+  push({ k: "session", t: Date.now(), ev: "start", v: version, os });
 }
 
 /** 테스트용 — 버퍼를 비운다. */

@@ -282,6 +282,7 @@ pub fn run() {
             usage::usage_read,
             usage::usage_months,
             usage::usage_clear,
+            usage::usage_write_report,
         ])
         .build(context)
         .expect("error while building tauri application");

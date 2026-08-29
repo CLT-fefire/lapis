@@ -16,6 +16,39 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.7.1] — 2026-08-29
+
+### Fixed
+- 🔴 **The window would not close.** v3.7.0 registered a close handler so it could record how
+  long a session lasted. Tauri holds the window open until that handler finishes — so anything
+  slow or throwing inside it left the app **with no way to quit**. The X button looked broken.
+
+  The handler is gone. Session length is now derived from the timestamps already in the log:
+  from a `session start` to the last event that follows it. That measures *time actually used*
+  rather than *time the window was open*, which is arguably the more useful number — and it costs
+  nothing at close time.
+
+  ⚠️ The lesson is worth more than the feature: **an observability hook must never be able to hold
+  the app hostage.** One session-length figure is not worth a program you cannot quit.
+
+### Changed
+- **Log files are now `YYYY-MM.log`** — the content is still JSONL, only the extension changed, so
+  they read as logs when you go looking in the folder. Existing `.jsonl` files are renamed on
+  startup; leaving them behind would make those months vanish from the stats with no error.
+
+- **The export UI is gone; the analysis document writes itself.** Settings had a save button, a
+  format picker and a redaction checkbox — that pushed the job of *managing logs* onto the reader.
+  The app now writes `analysis.md` beside the logs on startup, and you copy out whatever you want.
+  "Clear log" stays.
+
+  ⚠️ Written on startup, not on close, for the reason above. The document therefore describes
+  everything up to the previous session, which is exactly what you want when you go read it.
+
+### Removed
+- Manual export (`usageExport.ts`) and report redaction. The document never leaves the app data
+  folder now, so there is no boundary left to redact at — and redacting what you are about to read
+  yourself only makes it less useful.
+
 ## [3.7.0] — 2026-08-29
 
 > The usage log was added to answer "what should I fix next", but it could only export a Markdown
@@ -2238,6 +2271,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.7.1]: https://github.com/eren0315/lapis/compare/v3.7.0...v3.7.1
 [3.7.0]: https://github.com/eren0315/lapis/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/eren0315/lapis/compare/v3.5.2...v3.6.0
 [3.5.2]: https://github.com/eren0315/lapis/compare/v3.5.1...v3.5.2

@@ -163,6 +163,22 @@ export class UsageAnalyzer {
     this.#from = this.#from === null ? e.t : Math.min(this.#from, e.t);
     this.#to = this.#to === null ? e.t : Math.max(this.#to, e.t);
     this.#take(e);
+    // 🔴 **세션 길이는 여기서 자란다.** 끝 이벤트를 안 쓰기 때문이다 — 닫을 때 무언가를
+    //    하려면 창을 붙잡아야 하고, 그러다 실제로 **X 버튼이 안 먹는 앱**을 만들었다.
+    //    마지막 이벤트까지의 시간은 "실제로 쓴 시간"이라 오히려 더 정직하다.
+    if (this.#spanStart !== null) this.#spanLast = Math.max(this.#spanLast ?? e.t, e.t);
+  }
+
+  #spanStart: number | null = null;
+  #spanLast: number | null = null;
+
+  /** 열려 있던 구간을 닫아 길이에 넣는다. 이벤트가 하나뿐이면 길이가 0 이라 안 넣는다. */
+  #closeSpan(): void {
+    if (this.#spanStart === null || this.#spanLast === null) return;
+    const ms = this.#spanLast - this.#spanStart;
+    if (ms > 0) this.#sessionMs.push(ms);
+    this.#spanStart = null;
+    this.#spanLast = null;
   }
 
   feedAll(lines: Iterable<string>): void {
@@ -196,8 +212,15 @@ export class UsageAnalyzer {
         return;
       }
       case "session": {
-        if (e.ev === "start") this.#sessions++;
-        else if (typeof e.ms === "number") this.#sessionMs.push(e.ms);
+        if (e.ev === "start") {
+          this.#sessions++;
+          this.#closeSpan();
+          this.#spanStart = e.t;
+          this.#spanLast = e.t;
+        } else if (typeof e.ms === "number") {
+          // v3.7.0 이 쓴 끝 이벤트. 지금은 안 쓰지만 이미 쌓인 줄은 읽는다.
+          this.#sessionMs.push(e.ms);
+        }
         return;
       }
       case "query": {
@@ -235,6 +258,13 @@ export class UsageAnalyzer {
 
   /** ⚠️ **읽기만 한다.** 여러 번 불러도 같은 답이어야 한다 — 화면이 그렇게 쓴다. */
   result(): UsageSummary {
+    // ⚠️ **읽기만 하는 함수인데 여기서 구간을 닫는다.** 마지막 세션은 아직 안 끝났으므로
+    //    닫지 않으면 통계에서 빠진다. 여러 번 불러도 같은 답이어야 하므로 상태를 안 지우고
+    //    사본에만 더한다.
+    const spans =
+      this.#spanStart !== null && this.#spanLast !== null && this.#spanLast > this.#spanStart
+        ? [...this.#sessionMs, this.#spanLast - this.#spanStart]
+        : this.#sessionMs;
     const top = this.#top;
     const commands = [...this.#cmd.values()]
       .sort((a, b) => b.total - a.total || a.id.localeCompare(b.id))
@@ -263,10 +293,7 @@ export class UsageAnalyzer {
       from: this.#from,
       to: this.#to,
       sessions: this.#sessions,
-      avgSessionMs:
-        this.#sessionMs.length === 0
-          ? null
-          : this.#sessionMs.reduce((a, b) => a + b, 0) / this.#sessionMs.length,
+      avgSessionMs: spans.length === 0 ? null : spans.reduce((a, b) => a + b, 0) / spans.length,
       commands,
       errors,
       errorCount: this.#errorCount,

@@ -12,7 +12,8 @@
 //!
 //! ## 형식 — JSONL, 월별
 //!
-//! `usage/YYYY-MM.jsonl`. 한 줄이 한 이벤트다. 줄 단위라 손상이 그 줄에서 멈추고,
+//! `usage/YYYY-MM.log`. 내용은 JSONL(한 줄이 한 이벤트)이고 확장자만 `.log` 다 —
+//! 로그 파일로 보이는 편이 폴더에서 꺼낼 때 헷갈리지 않는다. 줄 단위라 손상이 그 줄에서 멈추고,
 //! 이어 붙이기가 원자적으로 끝난다(append 한 번).
 //!
 //! ⚠️ **줄 내용을 여기서 해석하지 않는다.** 프런트가 만든 JSON 문자열을 그대로 받아
@@ -37,10 +38,44 @@ const MONTH_FILE_MAX: u64 = 16 * 1024 * 1024;
 /// 한 번에 받을 수 있는 줄 수. 프런트 버퍼가 폭주해도 여기서 끊는다.
 const MAX_LINES_PER_CALL: usize = 2000;
 
+/// 파일 확장자. **내용은 JSONL 이고 확장자만 `.log` 다.**
+const LOG_EXT: &str = "log";
+
+/// 예전 확장자. 이관 대상이다.
+const OLD_LOG_EXT: &str = "jsonl";
+
 fn usage_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app_data_root(app)?.join("usage");
     fs::create_dir_all(&dir).map_err(|e| format!("usage 디렉터리 생성 실패: {e}"))?;
+    migrate_old_ext(&dir);
     Ok(dir)
+}
+
+/// ⚠️ **옛 `.jsonl` 을 `.log` 로 옮긴다.**
+///
+/// 확장자만 바꾸고 끝내면 이미 쌓인 달이 목록에서 **에러 없이 사라진다** — 파일은 남아
+/// 있는데 앱이 못 보므로, 통계가 그만큼 조용히 줄어든다.
+///
+/// 실패해도 넘어간다. 이관은 편의이지 정확성이 아니고, 여기서 앱을 세울 이유가 없다.
+/// 같은 이름의 `.log` 가 이미 있으면 건드리지 않는다 — 덮어쓰면 새 기록을 잃는다.
+fn migrate_old_ext(dir: &std::path::Path) {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(stem) = name.strip_suffix(&format!(".{OLD_LOG_EXT}")) else {
+            continue;
+        };
+        if stem.len() != 7 {
+            continue;
+        }
+        let next = dir.join(format!("{stem}.{LOG_EXT}"));
+        if next.exists() {
+            continue;
+        }
+        let _ = fs::rename(entry.path(), next);
+    }
 }
 
 /// `YYYY-MM` 인가.
@@ -59,7 +94,7 @@ fn month_file(app: &AppHandle, month: &str) -> Result<PathBuf, String> {
     if !valid_month(month) {
         return Err(format!("달 형식이 아니다: {month}"));
     }
-    Ok(usage_dir(app)?.join(format!("{month}.jsonl")))
+    Ok(usage_dir(app)?.join(format!("{month}.{LOG_EXT}")))
 }
 
 /// 결과 — 얼마나 썼고, 상한에 닿았는가.
@@ -151,7 +186,7 @@ pub fn usage_months(app: AppHandle) -> Result<UsageMonths, String> {
     if let Ok(rd) = fs::read_dir(&dir) {
         for entry in rd.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            let Some(stem) = name.strip_suffix(".jsonl") else {
+            let Some(stem) = name.strip_suffix(&format!(".{LOG_EXT}")) else {
                 continue;
             };
             if stem.len() != 7 {
@@ -170,10 +205,33 @@ pub fn usage_months(app: AppHandle) -> Result<UsageMonths, String> {
     })
 }
 
+/// 분석 문서 이름 — 로그와 같은 폴더에 선다.
+const REPORT_NAME: &str = "analysis.md";
+
+/// 분석 문서를 쓴다. **앱이 기동할 때 알아서 부른다** — 사용자가 누르는 버튼이 없다.
+///
+/// ⚠️ **임시 파일 → rename 으로 갈아끼운다.** 통계를 보려고 폴더를 열었는데 반쯤 쓰인
+/// 파일이 있으면 그 숫자를 믿게 된다. 이 저장소의 다른 쓰기와 같은 규칙이다.
+#[tauri::command]
+pub fn usage_write_report(app: AppHandle, text: String) -> Result<String, String> {
+    let dir = usage_dir(&app)?;
+    let target = dir.join(REPORT_NAME);
+    let tmp = dir.join(format!("{REPORT_NAME}.tmp"));
+    fs::write(&tmp, text.as_bytes()).map_err(|e| format!("분석 문서 쓰기 실패: {e}"))?;
+    if let Err(e) = fs::rename(&tmp, &target) {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("분석 문서 교체 실패: {e}"));
+    }
+    Ok(to_ui(&target))
+}
+
 /// 로그를 전부 지운다. 설정의 "기록 지우기".
 ///
 /// ⚠️ **디렉터리째 지우지 않는다.** `usage/` 아래에 다른 것이 생길 수 있고, 그때
-/// 통째로 날리면 남의 것까지 간다. 우리가 만든 `YYYY-MM.jsonl` 만 지운다.
+/// 통째로 날리면 남의 것까지 간다. 우리가 만든 `YYYY-MM.log` 만 지운다.
+///
+/// ⚠️ 옛 `.jsonl` 도 지운다. 이관이 실패해 남아 있을 수 있는데, 그걸 남기면 "지웠다"고
+/// 했는데 파일이 그대로 있는 상태가 된다.
 #[tauri::command]
 pub fn usage_clear(app: AppHandle) -> Result<usize, String> {
     let dir = usage_dir(&app)?;
@@ -181,7 +239,10 @@ pub fn usage_clear(app: AppHandle) -> Result<usize, String> {
     if let Ok(rd) = fs::read_dir(&dir) {
         for entry in rd.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            let Some(stem) = name.strip_suffix(".jsonl") else {
+            let stem = name
+                .strip_suffix(&format!(".{LOG_EXT}"))
+                .or_else(|| name.strip_suffix(&format!(".{OLD_LOG_EXT}")));
+            let Some(stem) = stem else {
                 continue;
             };
             if stem.len() == 7 && fs::remove_file(entry.path()).is_ok() {
