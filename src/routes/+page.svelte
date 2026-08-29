@@ -1467,10 +1467,6 @@ import { isPanicChord } from "$lib/userCss";
       `--rz-right: ${$contextCollapsed ? 0 : 4}px;`,
   );
 
-  // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
-  // package.json/tauri.conf.json와 동기되지 않은 stale 값을 표시할 위험을 원천 차단.
-  let appVersion = $state<string>("");
-
   // 디버그 빌드 표식 — 릴리즈 앱과 나란히 띄울 때 어느 창인지 구분한다.
   // 창 제목은 Rust setup()이 붙이고, 여기선 같은 판정값으로 topbar 배지를 켠다.
   let isDebug = $state(false);
@@ -1569,13 +1565,6 @@ import { isPanicChord } from "$lib/userCss";
     void listenCliOpen().then((un) => {
       unlistenCliOpen = un;
     });
-    void (async () => {
-      try {
-        appVersion = await getVersion();
-      } catch (e) {
-        logWarn("routes/+page", "[app] getVersion failed", e);
-      }
-    })();
     void (async () => {
       try {
         isDebug = await isDebugBuild();
