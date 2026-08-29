@@ -95,6 +95,23 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   ever looking wrong.
 
 ### Fixed
+- **`props rename` could rewrite a value it should not touch.** In YAML a `#` only starts a
+  comment when whitespace precedes it, so `C#` is the scalar `C#` — but the comment was
+  matched with a pattern that allowed none, so `topic: C#` was read as the value `C`.
+  Renaming `C` turned it into `topic: D#`, and the real value `C#` could never be matched
+  at all. The dry-run preview reported the change as expected, so a person reviewing it had no
+  way to notice. Values in quotes (`topic: "a # b"`) were cut at the same place.
+
+- **A render request could hijack a window that had another vault open.** A cold start marks
+  `main` as the designated window so it takes the request regardless of vault — but nothing
+  cleared that mark, so every later request was claimed by the same window, which then switched
+  its vault to render. Opening a note already clears the mark on every new request; rendering
+  did not.
+
+- **The side pane briefly showed the previous note.** Reading is asynchronous, so after the
+  path changed the header already named B while the body was still A, with nothing to indicate
+  it. A blank moment is better than a wrong one.
+
 - **"No unused commands" was a lie.** Asked through a real MCP client, `lapis_usage`
   reported zero commands used and zero unused. The truth was that it had no denominator: the
   command list lived in a module that pulls in Svelte stores, so the headless consumers could
