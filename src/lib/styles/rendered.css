@@ -335,6 +335,18 @@
   outline-offset: 1px;
 }
 
+/*
+  같은 이름의 노트가 여럿 — 링크는 동작하되 어디로 갈지 정해지지 않았다.
+
+  ⚠️ 오류처럼 보이면 안 된다. 끊긴 링크(빨강)와 달리 이건 **잘 동작하는 링크**다.
+     물결선으로 "확인해 보라"만 말하고 색은 안 바꾼다.
+*/
+.rendered .wikilink.ambiguous {
+  text-decoration: underline wavy var(--border-strong);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
 .rendered .wikilink.unresolved {
   color: var(--danger-text);
   border-bottom-color: var(--danger-border);

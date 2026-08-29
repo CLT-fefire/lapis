@@ -16,6 +16,51 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.9.0] — 2026-08-29
+
+> The rest of the fifth analysis, and five new CLI commands. Cut as one release rather than four —
+> the ceremony was costing more than the work.
+
+### Added
+- **Printing.** The exported HTML now carries `@media print`, so the browser's "save as PDF"
+  produces something readable. No PDF library: one stylesheet gets the same result without making
+  fonts, CJK and math our problem. Code blocks wrap (a scrolling block simply **vanishes** on
+  paper), external links print their address, and headings do not strand at the foot of a page.
+
+- **Errors show up in the status bar.** Release builds have no devtools, so a failure was recorded
+  in the log and nowhere else — you had to open the file to learn something had broken at all.
+  A count now sits in the status bar. It does not interrupt: the banner is still reserved for
+  irreversible writes that failed.
+
+- **An "untouched" tab in vault diagnostics** — notes that have sat for six months. Not a list of
+  things to fix; a list of things to look at again. Uses whichever is later, file mtime or the
+  frontmatter `date`, and **skips notes where neither is known** — counting "unknown" as "ancient"
+  would fill the list and nobody would trust it.
+
+- **Ambiguous links are marked where you read them.** Seven note names exist twice in this vault
+  (two projects). Diagnostics listed them, but reading `[[open-items]]` gave no hint at all.
+  A wavy underline now says "check this", and the title lists the candidates. The link still works —
+  marking, not blocking.
+
+- **Palette preview.** The active note's opening lines, debounced, only for entries that have a
+  path. It sits below the list rather than beside it: the palette's width is tuned, and widening
+  it would shrink the result text.
+
+- **Keyboard resizing.** The sidebar and context resizers carried `role="separator"` and a label
+  but no `tabindex` and no key handling — assistive tech announced a control that could not be
+  reached. Arrows move them, `Shift` moves further, `Home` resets.
+
+- **Five CLI commands.** `read` (find a note by name and print it — `cat` needs the path),
+  `stats` (what is in the vault, as distinct from `status`, which is about the cache), `usage`
+  (the same analyzer the app writes `analysis.md` with), `new` (a note, from a template, refusing
+  to overwrite and refusing to leave the vault), and `completion` for bash/zsh/pwsh — which reads
+  the command list from the spec rather than repeating it.
+
+### Fixed
+- **Command usage was still under-counted.** The title bar and tab bar acted through direct store
+  calls, so opening a vault, running the palette from the title bar, closing or pinning a tab were
+  all invisible. They log now.
+
 ## [3.8.0] — 2026-08-29
 
 > The fifth analysis, first group: the places where lapis found something and then made you go
@@ -2337,6 +2382,7 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 <!-- link references -->
 
 [Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[3.9.0]: https://github.com/eren0315/lapis/compare/v3.8.0...v3.9.0
 [3.8.0]: https://github.com/eren0315/lapis/compare/v3.7.2...v3.8.0
 [3.7.2]: https://github.com/eren0315/lapis/compare/v3.7.1...v3.7.2
 [3.7.1]: https://github.com/eren0315/lapis/compare/v3.7.0...v3.7.1

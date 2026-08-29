@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { logCommand } from "$lib/stores/usage";
   import { m } from "$lib/paraglide/messages.js";
   import { tick } from "svelte";
   import { slide } from "svelte/transition";
@@ -208,7 +209,7 @@
           title={$pinnedNotePaths.includes(path) ? m.tab_pin_remove() : m.tab_pin_add()}
           aria-label={m.tab_pin_aria()}
           aria-pressed={$pinnedNotePaths.includes(path)}
-          onclick={(e) => onPinToggle(e, path)}
+          onclick={(e) => { logCommand("tab-pin", "button"); onPinToggle(e, path); }}
         >{$pinnedNotePaths.includes(path) ? "★" : "☆"}</button>
         {#if path === $currentNotePath && $isDirty}
           <span class="dirty" aria-label={m.tab_dirty_aria()}>●</span>
@@ -218,7 +219,7 @@
           class="btn btn--icon btn--sm btn--plain close"
           title={m.tab_close_title()}
           aria-label={m.tab_close_aria()}
-          onclick={(e) => onClose(e, path)}
+          onclick={(e) => { logCommand("tab-close", "button"); onClose(e, path); }}
         >✕</button>
       </div>
     {/each}
@@ -231,7 +232,7 @@
   {@const menu = ctxMenu}
   <ul class="tab-ctx-menu" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
     <li>
-      <button role="menuitem" onclick={() => { const p = menu.path; closeCtxMenu(); void closeTab(p); }}>
+      <button role="menuitem" onclick={() => { logCommand("tab-close", "menu"); const p = menu.path; closeCtxMenu(); void closeTab(p); }}>
         {m.tab_close()}
       </button>
     </li>
@@ -239,7 +240,7 @@
       <button
         role="menuitem"
         disabled={$openTabs.length <= 1}
-        onclick={() => { const p = menu.path; closeCtxMenu(); void closeOtherTabs(p); }}
+        onclick={() => { logCommand("tab-close-others", "menu"); const p = menu.path; closeCtxMenu(); void closeOtherTabs(p); }}
       >{m.tab_close_others()}</button>
     </li>
     <li>

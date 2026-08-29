@@ -11,6 +11,7 @@
   import { watcherStatus } from "$lib/stores/watcher";
   import { lastCommit, formatCommitDate } from "$lib/stores/git";
   import { usingFakeBackend } from "$lib/tauri/invoke";
+  import { sessionErrors, sessionWarns } from "$lib/stores/usage";
 
   /**
    * 상태바 — 셸의 마지막 줄.
@@ -89,6 +90,23 @@
           {m.statusbar_committed({ count: $lastCommit.count })}
         </span>
       {/if}
+    {/if}
+    <!--
+      🔴 **릴리스에는 devtools 가 없다.** 로그에는 다 쌓이지만 그 파일을 열어 보기 전에는
+      뭔가 깨졌다는 사실 자체를 모른다. 숫자 한 칸이면 그 자리에서 안다.
+
+      ⚠️ **끼어들지 않는다.** 배너는 되돌릴 수 없는 쓰기가 깨졌을 때만 뜬다 — 이건 세기만
+      한다. 관찰이 대상을 바꾸면 안 된다.
+    -->
+    {#if $sessionErrors > 0 || $sessionWarns > 0}
+      <span
+        class="errs"
+        class:has-error={$sessionErrors > 0}
+        title={m.statusbar_errors_title({ errors: $sessionErrors, warns: $sessionWarns })}
+      >
+        {$sessionErrors > 0 ? "⚠" : "·"}
+        {$sessionErrors + $sessionWarns}
+      </span>
     {/if}
   </div>
 
@@ -176,6 +194,20 @@
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.04em;
+  }
+
+  /* 오류 수 — 눈에 띄되 끼어들지 않는다. 경고만 있으면 조용한 색. */
+  .errs {
+    flex: none;
+    padding: 0 var(--sp-2);
+    border-radius: var(--r-sm);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .errs.has-error {
+    color: var(--danger-text);
   }
 
   .commit {

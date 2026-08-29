@@ -132,6 +132,64 @@ body {
   color: var(--text-primary, #1a1a1a);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+  인쇄 — 브라우저의 "PDF 로 저장"이 이걸 쓴다.
+
+  ⚠️ PDF 라이브러리를 안 들인다. 자립 HTML 은 이미 있고, 브라우저는 어디에나 있다.
+     라이브러리를 들이면 글꼴·CJK·수식이 전부 우리 문제가 된다.
+*/
+@media print {
+  body {
+    padding: 0;
+    /* 종이는 하얗다. 화면 배경을 그대로 인쇄하면 토너를 붓는다. */
+    background: #ffffff;
+    color: #000000;
+  }
+
+  /* ⚠️ 링크 주소를 뒤에 붙인다 — 종이에서는 눌러도 아무 일이 없다. */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+
+  /* 내부 링크는 안 붙인다 — 슬러그만 나와도 읽는 사람에게 뜻이 없다. */
+  a:not([href^="http"])::after {
+    content: none;
+  }
+
+  /* 제목이 페이지 맨 아래에 혼자 남지 않게. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* 코드·표·그림은 쪼개지면 못 읽는다. */
+  pre,
+  table,
+  blockquote,
+  figure,
+  img,
+  svg {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  pre {
+    /* 화면에서는 가로로 스크롤하지만 종이에는 스크롤이 없다 — 잘리면 그냥 사라진다. */
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /*
+    ⚠️ 이미지 폭은 여기서 안 정한다 — rendered.css 의 .rendered 가 이미 갖는다.
+       같은 규칙을 두 곳에 두면 갈린다(previewExportDoc.test.ts 가 그걸 막는다).
+  */
 }`;
 
 /**

@@ -60,6 +60,23 @@ usageEnabled.subscribe((on) => {
 /** 상한에 닿아 버려진 줄 수. 0이 아니면 화면이 말해야 한다. */
 export const usageDropped = writable<number>(0);
 
+/**
+ * 이번 세션에 난 오류·경고 수.
+ *
+ * ## ⚠️ 왜 화면에 내나
+ *
+ * 릴리스 빌드에는 devtools 가 없다. 로그에는 다 쌓이지만 **그 파일을 열어 보기 전에는
+ * 뭔가 깨졌다는 사실 자체를 모른다.** 상태바 한 칸이면 "오늘 뭔가 이상했다"를 그 자리에서
+ * 안다.
+ *
+ * ⚠️ **끼어들지 않는다.** 배너는 되돌릴 수 없는 쓰기가 깨졌을 때만 뜬다(v3.5.0). 이건
+ * 숫자만 보여주고 아무것도 막지 않는다 — 관찰이 대상을 바꾸면 안 된다.
+ *
+ * ⚠️ 세션 단위다. 앱을 다시 켜면 0 이다 — 누적은 로그와 분석 문서의 일이다.
+ */
+export const sessionErrors = writable<number>(0);
+export const sessionWarns = writable<number>(0);
+
 let buffer: string[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -165,6 +182,7 @@ export function logError(at: string, msg: string, ...rest: unknown[]): void {
   } catch {
     /* 콘솔조차 없으면 넘어간다 */
   }
+  sessionErrors.update((n) => n + 1);
   push({ k: "err", t: Date.now(), at, msg, ...splitRest(rest) });
 }
 
@@ -175,6 +193,7 @@ export function logWarn(at: string, msg: string, ...rest: unknown[]): void {
   } catch {
     /* 무시 */
   }
+  sessionWarns.update((n) => n + 1);
   push({ k: "err", t: Date.now(), at, msg: `warn: ${msg}`, ...splitRest(rest) });
 }
 
@@ -218,6 +237,8 @@ export function logSessionStart(version: string, os: string): void {
 /** 테스트용 — 버퍼를 비운다. */
 export function resetUsageBuffer(): void {
   buffer = [];
+  sessionErrors.set(0);
+  sessionWarns.set(0);
   if (timer !== null) {
     clearTimeout(timer);
     timer = null;

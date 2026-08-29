@@ -214,6 +214,44 @@ export const COMMANDS: CommandSpec[] = [
     options: [],
   },
   {
+    name: "read",
+    desc: "노트 본문을 낸다. **이름으로 찾는다** — cat 은 경로를 알아야 한다",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
+    options: [{ name: "meta", kind: "boolean", desc: "frontmatter 도 같이. 기본은 본문만" }],
+  },
+  {
+    name: "new",
+    desc: "노트를 만든다. **쓰기다** — 이미 있으면 거부한다",
+    positional: [{ name: "이름", required: true, desc: "확장자 없이. vault 상대 경로도 된다" }],
+    options: [
+      { name: "template", kind: "string", desc: ".lapis/templates 안의 이름. 앱과 같은 목록" },
+      { name: "title", kind: "string", desc: "{{title}} 에 넣을 값. 기본은 파일 이름" },
+    ],
+  },
+  {
+    name: "completion",
+    desc: "셸 자동완성 스크립트를 낸다. `lapis completion bash >> ~/.bashrc` 꼴",
+    positional: [
+      { name: "셸", required: true, desc: "bash · zsh · pwsh 중 하나" },
+    ],
+    options: [],
+  },
+  {
+    name: "stats",
+    desc: "vault 한눈 — 노트 수 · doc_kind · topic · 태그 · 미완 작업",
+    positional: [],
+    options: [],
+  },
+  {
+    name: "usage",
+    desc: "사용 기록 요약. 앱이 쓰는 로그를 그대로 읽는다",
+    positional: [],
+    options: [
+      LIMIT,
+      { name: "dir", kind: "string", desc: "로그 폴더. 기본은 앱 데이터 폴더" },
+    ],
+  },
+  {
     name: "open",
     desc: "실행 중인 앱에서 이 노트를 연다. 앱이 꺼져 있으면 켠다",
     positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
