@@ -8,7 +8,6 @@
   } from "$lib/stores/usage";
   import { enhanceRendered } from "$lib/renderedEnhance";
   import { onMount, tick } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
   import Sidebar from "$lib/Sidebar.svelte";
   import SidebarRail from "$lib/SidebarRail.svelte";
@@ -21,6 +20,8 @@
   import { DEV_VAULT } from "$lib/dev/fixtureVault";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
+  import ComparePane from "$lib/ComparePane.svelte";
+  import { comparePath, closeIfSame } from "$lib/stores/compare";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
@@ -131,11 +132,23 @@ import { isPanicChord } from "$lib/userCss";
   import type { HeadingInfo } from "$lib/markdownPlugins/headingAnchor";
   import { groupRelations, type RelationGroup } from "$lib/relations";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
-  import { exportMermaidHostToPng } from "$lib/mermaidExport";
+  import { handleRenderedClick } from "$lib/previewClick";
   import { rewriteImageSources } from "$lib/assetPath";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
   import { newWindow } from "$lib/tauri/window";
   import { writeUsageAnalysis } from "$lib/usageAutoReport";
+  import { onCliRender } from "$lib/tauri/cliOpen";
+  import {
+    takePendingRender,
+    reportRenderFailure,
+    writeRenderResult,
+    pickMermaidHost,
+    waitForMermaidIn,
+  } from "$lib/stores/cliRender";
+  import { buildPreviewHtml } from "$lib/previewExport";
+  import { buildMermaidPng } from "$lib/mermaidExport";
+  /** 창이 닫힐 때 뗄 구독들 — 안 떼면 죽은 창의 핸들러가 요청을 가로챈다. */
+  const cliRenderUnlisten: (() => void)[] = [];
   import { rememberPos, posFor } from "$lib/stores/readingPos";
   import { BUILTIN_COMMANDS } from "$lib/commands";
   import { resolveShortcut } from "$lib/keymap";
@@ -287,68 +300,12 @@ import { isPanicChord } from "$lib/userCss";
   // - <a href="http..."> 외부: 시스템 브라우저로 (Tauri opener)
   // - <a href="..."> 내부 (./, ../, *.md, 상대 경로): 노트 점프 시도
   // - 그 외: SvelteKit SPA navigation 절대 막음 (앱이 /파일명 으로 가서 404 화이트스크린 되는 사고 방지)
+  /**
+   * 그려진 본문 안의 클릭. 🔴 규칙은 `previewClick.ts` **한 곳**에 있다 —
+   * 옆칸(`ComparePane`)이 같은 함수를 부른다.
+   */
   async function handlePreviewClick(e: MouseEvent) {
-    const el = e.target as HTMLElement | null;
-    if (!el) return;
-
-    // 0) mermaid PNG 내보내기 버튼 — 반드시 anchor 체크보다 앞.
-    //    <button>은 closest("a")에 안 걸려 아래 `if (!anchor) return`에서 무시됨.
-    const exportBtn = el.closest(".mermaid-export-btn") as HTMLElement | null;
-    if (exportBtn) {
-      e.preventDefault();
-      const host = exportBtn.closest(".mermaid-host") as HTMLElement | null;
-      if (host) {
-        const fileName = $currentNotePath?.split("/").pop() ?? "diagram";
-        const base = fileName.replace(/\.(md|mmd)$/i, "");
-        try {
-          await exportMermaidHostToPng(host, base);
-        } catch (err) {
-          logError("routes/+page", m.page_mermaid_export_failed(), err);
-        }
-      }
-      return;
-    }
-
-    // 1) wikilink (span)
-    const wikilink = el.closest(".wikilink") as HTMLElement | null;
-    if (wikilink) {
-      e.preventDefault();
-      const target = wikilink.getAttribute("data-target");
-      if (target) {
-        const ok = await jumpToWikilink(target);
-        if (!ok) console.info("wikilink unresolved:", target);
-      }
-      return;
-    }
-
-    // 2) 일반 <a> 태그 — markdown 링크 [텍스트](경로)
-    const anchor = el.closest("a") as HTMLAnchorElement | null;
-    if (!anchor) return;
-    const href = anchor.getAttribute("href") ?? "";
-
-    // 외부 링크 → 시스템 브라우저
-    if (/^(https?:|mailto:|tel:)/i.test(href)) {
-      e.preventDefault();
-      try {
-        await openUrl(href);
-      } catch (err) {
-        logError("routes/+page", "openUrl failed", err);
-      }
-      return;
-    }
-
-    // 빈 href / # / 내부 경로 → SPA 라우팅 차단
-    e.preventDefault();
-    if (!href || href === "#") return;
-
-    // .md 확장자나 상대 경로 → wikilink 매칭 시도 (확장자 제거 + 마지막 segment)
-    const cleaned = href
-      .replace(/^\.\//, "")
-      .replace(/^\//, "")
-      .replace(/\.md$/i, "");
-    const lastSegment = cleaned.split("/").pop() ?? cleaned;
-    const ok = await jumpToWikilink(lastSegment);
-    if (!ok) console.info("note link unresolved:", href);
+    await handleRenderedClick(e, $currentNotePath, "wikilink");
   }
 
   let previewBodyEl: HTMLElement | null = $state(null);
@@ -627,6 +584,103 @@ import { isPanicChord } from "$lib/userCss";
     if (!el || !path) return;
     rememberPos(path, { scroll: el.scrollTop });
   }
+
+  /**
+   * 🔴 **밖에서 시킨 렌더** — `lapis_render` 의 프런트 절반.
+   *
+   * 헤드리스에는 캔버스가 없어 mermaid PNG 를 만들 수 없다. 앱 품질 HTML 도 마찬가지다
+   * (mermaid 가 마운트 후 `<svg>` 가 되므로 라이브 DOM 이 필요하다). 그래서 실행 중인
+   * 창이 대신 해 준다.
+   *
+   * ⚠️ **실패해도 반드시 무언가를 쓴다.** 부른 쪽은 파일이 생기기를 기다리므로, 아무것도
+   * 안 쓰면 타임아웃으로만 알게 된다 — "앱이 느린가"와 "렌더가 깨졌나"가 구별이 안 된다.
+   *
+   * ⚠️ 노트를 **실제로 연다.** 렌더는 라이브 DOM 을 읽으므로 그 노트가 화면에 떠 있어야
+   * 한다. 사람이 보던 것이 바뀌는 부작용이 있지만, 숨기면 무엇을 내보내는지 안 보인다.
+   */
+  /**
+   * 🔴 **차가운 기동** — 앱이 꺼져 있을 때 온 요청.
+   *
+   * 그때는 이벤트가 아니라 `setup` 에서 슬롯에 담긴 채로 기다린다. 그런데
+   * `take_pending_render` 는 **vault 가 맞을 때만** 내주고(창이 여럿일 때 엉뚱한 창이
+   * 가져가지 않도록), 기동 직후엔 `$vaultPath` 가 아직 `null` 이다.
+   *
+   * ⚠️ 그래서 기동 때 한 번만 물으면 **조용히 아무 일도 안 일어난다** — Rust 는 담았고
+   * 프런트는 못 가져갔고, 이벤트는 구독보다 먼저 지나갔다. 부른 쪽은 타임아웃으로만
+   * 알고, 실패 파일조차 안 생긴다(실패한 적이 없으므로).
+   *
+   * vault 가 열린 **뒤에** 다시 묻는다. 불일치일 때 슬롯을 비우지 않으므로 요청은 살아 있다.
+   */
+  // ⚠️ `$state` 가 **아니다.** 효과 안에서 읽고 쓰는 `$state` 는 순환이 된다(이 파일에서
+  //    이미 한 번 겪었다). 이건 화면에 안 나가는 장부이므로 평범한 변수면 된다.
+  let coldRenderChecked: string | null = null;
+  $effect(() => {
+    const vault = $vaultPath;
+    if (!vault || coldRenderChecked === vault) return;
+    // [cli-render] 차가운 기동 — vault 가 열렸으니 이제 물어본다.
+    coldRenderChecked = vault;
+    void handleRenderRequest();
+  });
+
+  /**
+   * 🔴 본문이 옆칸과 **같은 노트로 가면** 옆칸을 닫는다.
+   *
+   * 안 그러면 같은 문서가 나란히 두 벌 뜬다. 링크를 눌러 옮겨 다니다 보면 실제로 걸린다 —
+   * 옆칸의 링크는 본문을 움직이므로, 옆칸에서 자기 자신을 가리키는 링크 하나면 된다.
+   */
+  $effect(() => {
+    closeIfSame($currentNotePath);
+  });
+
+  async function handleRenderRequest(): Promise<void> {
+    const req = await takePendingRender($vaultPath).catch(() => null);
+    if (!req) return;
+    try {
+      // 🔴 **vault 가 다르면 먼저 연다.**
+      //
+      // 지목된 창(`cli_window`)은 vault 를 안 따지고 받아간다 — 차가운 기동이거나,
+      // 그 vault 를 연 창이 없어 Rust 가 새로 띄운 창이다. 그 창은 자기가 복원한
+      // vault 를 들고 있으므로, 그대로 `selectNote` 하면 **엉뚱한 vault 에서** 찾는다.
+      //
+      // ⚠️ 순서가 중요하다. 노트를 먼저 열면 인덱스 없는 상태에서 열게 되고 뒤이은
+      //    `openVault` 가 탭을 갈아치운다 — `cliOpen.apply()` 가 같은 이유로 같은 순서다.
+      if (req.vault !== $vaultPath) await openVault(req.vault);
+      await selectNote(req.path, { via: "cli" });
+      // 본문이 그려지고 mermaid 가 **SVG 가 될 때까지** 기다린다.
+      //
+      // ⚠️ 본문 노드를 매번 다시 읽는다. 노트를 여는 도중이면 통째로 갈리므로, 한 번
+      //    잡아 두면 화면에서 떨어져 나간 옛 노드를 보며 영영 기다린다.
+      await tick();
+      const state = await waitForMermaidIn(() => renderedArticleEl ?? null);
+      const article = renderedArticleEl;
+      if (!article) throw new Error("본문이 아직 없다");
+      // ⚠️ 세 결과를 **따로** 말한다 — 조치가 다르다. 뭉치면 타임아웃을 늘려야 할 사람이
+      //    다이어그램 문법을 들여다본다.
+      if (state === "error") throw new Error("다이어그램 문법이 틀렸다");
+      if (state === "pending") throw new Error("다이어그램이 제때 안 그려졌다 (앱이 바쁘다)");
+
+      if (req.format === "png") {
+        const { host, total } = pickMermaidHost(article);
+        if (!host) throw new Error("이 노트에 mermaid 다이어그램이 없다");
+        const blob = await buildMermaidPng(host);
+        if (!blob) throw new Error("다이어그램 안에 SVG 가 없다");
+        await writeRenderResult(req.out, new Uint8Array(await blob.arrayBuffer()));
+        if (total > 1) {
+          // ⚠️ 여럿이면 첫 번째를 썼다는 사실을 남긴다 — 왜 다른 그림이 아닌지 알아야 한다.
+          logWarn("routes/+page", `[cli-render] 다이어그램 ${total}개 중 첫 번째를 썼다`);
+        }
+        return;
+      }
+
+      const { html } = await buildPreviewHtml(article, req.path);
+      await writeRenderResult(req.out, new TextEncoder().encode(html));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logWarn("routes/+page", "[cli-render] 실패", e);
+      await reportRenderFailure(req.out, msg);
+    }
+  }
+
 
   /** 복원이 부른 스크롤인지 — `onscroll` 이 자기 값을 덮어쓰지 않게. */
   let restoringPos = false;
@@ -1377,10 +1431,6 @@ import { isPanicChord } from "$lib/userCss";
       `--rz-right: ${$contextCollapsed ? 0 : 4}px;`,
   );
 
-  // Topbar 버전 라벨 — Tauri runtime의 Cargo.toml version을 단일 진실로 사용.
-  // package.json/tauri.conf.json와 동기되지 않은 stale 값을 표시할 위험을 원천 차단.
-  let appVersion = $state<string>("");
-
   // 디버그 빌드 표식 — 릴리즈 앱과 나란히 띄울 때 어느 창인지 구분한다.
   // 창 제목은 Rust setup()이 붙이고, 여기선 같은 판정값으로 topbar 배지를 켠다.
   let isDebug = $state(false);
@@ -1453,6 +1503,22 @@ import { isPanicChord } from "$lib/userCss";
       void writeUsageAnalysis(BUILTIN_COMMANDS.map((c) => c.id));
     }, 3_000);
 
+    /**
+     * 밖에서 시킨 렌더를 듣는다.
+     *
+     * ⚠️ 기동 때도 한 번 확인한다 — 앱이 꺼져 있을 때 요청이 오면 이벤트가 아니라
+     *    `setup` 에서 담긴 채로 기다린다(차가운 기동).
+     */
+    void onCliRender(() => handleRenderRequest())
+      .then((un) => cliRenderUnlisten.push(un))
+      .catch((e) => logWarn("routes/+page", "[cli-render] 구독 실패", e));
+
+    // ⚠️ 기동 때도 한 번 묻는다. 이 창이 **지목된 창**이면(차가운 기동이거나 Rust 가
+    //    이 요청 때문에 띄운 창) vault 를 안 따지고 받아가므로, 여기서 바로 잡힌다.
+    //    아래 `$effect` 는 지목이 없었을 때의 두 번째 기회다 — 둘 다 필요하고,
+    //    슬롯이 원자적이라 두 번 잡아도 한 번만 실행된다.
+    void handleRenderRequest();
+
     restoreTheme();
     restoreDensity();
     restoreMotionPref();
@@ -1471,13 +1537,6 @@ import { isPanicChord } from "$lib/userCss";
     });
     void (async () => {
       try {
-        appVersion = await getVersion();
-      } catch (e) {
-        logWarn("routes/+page", "[app] getVersion failed", e);
-      }
-    })();
-    void (async () => {
-      try {
         isDebug = await isDebugBuild();
       } catch (e) {
         // 표식은 편의 기능 — 실패해도 앱은 그대로 쓴다(릴리즈처럼 보일 뿐).
@@ -1490,6 +1549,9 @@ import { isPanicChord } from "$lib/userCss";
     return () => {
       unlistenCliOpen?.();
       unlistenCliOpen = null;
+      // ⚠️ 렌더 구독도 뗀다 — 안 떼면 죽은 창의 핸들러가 요청을 가로채고,
+      //    그 창에는 본문이 없어 부른 쪽은 "다이어그램이 없다"를 받는다.
+      for (const un of cliRenderUnlisten.splice(0)) un();
     };
   });
 </script>
@@ -1587,6 +1649,12 @@ import { isPanicChord } from "$lib/userCss";
     <!-- 본문 페인 — Editor와 Preview가 **교대**한다(2026-08-10, split 제거).
          TabBar와 pane-title은 모드 밖에 있다. 예전엔 TabBar가 Editor 펼침 분기 안에
          있어서 Editor를 접으면 탭이 통째로 사라졌다 — 그 결함도 여기서 같이 사라진다. -->
+    <!--
+      ⚠️ **그리드 컬럼을 늘리지 않는다.** 본문 칸(`1fr`) 안에서 가로로 나눈다 —
+      컬럼을 하나 더 두면 리사이저 · 접힘 · 저장 폭까지 전부 짝을 맞춰야 한다.
+      옆칸은 읽기 전용이라 그만한 배선이 필요 없다.
+    -->
+    <div class="main-split">
     <section class="pane main-pane" data-lapis="note-body">
       <TabBar />
       <div class="pane-title">
@@ -1759,6 +1827,10 @@ import { isPanicChord } from "$lib/userCss";
         </div>
       {/if}
     </section>
+    {#if $comparePath}
+      <ComparePane path={$comparePath} />
+    {/if}
+    </div>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- 위 사이드바 리사이저와 같은 이유. -->
@@ -2099,6 +2171,24 @@ import { isPanicChord } from "$lib/userCss";
       1fr
       var(--rz-right)
       var(--context-col);
+  }
+
+  /**
+   * 본문 칸을 가로로 나눈다 — 왼쪽이 본문, 오른쪽이 나란히 보기.
+   *
+   * ⚠️ `min-width: 0` 이 **둘 다** 있어야 한다. 없으면 flex 아이템이 내용 크기
+   * 아래로 안 줄어들어 긴 코드 블록 하나가 옆칸을 화면 밖으로 밀어낸다.
+   */
+  .main-split {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-split > .main-pane {
+    flex: 1;
+    min-width: 0;
   }
 
   .sidebar-resizer {

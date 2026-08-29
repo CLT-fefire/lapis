@@ -1216,7 +1216,7 @@ async function pruneOldBackups(vault: string): Promise<void> {
  * Wikilink target name (alias / title / file stem) → 매칭되는 노트로 점프.
  * 매칭 없으면 false 반환.
  */
-export async function jumpToWikilink(target: string): Promise<boolean> {
+export async function jumpToWikilink(target: string, via: OpenSurface): Promise<boolean> {
   const idx = get(linkIndex);
   if (!idx) return false;
   // ⚠️ 지금 보고 있는 노트를 맥락으로 넘긴다 — 같은 이름의 노트가 둘일 때 어느 쪽으로
@@ -1228,7 +1228,7 @@ export async function jumpToWikilink(target: string): Promise<boolean> {
     return true;
   }
   if (!hit.path) return false;
-  await selectNote(hit.path, { via: "wikilink" });
+  await selectNote(hit.path, { via });
   // ⚠️ **이동한 뒤에** 심는다. 먼저 심으면 아직 **이전 노트의** 헤딩 목록을 보고 있는
   //    한 틱이 생기고, 우연히 같은 이름의 헤딩이 있으면 안 넘어가고 제자리에서
   //    스크롤한다. 늦게 심는 쪽은 최악이 '스크롤이 한 틱 늦다'로 끝난다.

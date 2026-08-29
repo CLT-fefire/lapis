@@ -1,14 +1,58 @@
 # lapis-mcp — 지식 vault 질의 MCP
 
-Lapis 앱이 만든 검색 인덱스를 Claude Code에 노출한다. **도구 하나**(`lapis_query`).
+Lapis 앱이 만든 검색 인덱스를 Claude Code에 노출하고, **앱을 조작한다.**
+질의 하나로 시작해 지금은 여덟이다.
 
 ```
-사용자 → Claude Code → MCP → Lapis 캐시
-           (판단)      (실행만)
+사용자 → Claude Code → MCP ──▶ Lapis 캐시   (읽기)
+           (판단)      (실행만)  └▶ Lapis 앱  (argv 한 줄)
 ```
 
 MCP는 판단하지 않는다. LLM도 API 키도 없다. 같은 인자 → 같은 결과. 결과가 나쁘면 원인이
 둘로만 좁혀진다 — 인자를 잘못 채웠나 / 인덱스에 없나.
+
+## 도구 여덟
+
+| 도구 | 무엇 | 앱이 필요한가 |
+|---|---|:--:|
+| `lapis_query` | 구조 질의 + BM25 전문검색 | |
+| `lapis_stats` | vault 통계 — 노트·태그·주제·열린 할 일 수 | |
+| `lapis_usage` | 앱 사용 기록 집계 | |
+| `lapis_index` | 헤드리스 재색인 — 앱 없이 캐시를 새로 만든다 | |
+| `lapis_export_html` | 노트를 HTML로. ⚠️ 앱 미리보기와 **다를 수 있다** | |
+| `lapis_open` | 앱에서 노트를 연다 | ✓ |
+| `lapis_reveal` | 노트가 든 폴더를 파일 탐색기에서 연다 | |
+| `lapis_render` | 앱 품질 HTML · mermaid PNG를 파일로 낸다 | ✓ |
+
+### ⚠️ `export_html`과 `render`는 다른 것을 판다
+
+⚠️ **둘 다 vault 밖으로만 쓴다.** `out`을 안 주면 `~/Downloads`(없으면 임시 폴더)로 나가고,
+응답의 `out`이 어디인지 말한다. 노트 옆에 두면 앱이 그걸 감지해 재색인하고, 사용자는 자기가
+안 만든 파일이 vault에 쌓이는 걸 나중에야 본다.
+
+`lapis_export_html`은 **앱 없이** 돈다. 자체 Markdown 변환이라 앱 미리보기와 결과가
+갈릴 수 있고, 응답의 `differs_from_app` 배열이 무엇이 다른지 적는다(mermaid·수식·
+사용자 CSS·위키링크 해소 등). 갈려도 **에러가 아니다** — 무엇이 갈렸는지가 보이면 된다.
+
+`lapis_render`는 **앱이 떠 있어야** 한다. 앱의 렌더러가 그린 것을 그대로 파일로 내므로
+미리보기와 같고, mermaid는 PNG로 나온다. 앱이 없으면 `app_not_found`, 떠 있는데 응답이
+없으면 `app_timeout`이다 — 두 실패의 조치가 다르므로 종류를 나눈다.
+
+⚠️ **버전이 3.10.0 이상이어야 한다.** 그 아래는 이 인자를 모르고 조용히 무시해서
+`app_timeout`으로만 드러난다 — **앱이 떠 있는데도** 그렇다. 떠 있는 앱에게 버전을 물을
+통로가 없어(네트워킹 코드가 없고 argv는 한 방향) 탐지 대신 조치문에 두 원인을 다 적는다.
+
+⚠️ **그 vault를 연 창이 없어도 된다.** 아무도 안 받아가면 앱이 창을 하나 띄워 요청받은
+vault를 열고 처리한다 — 그래서 그 호출만 느리다(색인 시간). 그러고도 안 받아가면
+실패 파일을 쓴다. **타임아웃이 유일한 신호인 상황을 남기지 않는다.**
+
+### 🔴 왜 앱을 띄워 놓고 기다리나 — 직접 그리지 않고
+
+mermaid도 수식도 KaTeX도 **브라우저에서만** 그려진다. MCP가 직접 그리려면 헤드리스
+브라우저를 하나 더 끌어와야 하고, 그러면 "앱이 생산자"라는 전제가 깨져 **두 렌더러가
+서로 다른 그림**을 내기 시작한다. 이 저장소에서 가장 자주 나온 결함이 그것이다.
+
+argv로 요청을 넘기고 결과 파일을 기다리는 쪽을 골랐다. 느리지만 갈리지 않는다.
 
 ## 등록
 
@@ -52,17 +96,6 @@ Desktop은 `/usr/bin:/bin:/usr/sbin:/sbin` 정도만 준다. homebrew node(`/opt
 설정은 앱 데이터 루트의 `lapis-settings.json` `mcp_enabled` 필드다.
 
 ```
-
-⚠️ **v2.4.0부터 `audit` 인자로 vault 위생을 물을 수 있다.** 앱·CLI와 **같은 판정 함수**를
-부른다 — MCP가 자기 판정을 따로 두면 AI가 보는 상태와 사람이 보는 상태가 갈리고, 그러면
-누가 맞는지 아무도 모른다.
-
-```
-audit: "broken" | "orphans" | "unlinked" | "tags" | "props"
-```
-
-⚠️ `all` 을 두지 않았다. `unlinked` 만 **본문을 전부 읽어서**, `all` 에 넣으면 값싼 넷을
-물을 때마다 그 비용을 문다. 넣지 않으면서 `all` 이라 부르면 거짓말이다.
 lapis-settings.json  { "mcp_enabled": true }   ← 앱이 쓴다
 search-cache/                                   ← 같은 루트 하위
 ```
@@ -138,6 +171,18 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 | `min_rel` | BM25 | 상대 점수 하한 `[0,1]`. 생략하면 안 거른다. `[0,1]` 밖은 클램프 |
 | `vault` | — | vault 루트 절대 경로 |
 
+### `audit` — vault 위생을 묻는다 (v2.4.0)
+
+```
+audit: "broken" | "orphans" | "unlinked" | "tags" | "props"
+```
+
+앱·CLI와 **같은 판정 함수**를 부른다. MCP가 자기 판정을 따로 두면 AI가 보는 상태와
+사람이 보는 상태가 갈리고, 그러면 누가 맞는지 아무도 모른다.
+
+⚠️ `all`을 두지 않았다. `unlinked`만 **본문을 전부 읽어서**, `all`에 넣으면 값싼 넷을
+물을 때마다 그 비용을 문다. 넣지 않으면서 `all`이라 부르면 거짓말이다.
+
 ### 알아야 하는 동작 5가지
 
 1. **구조 + `text`를 같이 주면 구조가 필터, BM25가 순위.** 구조만 주면 그 집합을 먼저 싣는다.
@@ -198,10 +243,27 @@ Node엔 vault 스캐너가 없다. `extract_wikilinks`(코드펜스·인라인�
 
 `{ error: { kind, message, remedy } }`.
 
-`cache_absent` · `version_skew` · `corrupt` · `vault_ambiguous` ·
-`vault_not_found` · `path_not_indexed` · `shard_incomplete` · `no_criteria`
+| 종류 | 언제 | 조치 |
+|---|---|---|
+| `cache_absent` | 캐시가 없다 | 앱을 한 번 실행하거나 `lapis_index` |
+| `version_skew` | 캐시 버전이 다르다 | 앱을 새로 실행 |
+| `corrupt` | 샤드를 못 읽는다 | 재색인 |
+| `shard_incomplete` | 샤드가 결손 | 재색인 |
+| `vault_ambiguous` | 캐시에 vault가 여럿 | `vault` 인자를 준다 |
+| `vault_not_found` | 그 vault가 캐시에 없다 | 경로 확인 |
+| `path_not_indexed` | 그 노트가 인덱스에 없다 | 재색인 |
+| `no_criteria` | 인자가 하나도 없다 | 팔을 하나는 준다 |
+| `usage` | 사용 기록을 못 읽는다 | 폴더 확인 |
+| `no_usage_log` | 기록이 비었다 | 앱을 좀 써야 쌓인다 |
+| `app_not_found` | 앱 실행 파일이 없다 | 설치 경로 확인 |
+| `app_timeout` | 앱이 제때 답을 안 냈다 | **앱이 떠 있는지** 먼저 본다 |
+| `index_failed` | 헤드리스 색인이 실패 | 로그 확인 |
+| `export_failed` | 내보내기가 실패 | 대상 폴더 쓰기 권한 |
 
 (`stale`은 오류가 아니라 응답 필드다 — 위 참조.)
+
+⚠️ `app_not_found`와 `app_timeout`을 하나로 묶지 않는 이유: 전자는 **설치** 문제,
+후자는 **실행 중이 아님** 문제다. 조치가 갈리는데 종류가 같으면 부른 쪽이 엉뚱한 데를 판다.
 
 **부분 인덱스로 검색하지 않는다.** shard가 하나라도 결손·skew면 실패한다 — "검색했는데
 안 나온다"는 소비자에게 "없다"로 읽히고, 그건 없는 것보다 나쁘다.

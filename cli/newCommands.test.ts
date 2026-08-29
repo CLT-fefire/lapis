@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { COMMANDS } from "./spec.ts";
+import { COMMANDS, GLOBAL_OPTIONS } from "./spec.ts";
 import { HANDLERS } from "./handlers.ts";
 
 /**
@@ -67,9 +67,14 @@ describe("usage", () => {
 describe("집계는 한 곳", () => {
   const src = readFileSync(fileURLToPath(new URL("./handlers.ts", import.meta.url)), "utf-8");
 
+  /**
+   * ⚠️ **호출 형태를 못 박지 않는다.** 처음엔 `new UsageAnalyzer()` 를 그대로 비교했는데,
+   * 분모(`knownCommands`)를 넘기도록 고치자 빨개졌다 — 개선을 막는 검사다.
+   * 지켜야 할 것은 인자 모양이 아니라 **앱과 같은 클래스를 쓴다**는 것이다.
+   */
   it("앱과 같은 UsageAnalyzer 를 쓴다", () => {
     expect(src).toMatch(/from "\$lib\/usageAnalyzer"/);
-    expect(src).toMatch(/new UsageAnalyzer\(\)/);
+    expect(src).toMatch(/new UsageAnalyzer\(/);
   });
 
   /** ⚠️ 경로 지식도 한 곳이다 — 두 곳에 적으면 CLI 가 앱과 다른 폴더를 본다. */
@@ -135,5 +140,134 @@ describe("completion", () => {
     expect(src).toMatch(/"bash"/);
     expect(src).toMatch(/"zsh"/);
     expect(src).toMatch(/"pwsh"/);
+  });
+});
+
+/**
+ * `config` — 앱 설정을 CLI 에서 본다.
+ *
+ * ## 🔴 왜 필요했나
+ *
+ * `mcp_enabled` 를 켜는 경로가 **앱 하나**뿐이었다. 그 토글이 안 먹었을 때 확인할
+ * 다른 눈이 없어서 원인을 엉뚱한 곳(MCP 서버)에서 찾았다. 읽는 경로가 둘이면
+ * **어긋난 순간 바로 보인다.**
+ */
+describe("config", () => {
+  const spec = COMMANDS.find((c) => c.name === "config")!;
+  const src = readFileSync(fileURLToPath(new URL("./handlers.ts", import.meta.url)), "utf-8");
+
+  /** 인자 없이도 돌아야 한다 — 전부 보기가 가장 흔한 쓰임이다. */
+  it("키도 값도 선택이다", () => {
+    expect(spec.positional[0]?.required).toBe(false);
+    expect(spec.positional[1]?.required).toBe(false);
+  });
+
+  /**
+   * 🔴 **경로 지식을 여기서 다시 만들지 않는다.** `mcp/cache.ts` 가 후보 파일을 안다 —
+   * dev 와 릴리스가 갈려 있어서, CLI 가 자기 규칙으로 조립하면 한쪽만 보게 된다.
+   */
+  it("설정 읽기·쓰기를 mcp/cache 에 맡긴다", () => {
+    expect(src).toMatch(/readSettings/);
+    expect(src).toMatch(/writeSetting/);
+  });
+
+  /**
+   * 🔴 **설정 파일 하나에 앱 설정 전부가 들어 있다.**
+   *
+   * 직접 덮다 중간에 끊기면 키 하나가 아니라 전부 날아가고, 앱은 그걸 "설정이 없다"로
+   * 읽는다 — MCP 게이트가 닫히고, 원인이 CLI 한 줄이었다는 걸 아무도 못 찾는다.
+   * `vault.rs` 의 쓰기 불변식이 여기에도 그대로 필요하다.
+   */
+  it("쓰기가 원자적이다", () => {
+    const cache = readFileSync(fileURLToPath(new URL("../mcp/cache.ts", import.meta.url)), "utf-8");
+    expect(cache).toMatch(/renameSync\(tmp, file\)/);
+    // ⚠️ 설정 파일에 직접 쓰는 곳이 하나라도 남으면 그 경로만 위험한 채로 남는다.
+    expect(cache, "설정 파일을 직접 덮어쓴다").not.toMatch(/writeFileSync\(file,/);
+  });
+
+  /** `--quiet` 면 값만 — 스크립트가 `$(lapis config x --quiet)` 로 받아쓰는 자리다. */
+  it("quiet 면 값만 낸다", () => {
+    expect(src).toMatch(/p\.options\.quiet === true \? String\(v \?\? ""\)/);
+  });
+
+  /** ⚠️ 앱이 떠 있으면 메모리 값이 이긴다 — 안 적으면 "썼는데 안 먹는다"가 된다. */
+  it("다시 켜야 한다고 적는다", () => {
+    expect(src).toMatch(/앱이 떠 있으면 다시 켜야 반영된다/);
+  });
+});
+
+/**
+ * `diff` — 노트의 git 변경.
+ */
+describe("diff", () => {
+  const spec = COMMANDS.find((c) => c.name === "diff")!;
+  const src = readFileSync(fileURLToPath(new URL("./handlers.ts", import.meta.url)), "utf-8");
+
+  it("리비전을 고를 수 있다", () => {
+    expect(spec.options.map((o) => o.name)).toContain("rev");
+  });
+
+  /**
+   * 🔴 **변경 없음은 오류가 아니다.** 0 이 아닌 코드로 끝내면 `&&` 로 이은 스크립트가
+   * 거기서 멈춘다 — 아무 문제도 없는데.
+   */
+  it("변경이 없어도 0 으로 끝낸다", () => {
+    const at = src.indexOf("// ⚠️ 변경이 없는 것은 **오류가 아니다.**");
+    expect(at).toBeGreaterThan(-1);
+    // 그 자리에서 `fail` 을 부르지 않는지 — 다음 5줄 안을 본다.
+    expect(src.slice(at, at + 240)).not.toMatch(/out\.fail/);
+  });
+
+  /** ⚠️ git 이 없는 것과 저장소가 아닌 것은 다른 실패다. 조치가 다르다. */
+  it("git 없음과 저장소 아님을 가른다", () => {
+    expect(src).toMatch(/git 이 PATH 에 있는지 볼 것/);
+    expect(src).toMatch(/vault 가 git 저장소인지 볼 것/);
+  });
+});
+
+/**
+ * 🔴 **`-` 는 표준입력이다.**
+ *
+ * 이게 있어야 `lapis search --json | jq -r .results[0].path | lapis read -` 가 된다.
+ * 없으면 명령마다 셸 변수를 거쳐야 하고, CLI 가 파이프에 못 낀다.
+ */
+describe("표준입력", () => {
+  const src = readFileSync(fileURLToPath(new URL("./handlers.ts", import.meta.url)), "utf-8");
+
+  it("`-` 를 표준입력으로 읽는다", () => {
+    expect(src).toMatch(/p\.positional\[0\] === "-" \? readStdinLine\(\)/);
+  });
+
+  /**
+   * ⚠️ **CRLF 를 잘라야 한다.** Windows 파이프는 `\r\n` 을 준다. `\n` 만 자르면
+   * 경로 끝에 `\r` 이 붙고, 파일은 **없다고** 나온다 — 눈으로는 멀쩡해 보이는 채로.
+   */
+  it("CRLF 를 자른다", () => {
+    expect(src).toContain(String.raw`raw.split(/\r?\n/)`);
+  });
+
+  /** ⚠️ 빈 줄을 집으면 "노트를 못 찾음"이 된다 — 원인이 파이프인 걸 못 알아챈다. */
+  it("빈 줄을 건너뛴다", () => {
+    expect(src).toMatch(/\.find\(\(l\) => l\.trim\(\) !== ""\)/);
+  });
+});
+
+/**
+ * `--quiet` 는 **전역**이다 — 명령마다 따로 두면 어떤 것엔 있고 어떤 것엔 없다.
+ */
+describe("--quiet", () => {
+  it("전역 옵션이다", () => {
+    expect(GLOBAL_OPTIONS.map((o) => o.name)).toContain("quiet");
+  });
+
+  /** ⚠️ 명령이 자기 `quiet` 를 또 선언하면 파서가 어느 쪽을 볼지가 파일 순서에 달린다. */
+  it("명령이 따로 선언하지 않는다", () => {
+    const dupes = COMMANDS.filter((c) => c.options.some((o) => o.name === "quiet"));
+    expect(dupes.map((c) => c.name)).toEqual([]);
+  });
+
+  /** 🔴 `--json` 과 겹치면 안 된다 — JSON 은 애초에 안내 줄이 없다. */
+  it("json 과 별개다", () => {
+    expect(GLOBAL_OPTIONS.map((o) => o.name)).toContain("json");
   });
 });

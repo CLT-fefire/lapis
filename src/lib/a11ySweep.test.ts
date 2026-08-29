@@ -88,6 +88,13 @@ describe("a11y 억제에는 근거가 붙는다", () => {
   const KNOWN = new Set([
     "src/lib/Autocomplete.svelte",
     "src/lib/CommandPalette.svelte",
+    /**
+     * 나란히 보기 옆칸 — **위임된 클릭**이다. 본문 안 위키링크는 `{@html}` 로 들어와
+     * 컴포넌트가 핸들러를 못 걸어서 컨테이너가 받는다. 실제로 눌리는 것은 `<a>` 이고
+     * 키보드는 그 앵커가 이미 받으므로, 컨테이너에 키 핸들러를 더하면 Enter 가 **두 번**
+     * 처리된다. `+page.svelte` 의 `handlePreviewClick` 이 같은 이유로 같은 모양이다.
+     */
+    "src/lib/ComparePane.svelte",
     "src/lib/FileTree.svelte",
     "src/lib/ModalShell.svelte",
     "src/lib/Properties.svelte",

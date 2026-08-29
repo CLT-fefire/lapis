@@ -411,3 +411,36 @@ export async function buildContentSnippet(path: string, query: string): Promise<
     return "";
   }
 }
+
+/**
+ * 명령 라벨용 매칭 — **초성 질의를 안다.**
+ *
+ * ## 🔴 왜 따로 있나
+ *
+ * `⌘P` 로 파일을 찾을 때는 초성이 먹는다 — 이 파일의 인덱스가 항목마다 `chosungKeys` 를
+ * 미리 계산해 두기 때문이다. 그런데 명령은 그 인덱스에 없어서 라벨 원문에 바로
+ * `fuzzyMatch` 를 걸었고, 라벨에 낱자(ㅅ·ㅌ)가 들어 있을 리 없으니 **언제나 `null`** 이었다.
+ * 같은 팔레트 안에서 한쪽만 초성이 되는 비대칭이었다.
+ *
+ * ## ⚠️ 미리 계산해 두지 않는다
+ *
+ * 명령 라벨은 **getter** 다(로케일이 바뀌면 따라와야 해서). 모듈 최상위에서 접어 두면
+ * 언어를 바꿔도 옛 초성이 남는다. 스무 개 남짓한 짧은 문자열이라 입력마다 접어도 싸다.
+ *
+ * ⚠️ **초성 질의일 때만** 접는다. 보통 질의를 접으면 `탭` 같은 글자가 `ㅌ` 이 되어
+ * 엉뚱한 것에 걸린다.
+ */
+export function fuzzyMatchLabel(query: string, label: string): number | null {
+  const q = query.trim();
+  if (!q) return 0;
+  if (!isChosungQuery(q)) return fuzzyMatch(q, label);
+
+  const folded = chosungOf(label);
+  const direct = fuzzyMatchLower(q, folded);
+  if (direct !== null) return direct;
+
+  // ⚠️ 낱말을 가로지르는 초성 — `ㅅㄴㅌ` 이 `새 노트` 를 가리킨다. 접힌 형태는
+  //    `ㅅ ㄴㅌ` 이라 공백 때문에 위에서 안 걸릴 수 있다.
+  const joined = folded.replace(/\s+/g, "");
+  return fuzzyMatchLower(q, joined);
+}

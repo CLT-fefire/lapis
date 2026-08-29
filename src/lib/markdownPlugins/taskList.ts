@@ -63,7 +63,15 @@ export function taskListPlugin(md: MarkdownIt): void {
   });
 }
 
-/** 이 `list_item_open` 을 담은 `bullet_list_open`. 못 찾으면 `null`. */
+const isListOpen = (t: Token) => t.type === "bullet_list_open" || t.type === "ordered_list_open";
+const isListClose = (t: Token) => t.type === "bullet_list_close" || t.type === "ordered_list_close";
+
+/**
+ * 이 `list_item_open` 을 담은 목록 토큰. 못 찾으면 `null`.
+ *
+ * ⚠️ **번호 목록도 본다.** 불릿만 보던 때는 `1. [ ] 할 일` 에서 `.task-item` 만 붙고
+ * `.task-list` 가 안 붙어, 그 항목만 들여쓰기가 어긋난 채 조용히 지나갔다.
+ */
 function findListOpen(tokens: readonly Token[], liIndex: number): Token | null {
   let depth = 0;
   for (let i = liIndex - 1; i >= 0; i--) {
@@ -72,9 +80,9 @@ function findListOpen(tokens: readonly Token[], liIndex: number): Token | null {
     else if (t.type === "list_item_open") {
       if (depth === 0) continue;
       depth--;
-    } else if (t.type === "bullet_list_open" && depth === 0) {
+    } else if (isListOpen(t) && depth === 0) {
       return t;
-    } else if (t.type === "bullet_list_close") {
+    } else if (isListClose(t)) {
       depth++;
     }
   }

@@ -1,6 +1,7 @@
 import { m } from "$lib/paraglide/messages.js";
+import type { CommandId } from "$lib/commandIds";
 import { get } from "svelte/store";
-import { fuzzyMatch } from "$lib/searchIndex";
+import { fuzzyMatch, fuzzyMatchLabel } from "$lib/searchIndex";
 import {
   vaultPath,
   currentNotePath,
@@ -25,7 +26,14 @@ import { newWindow } from "$lib/tauri/window";
 import { logError } from "$lib/stores/usage";
 
 export interface Command {
-  id: string;
+  /**
+   * 🔴 `commandIds.ts` 의 목록에 없는 id 는 **컴파일이 안 된다.**
+   *
+   * 그 목록은 CLI · MCP 가 사용 기록을 집계할 때 쓰는 **분모**다. 둘이 갈리면 있지도
+   * 않은 명령을 "안 썼다"고 하거나, 새 명령을 아예 안 센다. 반대 방향(목록에만 있고
+   * 안 만든 것)은 `commandIds.test.ts` 가 막는다.
+   */
+  id: CommandId;
   label: string;
   /** Mac 표기 (⌘ ⌥ ⇧). 미지정이면 단축키 없음 */
   shortcut?: string;
@@ -129,7 +137,8 @@ export const BUILTIN_COMMANDS: Command[] = [
    * 두면 목적지를 말할 방법이 없다.
    */
   ...(["orphans", "tags", "unlinked", "props"] as const).map((tab) => ({
-    id: `audit-${tab}`,
+    // ⚠️ `as const` 가 없으면 템플릿 리터럴이 `string` 으로 넓어져 `CommandId` 를 못 만족한다.
+    id: `audit-${tab}` as const,
     get label() {
       return {
         orphans: m.cmd_audit_orphans(),
@@ -282,7 +291,9 @@ export function matchCommands(query: string, limit = 20): CommandHit[] {
   }
   const hits: CommandHit[] = [];
   for (const command of visible) {
-    const labelScore = fuzzyMatch(q, command.label);
+    // ⚠️ 라벨은 **초성을 아는** 쪽으로 본다. `fuzzyMatch` 를 그대로 걸면
+    //    초성 질의가 언제나 `null` 이 된다 — 라벨에 낱자가 있을 리가 없다.
+    const labelScore = fuzzyMatchLabel(q, command.label);
     const idScore = fuzzyMatch(q, command.id);
     let best: { score: number; key: string } | null = null;
     if (labelScore !== null) best = { score: labelScore, key: command.label };

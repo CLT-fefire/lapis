@@ -16,6 +16,199 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.10.0] — 2026-08-29
+
+> The MCP server can now drive the app, and the CLI can sit in the middle of a pipe.
+> One tool became eight; fourteen commands became twenty-one.
+
+### Added
+- **Seven new MCP tools.** `lapis_query` was the only one, and it could only read. Now:
+  `lapis_stats` (vault totals), `lapis_usage` (usage-log rollup), `lapis_index` (headless
+  reindex), `lapis_export_html`, `lapis_open` (open a note in the running app),
+  `lapis_reveal` (open the containing folder), and `lapis_render` (app-quality HTML, and
+  mermaid diagrams as PNG).
+
+- **`lapis_render` renders through the app, not beside it.** Mermaid, math and user CSS only
+  exist in a browser. Rendering them a second time inside the MCP server would mean two
+  renderers that drift — the single most common defect in this repository. Instead the request
+  goes over the existing argv channel, the app draws it, and the file lands where you asked.
+  Slower, but it cannot disagree with what you see on screen.
+
+- **`lapis_export_html` runs without the app** and says where it differs. Its `differs_from_app`
+  field names what the standalone converter cannot reproduce (mermaid, math, user CSS, wikilink
+  resolution). A difference is **not** an error; an unreported difference is.
+
+- **Seven new CLI commands.** `read` (note body; `-` reads the path from stdin), `stats`,
+  `usage`, `new`, `config`, `diff`, and `completion` for bash/zsh/pwsh.
+
+- **The CLI fits in a pipe.** `--quiet` drops the human-facing lines, and `read -` takes its
+  path from stdin, so this works:
+  `lapis search q --json | jq -r '.results[0].path' | lapis read -`
+
+- **`config` gives settings a second pair of eyes.** `mcp_enabled` could only be flipped from
+  the app. When that toggle silently did nothing there was no other way to look, so the search
+  for a cause started in the wrong place. Two readers disagree loudly.
+
+### Added
+- **`lapis render`** hands a note to the running app and takes back what the screen shows —
+  app-quality HTML, or the first mermaid diagram as a PNG. `export` still runs without the
+  app, but it has no browser, so mermaid stays a code fence there. The request building, the
+  wait, and the failure check now live in one module that both the CLI and `lapis_render`
+  call; after the move the two produced byte-identical output from the same note.
+
+- **`lapis props rename`** fixes what `props audit` finds. The audit reported `topic`
+  split across `feature` (11 notes) and `feature-selection` (2), and there was no way to
+  act on it — tags had `tag rename`, frontmatter values had nothing. Same discipline as
+  tags: dry-run by default, `--apply` to write, the same backup-and-replace transaction.
+  Unlike tags there is **no prefix hierarchy** — `cross-platform` is not `platform`, so
+  only exact values match.
+
+- **`lapis tasks audit` can be narrowed** with `--under`, `--exclude`, `--top` and
+  `--count`. This vault has 89 open items, 67 of them in a single manual-test checklist, and
+  all 99 lines came out every time. The count of what was filtered away is always printed —
+  otherwise a narrowed list reads as the whole list.
+
+- **Task totals say where they are concentrated.** `lapis_stats` reported
+  `{ open: 90, done: 30 }`, which is true and misleading: three quarters of it was one
+  checklist. It now reports the heaviest note and its share alongside. No new setting — the
+  same call made for orphan notes, where a second number lets a person judge instead of the
+  app deciding what to hide.
+
+- **Side-by-side reading.** Right-click a note in the tree and open it beside the one you
+  are reading — until now that meant a second window, which is awkward on one monitor. The
+  side pane is **read-only**: no tabs, no editor, no in-document search. Every piece of body
+  state is a singleton today, and splitting all of it per pane is a restructuring of a
+  2,400-line file; the value is in "keep B up while I read A", and that part is here. Links
+  in the side pane move the **main** pane, and the side pane closes itself if the main pane
+  arrives at the same note — otherwise the same document renders twice, side by side.
+
+- **The command palette answers to initial consonants.** Typing `ㅅㅌ` already found files
+  (`새 탭`), because the file index precomputes their initials — but commands went through
+  a different path that compared the query against the label as written, so a jamo-only query
+  could never match. It now folds the label the same way, including across word boundaries
+  (`ㅅㄴㅌ` → `새 노트`), and such a match is promoted to the top group like any other.
+
+- **Recently-opened notes show where you left off.** The list already existed; what it did not
+  say was which of those you actually read into. A dot marks a remembered position, and the
+  line number appears when it was the editor. **No percentage** — the stored position knows
+  scroll offset and line, not document length, and a guessed progress bar is wrong without
+  ever looking wrong.
+
+### Fixed
+- **Tasks the app drew were not counted by the audit.** `+ [ ] something` and
+  `1. [ ] something` rendered as real checkboxes but were invisible to `tasks audit`,
+  `stats` and the MCP server — the screen showed work left while the tools answered
+  "no open tasks". The rule for what counts as a task lived in two places: the renderer
+  sits on top of markdown-it and therefore accepted all three CommonMark bullets and
+  ordered lists, while the audit scanned lines with a regex that only allowed `-` and `*`.
+
+  The two cannot be merged — one reads parser output, the other reads raw text without an
+  index. So a test now feeds the same input to both and fails when their answers differ.
+
+  On this vault the gap was **zero** — nothing here is written with `+`. This is
+  insurance, not a win.
+
+- **Every link in the side-by-side pane was dead.** Wikilinks, markdown links and the mermaid
+  export button all did nothing when clicked, and nothing reported an error. The click rules
+  lived inside `+page.svelte`, where nothing could call them, so the side pane got its own
+  copy — and the copy was wrong. It looked for `a.wikilink` while the plugin emits
+  `span.wikilink` (deliberately: an anchor would let the webview navigate away), and read
+  `data-target-path`, a name nothing in the repository ever sets. Plain `<a>` links were
+  not handled at all, so their default behaviour survived: an internal `.md` link could
+  trigger SPA routing and an external URL could move the webview.
+
+  The fix removes the copy rather than correcting it. Both panes now call one function. They
+  render with the same parts, so the HTML they produce is identical — the rule that reads it
+  should be single too.
+
+  Two older tests had pinned the bug in place: they hand-built the DOM the broken component
+  expected instead of using what the renderer actually emits, so they stayed green while the
+  feature was entirely dead.
+
+- **`props rename` could rewrite a value it should not touch.** In YAML a `#` only starts a
+  comment when whitespace precedes it, so `C#` is the scalar `C#` — but the comment was
+  matched with a pattern that allowed none, so `topic: C#` was read as the value `C`.
+  Renaming `C` turned it into `topic: D#`, and the real value `C#` could never be matched
+  at all. The dry-run preview reported the change as expected, so a person reviewing it had no
+  way to notice. Values in quotes (`topic: "a # b"`) were cut at the same place.
+
+- **A render request could hijack a window that had another vault open.** A cold start marks
+  `main` as the designated window so it takes the request regardless of vault — but nothing
+  cleared that mark, so every later request was claimed by the same window, which then switched
+  its vault to render. Opening a note already clears the mark on every new request; rendering
+  did not.
+
+- **The side pane briefly showed the previous note.** Reading is asynchronous, so after the
+  path changed the header already named B while the body was still A, with nothing to indicate
+  it. A blank moment is better than a wrong one.
+
+- **"No unused commands" was a lie.** Asked through a real MCP client, `lapis_usage`
+  reported zero commands used and zero unused. The truth was that it had no denominator: the
+  command list lived in a module that pulls in Svelte stores, so the headless consumers could
+  not read it and passed nothing. The ids now live in an import-free module, a mismatch
+  between them and the real commands is a compile error, and a missing denominator reports
+  `null` rather than an empty list.
+
+- **A render for a vault no window had open went nowhere.** The second process exited
+  with status 0 — reporting success for having handed over the arguments — while no output
+  file and no failure file were ever written, so a shell chaining on `&&` carried on. Opening
+  a note already solved this: if no window claims the request, the app opens one and remembers
+  its label so that window takes it regardless of vault. Rendering now does the same, opens
+  the requested vault in that window, and writes a failure file if even that window does not
+  claim it — a timeout is never the only signal.
+
+- **A render request made while the app was closed silently vanished.** The app took the
+  request from argv and held it, but the front end asked for it once at startup — before the
+  vault had opened — and the answer is only given to a window whose vault matches. The event
+  that would prompt a second ask had already gone out before anything subscribed. Rust logged
+  "staged", never "taken"; no output file, and no failure file either, because nothing had
+  failed. The caller learned about it only as a timeout. It now asks again once the vault opens.
+
+- **`data-rendered` was read as "finished".** Mermaid sets that attribute to `pending` the
+  moment it *starts*, and the wait counted any host carrying the attribute as done — so the
+  next line looked for an `<svg>` that was not there yet and reported "the diagram is not
+  drawn yet, or its syntax is wrong". It was neither. The wait now looks at the rendered
+  result rather than the attribute, and reports three outcomes separately, because
+  "too slow", "bad syntax" and "done" call for different responses.
+
+- **Every path in a reply now has one shape.** Fixing `out` in `lapis_render` left the same
+  leak in its neighbours: `lapis_usage` returned its log directory with backslashes, and
+  `lapis_open` returned the executable path the same way. Consumers split these on `/`, so an
+  odd one out silently loses its file name and parent directory. Found by calling the tools
+  through a real MCP client rather than a test harness.
+
+- **Exporting no longer writes into the vault.** With no `out`, `lapis_export_html` put the
+  HTML next to the note — inside the vault — while the module declared it writes only outside
+  it. The app is watching, so that write triggered a reindex, and files the user never created
+  accumulated where their notes live. It now goes to `~/Downloads` (or the temp directory if
+  that is missing), and the reply says where.
+
+- **A timeout blamed the wrong thing.** With the app plainly running, `lapis_render` still
+  answered "check that the app is running". The real cause was that the running app predates
+  the feature: older builds ignore an argument they do not know, the second process hands over
+  its argv and exits, and nobody writes a failure. The remedy now names both causes, version
+  first. There is no probe for this — the project has no networking code and argv is one-way,
+  so a running app cannot be asked its version; an honest remedy beats a detection that cannot
+  exist.
+
+- **`lapis_render` mixed two path shapes in one reply.** `path` and `vault` came back with
+  forward slashes and `out` with backslashes. Consumers split these on `/`, so the odd one
+  out silently loses its file name and parent directory.
+
+- **Settings are written atomically.** The CLI wrote the settings file in place. One file holds
+  *every* app setting, so an interrupted write loses not one key but all of them — and the app
+  reads that as "no settings", which closes the MCP gate. Now: temp file, then rename, in the
+  same directory.
+
+- **stdin paths keep their `\r`.** A Windows pipe hands over CRLF. Splitting on `\n` alone left
+  a carriage return glued to the end of the path, and the file came back **missing** while
+  looking perfectly fine on screen.
+
+### Changed
+- The MCP failure table is now a table, with a remedy per kind. `app_not_found` and
+  `app_timeout` are deliberately separate: one is an install problem, the other means the app
+  simply is not running, and a caller told the wrong one digs in the wrong place.
+
 ## [3.9.0] — 2026-08-29
 
 > The rest of the fifth analysis, and five new CLI commands. Cut as one release rather than four —

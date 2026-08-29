@@ -48,6 +48,8 @@ export const LAPIS_HOOKS = [
   "tabs",
   "note-header",
   "note-body",
+  /** 나란히 보기 옆칸 — 본문과 **다른** 배경이라 사용자 CSS 가 따로 잡고 싶어 한다. */
+  "compare-pane",
   "editor",
   "preview",
   "context-panel",

@@ -1,4 +1,4 @@
-import { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
+import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import {
   lapisQuery,
   isAudit,
@@ -7,8 +7,11 @@ import {
   type QueryArgs,
 } from "../mcp/query.ts";
 import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
+import { spawnSync } from "node:child_process";
 import {
   resolveVault,
+  readSettings,
+  writeSetting,
   checkStale,
   type VaultCache,
   type Staleness,
@@ -26,12 +29,16 @@ import {
   findFrontmatterIssues,
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
+import { computePropRewritePreview, SCALAR_PROP_KEYS } from "$lib/propsRewrite";
+import { requestRender, RENDER_FORMATS, type RenderFormat } from "./renderRequest.ts";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
+import { COMMAND_IDS } from "$lib/commandIds";
 import { applyTemplate, defaultBody, TEMPLATE_DIR } from "$lib/noteTemplate";
-import { usageDirs } from "../mcp/cache.ts";
+import { usageDirs, normPath } from "../mcp/cache.ts";
+import { homedir, tmpdir } from "node:os";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
 import { runIndex, IndexError } from "./indexRun.ts";
@@ -45,6 +52,7 @@ import {
   renderFacet,
   renderBroken,
   renderTagPreview,
+  renderPropPreview,
   renderReplacePreview,
   renderOrphans,
   renderTagIssues,
@@ -621,7 +629,20 @@ function cmdIndex(p: ParsedCommand, out: Out): void {
  * 필요하면 `--meta`.
  */
 function cmdRead(p: ParsedCommand, out: Out): void {
-  const resolved = resolveNotePath(p.positional[0], vaultOf(p));
+  /**
+   * ⚠️ `-` 는 **표준입력에서 노트 이름을 읽는다**는 뜻이다.
+   *
+   * 명령이 스물인데 서로 못 엮였다. 이제 이렇게 된다:
+   * `lapis search --json | jq -r .results[0].path | lapis read -`
+   *
+   * ⚠️ 첫 줄만 쓴다. 여러 줄을 받아 여러 노트를 내면 어디서 끊기는지 알 수 없다 —
+   * 그건 `xargs` 가 할 일이다.
+   */
+  const target = p.positional[0] === "-" ? readStdinLine() : p.positional[0];
+  if (!target) {
+    return out.fail("usage", "노트를 못 읽었다", "표준입력이 비어 있다", 2);
+  }
+  const resolved = resolveNotePath(target, vaultOf(p));
   let raw: string;
   try {
     raw = readFileSync(resolved.path, "utf-8");
@@ -677,9 +698,12 @@ function cmdStats(p: ParsedCommand, out: Out): void {
   const topics = count((i) => i.topic);
   const tags = new Set<string>();
   for (const i of infos) for (const t of i.tags ?? []) tags.add(t);
-  const openTasks = countOpenTasks(
-    collectOpenTasks([...readBodies(vc)].map(([path, body]) => ({ path, body }))),
+  const taskGroups = collectOpenTasks(
+    [...readBodies(vc)].map(([path, body]) => ({ path, body })),
   );
+  const openTasks = countOpenTasks(taskGroups);
+  // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다.
+  const conc = taskConcentration(taskGroups);
 
   if (out.json) {
     return out.json_({
@@ -688,7 +712,7 @@ function cmdStats(p: ParsedCommand, out: Out): void {
       doc_kinds: Object.fromEntries(docKinds),
       topics: Object.fromEntries(topics),
       tags: tags.size,
-      tasks: openTasks,
+      tasks: { ...openTasks, concentration: conc },
       stale: checkStale(vc),
     });
   }
@@ -704,6 +728,15 @@ function cmdStats(p: ParsedCommand, out: Out): void {
       ["topic", top(topics)],
       ["태그", String(tags.size)],
       ["미완 작업", `${openTasks.open}건 미완 · ${openTasks.done}건 완료`],
+      ...(conc.top
+        ? [
+            [
+              "  가장 많은 노트",
+              `${conc.top.open}건 (${Math.round(conc.top.share * 100)}%) · ${conc.top.path}`,
+            ] as [string, string],
+            ["  퍼진 노트", `${conc.notes}개`] as [string, string],
+          ]
+        : []),
     ]),
   );
 }
@@ -738,7 +771,8 @@ function cmdUsage(p: ParsedCommand, out: Out): void {
     return out.fail("no_usage_log", `${dir} 에 로그 파일이 없다`, "앱을 한 번 켜 볼 것", 1);
   }
 
-  const analyzer = new UsageAnalyzer();
+  // ⚠️ 분모를 넘긴다 — 앱과 같은 명령 목록을 써야 같은 숫자가 나온다.
+  const analyzer = new UsageAnalyzer({ knownCommands: COMMAND_IDS });
   for (const f of months) {
     const raw = readFileSync(nodePath.join(dir, f), "utf-8");
     analyzer.feedAll(raw.split(/\r?\n/).filter((l) => l.trim() !== ""));
@@ -897,6 +931,122 @@ function cmdCompletion(p: ParsedCommand, out: Out): void {
     );
   }
   out.fail("usage", `모르는 셸: ${shell}`, "bash · zsh · pwsh 중 하나", 2);
+}
+
+/**
+ * 앱 설정을 보고 바꾼다.
+ *
+ * ## ⚠️ 왜 CLI 에 있나
+ *
+ * `mcp_enabled` 를 **앱에서만** 켤 수 있었다. 그 토글이 조용히 안 먹은 적이 있고
+ * (같은 값이면 아무것도 안 했고, dev/릴리스 설정이 갈렸다) 확인할 다른 경로가 없어서
+ * 원인을 앱이 아닌 MCP 쪽에서 찾느라 시간을 썼다. **경로가 둘이면 그때 바로 갈린다.**
+ *
+ * ⚠️ 쓰기는 `writeSetting` 이 한다 — 모르는 키를 보존하고 후보 파일 전부에 쓴다.
+ */
+function cmdConfig(p: ParsedCommand, out: Out): void {
+  const key = p.positional[0];
+  const raw = p.positional[1];
+
+  if (!key) {
+    const s = readSettings();
+    if (!s) {
+      return out.fail(
+        "cache_absent",
+        "설정 파일이 없다",
+        "Lapis 앱을 한 번 실행하면 만들어진다",
+        1,
+      );
+    }
+    if (out.json) return out.json_({ file: s.file, values: s.values });
+    out.line(table([["파일", s.file]]));
+    out.line("");
+    out.line(
+      table(Object.entries(s.values).map(([k, v]) => ["  " + k, summarizeValue(v)])),
+    );
+    return;
+  }
+
+  if (raw === undefined) {
+    const s = readSettings();
+    const v = s?.values[key];
+    if (out.json) return out.json_({ key, value: v ?? null, file: s?.file ?? null });
+    // ⚠️ `--quiet` 면 값만 낸다 — 스크립트가 받아쓰는 자리다.
+    return out.line(p.options.quiet === true ? String(v ?? "") : `${key} = ${summarizeValue(v)}`);
+  }
+
+  const value = parseSettingValue(raw);
+  const touched = writeSetting(key, value);
+  if (touched.length === 0) {
+    return out.fail(
+      "cache_absent",
+      "설정 파일이 없다",
+      "Lapis 앱을 한 번 실행하면 만들어진다",
+      1,
+    );
+  }
+  if (out.json) return out.json_({ key, value, files: touched });
+  out.line(`${key} = ${summarizeValue(value)}`);
+  if (p.options.quiet !== true) {
+    // ⚠️ 앱이 떠 있으면 메모리의 값이 이긴다 — 안 적으면 "썼는데 안 먹는다"가 된다.
+    out.line(`  ${touched.length}개 파일에 썼다. 앱이 떠 있으면 다시 켜야 반영된다.`);
+  }
+}
+
+/**
+ * 표준입력의 **첫 줄**.
+ *
+ * ⚠️ 파이프가 아니면 여기서 멈춘다. 그래서 `-` 를 명시했을 때만 부른다.
+ */
+function readStdinLine(): string {
+  try {
+    const raw = readFileSync(0, "utf-8");
+    return raw.split(/\r?\n/).find((l) => l.trim() !== "")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** `true` · `false` · 숫자는 그 타입으로, 나머지는 문자열. */
+function parseSettingValue(raw: string): unknown {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (/^-?\d+$/.test(raw)) return Number(raw);
+  return raw;
+}
+
+/** 긴 값(사용자 CSS 본문 등)은 줄여서 — 터미널을 덮지 않게. */
+function summarizeValue(v: unknown): string {
+  if (typeof v === "string" && v.length > 60) return `${v.slice(0, 57)}… (${v.length}자)`;
+  return JSON.stringify(v) ?? String(v);
+}
+
+/**
+ * 노트의 git 변경을 본다.
+ *
+ * ⚠️ **git 을 직접 부른다.** 앱의 `git_show_diff` 는 Tauri 커맨드라 여기서 못 쓴다.
+ * 인자 모양은 앱 쪽과 같게 맞춘다 — 두 도구가 다른 diff 를 내면 안 된다.
+ */
+function cmdDiff(p: ParsedCommand, out: Out): void {
+  const resolved = resolveNotePath(p.positional[0], vaultOf(p));
+  const rev = typeof p.options.rev === "string" ? p.options.rev : "";
+  const args = rev
+    ? ["diff", rev, "--", resolved.path]
+    : ["diff", "--", resolved.path];
+  const r = spawnSync("git", args, { cwd: resolved.vault, encoding: "utf-8" });
+  if (r.error) {
+    return out.fail("internal", "git 을 못 불렀다", "git 이 PATH 에 있는지 볼 것", 1);
+  }
+  if (r.status !== 0 && r.stderr) {
+    return out.fail("internal", r.stderr.trim(), "vault 가 git 저장소인지 볼 것", 1);
+  }
+  const diff = r.stdout ?? "";
+  if (out.json) return out.json_({ ...resolved, rev: rev || null, diff });
+  if (!diff.trim()) {
+    // ⚠️ 변경이 없는 것은 **오류가 아니다.** 종료 코드 0 으로 끝낸다.
+    return out.line(p.options.quiet === true ? "" : "변경 없음");
+  }
+  out.line(diff);
 }
 
 function cmdOpen(p: ParsedCommand, out: Out): void {
@@ -1298,7 +1448,7 @@ export function cmdExport(p: ParsedCommand, out: Out): void {
  * ⚠️ `tag audit`과 성격이 같지만 **대상이 다르다.** 저쪽은 태그, 이쪽은 거를 수 있는
  * 축(`doc_kind`·`topic`과 열거형처럼 쓰이는 props 필드)이다.
  */
-export function cmdProps(p: ParsedCommand, out: Out): void {
+export async function cmdProps(p: ParsedCommand, out: Out): Promise<void> {
   const action = p.positional[0];
   if (!(PROPS_ACTIONS as readonly string[]).includes(action)) {
     out.fail(
@@ -1308,6 +1458,7 @@ export function cmdProps(p: ParsedCommand, out: Out): void {
       2,
     );
   }
+  if (action === "rename") return cmdPropsRename(p, out);
   const vc = resolveVault(vaultOf(p));
   const issues = findFrontmatterIssues(buildIndex(vc.infos));
   if (out.json) {
@@ -1320,6 +1471,181 @@ export function cmdProps(p: ParsedCommand, out: Out): void {
     out.line("이 축으로 거르는 질의가 절반만 찾는다는 뜻이다.");
   }
   reportStale(out, vc);
+}
+
+/**
+ * `lapis props rename <키> <이전> <새값>` — 감사가 찾은 것을 고치는 짝.
+ *
+ * ## 🔴 `tag rename` 과 같은 규율이다
+ *
+ * 기본 dry-run · `--apply` 로만 쓰기 · 쓰기 직전에만 낡은 인덱스를 막기 ·
+ * 백업 후 원자 교체. **쓰기 경로를 새로 만들지 않는다** — 같은 `backupAndWrite` 를 쓴다.
+ *
+ * ## ⚠️ 태그와 다른 점 — 접두 계층이 없다
+ *
+ * `tag rename tech` 는 `tech/svelte5` 도 옮기지만, `topic` 에는 계층이 없으므로
+ * **정확히 일치할 때만** 바꾼다. 감사가 "앞부분이 같음"으로 묶어 준 것은 후보일 뿐이다 —
+ * `cross-platform` 은 `platform` 이 아니다.
+ */
+async function cmdPropsRename(p: ParsedCommand, out: Out): Promise<void> {
+  const key = p.positional[1];
+  const oldValue = p.positional[2];
+  const newValue = p.positional[3];
+
+  if (!key || !oldValue || !newValue) {
+    out.fail(
+      "no_criteria",
+      "rename 에는 키·이전 값·새 값이 필요하다",
+      "lapis props rename <키> <이전> <새값>",
+      2,
+    );
+  }
+  // ⚠️ 아무 키나 받지 않는다. `tags` 는 배열이고 `tag rename` 이 계층까지 다룬다 —
+  //    여기서 손대면 규칙이 두 벌이 된다.
+  if (!(SCALAR_PROP_KEYS as readonly string[]).includes(key)) {
+    out.fail(
+      "no_criteria",
+      `이 키는 다루지 않는다: ${key}`,
+      key === "tags"
+        ? "태그는 `lapis tag rename` 이 계층까지 다룬다"
+        : `쓸 수 있는 키: ${SCALAR_PROP_KEYS.join(" · ")}`,
+      2,
+    );
+  }
+  if (oldValue === newValue) {
+    out.fail("no_criteria", "이전 값과 새 값이 같다", "바꿀 값을 다르게 주어라", 2);
+  }
+
+  const vc = resolveVault(vaultOf(p));
+
+  const notes = new Map<string, string>();
+  for (const info of vc.infos) {
+    try {
+      notes.set(info.source_path, readFileSync(info.source_path, "utf8"));
+    } catch {
+      // 한 파일을 못 읽었다고 전체를 세우지 않는다. 그 노트만 대상에서 빠진다.
+    }
+  }
+  const known = new Set<string>();
+  for (const i of vc.infos) {
+    const v = i.props?.[key];
+    if (Array.isArray(v)) for (const x of v) known.add(x);
+  }
+
+  const preview = computePropRewritePreview(notes, key, oldValue, newValue, known);
+  const apply = p.options.apply === true;
+  // ⚠️ 쓰기 직전에만 막는다 — 미리보기는 낡아도 보여준다.
+  if (apply) requireFreshIndex(out, vc, p);
+
+  if (!apply) {
+    if (out.json) {
+      return out.json_({ vault: vc.root, dry_run: true, ...staleField(vc), ...preview });
+    }
+    out.line(
+      renderPropPreview(
+        key,
+        oldValue,
+        newValue,
+        preview.items.map((i) => ({ path: i.path, occurrences: i.occurrences })),
+        preview.totalOccurrences,
+        preview.merge,
+      ),
+    );
+    if (preview.items.length > 0) out.line("\n미리보기다 — 실제로 쓰려면 --apply");
+    reportStale(out, vc);
+    return;
+  }
+
+  if (preview.items.length === 0) {
+    // 쓸 게 없는데 성공이라고 하면 "바뀐 줄 알았다"가 된다.
+    out.fail(
+      "path_not_indexed",
+      `${key}: ${oldValue} 인 노트가 없다`,
+      "`lapis props audit` 으로 실제 값을 확인하라",
+      1,
+    );
+  }
+
+  const io = makeCliIo({
+    settingsFile: nodePath.join(nodePath.dirname(vc.dir), "lapis-settings.json"),
+  });
+  const outcome = await backupAndWrite(vc.root, preview.items, io);
+  if (!outcome.ok) {
+    out.fail("corrupt", describeFailure(outcome) ?? "쓰기 실패", "백업에서 회수할 수 있다", 1);
+  }
+
+  if (out.json) {
+    return out.json_({
+      vault: vc.root,
+      applied: true,
+      written: outcome.ok ? outcome.written : [],
+    });
+  }
+  out.line(`${key}: ${oldValue} → ${newValue} — 노트 ${preview.items.length}개 갱신`);
+  // ⚠️ 앱이 인덱스 생산자다. CLI 가 쓴 것은 앱이 다시 읽어야 검색에 반영된다.
+  out.line("앱이 떠 있으면 watcher가 반영한다. 아니면 다음에 vault를 열 때 재색인된다.");
+}
+
+/**
+ * `lapis render <노트> --out <파일> --format html|png`
+ *
+ * ## 🔴 `export` 와 무엇이 다른가
+ *
+ * `export` 는 **앱 없이** 도는 자체 변환기다 — 브라우저가 없어 mermaid 가 코드 펜스로
+ * 남고 사용자 정의 CSS 도 안 붙는다. 이건 **떠 있는 앱에게 시켜서** 화면에 보이는 것을
+ * 그대로 받는다. 느리지만 미리보기와 어긋날 수가 없다.
+ *
+ * ⚠️ 요청 조립·대기·실패 판정은 `renderRequest.ts` 한 곳에 있다. MCP 의
+ * `lapis_render` 도 같은 함수를 부른다 — argv 이름이 두 벌이 되면 갈린다.
+ */
+function cmdRender(p: ParsedCommand, out: Out): void {
+  const target = p.positional[0] === "-" ? readStdinLine() : p.positional[0];
+  if (!target) {
+    out.fail("no_criteria", "노트가 필요하다", "lapis render <노트> --out <파일>", 2);
+  }
+  const format = (typeof p.options.format === "string" ? p.options.format : "html") as RenderFormat;
+  if (!(RENDER_FORMATS as readonly string[]).includes(format)) {
+    out.fail("no_criteria", `모르는 형식: ${format}`, RENDER_FORMATS.join(" 또는 "), 2);
+  }
+
+  const resolved = resolveNotePath(target, vaultOf(p));
+  const outNative = nodePath.resolve(
+    typeof p.options.out === "string" && p.options.out
+      ? p.options.out
+      : defaultRenderOut(resolved.path, format),
+  );
+  const timeout = typeof p.options.timeout === "number" ? p.options.timeout : 20_000;
+
+  const r = requestRender(
+    { notePath: resolved.path, vault: resolved.vault, outNative, format },
+    timeout,
+  );
+  if (!r.ok) {
+    out.fail(r.kind, r.message, r.remedy, 1);
+    return;
+  }
+
+  const outUi = normPath(outNative);
+  if (out.json) {
+    return out.json_({ ...resolved, out: outUi, format, bytes: r.bytes });
+  }
+  out.line(outUi);
+  if (p.options.quiet !== true) out.line(`  ${r.bytes} 바이트 · ${format}`);
+}
+
+/**
+ * `--out` 을 안 주면 어디에 쓸까.
+ *
+ * ⚠️ **vault 안은 안 된다.** 노트 옆에 두면 앱이 감지해 재색인하고, 사용자는 자기가
+ * 안 만든 파일이 노트 사이에 쌓이는 걸 나중에야 본다. `lapis_export_html` 이 같은
+ * 이유로 같은 자리를 쓴다.
+ */
+function defaultRenderOut(notePath: string, format: RenderFormat): string {
+  const stem = nodePath.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  const home = homedir();
+  const downloads = home ? nodePath.join(home, "Downloads") : "";
+  const dir = downloads && existsSync(downloads) ? downloads : tmpdir();
+  return nodePath.join(dir, `${stem}.${format}`);
 }
 
 /**
@@ -1344,24 +1670,76 @@ export function cmdTasks(p: ParsedCommand, out: Out): void {
       }
     }),
   );
-  const total = countOpenTasks(groups);
+  // ⚠️ **거르기는 전체를 센 뒤에 한다.** 거른 것을 분모로 삼으면 "몇 건 숨겼는지"를
+  //    말할 수 없고, 그러면 `--under` 한 번에 나머지가 조용히 사라진다.
+  const totalAll = countOpenTasks(groups);
+  const conc = taskConcentration(groups);
+
+  const under = strList(p.options.under);
+  const exclude = strList(p.options.exclude);
+  const rel = relativizer(vc.root);
+  let shown = groups.filter((g) => {
+    const r = rel(g.path);
+    // exclude 가 이긴다 — `search` 의 축과 같은 규칙이다.
+    if (exclude.some((x) => r.startsWith(x))) return false;
+    return under.length === 0 || under.some((x) => r.startsWith(x));
+  });
+
+  const topN = typeof p.options.top === "number" ? p.options.top : 0;
+  if (topN > 0) {
+    shown = [...shown].sort((a, b) => b.open.length - a.open.length || a.path.localeCompare(b.path));
+    shown = shown.slice(0, topN);
+  }
+  const totalShown = countOpenTasks(shown);
+  const hidden = totalAll.open - totalShown.open;
 
   if (out.json) {
-    return out.json_({ vault: vc.root, ...staleField(vc), total, groups });
+    return out.json_({
+      vault: vc.root,
+      ...staleField(vc),
+      total: totalAll,
+      shown: totalShown,
+      hidden,
+      concentration: conc,
+      groups: p.options.count === true ? [] : shown,
+    });
   }
-  if (groups.length === 0) {
+
+  if (totalAll.open === 0) {
     out.line("미완 작업이 없다.");
-  } else {
-    out.line(`${total.open}건 미완 · ${total.done}건 완료`);
-    for (const g of groups) {
-      out.line("");
-      out.line(`${g.path}  (${g.open.length})`);
-      for (const t of g.open) {
-        out.line(`${"  ".repeat(t.depth + 1)}- ${t.text}`);
-      }
+    reportStale(out, vc);
+    return;
+  }
+
+  out.line(`${totalAll.open}건 미완 · ${totalAll.done}건 완료`);
+  if (conc.top) {
+    // 🔴 맨숫자 하나는 어디에 몰렸는지를 감춘다 — `stats` 와 같은 이유다.
+    out.line(
+      `  가장 많은 노트: ${conc.top.open}건 (${Math.round(conc.top.share * 100)}%) · ${rel(conc.top.path)}`,
+    );
+  }
+  // ⚠️ **숨긴 건수를 반드시 말한다.** 안 말하면 거른 목록이 전부로 읽힌다.
+  if (hidden > 0) out.line(`  ${hidden}건은 걸러져 안 보인다`);
+
+  if (p.options.count === true) {
+    reportStale(out, vc);
+    return;
+  }
+
+  for (const g of shown) {
+    out.line("");
+    out.line(`${g.path}  (${g.open.length})`);
+    for (const t of g.open) {
+      out.line(`${"  ".repeat(t.depth + 1)}- ${t.text}`);
     }
   }
   reportStale(out, vc);
+}
+
+/** `--under a --under b` 를 배열로. 하나만 줘도 배열이다. */
+function strList(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  return typeof v === "string" && v ? [v] : [];
 }
 
 /**
@@ -1419,5 +1797,8 @@ export const HANDLERS: Record<string, (p: ParsedCommand, out: Out) => void | Pro
   usage: cmdUsage,
   new: cmdNew,
   completion: cmdCompletion,
+  config: cmdConfig,
+  diff: cmdDiff,
+  render: cmdRender,
   replace: cmdReplace,
 };

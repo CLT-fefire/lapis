@@ -1,4 +1,5 @@
 mod cliopen;
+mod clirender;
 mod git;
 mod grep;
 mod hash;
@@ -18,6 +19,11 @@ use tauri::Manager;
 /// ⚠️ 0에 가까우면 vault를 이미 연 창이 있는데도 프론트가 답하기 전에 판정해 **창을
 /// 하나 더 띄운다.** 반대로 너무 길면 새 창이 늦게 뜬다. 왕복 한 번이면 충분한 값이다.
 const UNCLAIMED_WAIT_MS: u64 = 500;
+
+/// 새 창을 띄운 뒤 그 창이 받아가기를 기다리는 상한.
+///
+/// ⚠️ 넘기면 **실패 파일을 쓴다.** 그냥 두면 부른 쪽이 타임아웃으로만 알게 된다.
+const UNCLAIMED_GIVE_UP_MS: u64 = 15_000;
 
 /// 디버그 빌드 여부.
 ///
@@ -166,9 +172,19 @@ pub fn run() {
     if job.is_none() && !cfg!(debug_assertions) {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // argv[0]은 실행파일 경로다.
-            if let Some(open) = cliopen::parse_open(argv.into_iter().skip(1)) {
+            let rest: Vec<String> = argv.into_iter().skip(1).collect();
+            if let Some(open) = cliopen::parse_open(rest.iter().cloned()) {
                 cliopen::stage(app, open);
                 cliopen::open_window_if_unclaimed(app, UNCLAIMED_WAIT_MS);
+            }
+            // ⚠️ 렌더는 **열기와 독립이다.** 같은 argv 에 둘 다 올 수 있고(보여주면서
+            //    저장), 하나가 없다고 다른 하나를 건너뛰면 안 된다.
+            if let Some(render) = clirender::parse_render(rest.into_iter()) {
+                clirender::stage(app, render);
+                // ⚠️ 그 vault 를 연 창이 없으면 **아무 일도 안 일어난다** — 실측으로
+                //    걸렸다(두 번째 프로세스는 코드 0, 결과도 실패 파일도 없음).
+                //    `cliopen` 과 같은 방법으로 새 창을 띄우고, 그래도 안 되면 실패를 쓴다.
+                clirender::render_window_if_unclaimed(app, UNCLAIMED_WAIT_MS, UNCLAIMED_GIVE_UP_MS);
             }
         }));
     }
@@ -204,9 +220,16 @@ pub fn run() {
         )
         .manage(watcher::WatcherState::default())
         .manage(cliopen::PendingOpenState::default())
+        .manage(clirender::PendingRenderState::default())
         .setup(|app| {
             // 차가운 기동 — 앱이 꺼져 있을 때 `lapis open`이 부른 경우다. 담아만 두면
             // 첫 창이 뜨면서 스스로 가져간다(경합 없음 — 창이 준비됐을 때 묻는다).
+            if let Some(render) = clirender::parse_render(std::env::args().skip(1)) {
+                clirender::stage(app.handle(), render);
+                // 앱이 이 요청 때문에 떴다 — `main` 이 자기 vault 를 안 따지고 받아간다.
+                // 없으면 앱이 **마지막 vault** 를 복원한 뒤 요청과 안 맞아 조용히 지나간다.
+                clirender::mark_cli_window(app.handle(), "main");
+            }
             if let Some(open) = cliopen::parse_open(std::env::args().skip(1)) {
                 cliopen::stage(app.handle(), open);
                 // 앱이 이 요청 때문에 떴다 — `main`이 자기 vault를 안 따지고 받아간다.
@@ -271,6 +294,8 @@ pub fn run() {
             search_cache::read_search_cache_shard,
             search_cache::write_search_cache_shard,
             cliopen::take_pending_open,
+            clirender::take_pending_render,
+            clirender::write_render_failure,
             watcher::watch_vault,
             watcher::unwatch_vault,
             settings::settings_read,

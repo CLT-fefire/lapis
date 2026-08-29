@@ -8,7 +8,7 @@
  * MCP는 **인덱스를 만들지 않는다.** 생산자는 앱이다 → stale이면 실패시키고 앱을 켜라고 한다.
  */
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -147,6 +147,80 @@ export function settingsFileCandidates(): string[] {
  *
  * @returns 실제로 고친 파일들. 빈 배열이면 설정 파일이 없다는 뜻이다.
  */
+/**
+ * 앱 설정을 읽는다 — 후보 파일들에서 **처음 찾은 것**.
+ *
+ * ⚠️ 후보가 여럿인 이유는 dev/릴리스가 갈리기 때문이다(`paths.rs`). 게이트가 보는 것과
+ * **같은 순서**로 훑는다 — 다르면 "CLI 로는 켜졌는데 MCP 는 꺼져 있다"가 된다.
+ */
+export function readSettings(): { file: string; values: Record<string, unknown> } | null {
+  for (const file of settingsFileCandidates()) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+      return { file, values: parsed };
+    } catch {
+      // 없거나 손상 — 다음 후보.
+    }
+  }
+  return null;
+}
+
+/**
+ * 설정 하나를 쓴다. 반환은 건드린 파일들.
+ *
+ * ## 🔴 모르는 키를 보존한다
+ *
+ * 파일에는 앱만 아는 키가 여럿 있다(색 테마 · 밀도 · 사용자 CSS 본문). 통째로 새로 쓰면
+ * **그것들이 조용히 사라진다** — 앱을 다시 켰을 때 설정이 초기화된 것처럼 보이고, 원인은
+ * 어디에도 안 남는다. 그래서 읽어서 한 키만 갈아끼운다.
+ *
+ * ⚠️ 손상된 파일은 **건너뛴다.** 덮어쓰면 다른 설정까지 날린다 — `disableCustomCss` 와
+ * 같은 규율이다.
+ *
+ * ⚠️ 후보 **전부**에 쓴다. 하나만 쓰면 dev/릴리스 중 한쪽만 바뀌고, 그 둘이 갈린 것이
+ * 정확히 예전에 "켰는데 안 켜진다"를 만든 원인이었다.
+ */
+/**
+ * 🔴 **설정은 원자적으로 바꾼다.**
+ *
+ * 설정 파일 하나에 앱의 모든 설정이 들어 있다. 직접 `writeFileSync` 로 덮다 중간에
+ * 끊기면 키 하나가 아니라 **전부** 날아가고, 앱은 그걸 "설정이 없다"로 읽는다.
+ * vault 쓰기에 적용하는 규칙(`vault.rs`)이 여기에도 그대로 필요하다.
+ *
+ * ⚠️ 임시 파일은 **같은 디렉터리**에 둔다. 다른 볼륨이면 rename 이 복사가 되고
+ * 원자성이 사라진다 — Windows 에서 `%APPDATA%` 와 `%TEMP%` 가 다른 드라이브일 수 있다.
+ */
+function writeJsonAtomic(file: string, value: unknown): void {
+  const tmp = `${file}.tmp-${process.pid}`;
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
+    renameSync(tmp, file);
+  } catch (e) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // 임시 파일이 애초에 안 생겼다 — 원래 실패를 덮지 않는다.
+    }
+    throw e;
+  }
+}
+
+export function writeSetting(key: string, value: unknown): string[] {
+  const touched: string[] = [];
+  for (const file of settingsFileCandidates()) {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    parsed[key] = value;
+    writeJsonAtomic(file, parsed);
+    touched.push(file);
+  }
+  return touched;
+}
+
 export function disableCustomCss(): string[] {
   const touched: string[] = [];
   for (const file of settingsFileCandidates()) {
@@ -165,7 +239,7 @@ export function disableCustomCss(): string[] {
     }
     if (parsed.custom_css_enabled === false) continue; // 이미 꺼져 있다
     parsed.custom_css_enabled = false;
-    writeFileSync(file, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+    writeJsonAtomic(file, parsed);
     touched.push(file);
   }
   return touched;
@@ -221,7 +295,22 @@ export type ErrorKind =
   | "name_ambiguous"
   | "shard_incomplete"
   | "no_criteria"
-  | "mcp_disabled";
+  | "mcp_disabled"
+  // ── 도구가 늘면서 생긴 것들 ────────────────────────────────────────────────
+  // ⚠️ 이 목록은 **계약이다** — `mcp/README.md` 의 표와 짝이고, 부르는 쪽이 종류로
+  //    분기한다. 늘릴 때 README 도 같이 고친다.
+  /** 인자가 모자라거나 모양이 틀렸다. */
+  | "usage"
+  /** 설치된 Lapis 실행파일을 못 찾았다. */
+  | "app_not_found"
+  /** 인덱스 재구축이 실패했다. */
+  | "index_failed"
+  /** 내보내기가 실패했다. */
+  | "export_failed"
+  /** 사용 기록이 아직 없다. */
+  | "no_usage_log"
+  /** 실행 중인 앱이 제 시간에 결과를 안 냈다. */
+  | "app_timeout";
 
 export class LapisError extends Error {
   constructor(

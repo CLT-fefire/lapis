@@ -95,7 +95,12 @@ export function buildUsageReport(s: UsageSummary, opts: ReportOptions = {}): str
 
   out.push("## 한 번도 안 쓴 명령");
   out.push("");
-  if (s.unusedCommands.length === 0) {
+  if (s.unusedCommands === null) {
+    // 🔴 **"없다"고 쓰면 안 된다.** 분모를 못 받았을 뿐이고, 그건 전혀 다른 말이다.
+    out.push("**셀 수 없었다** — 앱이 아는 명령 목록을 못 받았다.");
+    out.push("");
+    out.push("> 로그에는 안 쓴 명령이 애초에 안 남는다. 분모가 있어야 셀 수 있다.");
+  } else if (s.unusedCommands.length === 0) {
     out.push("없다 — 있는 명령을 전부 한 번은 썼다.");
   } else {
     out.push("> 지워도 되는지, 아니면 **닿을 길이 없는지**를 가르는 목록이다.");

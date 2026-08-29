@@ -41,7 +41,12 @@ export const POSITIONS_MAX = 200;
 const KEY = "lapis.reading-pos";
 
 /** ⚠️ **삽입 순서가 최근 순이다** — `Map` 이 그것을 보장하므로 별도 시각을 안 든다. */
-const positions = writable<Map<string, ReadingPos>>(loadPositions());
+/**
+ * ⚠️ **구독용으로만 내보낸다.** 읽기는 `posFor`, 쓰기는 `rememberPos` 를 쓴다 —
+ * 밖에서 `set` 하면 LRU 상한과 영속화를 건너뛰게 된다.
+ * 페널이 표식을 그릴 때 자리가 바뀌면 따라오게 하려면 이걸 구독해야 한다.
+ */
+export const positions = writable<Map<string, ReadingPos>>(loadPositions());
 
 function loadPositions(): Map<string, ReadingPos> {
   if (typeof localStorage === "undefined") return new Map();

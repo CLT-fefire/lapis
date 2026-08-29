@@ -34,6 +34,7 @@ export interface CommandSpec {
 export const GLOBAL_OPTIONS: OptionSpec[] = [
   { name: "vault", kind: "string", desc: "vault 루트 절대 경로. 캐시에 여러 vault가 있을 때" },
   { name: "json", kind: "boolean", desc: "기계가 읽을 형태로. 스크립트·AI는 이걸 쓴다" },
+  { name: "quiet", kind: "boolean", desc: "사람용 안내 줄을 뺀다. 값만 필요할 때" },
   { name: "help", kind: "boolean", desc: "이 명령의 사용법" },
 ];
 
@@ -157,15 +158,35 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "props",
-    desc: "frontmatter 값 진단 — 거를 수 있는 축이 갈렸는지",
-    positional: [{ name: "동작", required: true, desc: "audit" }],
-    options: [],
+    desc: "frontmatter 값 진단·정리 — 거를 수 있는 축이 갈렸는지 보고, 고친다",
+    positional: [
+      { name: "동작", required: true, desc: "audit | rename" },
+      { name: "키", required: false, desc: "rename 전용 — doc_kind · topic · status" },
+      { name: "이전", required: false, desc: "rename 전용 — 바꿀 값" },
+      { name: "새값", required: false, desc: "rename 전용 — 새 값" },
+    ],
+    options: [
+      {
+        name: "apply",
+        kind: "boolean",
+        // ⚠️ `tag rename` 과 같은 이유로 기본이 dry-run 이다.
+        desc: "실제로 쓴다. 없으면 미리보기만 (기본)",
+      },
+      ALLOW_STALE,
+    ],
   },
   {
     name: "tasks",
     desc: "본문의 미완 `- [ ]` 를 모은다. 코드 블록 안은 안 센다",
     positional: [{ name: "동작", required: true, desc: "audit" }],
-    options: [],
+    options: [
+      // ⚠️ 실측: 이 vault 는 89건 중 67건이 체크리스트 한 파일이었다. 거를 길이
+      //    없으면 "무엇이 남았나"를 물을 때마다 그게 화면을 덮는다.
+      { name: "under", kind: "string[]", desc: "이 아래에서만. vault 상대 prefix, 여러 번" },
+      { name: "exclude", kind: "string[]", desc: "이 아래는 뺀다. under 와 겹치면 이쪽이 이긴다" },
+      { name: "top", kind: "number", desc: "노트를 미완 많은 순으로 이만큼만" },
+      { name: "count", kind: "boolean", desc: "숫자만. 목록을 안 낸다" },
+    ],
   },
   {
     name: "export",
@@ -226,6 +247,31 @@ export const COMMANDS: CommandSpec[] = [
     options: [
       { name: "template", kind: "string", desc: ".lapis/templates 안의 이름. 앱과 같은 목록" },
       { name: "title", kind: "string", desc: "{{title}} 에 넣을 값. 기본은 파일 이름" },
+    ],
+  },
+  {
+    name: "config",
+    desc: "앱 설정을 보고 바꾼다. `mcp_enabled` 를 여기서 켤 수 있다",
+    positional: [
+      { name: "키", required: false, desc: "생략하면 전부 본다" },
+      { name: "값", required: false, desc: "주면 쓴다. true · false · 숫자 · 문자열" },
+    ],
+    options: [],
+  },
+  {
+    name: "diff",
+    desc: "노트의 git 변경을 본다. vault 가 git 저장소여야 한다",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나" }],
+    options: [{ name: "rev", kind: "string", desc: "비교할 리비전. 기본은 작업 트리" }],
+  },
+  {
+    name: "render",
+    desc: "앱에게 렌더를 시켜 파일로 받는다 — 앱 품질 HTML 또는 mermaid PNG",
+    positional: [{ name: "노트", required: true, desc: "경로 · 노트 이름 아무거나. `-` 면 표준입력" }],
+    options: [
+      { name: "out", kind: "string", desc: "저장할 경로. 안 주면 ~/Downloads" },
+      { name: "format", kind: "string", desc: "html(기본) · png" },
+      { name: "timeout", kind: "number", desc: "앱을 기다릴 ms. 기본 20000" },
     ],
   },
   {
@@ -309,7 +355,11 @@ export const FACETS = ["tags", "topics", "doc-kinds"] as const;
 export const TAG_ACTIONS = ["rename", "audit"] as const;
 
 /** `props` 명령이 받는 동작. 지금은 하나뿐이지만 `tag`와 같은 모양을 지킨다. */
-export const PROPS_ACTIONS = ["audit"] as const;
+/**
+ * ⚠️ `rename` 은 **쓰기**다. `tag rename` 과 같은 규율을 따른다 —
+ * 기본 dry-run, `--apply` 가 있어야 쓰고, 쓰기 직전에 낡은 인덱스를 막는다.
+ */
+export const PROPS_ACTIONS = ["audit", "rename"] as const;
 
 export function findCommand(name: string): CommandSpec | undefined {
   return COMMANDS.find((c) => c.name === name);

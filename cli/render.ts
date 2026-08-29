@@ -71,6 +71,13 @@ export function renderRootHelp(): string {
     "공통 옵션",
     table(GLOBAL_OPTIONS.map((o) => ["  --" + o.name, o.desc])),
     "",
+    "종료 코드",
+    table([
+      ["  0", "성공. `doctor` 는 문제를 못 찾았다는 뜻"],
+      ["  1", "질의·실행 실패. `doctor` 는 문제를 찾았다는 뜻"],
+      ["  2", "쓰는 법이 틀렸다 — 인자·옵션 문제. 낡은 인덱스로 쓰기를 막을 때도 이 코드다"],
+    ]),
+    "",
     "자세한 것은 cli/README.md. 명령별 사용법은 `lapis <명령> --help`.",
   ];
   return lines.join("\n");
@@ -180,6 +187,34 @@ export function renderTagPreview(
   ];
   if (merge) {
     out.push("", "⚠️ 이미 있는 태그다 — 두 태그가 하나로 합쳐진다. 되돌릴 수 없다.");
+  }
+  return out.join("\n");
+}
+
+/**
+ * frontmatter 값 바꾸기 미리보기.
+ *
+ * ⚠️ 태그와 달리 **정확히 일치한 것만** 걸린다. 그래서 "접두가 같아 안 걸린 것"이
+ * 있을 수 있는데, 그건 감사가 후보로 보여준 것이지 같은 값이 아니다.
+ */
+export function renderPropPreview(
+  key: string,
+  oldValue: string,
+  newValue: string,
+  rows: readonly TagPreviewRow[],
+  total: number,
+  merge: boolean,
+): string {
+  if (rows.length === 0) return `${key}: ${oldValue} 인 노트가 없다`;
+  const out = [
+    `${key}:  ${oldValue}  →  ${newValue}`,
+    "",
+    table(rows.map((r) => [String(r.occurrences), r.path])),
+    "",
+    `노트 ${rows.length}개 · ${total}건`,
+  ];
+  if (merge) {
+    out.push("", "⚠️ 이미 쓰이는 값이다 — 둘이 하나로 합쳐진다. 되돌릴 수 없다.");
   }
   return out.join("\n");
 }
