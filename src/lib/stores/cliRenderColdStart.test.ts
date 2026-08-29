@@ -76,12 +76,35 @@ describe("슬롯은 불일치에 안 비워진다", () => {
     "utf-8",
   );
 
-  it("일치할 때만 take 한다", () => {
-    const at = rs.indexOf("if !matches {");
-    expect(at).toBeGreaterThan(-1);
-    // 불일치 분기 **안**만 본다 — 뒤의 정상 경로까지 보면 늘 빨개진다.
+  /**
+   * ⚠️ 조건이 하나였다가 **둘**이 됐다 — `mine || vault 일치`.
+   *
+   * 앱이 다른 vault 를 연 채면 요청이 영영 남던 것을 고치면서 `cliopen` 의 `cli_window`
+   * 표식을 들여왔다. 그래도 **불일치일 때 비우지 않는다**는 계약은 그대로다.
+   */
+  it("받아갈 자격이 없으면 슬롯을 안 비운다", () => {
+    const at = rs.indexOf("if !mine && !matches {");
+    expect(at, "받아가는 조건을 못 찾았다").toBeGreaterThan(-1);
     const branch = rs.slice(at, rs.indexOf("}", at));
     expect(branch).toMatch(/return None;/);
-    expect(branch, "불일치인데 슬롯을 비운다").not.toMatch(/\.take\(\)/);
+    expect(branch, "자격이 없는데 슬롯을 비운다").not.toMatch(/\.take\(\)/);
+  });
+
+  /** 🔴 지목된 창이 없으면 vault 불일치에서 다시 조용해진다. */
+  it("지목된 창을 안다", () => {
+    expect(rs).toMatch(/cli_window/);
+    expect(rs).toMatch(/pub fn mark_cli_window/);
+    expect(rs).toMatch(/pub fn render_window_if_unclaimed/);
+  });
+
+  /**
+   * ⚠️ 새 창을 띄우고도 안 받아가면 **실패 파일을 쓴다.** 안 그러면 다시
+   * 조용한 타임아웃이 된다 — 고치려던 바로 그 증상이다.
+   */
+  it("끝내 안 받아가면 실패를 쓴다", () => {
+    const at = rs.indexOf("pub fn render_window_if_unclaimed");
+    expect(at).toBeGreaterThan(-1);
+    expect(rs.slice(at, at + 2000)).toMatch(/report_unclaimed\(/);
+    expect(rs).toMatch(/write_render_failure\(out\.to_string\(\)/);
   });
 });

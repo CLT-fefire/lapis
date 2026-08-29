@@ -45,6 +45,12 @@ pub struct PendingRender {
 #[derive(Default)]
 pub struct PendingRenderState {
     slot: Mutex<Option<PendingRender>>,
+    /// 이 요청을 위해 **방금 만든** 창의 라벨. 그 창만 vault 를 안 따지고 받아간다.
+    ///
+    /// 🔴 이게 없으면 **앱이 다른 vault 를 연 채일 때 요청이 영영 남는다.** 실측:
+    /// 두 번째 프로세스는 코드 0(성공)으로 끝나고, 결과 파일도 실패 파일도 안 생기고,
+    /// 부른 쪽은 타임아웃으로만 안다. `cliopen` 이 같은 문제를 같은 방법으로 푼다.
+    cli_window: Mutex<Option<String>>,
 }
 
 /// 이 형식들만 받는다.
@@ -105,27 +111,121 @@ pub fn stage(app: &AppHandle, render: PendingRender) {
     }
 }
 
-/// 자기 vault 의 요청이면 꺼내 간다.
+/// 자기 요청이면 꺼내 간다.
 ///
 /// ⚠️ 꺼내기는 **원자적**이다. 안 그러면 창 둘이 같은 렌더를 각자 하고 같은 파일에 쓴다.
+///
+/// ⚠️ vault 가 안 맞아도 **슬롯을 비우지 않는다.** 비우면 뒤에 올 진짜 주인이 못 받는다.
 #[tauri::command]
 pub fn take_pending_render(
+    window: tauri::Window,
     state: tauri::State<'_, PendingRenderState>,
     vault: Option<String>,
 ) -> Option<PendingRender> {
+    claim(&state, window.label(), vault.as_deref())
+}
+
+/// 꺼내기의 순수한 절반 — Tauri 없이 테스트할 수 있게 뗐다.
+///
+/// 받아가는 조건은 **둘 중 하나**다:
+/// - 이 요청을 위해 방금 만든 창이거나(`cli_window`),
+/// - 자기 vault 의 요청이거나.
+fn claim(state: &PendingRenderState, label: &str, vault: Option<&str>) -> Option<PendingRender> {
+    let mine = state
+        .cli_window
+        .lock()
+        .ok()
+        .map(|w| w.as_deref() == Some(label))
+        .unwrap_or(false);
+
     let mut slot = state.slot.lock().ok()?;
     let pending = slot.as_ref()?;
-    let matches = vault
-        .as_deref()
-        .is_some_and(|v| to_ui(std::path::Path::new(v)) == pending.vault);
-    if !matches {
+    let matches = vault.is_some_and(|v| to_ui(std::path::Path::new(v)) == pending.vault);
+    if !mine && !matches {
         return None;
     }
     let taken = slot.take();
     if let Some(t) = &taken {
-        eprintln!("[lapis/cli-render] 가져감: {} → {}", t.path, t.out);
+        eprintln!(
+            "[lapis/cli-render] {label} 이(가) 가져감: {} → {}",
+            t.path, t.out
+        );
     }
     taken
+}
+
+/// 차가운 기동에서 `main` 을 지목해 둔다 — 그 창이 vault 를 안 따지고 받아간다.
+///
+/// ⚠️ 없으면 앱이 **마지막에 열었던 vault** 를 복원한 뒤 요청과 안 맞아 안 가져간다.
+/// `cliopen` 이 같은 이유로 같은 표식을 쓴다.
+pub fn mark_cli_window(app: &AppHandle, label: &str) {
+    if let Some(state) = app.try_state::<PendingRenderState>() {
+        if let Ok(mut w) = state.cli_window.lock() {
+            *w = Some(label.to_string());
+        }
+    }
+}
+
+/// 아무 창도 안 받아가면 **새 창을 띄운다.**
+///
+/// ## 🔴 없으면 조용히 아무 일도 안 일어난다
+///
+/// 실측(v3.10.0 릴리스): 앱이 `C:\lapis-testvault` 를 연 채로 다른 vault 의 노트를
+/// 렌더 요청했더니 두 번째 프로세스가 **코드 0(성공)** 으로 끝났고, 결과 파일도 실패
+/// 파일도 안 생겼다. 부른 쪽은 타임아웃으로만 알고, 셸에서 `&&` 로 이으면 진행된다.
+///
+/// `cliopen::open_window_if_unclaimed` 과 **같은 방법**이다 — 새 창의 라벨을 기억해
+/// 두면 그 창이 기동하며 물을 때 vault 를 안 따지고 받아간다.
+///
+/// ⚠️ 그러고도 안 받아가면 **실패 파일을 쓴다.** 창을 띄웠는데 그 창도 못 받는 상황이
+/// 남으면 다시 조용한 타임아웃이 된다.
+pub fn render_window_if_unclaimed(app: &AppHandle, wait_ms: u64, give_up_ms: u64) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+        let Some(state) = app.try_state::<PendingRenderState>() else {
+            return;
+        };
+        let Some(out) = unclaimed_out(&state) else {
+            return;
+        };
+
+        match crate::spawn_window(&app) {
+            Ok(label) => {
+                if let Ok(mut w) = state.cli_window.lock() {
+                    *w = Some(label.clone());
+                }
+                eprintln!("[lapis/cli-render] 받아간 창이 없다 → 새 창 {label}");
+            }
+            Err(e) => {
+                eprintln!("[lapis/cli-render] 새 창을 못 띄웠다: {e}");
+                report_unclaimed(&out, "이 vault 를 연 창이 없고, 새 창도 못 띄웠다");
+                return;
+            }
+        }
+
+        // 새 창도 못 받으면 조용히 두지 않는다.
+        std::thread::sleep(std::time::Duration::from_millis(give_up_ms));
+        if let Some(out) = unclaimed_out(&state) {
+            report_unclaimed(&out, "새 창을 띄웠는데도 아무도 이 요청을 받지 않았다");
+        }
+    });
+}
+
+/// 아직 안 가져간 요청의 결과 경로. 비어 있으면 `None`.
+fn unclaimed_out(state: &PendingRenderState) -> Option<String> {
+    state
+        .slot
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().map(|p| p.out.clone()))
+}
+
+fn report_unclaimed(out: &str, message: &str) {
+    eprintln!("[lapis/cli-render] 포기: {message}");
+    if let Err(e) = write_render_failure(out.to_string(), message.to_string()) {
+        eprintln!("[lapis/cli-render] 실패 보고도 못 썼다: {e}");
+    }
 }
 
 /// 렌더가 실패했을 때 부른 쪽에 알린다.
@@ -232,5 +332,84 @@ mod tests {
             "/tmp/a.html",
         ]));
         assert!(r.is_some());
+    }
+}
+
+#[cfg(test)]
+mod unclaimed_tests {
+    use super::*;
+
+    /// 🔴 **아무도 안 가져가면 요청이 영원히 남는다.**
+    ///
+    /// 실측(v3.10.0 릴리스 빌드): 앱이 `C:\lapis-testvault` 를 연 채로 `SharedDocs` 의
+    /// 노트를 렌더 요청했더니 —
+    ///
+    /// ```text
+    /// 두 번째 프로세스 종료: True (코드 0)   ← 성공이라고 답한다
+    /// 결과 파일: 없음 — 실패 파일조차 없다
+    /// ```
+    ///
+    /// 부른 쪽은 **타임아웃으로만** 알고, 셸에서 `&&` 로 이으면 그대로 진행된다.
+    ///
+    /// `cliopen` 은 이 경우를 이미 푼다 — `open_window_if_unclaimed` 가 새 창을 띄우고
+    /// 그 라벨을 기억해, 그 창이 기동하며 물을 때 vault 를 안 따지고 받아가게 한다.
+    /// 렌더에도 같은 짝이 필요하다.
+    fn state_with(slot: Option<PendingRender>, cli_window: Option<&str>) -> PendingRenderState {
+        PendingRenderState {
+            slot: Mutex::new(slot),
+            cli_window: Mutex::new(cli_window.map(|s| s.to_string())),
+        }
+    }
+
+    fn pending(vault: &str) -> PendingRender {
+        PendingRender {
+            path: format!("{vault}/n.md"),
+            vault: vault.to_string(),
+            out: "C:/out/n.png".to_string(),
+            format: "png".to_string(),
+        }
+    }
+
+    #[test]
+    fn claims_when_vault_matches() {
+        let s = state_with(Some(pending("C:/v")), None);
+        assert!(claim(&s, "main", Some("C:/v")).is_some());
+        // 가져간 뒤에는 비어 있어야 한다 — 창 둘이 같은 파일에 쓰면 안 된다.
+        assert!(claim(&s, "main", Some("C:/v")).is_none());
+    }
+
+    /// ⚠️ vault 가 다르면 **비우지 않는다.** 비우면 뒤에 올 진짜 주인이 못 받는다.
+    #[test]
+    fn keeps_slot_when_vault_differs() {
+        let s = state_with(Some(pending("C:/v")), None);
+        assert!(claim(&s, "main", Some("C:/other")).is_none());
+        assert!(s.slot.lock().unwrap().is_some(), "슬롯이 비었다");
+    }
+
+    /// 🔴 이 요청을 위해 **방금 만든 창**은 vault 를 안 따지고 받아간다.
+    #[test]
+    fn designated_window_claims_regardless_of_vault() {
+        let s = state_with(Some(pending("C:/v")), Some("w2"));
+        assert!(
+            claim(&s, "w2", Some("C:/completely-other")).is_some(),
+            "지목된 창이 못 받았다"
+        );
+    }
+
+    /// ⚠️ 지목되지 않은 창은 여전히 vault 를 따진다 — 아니면 아무 창이나 낚아챈다.
+    #[test]
+    fn other_windows_still_need_the_vault() {
+        let s = state_with(Some(pending("C:/v")), Some("w2"));
+        assert!(claim(&s, "main", Some("C:/other")).is_none());
+    }
+
+    /// 창이 vault 를 아직 안 열었을 때(`None`) — 지목됐으면 받고, 아니면 안 받는다.
+    #[test]
+    fn null_vault_only_for_designated() {
+        let designated = state_with(Some(pending("C:/v")), Some("w2"));
+        assert!(claim(&designated, "w2", None).is_some());
+
+        let plain = state_with(Some(pending("C:/v")), None);
+        assert!(claim(&plain, "main", None).is_none());
     }
 }

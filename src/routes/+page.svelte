@@ -681,6 +681,15 @@ import { isPanicChord } from "$lib/userCss";
     const req = await takePendingRender($vaultPath).catch(() => null);
     if (!req) return;
     try {
+      // 🔴 **vault 가 다르면 먼저 연다.**
+      //
+      // 지목된 창(`cli_window`)은 vault 를 안 따지고 받아간다 — 차가운 기동이거나,
+      // 그 vault 를 연 창이 없어 Rust 가 새로 띄운 창이다. 그 창은 자기가 복원한
+      // vault 를 들고 있으므로, 그대로 `selectNote` 하면 **엉뚱한 vault 에서** 찾는다.
+      //
+      // ⚠️ 순서가 중요하다. 노트를 먼저 열면 인덱스 없는 상태에서 열게 되고 뒤이은
+      //    `openVault` 가 탭을 갈아치운다 — `cliOpen.apply()` 가 같은 이유로 같은 순서다.
+      if (req.vault !== $vaultPath) await openVault(req.vault);
       await selectNote(req.path, { via: "cli" });
       // 본문이 그려지고 mermaid 가 **SVG 가 될 때까지** 기다린다.
       //
@@ -1548,6 +1557,12 @@ import { isPanicChord } from "$lib/userCss";
     void onCliRender(() => handleRenderRequest())
       .then((un) => cliRenderUnlisten.push(un))
       .catch((e) => logWarn("routes/+page", "[cli-render] 구독 실패", e));
+
+    // ⚠️ 기동 때도 한 번 묻는다. 이 창이 **지목된 창**이면(차가운 기동이거나 Rust 가
+    //    이 요청 때문에 띄운 창) vault 를 안 따지고 받아가므로, 여기서 바로 잡힌다.
+    //    아래 `$effect` 는 지목이 없었을 때의 두 번째 기회다 — 둘 다 필요하고,
+    //    슬롯이 원자적이라 두 번 잡아도 한 번만 실행된다.
+    void handleRenderRequest();
 
     restoreTheme();
     restoreDensity();

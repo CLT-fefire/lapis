@@ -82,6 +82,14 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   between them and the real commands is a compile error, and a missing denominator reports
   `null` rather than an empty list.
 
+- **A render for a vault no window had open went nowhere.** The second process exited
+  with status 0 — reporting success for having handed over the arguments — while no output
+  file and no failure file were ever written, so a shell chaining on `&&` carried on. Opening
+  a note already solved this: if no window claims the request, the app opens one and remembers
+  its label so that window takes it regardless of vault. Rendering now does the same, opens
+  the requested vault in that window, and writes a failure file if even that window does not
+  claim it — a timeout is never the only signal.
+
 - **A render request made while the app was closed silently vanished.** The app took the
   request from argv and held it, but the front end asked for it once at startup — before the
   vault had opened — and the answer is only given to a window whose vault matches. The event
