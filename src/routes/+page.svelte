@@ -21,6 +21,8 @@
   import { DEV_VAULT } from "$lib/dev/fixtureVault";
   import CommandPalette from "$lib/CommandPalette.svelte";
   import LinkRewritePreviewModal from "$lib/LinkRewritePreviewModal.svelte";
+  import ComparePane from "$lib/ComparePane.svelte";
+  import { comparePath, closeIfSame } from "$lib/stores/compare";
   import ContextMenu from "$lib/ContextMenu.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import NewNoteModal from "$lib/NewNoteModal.svelte";
@@ -675,6 +677,16 @@ import { isPanicChord } from "$lib/userCss";
     // [cli-render] 차가운 기동 — vault 가 열렸으니 이제 물어본다.
     coldRenderChecked = vault;
     void handleRenderRequest();
+  });
+
+  /**
+   * 🔴 본문이 옆칸과 **같은 노트로 가면** 옆칸을 닫는다.
+   *
+   * 안 그러면 같은 문서가 나란히 두 벌 뜬다. 링크를 눌러 옮겨 다니다 보면 실제로 걸린다 —
+   * 옆칸의 링크는 본문을 움직이므로, 옆칸에서 자기 자신을 가리키는 링크 하나면 된다.
+   */
+  $effect(() => {
+    closeIfSame($currentNotePath);
   });
 
   async function handleRenderRequest(): Promise<void> {
@@ -1694,6 +1706,12 @@ import { isPanicChord } from "$lib/userCss";
     <!-- 본문 페인 — Editor와 Preview가 **교대**한다(2026-08-10, split 제거).
          TabBar와 pane-title은 모드 밖에 있다. 예전엔 TabBar가 Editor 펼침 분기 안에
          있어서 Editor를 접으면 탭이 통째로 사라졌다 — 그 결함도 여기서 같이 사라진다. -->
+    <!--
+      ⚠️ **그리드 컬럼을 늘리지 않는다.** 본문 칸(`1fr`) 안에서 가로로 나눈다 —
+      컬럼을 하나 더 두면 리사이저 · 접힘 · 저장 폭까지 전부 짝을 맞춰야 한다.
+      옆칸은 읽기 전용이라 그만한 배선이 필요 없다.
+    -->
+    <div class="main-split">
     <section class="pane main-pane" data-lapis="note-body">
       <TabBar />
       <div class="pane-title">
@@ -1866,6 +1884,10 @@ import { isPanicChord } from "$lib/userCss";
         </div>
       {/if}
     </section>
+    {#if $comparePath}
+      <ComparePane path={$comparePath} />
+    {/if}
+    </div>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- 위 사이드바 리사이저와 같은 이유. -->
@@ -2206,6 +2228,24 @@ import { isPanicChord } from "$lib/userCss";
       1fr
       var(--rz-right)
       var(--context-col);
+  }
+
+  /**
+   * 본문 칸을 가로로 나눈다 — 왼쪽이 본문, 오른쪽이 나란히 보기.
+   *
+   * ⚠️ `min-width: 0` 이 **둘 다** 있어야 한다. 없으면 flex 아이템이 내용 크기
+   * 아래로 안 줄어들어 긴 코드 블록 하나가 옆칸을 화면 밖으로 밀어낸다.
+   */
+  .main-split {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-split > .main-pane {
+    flex: 1;
+    min-width: 0;
   }
 
   .sidebar-resizer {

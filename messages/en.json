@@ -548,5 +548,11 @@
   "hygiene_stale_hint": "Not a list of things to fix — a list of things to look at again. Uses whichever is later: the file's modified time or the frontmatter <code>date</code>.",
   "wikilink_ambiguous": "{count} notes share this name — goes to the nearest: {paths}",
   "fav_reading_mark": "Where you left off",
-  "fav_reading_line": "Line {line}"
+  "fav_reading_line": "Line {line}",
+  "compare_title": "Side-by-side",
+  "compare_close": "Close side-by-side",
+  "compare_read_failed": "Could not read this note.",
+  "cmd_compare_close": "Close side-by-side",
+  "ctx_compare": "Open side-by-side",
+  "ctx_compare_close": "Close side-by-side"
 }

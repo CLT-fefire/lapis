@@ -55,6 +55,8 @@ export type OpenSurface =
   | "tab"
   | "recent"
   | "history"
+  /** 나란히 보기 옆칸의 링크 — 옆칸이 스스로 안 움직이고 **본문**을 보낸다. */
+  | "compare"
   /** `lapis open` — 앱 밖에서 들어온다. 다른 입구와 성격이 아주 다르다. */
   | "cli";
 
@@ -67,6 +69,7 @@ export const OPEN_SURFACES: readonly OpenSurface[] = [
   "tab",
   "recent",
   "history",
+  "compare",
   "cli",
 ] as const;
 

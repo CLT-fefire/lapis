@@ -9,12 +9,21 @@
     openNewNote,
     requestRename,
   } from "$lib/stores/tree-ui";
-  import { deletePath, createNewFolder } from "$lib/stores/vault";
+  import { deletePath, createNewFolder, currentNotePath } from "$lib/stores/vault";
   import { pinnedNotePaths, togglePin } from "$lib/stores/pins";
+  import { comparePath, toggleCompare } from "$lib/stores/compare";
   import { revealInFinder } from "$lib/tauri/reveal";
 
   async function onAction(
-    action: "new-note" | "new-folder" | "rename" | "delete" | "copy-path" | "reveal" | "pin",
+    action:
+      | "new-note"
+      | "new-folder"
+      | "rename"
+      | "delete"
+      | "copy-path"
+      | "reveal"
+      | "pin"
+      | "compare",
   ) {
     const target = $contextTarget;
     if (!target) return;
@@ -49,6 +58,10 @@
         break;
       case "pin":
         togglePin(entry.path);
+        break;
+      case "compare":
+        // ⚠️ 본문 경로를 같이 넘긴다 — 같은 노트를 양쪽에 띄우지 않기 위해.
+        toggleCompare(entry.path, $currentNotePath);
         break;
     }
   }
@@ -110,6 +123,14 @@
           {$pinnedNotePaths.includes(target.entry.path) ? m.ctx_unpin() : m.ctx_pin()}
         </button>
       </li>
+      <!-- ⚠️ 지금 보고 있는 노트에는 안 띄운다 — 같은 것을 나란히 두 벌 그리게 된다. -->
+      {#if target.entry.path !== $currentNotePath}
+        <li>
+          <button onclick={() => onAction("compare")}>
+            {$comparePath === target.entry.path ? m.ctx_compare_close() : m.ctx_compare()}
+          </button>
+        </li>
+      {/if}
     {/if}
     <li><button onclick={() => onAction("copy-path")}>{m.ctx_copy_path()}</button></li>
     <li><button onclick={() => onAction("reveal")}>{m.ctx_reveal()}</button></li>
