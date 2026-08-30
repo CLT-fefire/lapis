@@ -26,6 +26,7 @@
     findAmbiguousNames,
     findUnlinkedMentions,
     findFrontmatterIssues,
+    findDecayedNotes,
     type TagIssueKind,
     type FrontmatterIssueKind,
     type UnlinkedMention,
@@ -55,7 +56,16 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks" | "changes" | "stale";
+  type Tab =
+    | "broken"
+    | "orphans"
+    | "tags"
+    | "unlinked"
+    | "props"
+    | "tasks"
+    | "decay"
+    | "changes"
+    | "stale";
   let tab = $state<Tab>("broken");
 
   // 열릴 때 팔레트가 지정한 탭으로 간다. ⚠️ **열릴 때만** — 열려 있는 동안 store 가
@@ -101,6 +111,15 @@
   const fmIssues = $derived(idx ? findFrontmatterIssues(idx) : []);
 
   /**
+   * 부패한 노트 — 프론트매터는 끝났다는데 본문에 미완이 남았다.
+   *
+   * ⚠️ **`tasks` 가 읽은 본문을 그대로 쓴다.** 따로 읽으면 두 탭이 다른 vault 를 보고,
+   *    같은 화면 안에서 답이 갈린다. 그래서 `tasks` 가 `null` 이면 여기도 `null` 이다 —
+   *    0 을 띄우면 **안 본 것을 깨끗하다고** 말하게 된다.
+   */
+  const decayed = $derived(idx && tasks !== null ? findDecayedNotes(idx, tasks) : null);
+
+  /**
    * 오래 안 건드린 노트.
    *
    * ⚠️ **인덱스만으로 된다** — `mtimes` 지도와 frontmatter `date` 가 이미 있다.
@@ -138,7 +157,8 @@
     if (tab === "unlinked" && unlinked === null && !unlinkedBusy && !unlinkedFailed) {
       void loadUnlinked();
     }
-    if (tab === "tasks" && tasks === null && !tasksBusy && !tasksFailed) {
+    // ⚠️ 두 탭이 **같은 적재**를 쓴다. 각자 읽게 두면 vault 를 두 번 훑는다.
+    if ((tab === "tasks" || tab === "decay") && tasks === null && !tasksBusy && !tasksFailed) {
       void loadTasks();
     }
     if (tab === "changes" && changes === null && !changesBusy) {
@@ -219,6 +239,8 @@
     props: fmIssues.length,
     // null = 아직 안 셌다. 0 을 띄우면 안 본 것을 "할 일 없음"이라고 말하게 된다.
     tasks: tasks === null ? null : countOpenTasks(tasks).open,
+    // null = 아직 안 셌다. 위 `tasks` 와 같은 이유다.
+    decay: decayed === null ? null : decayed.length,
     changes: changes === null ? null : changes.length,
     stale: stale.length,
   });
@@ -251,7 +273,10 @@
       // ⚠️ 앞의 다섯은 **구조**를 본다(링크·축). 이건 **본문에 적힌 것**을 본다 —
       //    묶음을 나눠 두지 않으면 "왜 여기 있지"가 된다.
       label: m.hygiene_group_body(),
-      tabs: [["tasks", m.hygiene_tab_tasks()]],
+      tabs: [
+        ["tasks", m.hygiene_tab_tasks()],
+        ["decay", m.hygiene_tab_decay()],
+      ],
     },
     {
       // 나머지는 vault 의 **지금**을 본다. 이건 **지나온 것**을 본다.
@@ -561,6 +586,27 @@
           {/if}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           <p class="hint">{@html m.hygiene_tasks_hint()}</p>
+        {:else if tab === "decay"}
+          {#if tasksBusy}
+            <p class="empty loading">{m.hygiene_tasks_loading()}</p>
+          {:else if tasksFailed}
+            <p class="empty">{m.hygiene_tasks_failed()}</p>
+          {:else if decayed !== null && decayed.length === 0}
+            <p class="empty">{m.hygiene_decay_empty()}</p>
+          {:else if decayed !== null}
+            <p class="summary">{m.hygiene_decay_summary({ count: decayed.length })}</p>
+            <ul class="rows">
+              {#each decayed as d (d.path)}
+                <li class="row">
+                  <button class="src" title={d.path} onclick={() => go(d.path)}>{d.name}</button>
+                  <span class="count">{m.hygiene_decay_says({ status: d.status })}</span>
+                  <span class="count">{m.hygiene_tasks_in({ count: d.open })}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          <p class="hint">{@html m.hygiene_decay_hint()}</p>
         {:else if tab === "changes"}
           {#if changesBusy}
             <p class="empty loading">{m.hygiene_tasks_loading()}</p>

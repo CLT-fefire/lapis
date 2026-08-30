@@ -23,7 +23,7 @@ const TOOL = {
     "노트 이름만 줘도 해소된다(경로·확장자 불필요).\n" +
     "· 값을 모르면 먼저 `list`로 확인하라 — topic/tag 정확일치가 '전부 찾아라'의 완결성을 낸다.\n" +
     "· 과거 세션 아카이브(`_memories`, vault의 94%)는 **기본 제외**. 필요하면 include_archive:true.\n" +
-    "· `audit`으로 vault 위생 다섯 가지를 물을 수 있다 — 앱·CLI와 **같은 판정**이다.\n" +
+    "· `audit`으로 vault 위생을 물을 수 있다(enum 참조) — 앱·CLI와 **같은 판정**이다.\n" +
     "· 인덱스 생산자는 Lapis 앱이다. vault가 캐시보다 새로우면 `stale`로 실패한다 — 앱을 켜면 2초 안에 갱신된다.",
   inputSchema: {
     type: "object",
@@ -45,13 +45,14 @@ const TOOL = {
       },
       audit: {
         type: "string",
-        enum: ["broken", "orphans", "unlinked", "tags", "props", "tasks"],
+        enum: ["broken", "orphans", "unlinked", "tags", "props", "tasks", "decay"],
         description:
           "vault 진단 하나. broken=끊긴 링크 · orphans=아무도 안 가리키는 노트 · " +
           "unlinked=이름을 말했는데 링크는 안 건 자리 · tags=태그 중복+모호한 이름 · " +
           "props=거를 수 있는 축(doc_kind·topic 등)의 값이 갈린 곳 · " +
-          "tasks=본문의 미완 `- [ ]`(코드 블록 안은 안 센다). " +
-          "⚠️ unlinked·tasks 는 본문을 전부 읽어 느리다. 고치라고 하지 않고 보여주기만 한다",
+          "tasks=본문의 미완 `- [ ]`(코드 블록 안은 안 센다) · " +
+          "decay=프론트매터는 끝났다는데 본문에 미완이 남은 노트(한 노트가 자기 자신과 어긋난 것). " +
+          "⚠️ unlinked·tasks·decay 는 본문을 전부 읽어 느리다. 고치라고 하지 않고 보여주기만 한다",
       },
       sources: {
         type: "array",

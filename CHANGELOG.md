@@ -17,6 +17,14 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **A "says done" check in the vault diagnostics.** It counts notes whose frontmatter claims the
+  work is finished while the body still holds `- [ ]`. The app's diagnostics screen,
+  `lapis doctor` and MCP's `audit:"decay"` all call the **same** function. Notes with no
+  `status`, or a status outside the vocabulary, are **left out** — a checklist is supposed to stay
+  unchecked, and a list that mixes in false positives stops being trusted. This does not break the
+  audits' rule against judging: unlike inferring that two words are synonyms, both statements here
+  belong to the same note, so it is counted rather than inferred. It reports **0** on the measured
+  vault — the one note that prompted it was fixed the same day, so this is insurance, not a result.
 - **Ask `status` by lifecycle, not by word — `@done`, `@active`, `@todo`.** People name the
   same state differently depending on the kind of document, and to code those are simply different
   strings, so asking with one literal quietly matched half of what was there — no error. In the
@@ -38,6 +46,12 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **`lapis tasks audit --json` and `lapis stats --json` emitted absolute paths.** Every other
+  CLI JSON surface returns vault-relative ones, and `cli/README.md` promises the output mirrors
+  `lapisQuery()`. The failure is silent: each command looks fine on its own, and intersecting two
+  of them yields **zero rows** rather than an error. The handler built its relativizer and used it
+  only for filtering, never for the output — the human-readable line had it right all along. A test
+  now walks **every** `--json` surface, so the next audit is covered too.
 - **Notes that could not be read were dropped without saying so.** Counting open tasks needs
   the note bodies, and when a note in the cache is gone from disk — or unreadable — five
   places quietly skipped it. So "12 open" could mean twelve, or twelve plus however many

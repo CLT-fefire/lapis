@@ -1,4 +1,10 @@
-import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
+import {
+  collectOpenTasks,
+  countOpenTasks,
+  taskConcentration,
+  type OpenTaskGroup,
+  type TaskConcentration,
+} from "$lib/openTasks";
 import {
   lapisQuery,
   isAudit,
@@ -28,6 +34,7 @@ import {
   findTagIssues,
   findAmbiguousNames,
   findUnlinkedMentions,
+  findDecayedNotes,
   findFrontmatterIssues,
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
@@ -713,7 +720,8 @@ function cmdStats(p: ParsedCommand, out: Out): void {
   );
   const openTasks = countOpenTasks(taskGroups);
   // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다.
-  const conc = taskConcentration(taskGroups);
+  // ⚠️ 경로는 **여기서** 상대로 만든다 — JSON 이 절대 경로를 내던 자리다.
+  const conc = relConcentration(taskConcentration(taskGroups), relativizer(vc.root));
 
   if (out.json) {
     return out.json_({
@@ -1239,11 +1247,21 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   //    doctor 전체가 0.73 → 0.79초였다(+54 ms). 큰 vault에서는 이 항목이 비용을 지배한다.
   const fmIssues = findFrontmatterIssues(index);
 
-  const unlinked = findUnlinkedMentions(index, readBodies(vc).map).map((r) => ({
+  // ⚠️ 본문은 **한 번만** 읽는다. `unlinked` 와 `decay` 가 각자 읽으면 vault 를 두 번
+  //    훑고, 한쪽만 실패했을 때 두 검사가 다른 vault 를 보고 답이 갈린다.
+  const bodies = readBodies(vc);
+
+  const unlinked = findUnlinkedMentions(index, bodies.map).map((r) => ({
     ...r,
     target: rel(r.target),
     sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
   }));
+
+  // 프론트매터는 끝났다는데 본문에 미완이 남은 노트 — 한 노트가 자기 자신과 어긋난 것.
+  const decayed = findDecayedNotes(
+    index,
+    collectOpenTasks([...bodies.map].map(([path, body]) => ({ path, body }))),
+  ).map((d) => ({ ...d, path: rel(d.path) }));
 
   const problems =
     broken.length +
@@ -1251,7 +1269,8 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
     tagIssues.length +
     ambiguous.length +
     unlinked.length +
-    fmIssues.length;
+    fmIssues.length +
+    decayed.length;
 
   if (out.json) {
     out.json_({
@@ -1269,6 +1288,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
         mentions: unlinked.reduce((n, r) => n + r.total, 0),
         rows: unlinked,
       },
+      decayed_notes: { count: decayed.length, notes: decayed },
     });
     // ⚠️ `json_`는 출력만 한다. 종료 코드는 여기서 정해야 한다.
     if (problems > 0) process.exitCode = 1;
@@ -1291,6 +1311,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
       ["모호한 이름", ambiguous.length === 0 ? "없음" : `${ambiguous.length}개`],
       ["안 걸린 언급", unlinked.length === 0 ? "없음" : `이름 ${unlinked.length}개`],
       ["frontmatter", fmIssues.length === 0 ? "없음" : `${fmIssues.length}묶음`],
+      ["끝났다는데 미완", decayed.length === 0 ? "없음" : `${decayed.length}개`],
     ]),
   );
 
@@ -1304,6 +1325,11 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   if (tagIssues.length > 0 || ambiguous.length > 0) out.line("  lapis tag audit");
   if (unlinked.length > 0) out.line("  lapis links --unlinked");
   if (fmIssues.length > 0) out.line("  lapis props audit");
+  // ⚠️ 전용 CLI 명령을 안 만들었다 — 0건짜리 감사에 명령을 얹는 것은 과하다.
+  //    앱의 진단 화면과 MCP 의 `audit:"decay"` 가 목록을 낸다.
+  if (decayed.length > 0) {
+    for (const d of decayed) out.line(`  ${d.path} — "${d.status}" 인데 미완 ${d.open}건`);
+  }
   process.exitCode = 1;
 }
 
@@ -1681,6 +1707,32 @@ function reportUnreadable(out: Out, n: number): void {
   out.line(`  ⚠️ ${n}개 노트를 못 읽어 위 숫자에서 빠졌다 — 'lapis index' 로 캐시를 맞춰 볼 것`);
 }
 
+/**
+ * 미완 작업 묶음·몰림의 경로를 **vault 상대**로.
+ *
+ * 🔴 사람용 줄은 이미 `rel` 을 태우고 있었는데 **JSON 만 안 태웠다.** 같은 규칙이 두
+ * 곳에 있고 한쪽이 틀린 자리다 — `tasks audit --json` 과 `stats --json` 둘 다 절대
+ * 경로를 냈고, 다른 표면은 전부 상대라 **두 출력을 교집합하면 조용히 0건**이 됐다.
+ * `cli/jsonPathForm.test.ts` 가 이제 표면 전부를 훑는다.
+ */
+function relTaskGroups(
+  groups: readonly OpenTaskGroup[],
+  rel: (abs: string) => string,
+): OpenTaskGroup[] {
+  return groups.map((g) => ({
+    ...g,
+    path: rel(g.path),
+    open: g.open.map((t) => ({ ...t, path: rel(t.path) })),
+  }));
+}
+
+function relConcentration(
+  conc: TaskConcentration,
+  rel: (abs: string) => string,
+): TaskConcentration {
+  return conc.top ? { ...conc, top: { ...conc.top, path: rel(conc.top.path) } } : conc;
+}
+
 export function cmdTasks(p: ParsedCommand, out: Out): void {
   const action = p.positional[0];
   if (action !== "audit") {
@@ -1723,8 +1775,8 @@ export function cmdTasks(p: ParsedCommand, out: Out): void {
       hidden,
       // ⚠️ 0 이 아니면 위 숫자가 **그만큼 덜 센 것**이다.
       unreadable: read.unreadable,
-      concentration: conc,
-      groups: p.options.count === true ? [] : shown,
+      concentration: relConcentration(conc, rel),
+      groups: p.options.count === true ? [] : relTaskGroups(shown, rel),
     });
   }
 

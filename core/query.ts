@@ -67,6 +67,7 @@ import {
   findAmbiguousNames,
   findFrontmatterIssues,
   findUnlinkedMentions,
+  findDecayedNotes,
 } from "$lib/vaultAudit";
 
 /**
@@ -149,8 +150,16 @@ export function isAudit(r: QueryResponse): r is AuditResponse {
   return "audit" in r && r.audit !== undefined;
 }
 
-/** 쓸 수 있는 감사. **앱·CLI와 같은 다섯**이다 — 여기만 다르면 답이 갈린다. */
-export const AUDIT_KINDS = ["broken", "orphans", "unlinked", "tags", "props", "tasks"] as const;
+/** 쓸 수 있는 감사. **앱·CLI와 같은 목록**이어야 한다 — 여기만 다르면 답이 갈린다. */
+export const AUDIT_KINDS = [
+  "broken",
+  "orphans",
+  "unlinked",
+  "tags",
+  "props",
+  "tasks",
+  "decay",
+] as const;
 export type AuditKind = (typeof AUDIT_KINDS)[number];
 
 export interface AuditResponse extends ResponseBase {
@@ -586,18 +595,17 @@ function runAudit(
       }));
       return { audit: kind, count: all.length, unit: "이름", ...cut(all) };
     }
+    case "decay": {
+      // ⚠️ `tasks` 와 **같은 본문**을 본다. 따로 읽으면 두 감사가 다른 vault 를 보게 된다.
+      const rows = findDecayedNotes(st.link, collectOpenTasks(readableDocs(st))).map((r) => ({
+        ...r,
+        path: rel(r.path),
+      }));
+      return { audit: kind, count: rows.length, unit: "노트", ...cut(rows) };
+    }
     case "tasks": {
       // ⚠️ `unlinked` 와 같은 부류 — 인덱스로는 안 되고 본문을 봐야 한다.
-      const groups = collectOpenTasks(
-        st.vc.infos.flatMap((info) => {
-          try {
-            return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
-          } catch {
-            // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
-            return [];
-          }
-        }),
-      ).map((g) => ({
+      const groups = collectOpenTasks(readableDocs(st)).map((g) => ({
         ...g,
         path: rel(g.path),
         open: g.open.map((t) => ({ ...t, path: rel(t.path) })),
@@ -611,6 +619,23 @@ function runAudit(
       };
     }
   }
+}
+
+/**
+ * 읽히는 노트의 본문 — **못 읽은 것은 조용히 빠진다.**
+ *
+ * ⚠️ `tasks` 와 `decay` 가 **같은 것**을 봐야 한다. 각자 읽으면 한쪽만 실패했을 때
+ * 두 감사가 다른 vault 를 보고 답이 갈린다.
+ */
+function readableDocs(st: Loaded): { path: string; body: string }[] {
+  return st.vc.infos.flatMap((info) => {
+    try {
+      return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
+    } catch {
+      // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
+      return [];
+    }
+  });
 }
 
 /**
