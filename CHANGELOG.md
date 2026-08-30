@@ -56,6 +56,20 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **The watcher treated directory events as notes.** The usage log had accumulated **43** occurrences
+  of a failed incremental reindex, and every path was a directory. The Rust side forwards directory
+  events on purpose (to notice renames), but the frontend heard "a note changed" — the scan failed,
+  and the recency map and the "changed while you were away" marks were polluted with directories.
+  The failure was silent: the loop continued, other notes indexed fine, and the human-readable report
+  showed only a bare "50 warnings". Events are now sorted into note / ignore / full reload: a
+  directory being modified or created is ignored (the file events inside cover it), while one being
+  removed or renamed triggers a full reload, since its scope cannot be known from the event. That
+  second case previously left the index holding the old paths.
+- **`lapis usage` showed only half of what it computed.** Named error counts, the notes actually
+  opened, and the commands never used were available in `--json` and absent from the human report.
+  Reading "most used command: open:note 3" suggested the app was barely used, when opens actually
+  totalled **31** — that line counts only palette-initiated commands. Lists that get truncated now
+  say so.
 - **Examples inside code blocks were counted as open tasks.** Three places answered "which lines
   are code" differently: `linkRewrite` got it right with a markdown-it block parse but kept that
   function **private**, so the task scanner used a line toggle (missing indented code blocks) and

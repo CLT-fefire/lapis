@@ -10,7 +10,9 @@ import {
   currentNotePath,
   closeTab,
   reindexIncremental,
+  requestFullReload,
 } from "./vault";
+import { classifyChange } from "$lib/watchClassify";
 
 export type WatcherStatus = "idle" | "watching" | "error";
 import { logError, logWarn } from "$lib/stores/usage";
@@ -75,10 +77,26 @@ export async function stopWatching(): Promise<void> {
  */
 const pendingChanged = new Set<string>();
 const pendingRemoved = new Set<string>();
+/** 디렉터리가 사라지거나 이름이 바뀌었다 — 증분으로는 못 따라간다. */
+let pendingFullReload = false;
 
 async function handleChange(change: VaultChange): Promise<void> {
   const root = get(vaultPath);
   if (!root) return;
+
+  // 🔴 **디렉터리 이벤트를 노트로 취급하지 않는다.** 생산자(`watcher.rs`)는 디렉터리
+  //    이벤트를 일부러 통과시키는데, 예전엔 여기서 그대로 노트 경로로 흘려보냈다 —
+  //    실사용 로그에 `[reindex] scan/update 실패` 가 **43회** 쌓여 있었고, 시간축 지도와
+  //    "밖에서 바뀜" 표시까지 디렉터리로 더러워졌다. 근거는 `watchClassify.ts`.
+  const action = classifyChange(change);
+  if (action === "ignore") return;
+  if (action === "reload") {
+    // 범위를 모르니 통째로 다시 읽는다. **같은 디바운스**를 탄다 — 폴더 하나를 지우면
+    // 이벤트가 여러 개 오는데 그때마다 vault 를 다시 읽으면 안 된다.
+    pendingFullReload = true;
+    scheduleIncrementalReindex();
+    return;
+  }
 
   // 이번 이벤트로 바뀐 경로 — git 자동커밋에 targeted add로 넘긴다.
   const touched: string[] = [];
@@ -164,6 +182,24 @@ function scheduleIncrementalReindex(): void {
 
 async function runReindex(): Promise<void> {
   reindexTimer = null;
+
+  if (pendingFullReload) {
+    // ⚠️ 모아 둔 증분은 버린다 — 어차피 전체를 다시 읽는다.
+    pendingChanged.clear();
+    pendingRemoved.clear();
+    let done = false;
+    try {
+      done = await requestFullReload();
+    } catch (e) {
+      logWarn("stores/watcher", "[watcher] 폴더 변경 후 전체 재읽기 실패:", e);
+      done = true; // 에러는 재시도 안 함 — 무한 루프 방지(증분 쪽과 같은 규율)
+    }
+    // 🔴 바빠서 못 했으면 **깃발을 내리지 않는다.** 내리면 폴더 이름 바꾸기가 조용히 씹힌다.
+    if (done) pendingFullReload = false;
+    else scheduleIncrementalReindex();
+    return;
+  }
+
   if (pendingChanged.size === 0 && pendingRemoved.size === 0) return;
   const changed = Array.from(pendingChanged);
   const removed = Array.from(pendingRemoved);

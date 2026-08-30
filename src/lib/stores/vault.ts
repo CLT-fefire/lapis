@@ -544,6 +544,19 @@ async function buildFullTextFromPending(): Promise<void> {
  */
 let reloadInFlight = false;
 
+/**
+ * 풀 리로드 **요청** — 다른 reload/reindex 가 돌고 있으면 `false`.
+ *
+ * ⚠️ `reindexIncremental` 과 **같은 계약**이다(바쁘면 false, 부르는 쪽이 재큐).
+ * `reloadNotes` 는 바쁠 때 조용히 돌아가서, 워처가 그걸 그대로 쓰면 폴더 이름 바꾸기가
+ * **한 번 씹히고 아무도 모른다.**
+ */
+export async function requestFullReload(): Promise<boolean> {
+  if (reloadInFlight) return false;
+  await reloadNotes();
+  return true;
+}
+
 export async function reloadNotes(): Promise<void> {
   if (reloadInFlight) return;
   reloadInFlight = true;

@@ -770,6 +770,21 @@ function cmdStats(p: ParsedCommand, out: Out): void {
  * ⚠️ **달을 하나씩 흘려보낸다.** 월 파일 상한이 16 MB 라 열두 달을 한 배열로 모으면
  * 최악 192 MB 다.
  */
+/** 열기 합계 — 노트별 수를 더한다. */
+function opensTotal(opens: readonly { total: number }[]): number {
+  return opens.reduce((n, o) => n + o.total, 0);
+}
+
+/**
+ * 목록에 쓰는 짧은 경로 — 파일 이름과 부모 하나.
+ *
+ * ⚠️ 전체 경로를 쓰면 표가 가로로 터져 옆의 숫자가 안 보인다. `--json` 은 전체를 낸다.
+ */
+function shortPath(abs: string): string {
+  const segs = abs.split(/[\\/]/).filter(Boolean);
+  return segs.slice(-2).join("/");
+}
+
 function cmdUsage(p: ParsedCommand, out: Out): void {
   const dirs = typeof p.options.dir === "string" ? [p.options.dir] : usageDirs();
   const dir = dirs.find((d) => existsSync(d));
@@ -822,6 +837,51 @@ function cmdUsage(p: ParsedCommand, out: Out): void {
     table(r.commands.slice(0, top).map((c) => ["  " + c.id, `${c.total} (${via(c.via)})`])) ||
       "  없음",
   );
+  // 🔴 **"경고 50" 은 어디에 몰렸는지를 감춘다.** 실측에서 43이 한 실패에 몰려 있었는데
+  //    이름이 안 나왔고, 그래서 그 실패가 오래 안 보였다. `taskConcentration` 이 맨숫자
+  //    하나를 거부하는 것과 같은 이유다.
+  if (r.errors.length > 0) {
+    out.line("");
+    out.line("오류 · 경고 (많은 것부터)");
+    out.line(
+      table(
+        r.errors.slice(0, top).map((e) => ["  " + e.at, `${e.msg} — ${e.count}회 (${e.lvl})`]),
+      ),
+    );
+    // ⚠️ 자른 것을 말한다. 안 말하면 잘린 목록이 전부로 읽힌다.
+    if (r.errors.length > top) out.line(`  외 ${r.errors.length - top}종`);
+  }
+
+  // 🔴 **"많이 쓴 명령"과 다른 축이다.** 저건 팔레트발 명령만 센다 — 실측에서 `open:note 3`
+  //    이라 적혀 있는데 실제 열기는 31회였고, 그걸 읽고 "앱을 거의 안 쓴다"고 잘못 읽었다.
+  if (r.opens.length > 0) {
+    out.line("");
+    out.line(`많이 연 노트 (합계 ${opensTotal(r.opens)}회 · ${via(r.openVia)})`);
+    out.line(
+      table(
+        r.opens
+          .slice(0, top)
+          .map((o) => ["  " + shortPath(o.path), `${o.total} (${via(o.via)})`]),
+      ),
+    );
+    if (r.opens.length > top) out.line(`  외 ${r.opens.length - top}개 노트`);
+  }
+
+  // ⚠️ `null` 은 **"모른다"** 다 — 앱의 명령 목록을 분모로 못 받았다는 뜻이고, 0 과 다르다.
+  //    이 필드는 예전에 늘 빈 배열이라 "안 쓴 명령 없음"이라고 거짓말한 적이 있다(6차).
+  if (r.unusedCommands === null) {
+    out.line("");
+    out.line("한 번도 안 쓴 명령  모름 (명령 목록을 못 받았다)");
+  } else if (r.unusedCommands.length > 0) {
+    out.line("");
+    out.line(`한 번도 안 쓴 명령  ${r.unusedCommands.length}개`);
+    const shown = r.unusedCommands.slice(0, top);
+    out.line("  " + shown.join(" · "));
+    if (r.unusedCommands.length > top) {
+      out.line(`  외 ${r.unusedCommands.length - top}개`);
+    }
+  }
+
   if (r.queries.empty.length > 0) {
     out.line("");
     out.line("결과가 0건이던 질의");
