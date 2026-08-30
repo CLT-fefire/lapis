@@ -29,6 +29,7 @@ describe("축으로 옮긴다", () => {
     expect(ok("doc_kind: plan")).toEqual({
       docKinds: ["plan"],
       topics: [],
+      tags: [],
       text: "",
       limit: SAVED_QUERY_DEFAULT_LIMIT,
     });
@@ -39,8 +40,24 @@ describe("축으로 옮긴다", () => {
   });
 
   it("축 여럿을 같이", () => {
-    const q = ok("doc_kind: plan\ntopic: overview\ntext: 초성\nlimit: 5");
-    expect(q).toEqual({ docKinds: ["plan"], topics: ["overview"], text: "초성", limit: 5 });
+    const q = ok("doc_kind: plan\ntopic: overview\ntag: subject/ui\ntext: 초성\nlimit: 5");
+    expect(q).toEqual({
+      docKinds: ["plan"],
+      topics: ["overview"],
+      tags: ["subject/ui"],
+      text: "초성",
+      limit: 5,
+    });
+  });
+
+  /**
+   * 🔴 **태그는 `tag` 다.** 판정은 `$lib/tagMatch` 가 하고, 그건 앱 필터와
+   * `core/query.ts` 의 `tag` 축도 쓰는 **같은 모듈**이다. 여기서 따로 판정했다면
+   * 같은 태그 질의가 표면마다 다른 답을 냈을 것이다.
+   */
+  it("태그를 축으로 받는다", () => {
+    expect(ok("tag: subject/ui").tags).toEqual(["subject/ui"]);
+    expect(ok("tag: a, b ,c").tags).toEqual(["a", "b", "c"]);
   });
 
   it("키는 대소문자를 안 가린다", () => {
@@ -60,6 +77,7 @@ describe("축으로 옮긴다", () => {
 
 describe("🔴 틀린 것을 틀렸다고 한다", () => {
   it("모르는 키는 오류다", () => {
+    // ⚠️ 복수형 `tags` 는 흔한 오타다 — 프론트매터 필드 이름이 `tags` 라서 더 그렇다.
     const e = errs("tags: lapis");
     expect(e[0]).toContain("모르는 키");
     expect(e[0], "쓸 수 있는 것을 같이 말해야 고칠 수 있다").toContain("doc_kind");

@@ -5,6 +5,7 @@
  * ```lapis-query
  * doc_kind: plan, adr
  * topic: overview
+ * tag: subject/ui
  * text: 초성
  * limit: 20
  * ```
@@ -24,16 +25,22 @@
  * 없다고 읽는다. **틀린 결론이 조용히 나온다.** 그래서 모르는 키는 오류로 되돌리고
  * 화면이 그걸 그린다.
  *
- * ## ⚠️ 태그 축은 **아직 없다**
+ * ## ⚠️ 태그는 `filterRows` 가 아니라 `tagMatch` 가 판정한다
  *
- * `filterRows` 가 안 받기 때문이다. 여기에만 넣으면 표와 갈리므로 넣지 않았다 —
- * 넣으려면 그 매처를 먼저 넓혀야 한다. 값을 한다고 적지 않는다.
+ * `filterRows`(표 화면의 매처)는 태그 축이 없다. 거기 넣으면 표 화면에도 칩을 내야
+ * 하고, 안 내면 **쓸 수 없는 능력**이 된다. 그래서 태그만 `$lib/tagMatch` 로 따로
+ * 판정하고 나머지는 `filterRows` 에 맡긴다.
+ *
+ * 🔴 그래도 **규칙은 하나다.** `tagMatch` 는 앱 필터도 `core/query.ts` 의 `tag` 축도
+ * 같이 쓰는 모듈이다 — 여기서 따로 판정했다면 같은 태그 질의가 표면마다 달라졌을 것이다.
  */
 
 /** 파싱 결과 — 축으로 옮겨진 질의. */
 export interface SavedQuery {
   docKinds: string[];
   topics: string[];
+  /** nested 접두사로 걸린다 — `tech` 는 `tech/*` 까지. */
+  tags: string[];
   text: string;
   /** 그릴 최대 줄 수. */
   limit: number;
@@ -50,7 +57,7 @@ export const SAVED_QUERY_MAX_LIMIT = 200;
 /** 이 fence 의 info string. `markdown.ts` 와 플러그인이 같이 쓴다. */
 export const SAVED_QUERY_FENCE = "lapis-query";
 
-const KEYS = ["doc_kind", "topic", "text", "limit"] as const;
+const KEYS = ["doc_kind", "topic", "tag", "text", "limit"] as const;
 
 /** `a, b , c` → `["a","b","c"]`. 빈 조각은 버린다. */
 function csv(v: string): string[] {
@@ -68,7 +75,13 @@ function csv(v: string): string[] {
  */
 export function parseSavedQuery(source: string): SavedQueryParse {
   const errors: string[] = [];
-  const q: SavedQuery = { docKinds: [], topics: [], text: "", limit: SAVED_QUERY_DEFAULT_LIMIT };
+  const q: SavedQuery = {
+    docKinds: [],
+    topics: [],
+    tags: [],
+    text: "",
+    limit: SAVED_QUERY_DEFAULT_LIMIT,
+  };
   let sawValue = false;
 
   const lines = source.split("\n");
@@ -102,6 +115,10 @@ export function parseSavedQuery(source: string): SavedQueryParse {
         break;
       case "topic":
         q.topics.push(...csv(value));
+        sawValue = true;
+        break;
+      case "tag":
+        q.tags.push(...csv(value));
         sawValue = true;
         break;
       case "text":

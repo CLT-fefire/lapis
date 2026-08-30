@@ -24,10 +24,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   states how many matched and says so again when the list was cut short — a truncated list that
   looks complete is worse than no list — and a query it cannot read is shown as an error in place,
   because an empty result would read as "no such notes". Nothing is written back into the note,
-  and there is no tag axis yet: the shared matcher has none, and adding it here alone would split
-  the two.
+  including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **The same tag question could get two answers.** The query engine compared tags after
+  Unicode normalisation only, while the app's tag index also lowercased them — so
+  `subject/UI` and `subject/ui` were one tag in the sidebar and two in a `tag:` query.
+  Both now go through one module. Measured on this vault the gap was **zero**: none of the
+  85 tags differ only by case. This is insurance, not a win.
+
 - **The caller gave up two seconds before the app explained itself.** When nobody claims a
   render request the app writes a failure file saying so, but that only happens after its
   own 15.5 second wait — and the default limit on the calling side was 20 seconds. Measured

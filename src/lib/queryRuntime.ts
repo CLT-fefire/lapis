@@ -2,6 +2,7 @@ import type { LinkInfo } from "$lib/tauri/notes";
 import { filterRows } from "$lib/tableView";
 import { parseSavedQuery } from "$lib/savedQuery";
 import { noteStem, noteDisplayName } from "$lib/notePath";
+import { noteHasAnyTag } from "$lib/tagMatch";
 
 /**
  * 저장된 질의를 **그 자리에서** 채운다. `renderMermaidIn` 과 같은 자리에서 돈다.
@@ -74,7 +75,7 @@ export function renderQueriesIn(
 
     const q = parsed.query;
     // ⚠️ `filterRows` 는 Set 을 받는다. 빈 Set 인 축은 안 거른다 — 그쪽 계약 그대로다.
-    const rows = filterRows(
+    const byAxes = filterRows(
       ctx.infos,
       {
         docKinds: new Set(q.docKinds),
@@ -83,6 +84,9 @@ export function renderQueriesIn(
       },
       ctx.vaultRoot,
     );
+    // 🔴 태그는 `filterRows` 에 없다 — 표 화면에 칩이 없어서다. 규칙은 `tagMatch` 하나를
+    //    쓰므로 앱 필터·`core/query.ts` 와 같은 답이 나온다. 축 사이는 AND.
+    const rows = byAxes.filter((info) => noteHasAnyTag(info.tags, q.tags));
 
     const box = el("div", "lapis-query");
     // 🔴 **몇 건인지 먼저 말한다.** 잘린 목록만 보여주면 그게 전부인 줄 안다.

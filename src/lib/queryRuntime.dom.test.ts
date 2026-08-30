@@ -39,9 +39,9 @@ function note(p: Partial<LinkInfo> & { source_path: string }): LinkInfo {
 const CTX: QueryContext = {
   vaultRoot: "/v",
   infos: [
-    note({ source_path: "/v/a.md", doc_kind: "plan", topic: "overview" }),
-    note({ source_path: "/v/sub/b.md", doc_kind: "plan", topic: "search" }),
-    note({ source_path: "/v/c.md", doc_kind: "adr", topic: "overview" }),
+    note({ source_path: "/v/a.md", doc_kind: "plan", topic: "overview", tags: ["subject/UI"] }),
+    note({ source_path: "/v/sub/b.md", doc_kind: "plan", topic: "search", tags: ["tech/rust"] }),
+    note({ source_path: "/v/c.md", doc_kind: "adr", topic: "overview", tags: ["subject/cli"] }),
   ],
 };
 
@@ -163,5 +163,46 @@ describe("두 번 돌아도 안전하다", () => {
     renderQueriesIn(root, CTX, T);
     expect(root.querySelectorAll(".lapis-query")).toHaveLength(1);
     expect(root.querySelectorAll(".lapis-query-list li")).toHaveLength(2);
+  });
+});
+
+/**
+ * 🔴 **태그는 `filterRows` 가 아니라 `$lib/tagMatch` 가 판정한다.** 표 화면에 태그
+ * 칩이 없어서 그쪽 매처에는 안 넣었다 — 넣고 화면을 안 고치면 **쓸 수 없는 능력**이 된다.
+ *
+ * 그래도 규칙은 하나다. `tagMatch` 는 앱 필터도 `core/query.ts` 의 `tag` 축도 쓴다.
+ */
+describe("태그 축", () => {
+  it("정확한 태그로 고른다", () => {
+    host("tag: tech/rust");
+    renderQueriesIn(root, CTX, T);
+    expect([...root.querySelectorAll(".wikilink")].map((e) => e.textContent)).toEqual(["b"]);
+  });
+
+  /** nested — `subject` 로 물으면 `subject/*` 가 다 걸린다. */
+  it("상위 태그로 물으면 하위가 걸린다", () => {
+    host("tag: subject");
+    renderQueriesIn(root, CTX, T);
+    expect([...root.querySelectorAll(".wikilink")].map((e) => e.textContent)).toEqual(["a", "c"]);
+  });
+
+  /** ⚠️ 대소문자를 가리지 않는다 — 픽스처의 `a` 는 `subject/UI` 로 적혀 있다. */
+  it("대소문자를 안 가린다", () => {
+    host("tag: subject/ui");
+    renderQueriesIn(root, CTX, T);
+    expect([...root.querySelectorAll(".wikilink")].map((e) => e.textContent)).toEqual(["a"]);
+  });
+
+  /** 축 사이는 AND — 태그와 doc_kind 를 같이 주면 둘 다 만족해야 한다. */
+  it("다른 축과 AND 로 걸린다", () => {
+    host("doc_kind: plan\ntag: subject");
+    renderQueriesIn(root, CTX, T);
+    expect([...root.querySelectorAll(".wikilink")].map((e) => e.textContent)).toEqual(["a"]);
+  });
+
+  it("없는 태그면 0건", () => {
+    host("tag: 없는태그");
+    renderQueriesIn(root, CTX, T);
+    expect(root.querySelector(".lapis-query-title")?.textContent).toBe("0건");
   });
 });

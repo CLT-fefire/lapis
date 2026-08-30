@@ -75,6 +75,7 @@ A fenced block runs where it sits and shows what matches:
 ```lapis-query
 doc_kind: plan, adr
 topic: overview
+tag: subject
 text: windows
 limit: 20
 ```
@@ -88,8 +89,10 @@ The block always says **how many** matched, and says so again when the list was 
 truncated list that looks complete is worse than no list. A query it cannot read is shown as an
 error in place rather than as an empty result — an empty result would read as "no such notes".
 
-Nothing is written back into the note. There is no tag axis yet, because the shared matcher does
-not have one and adding it here alone would split the two.
+Tags match by exact name or nested prefix — `subject` finds `subject/ui` too — and the
+rule lives in one module shared with the app's own filtering and the query engine, so the same
+tag question cannot get different answers on different surfaces. Nothing is written back into
+the note.
 
 ### Tags
 

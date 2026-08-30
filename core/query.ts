@@ -58,6 +58,7 @@ import {
   type VaultCache,
 } from "./cache.ts";
 import { findBrokenLinks } from "$lib/brokenLinks";
+import { noteHasTag } from "$lib/tagMatch";
 import {
   findOrphans,
   findTagIssues,
@@ -755,14 +756,12 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     }
 
     if (tag) {
-      const t = norm(tag);
       const hit = new Set<string>();
       for (const info of st.vc.infos) {
-        // nested prefix — `tech`를 주면 `tech/*` 전부.
-        if ((info.tags ?? []).some((x) => {
-          const n = norm(x);
-          return n === t || n.startsWith(t + "/");
-        })) {
+        // 🔴 규칙은 `$lib/tagMatch` 하나다 — 앱 필터·저장된 질의와 같은 답을 낸다.
+        //    예전엔 여기서 `norm()`(NFC 만)으로 비교해서 **대소문자를 가렸고**,
+        //    태그 인덱스는 소문자로 색인해서 안 가렸다. 같은 태그를 다르게 봤다.
+        if (noteHasTag(info.tags, tag)) {
           hit.add(info.source_path);
         }
       }
