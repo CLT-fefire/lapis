@@ -17,6 +17,17 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **Ask `status` by lifecycle, not by word — `@done`, `@active`, `@todo`.** People name the
+  same state differently depending on the kind of document, and to code those are simply different
+  strings, so asking with one literal quietly matched half of what was there — no error. In the
+  measured vault, `status=완료` found 15 notes and `status=@done` found 41 of the 53 that carry a
+  status. Both surfaces take the groups (`{"status":["@done"]}` for MCP, `--props status=@done`
+  for the CLI). **An unknown group is an error**, because a typo returning zero hits reads exactly
+  like a correct answer, and `@` on any other axis is an error rather than a silent no-op.
+  This is a table a person declared, not synonyms a machine inferred — the vault audit still refuses
+  to call two words synonyms. The table lives in one file and `npm run check:arch` blocks copies of
+  it; when the rule went up it found three copies already, and **every one of them listed two of the
+  five words**.
 - **Saved queries inside a note.** A `lapis-query` fenced block runs where it sits and lists
   what matches, by `doc_kind`, `topic` and free text. It calls the same matcher the table
   view uses, so a query cannot mean one thing in a table and another in a note, and results are

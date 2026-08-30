@@ -61,7 +61,7 @@ const TOOL = {
       props: {
         type: "object",
         additionalProperties: { type: "array", items: { type: "string" } },
-        description: "임의 frontmatter 축으로 거른다 — `{\"status\": [\"완료\",\"반영됨\"]}`. 같은 필드 안은 OR, 필드 사이는 AND. 그 필드가 **없는** 노트는 빠진다. 어떤 필드·값이 있는지는 `list:\"fields\"` 와 `list:\"<필드>\"` 가 답한다",
+        description: "임의 frontmatter 축으로 거른다 — `{\"topic\": [\"graph\",\"ui\"]}`. 같은 필드 안은 OR, 필드 사이는 AND. 그 필드가 **없는** 노트는 빠진다. ⚠️ `status` 는 낱말을 나열하지 말고 갈래로 물어라 — `{\"status\": [\"@done\"]}` · `@active` · `@todo`. 같은 자리를 여러 낱말이 나눠 쓰고 있어서 리터럴 하나로 물으면 조용히 절반만 잡힌다. 어떤 필드·값이 있는지는 `list:\"fields\"` 와 `list:\"<필드>\"` 가 답한다",
       },
       under: {
         type: "array",

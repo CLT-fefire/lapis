@@ -242,6 +242,10 @@ export const SAMPLE_NOTES: FixtureNote[] = [
     doc_kind: "plan",
     topic: "graph",
     related: { superseded_by: ["001-abandoned"] },
+    // ⚠️ `완료` 가 아니라 `반영됨` 인 것이 **의도다.** 실측 vault 의 plans 는 이 낱말을
+    //    쓴다. 리터럴 `status: ["완료"]` 로 물으면 이 노트가 조용히 빠지는 것을 보이려고
+    //    둔 것이다 — 통일하면 상태 갈래 테스트가 아무것도 증명하지 못한다.
+    props: { status: ["반영됨"] },
     body: "이 계획은 폐기됐다.",
   },
   {

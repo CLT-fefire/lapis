@@ -188,7 +188,12 @@ function relativizer(root: string): (abs: string) => string {
 }
 
 /**
- * `--props status=완료 --props status=반영됨` → `{ status: ["완료", "반영됨"] }`.
+ * `--props topic=graph --props topic=ui` → `{ topic: ["graph", "ui"] }`.
+ *
+ * ⚠️ **낱말 목록을 여기 적지 않는다.** 예전엔 이 주석이 `status` 의 "끝났다" 낱말 중
+ * 둘만 적어 두었고, 그대로 베껴 쓰면 실측 vault 53건 중 15건만 잡혔다. 상태를 물을
+ * 때는 `--props status=@done` 처럼 **갈래**로 부른다(`core/query.ts` 의
+ * `expandPropValues`, 낱말 표는 `$lib/docStatus`).
  *
  * ⚠️ 값에 `=` 가 들어갈 수 있다(`date=2026-08-28`은 아니지만 자유 텍스트 축은 그럴 수 있다).
  * **첫 `=` 에서만** 가른다.

@@ -306,6 +306,51 @@ describe("props — 임의 frontmatter 축", () => {
   });
 });
 
+/**
+ * 🔴 **손으로 적던 목록.** 실측 vault 에서 "끝났다"를 뜻하는 낱말이 **다섯**이라
+ * (`완료`·`반영됨`·`해결됨`·`닫힘`·`이전됨`) `status: ["완료"]` 로 물으면 53건 중
+ * 15건만 잡히고 **에러는 안 났다.** 이 파일의 위 주석도 둘만 적고 있었다.
+ *
+ * 낱말 표는 `$lib/docStatus` 하나에 있다. 여기서 다시 적지 않는다.
+ */
+describe("props — 상태 갈래(@done · @active · @todo)", () => {
+  it("@done 이 끝났다는 낱말 전부를 잡는다", () => {
+    const r = paths(search({ props: { status: ["@done"] } }));
+    expect(r).toContain("proj/adr/001-abandoned.md"); // 완료
+    expect(r).toContain("proj/plans/rework.md"); // 반영됨
+  });
+
+  /** 이게 이 기능의 존재 이유다 — 리터럴로 물으면 동의어가 조용히 빠진다. */
+  it("리터럴 `완료` 로는 `반영됨` 이 안 잡힌다", () => {
+    expect(paths(search({ props: { status: ["완료"] } }))).not.toContain("proj/plans/rework.md");
+  });
+
+  it("@active 는 진행 중만", () => {
+    expect(paths(search({ props: { status: ["@active"] } }))).toEqual(["proj/adr/002-revived.md"]);
+  });
+
+  it("갈래와 리터럴을 섞을 수 있다 — 같은 필드 안은 OR", () => {
+    const r = paths(search({ props: { status: ["@active", "완료"] } }));
+    expect(r).toContain("proj/adr/001-abandoned.md");
+    expect(r).toContain("proj/adr/002-revived.md");
+  });
+
+  it("used 이름은 그대로 props:status — 갈래를 썼는지로 축이 갈리지 않는다", () => {
+    const r = search({ props: { status: ["@done"] } });
+    expect(r.used.some((u) => u.name === "props:status")).toBe(true);
+  });
+
+  /** ⚠️ 오타 난 갈래가 **0건을 정답처럼** 내면 안 된다. */
+  it("모르는 갈래는 운다", () => {
+    expect(() => search({ props: { status: ["@nope"] } })).toThrow(/모르는 상태 갈래/);
+  });
+
+  /** `@` 는 예약이다. 다른 축에서 쓰면 조용히 0건이 아니라 에러다. */
+  it("status 밖에서 쓰면 운다", () => {
+    expect(() => search({ props: { topic: ["@done"] } })).toThrow(/status/);
+  });
+});
+
 describe("list — 임의 필드", () => {
   it("fields 가 어떤 축이 있는지 낸다", () => {
     expect(facets({ list: "fields" }).values.map((v) => v.value)).toContain("status");
@@ -319,7 +364,7 @@ describe("list — 임의 필드", () => {
 
   it("필드 이름을 주면 그 값을 센다", () => {
     const vs = facets({ list: "status" }).values;
-    expect(vs.map((v) => v.value).sort()).toEqual(["완료", "진행 중"]);
+    expect(vs.map((v) => v.value).sort()).toEqual(["반영됨", "완료", "진행 중"]);
     expect(vs.find((v) => v.value === "완료")!.count).toBe(1);
   });
 

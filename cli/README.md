@@ -223,10 +223,30 @@ watcher가 잡고, 아니면 다음에 vault를 열 때 재색인된다.
 | `--doc-kind <k>` · `--topic <t>` | 정확 일치. ⚠️ frontmatter 선언 기준이라 폴더와 다를 수 있다 |
 | `--min-rel <0~1>` | 상대 점수 하한. 결과가 넓을 때 꼬리를 자른다 |
 | `--exclude <prefix>` | vault 상대 **문자열 prefix**. 여러 번 줄 수 있다 |
+| `--props <키>=<값>` | 임의 frontmatter 축. 여러 번 주면 같은 키는 OR, 다른 키는 AND |
+| `--props status=@done` | 상태 **갈래** — `@done` · `@active` · `@todo`. 아래 참조 |
 | `--include-archive` | `_memories` 기본 제외를 해제 |
 
 `--min-rel`이 왜 필요한지는 `mcp/README.md`의 **동작 6번**을 보라 — raw 점수는 질의 간
 비교가 안 되고, `rel`은 그 질의 안에서 top-1을 1.0으로 둔 값이다.
+
+### 🔴 `status` 는 낱말이 아니라 갈래로 묻는다
+
+사람은 같은 자리를 doc_kind 마다 다른 말로 부른다. 코드에게는 전부 다른 문자열이라
+리터럴 하나로 물으면 **조용히 절반만** 잡힌다:
+
+```bash
+lapis search --props status=완료    --limit 50 --json   # 15건
+lapis search --props status=@done  --limit 50 --json   # 41건
+```
+
+(2026-08-30 실측, `status` 있는 노트 53건. `@done`·`@active`·`@todo` 를 합치면 53 —
+남는 값이 없다.)
+
+⚠️ **모르는 갈래는 운다.** `@dnoe` 는 0건이 아니라 에러다. ⚠️ `@` 는 예약이라
+다른 축(`--props topic=@done`)에서 쓰면 조용한 no-op 이 아니라 에러다.
+
+낱말 표는 `src/lib/docStatus.ts` 하나에 있다 — `npm run check:arch` 가 사본을 막는다.
 
 ## 출력 계약
 

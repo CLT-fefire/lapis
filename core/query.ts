@@ -60,6 +60,7 @@ import {
 import { findBrokenLinks } from "$lib/brokenLinks";
 import { noteStem } from "$lib/notePath";
 import { noteHasTag } from "$lib/tagMatch";
+import { expandStatusGroup, STATUS_FIELD, STATUS_GROUPS } from "$lib/docStatus";
 import {
   findOrphans,
   findTagIssues,
@@ -218,7 +219,11 @@ export interface QueryArgs {
    * 전부 프로젝트 사이에서 났다.
    */
   /**
-   * 임의 frontmatter 축으로 거른다 — `{ status: ["완료", "반영됨"] }`.
+   * 임의 frontmatter 축으로 거른다 — `{ topic: ["graph", "ui"] }`.
+   *
+   * ⚠️ **`status` 는 갈래로 부른다** — `{ status: ["@done"] }`. 같은 자리를 다섯
+   * 낱말이 나눠 쓰고 있어서, 리터럴 하나로 물으면 조용히 절반만 잡힌다.
+   * 갈래 이름과 낱말 표는 `$lib/docStatus` 하나에만 있다.
    *
    * 같은 필드 안은 **OR**, 필드 사이는 **AND**. 앱의 필터 패널과 같은 규칙이다.
    *
@@ -608,6 +613,48 @@ function runAudit(
   }
 }
 
+/**
+ * `props` 한 축의 값들을 실제로 비교할 문자열로 편다.
+ *
+ * 🔴 **`@` 로 시작하면 갈래다.** `status` 는 같은 자리를 **다섯 낱말**로 부른다.
+ * 그래서 리터럴 하나로 물으면 실측 vault 53건 중 15건만 잡히고 **에러는 안 났다.**
+ * 목록을 호출부마다 손으로 적는 대신 `@done` 으로 부른다.
+ *
+ * ⚠️ 그 다섯이 무엇인지는 **여기 적지 않는다** — `$lib/docStatus` 가 표의 주인이고,
+ * 베낀 표는 반드시 낡는다. `check:arch` 가 이 주석의 첫 판본을 잡았다.
+ *
+ * ⚠️ **모르는 갈래는 운다.** 빈 배열로 두면 오타 난 질의가 0건을 정답처럼 낸다.
+ * ⚠️ **`@` 는 예약이다.** 다른 축에서 쓰면 조용히 no-op 이 아니라 에러다.
+ */
+function expandPropValues(field: string, values: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const raw of values) {
+    const v = raw.trim();
+    if (!v) continue;
+    if (!v.startsWith("@")) {
+      out.push(v);
+      continue;
+    }
+    if (field !== STATUS_FIELD) {
+      throw new LapisError(
+        "no_criteria",
+        `상태 갈래(${v})는 \`${STATUS_FIELD}\` 축에만 쓸 수 있다 — 지금 축은 \`${field}\``,
+        `\`${field}\` 에는 값을 그대로 적어라. 어떤 값이 있는지는 list: "${field}" 가 답한다.`,
+      );
+    }
+    const words = expandStatusGroup(v);
+    if (!words) {
+      throw new LapisError(
+        "no_criteria",
+        `모르는 상태 갈래: ${v}`,
+        `${STATUS_GROUPS.join(" · ")} 중 하나이거나, 값을 그대로 적어라.`,
+      );
+    }
+    out.push(...words);
+  }
+  return out;
+}
+
 export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   const {
     vault,
@@ -631,7 +678,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   } = args;
 
   const propPairs = Object.entries(propFilter ?? {})
-    .map(([f, vs]) => [f, new Set((vs ?? []).map((v) => v.trim()).filter(Boolean))] as const)
+    .map(([f, vs]) => [f, new Set(expandPropValues(f, vs ?? []))] as const)
     .filter(([, set]) => set.size > 0);
   const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of || propPairs.length > 0);
   if (!list && !audit && !text && !wantsStructural) {

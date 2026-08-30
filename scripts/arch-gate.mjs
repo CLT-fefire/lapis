@@ -123,6 +123,28 @@ const CONTENT_RULES = [
     // 템플릿 파일 이름처럼 노트 확장자가 아닌 `.md` 도 있다.
     patterns: [String.raw`\.md$`, String.raw`\.mmd$`, String.raw`\.(md|mmd)`, String.raw`\.m?md`],
   },
+  {
+    id: "doc-status-single-owner",
+    why:
+      "`status` 의 낱말 표는 `src/lib/docStatus.ts` 하나에만 둔다. " +
+      "끝난 것을 물으려면 갈래(`@done`)를 쓴다 — 낱말을 손으로 나열하지 않는다.",
+    /**
+     * ⚠️ 픽스처는 뺀다. 저기 있는 낱말은 **규칙이 아니라 노트 내용**이고, 갈린 상태를
+     * 담고 있어야 감사 테스트가 무언가를 증명한다 — 통일하면 그 화면이 다시 빈다.
+     */
+    when: (f) =>
+      f !== "src/lib/docStatus.ts" &&
+      f !== "core/fixture.ts" &&
+      f !== "src/lib/dev/fixtureVault.ts",
+    /**
+     * 🔴 **낱낱이 아니라 나열을 잡는다.** `완료` 한 낱말은 픽스처 노트 본문에도, UI 문구에도
+     * 정당하게 나온다. 문제는 **여러 낱말을 한 파일에 늘어놓는 것**이다 — 그게 표를 베낀
+     * 자리이고, 베낀 표는 반드시 낡는다. 실제로 둘이 그랬고 **둘 다 다섯 중 둘만** 적고
+     * 있었다(`core/query.ts` · `cli/handlers.ts`). 그렇게 물으면 53건 중 15건만 잡혔다.
+     */
+    patterns: ["완료", "반영됨", "해결됨", "닫힘", "이전됨"],
+    atLeast: 2,
+  },
 ];
 
 const violations = [];
@@ -141,9 +163,15 @@ for (const f of files) {
 
   for (const rule of CONTENT_RULES) {
     if (!rule.when(r)) continue;
-    for (const p of rule.patterns) {
-      if (src.includes(p)) violations.push({ rule: rule.id, why: rule.why, file: r, spec: p });
+    const hit = rule.patterns.filter((p) => src.includes(p));
+    // ⚠️ `atLeast` 가 있으면 **나열**을 잡는 규칙이다 — 하나만 나온 것은 정당한 쓰임이다.
+    if (rule.atLeast) {
+      if (hit.length >= rule.atLeast) {
+        violations.push({ rule: rule.id, why: rule.why, file: r, spec: hit.join(" · ") });
+      }
+      continue;
     }
+    for (const p of hit) violations.push({ rule: rule.id, why: rule.why, file: r, spec: p });
   }
 }
 
