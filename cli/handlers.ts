@@ -20,6 +20,7 @@ import {
   LapisError,
 } from "../core/cache.ts";
 import { buildIndex } from "../core/entry.ts";
+import { noteStem, stripNoteExt, withNoteExt } from "$lib/notePath";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
 import {
   findOrphans,
@@ -849,7 +850,9 @@ function cmdNew(p: ParsedCommand, out: Out): void {
   const raw = String(p.positional[0] ?? "").trim();
   if (!raw) return out.fail("usage", "이름이 필요하다", "lapis new <이름>", 2);
 
-  const rel = raw.endsWith(".md") ? raw : `${raw}.md`;
+  // 🔴 `.mmd` 도 노트다. 예전엔 `.md` 만 보고 `diagram.mmd` → `diagram.mmd.md` 를 만들었다.
+  //    `vault.rs` 의 `already_has_supported_ext` 는 같은 판정을 제대로 하고 있었다.
+  const rel = withNoteExt(raw);
   const target = nodePath.resolve(vc.root, rel);
   // 🔴 vault 밖으로 못 나간다. 문자열이 아니라 **해소한 경로**로 본다.
   const root = nodePath.resolve(vc.root);
@@ -1324,7 +1327,7 @@ function exportAll(p: ParsedCommand, out: Out, outDir: string): void {
   const failed: { note: string; why: string }[] = [];
   for (const info of vc.infos) {
     const relPath = rel(info.source_path);
-    const dest = nodePath.resolve(destRoot, relPath.replace(/\.(md|mmd|markdown)$/i, ".html"));
+    const dest = nodePath.resolve(destRoot, `${stripNoteExt(relPath)}.html`);
     // ⚠️ 경로 이탈 검사. vault 상대 경로에서 만들었으니 새면 안 되지만, 새면 조용하다.
     if (!dest.startsWith(destRoot + nodePath.sep)) {
       failed.push({ note: relPath, why: "출력 디렉터리 밖" });
@@ -1647,7 +1650,7 @@ function cmdRender(p: ParsedCommand, out: Out): void {
  * 이유로 같은 자리를 쓴다.
  */
 function defaultRenderOut(notePath: string, format: RenderFormat): string {
-  const stem = nodePath.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  const stem = noteStem(notePath);
   const home = homedir();
   const downloads = home ? nodePath.join(home, "Downloads") : "";
   const dir = downloads && existsSync(downloads) ? downloads : tmpdir();

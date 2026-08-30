@@ -363,3 +363,51 @@ describe("rewriteLinksInNote — AST 코드 블록 보호 (옵션 3)", () => {
     expect(r.newContent).toContain("[text](newStem.md)");
   });
 });
+
+/**
+ * 🔴 **`.mmd` 노트의 이름을 바꿀 때.**
+ *
+ * 앱은 `.mmd` 를 1급 노트로 다룬다 — Rust 가 색인하고 감시자가 보고 `noteStem` 이 벗긴다.
+ * 그런데 마크다운 링크 정규식은 `(\.md)` 만 잡았고, 치환은 **무조건 `.md`** 를 붙였다.
+ *
+ * 그래서 `.mmd` 노트의 이름을 바꾸면 들어오는 마크다운 링크가 **조용히 끊겼다** —
+ * 안 잡히면 옛 이름이 남고, 잡히면 없는 `.md` 파일을 가리킨다. 에러는 없다.
+ *
+ * ⚠️ 이 vault(Windows)에는 `.mmd` 가 0개라 안 보였다. **macOS 쪽 vault 는 많이 쓴다** —
+ * 한쪽 머신에서만 재고 양쪽을 믿으면 이렇게 된다.
+ */
+describe("rewriteLinksInNote — .mmd 도 노트다", () => {
+  it("mmd 마크다운 링크를 잡는다", () => {
+    const r = rewriteLinksInNote("see [그림](diagram.mmd) here", "diagram", "flow");
+    expect(r.changed, "`.mmd` 링크를 아예 못 잡았다").toBe(true);
+    expect(r.occurrences).toBe(1);
+  });
+
+  /** 🔴 **원래 확장자를 지킨다.** `.md` 로 바꾸면 가리키는 파일이 없어진다. */
+  it("mmd 를 md 로 바꾸지 않는다", () => {
+    const r = rewriteLinksInNote("see [그림](diagram.mmd) here", "diagram", "flow");
+    expect(r.newContent, "확장자가 md 로 바뀌어 링크가 끊겼다").toBe("see [그림](flow.mmd) here");
+  });
+
+  it("md 는 md 로 남는다", () => {
+    const r = rewriteLinksInNote("see [글](note.md) here", "note", "메모");
+    expect(r.newContent).toBe("see [글](메모.md) here");
+  });
+
+  it("경로와 앵커가 있어도 확장자를 지킨다", () => {
+    const r = rewriteLinksInNote("[그림](sub/diagram.mmd#절) 참고", "diagram", "flow");
+    expect(r.newContent).toBe("[그림](sub/flow.mmd#절) 참고");
+  });
+
+  /** ⚠️ 대소문자도 원문 그대로 — 파일 시스템이 가리는 곳이 있다. */
+  it("대문자 확장자를 소문자로 바꾸지 않는다", () => {
+    const r = rewriteLinksInNote("[그림](diagram.MMD)", "diagram", "flow");
+    expect(r.newContent).toBe("[그림](flow.MMD)");
+  });
+
+  it("위키링크는 확장자가 없으므로 그대로 돈다", () => {
+    const r = rewriteLinksInNote("[[diagram]] 과 [그림](diagram.mmd)", "diagram", "flow");
+    expect(r.occurrences).toBe(2);
+    expect(r.newContent).toBe("[[flow]] 과 [그림](flow.mmd)");
+  });
+});

@@ -1,3 +1,4 @@
+import { noteStem } from "$lib/notePath";
 /**
  * 새 노트 템플릿.
  *
@@ -71,7 +72,7 @@ export const TEMPLATE_DIR = ".lapis/templates";
 
 /** 파일 경로 → 사용자에게 보일 이름. */
 export function templateName(path: string): string {
-  return (path.split("/").pop() ?? path).replace(/\.(md|mmd)$/i, "");
+  return noteStem(path);
 }
 
 /**

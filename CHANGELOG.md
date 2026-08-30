@@ -27,6 +27,19 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **`.mmd` notes were only half supported.** The app treats `.mmd` as a first-class note —
+  Rust indexes it, the watcher watches it, the new-note dialog knows it — but three paths
+  still assumed `.md`:
+
+  - `lapis new diagram.mmd` created **`diagram.mmd.md`**. Rust's own rename check had it right.
+  - Renaming a `.mmd` note **silently broke incoming markdown links**: the pattern only
+    matched `.md`, and the replacement hardcoded `.md` regardless of what it found.
+  - Clicking a `.mmd` link, and resolving one in a query, stripped only `.md`.
+
+  The rule for what counts as a note extension now lives in one module, and the architecture
+  gate fails the build if it is written anywhere else. A comment had claimed single ownership
+  for a long time; eight places had drifted from it, and three of those were wrong.
+
 - **The same tag question could get two answers.** The query engine compared tags after
   Unicode normalisation only, while the app's tag index also lowercased them — so
   `subject/UI` and `subject/ui` were one tag in the sidebar and two in a `tag:` query.

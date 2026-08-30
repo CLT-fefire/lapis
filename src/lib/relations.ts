@@ -1,3 +1,4 @@
+import { stripNoteExt } from "$lib/notePath";
 import type { LinkInfo } from "$lib/tauri/notes";
 import { yieldToPaint } from "$lib/yieldToPaint";
 import { resolveTarget, type ResolveSource } from "$lib/linkIndex";
@@ -98,7 +99,7 @@ function normalizeOne(raw: string): string | null {
   // 경로 → 마지막 세그먼트
   const seg = s.split("/").pop() ?? s;
   // 확장자(.md/.mmd) 제거
-  const stem = seg.replace(/\.(md|mmd)$/i, "").trim();
+  const stem = stripNoteExt(seg).trim();
   return stem || null;
 }
 

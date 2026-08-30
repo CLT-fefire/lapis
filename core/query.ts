@@ -58,6 +58,7 @@ import {
   type VaultCache,
 } from "./cache.ts";
 import { findBrokenLinks } from "$lib/brokenLinks";
+import { noteStem } from "$lib/notePath";
 import { noteHasTag } from "$lib/tagMatch";
 import {
   findOrphans,
@@ -332,7 +333,8 @@ function resolveNote(st: Loaded, input: string): string {
   if (st.link.byPath.has(asAbs)) return asAbs;
   // resolver는 alias > title > stem 우선순위. grep이 접두 충돌(`ADR-001` → `ADR-0010`)로
   // 오탐을 내던 자리를 정확 해소로 대체한다.
-  const stem = raw.replace(/\.md$/, "").split("/").pop() ?? raw;
+  // ⚠️ `.mmd` 도 노트고 대소문자도 안 가려야 한다 — 규칙은 `notePath.ts` 하나다.
+  const stem = noteStem(raw);
   const candidates = st.link.resolver.get(stem.toLowerCase());
 
   // ## ⚠️ 모호하면 추측하지 않는다

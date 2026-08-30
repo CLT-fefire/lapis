@@ -10,6 +10,7 @@
  */
 
 import { splitFrontmatter } from "$lib/frontmatter";
+import { NOTE_EXTENSIONS } from "$lib/notePath";
 import MarkdownIt from "markdown-it";
 
 // 코드 블록(fence / 들여쓰기 code block) 라인 범위를 정확히 식별하기 위한 markdown-it 인스턴스.
@@ -201,8 +202,15 @@ function rewriteLinksInBody(
     "g",
   );
   // MD link: [text](oldStem.md) or [text](path/oldStem.md) or [text](oldStem.md#anchor)
+  //
+  // 🔴 **확장자를 잡아서 그대로 되쓴다.** 예전엔 `(\.md)` 만 잡고 치환에서 `.md` 를
+  //    하드코딩했다. 그래서 `.mmd` 노트는 링크가 **아예 안 잡히거나**(못 바꿈),
+  //    바꾸면 없는 `.md` 를 가리켰다 — 둘 다 조용히 끊긴다.
+  //
+  // ⚠️ 목록은 `notePath.ts` 것을 쓴다. 여기 다시 적으면 그게 갈린다.
+  const extAlt = NOTE_EXTENSIONS.join("|");
   const mdlinkRe = new RegExp(
-    `(\\]\\(\\s*)([^)\\n]*?\\/)?${escapedOld}(\\.md)(#[^)\\n]*)?(\\s*\\))`,
+    `(\\]\\(\\s*)([^)\\n]*?\\/)?${escapedOld}(\\.(?:${extAlt}))(#[^)\\n]*)?(\\s*\\))`,
     "gi",
   );
 
@@ -220,9 +228,11 @@ function rewriteLinksInBody(
           count++;
           return `[[${newStem}${anchorPart ?? ""}${aliasPart ?? ""}]]`;
         });
-        s = s.replace(mdlinkRe, (_match, prefix, pathPart, _ext, anchor, suffix) => {
+        // ⚠️ `ext` 는 **원문 그대로**다(`.mmd` · `.MMD` 포함). 소문자로 눕히거나
+        //    `.md` 로 바꾸면 가리키는 파일이 없어진다.
+        s = s.replace(mdlinkRe, (_match, prefix, pathPart, ext, anchor, suffix) => {
           count++;
-          return `${prefix}${pathPart ?? ""}${newStem}.md${anchor ?? ""}${suffix}`;
+          return `${prefix}${pathPart ?? ""}${newStem}${ext}${anchor ?? ""}${suffix}`;
         });
         return s;
       })

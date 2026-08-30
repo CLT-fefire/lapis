@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 /**
- * 아키텍처 게이트 — 층 경계를 grep 으로 강제한다.
+ * 아키텍처 게이트 — 층 경계와 **규칙의 주인**을 grep 으로 강제한다.
  *
  * ```
  * core   질의 핵 · 캐시 · 앱 코드 파사드          → $lib 만
- * ops    앱 조작 연산(띄우기·렌더·인덱스·내보내기) → core · $lib
- * cli    사람과 스크립트가 쓰는 표면               → ops · core · $lib
- * mcp    LLM 이 쓰는 표면                          → ops · core · $lib
+ * ops    앱 조작(띄우기·렌더·인덱스·내보내기)     → core · $lib
+ * cli    사람과 스크립트가 쓰는 표면              → ops · core · $lib
+ * mcp    LLM 이 쓰는 표면                         → ops · core · $lib
  * ```
  *
- * 🔴 **왜 코드로 옮겼나.** 규칙이 문서에만 있으면 반드시 새어 나간다. 실제로 샜다 —
- * 헤드리스가 순수 함수 하나 쓰려고 Svelte 스토어 모듈을 통째로 물고 있었고, 그 때문에
- * 6차에서 `lapis_usage` 가 "안 쓴 명령 없음"이라고 **거짓말했다**.
+ * 🔴 **왜 코드로 옮겼나.** 규칙이 문서에만 있으면 반드시 새어 나간다. 두 번 겪었다:
+ *
+ * - 헤드리스가 순수 함수 하나 쓰려고 Svelte 스토어를 통째로 물었고, 그 때문에 6차에서
+ *   `lapis_usage` 가 "안 쓴 명령 없음"이라고 **거짓말했다.**
+ * - `notePath.ts` 는 주석으로 *"확장자를 벗기는 곳은 여기 하나다"* 라고 **적어 뒀는데**,
+ *   그 사이에 여덟 곳이 자기 정규식을 갖게 됐고 그중 셋이 틀렸다 —
+ *   `.mmd` 노트의 이름을 바꾸면 링크가 조용히 끊겼다.
+ *
  * 근거와 측정치는 `docs/reference/lapis-module-boundaries-20260830.md`.
  *
  * ⚠️ **경로 구분자를 항상 `/` 로 만든다.** Windows 에서 `path.relative` 는
@@ -55,12 +60,12 @@ const points = (s, area) => s.includes("../" + area + "/") || s.startsWith(area 
 const HEADLESS = /^(core|ops|cli|mcp)\//;
 
 /**
- * 규칙. `when` 인 파일에서 `forbid` 인 import 를 찾으면 실패한다.
+ * 층 규칙 — `when` 인 파일에서 `forbid` 인 import 를 찾으면 실패한다.
  *
  * ⚠️ 테스트 파일은 뺀다 — 테스트는 어느 층이든 들여다볼 수 있어야 한다. 대신
  * **프로덕션 코드만** 본다는 뜻이므로 규칙이 헐거워지지 않는다.
  */
-const RULES = [
+const IMPORT_RULES = [
   {
     id: "headless-no-svelte",
     why: "헤드리스(core·ops·cli·mcp)는 앱 없이 돈다. Svelte 를 물면 순수 함수 하나 때문에 프레임워크가 딸려 온다.",
@@ -91,8 +96,32 @@ const RULES = [
       "cli 와 mcp 는 **나란한 표면**이다. 서로를 부르면 순환이 되고, 그러면 공용이어야 할 층이 " +
       "한쪽 지붕 밑에 갇힌다. 공용은 `core/` 나 `ops/` 로 내린다.",
     when: (f) => /^(cli|mcp)\//.test(f),
-    forbid: (s, f) =>
-      /^cli\//.test(f) ? points(s, "mcp") : points(s, "cli"),
+    forbid: (s, f) => (/^cli\//.test(f) ? points(s, "mcp") : points(s, "cli")),
+  },
+];
+
+/**
+ * 내용 규칙 — 어떤 규칙이 **한 파일에만** 있어야 할 때.
+ *
+ * 🔴 여기 첫 손님이 노트 확장자다. `notePath.ts` 주석이 "여기 하나"라고 적어 뒀지만
+ * 주석은 규칙을 못 지킨다 — 여덟 곳이 자기 정규식을 갖고 있었고 그중 셋이 틀렸다:
+ *
+ * - `lapis new diagram.mmd` → `diagram.mmd.md`
+ * - `.mmd` 노트 이름을 바꾸면 마크다운 링크가 **조용히 끊겼다**
+ * - `.mmd` 링크가 해소되지 않았다
+ *
+ * ⚠️ 넷은 인덱서가 만들지도 않는 `markdown` 까지 벗기고 있었다 — 생산자·소비자 비대칭.
+ */
+const CONTENT_RULES = [
+  {
+    id: "note-ext-single-owner",
+    why:
+      "노트 확장자 규칙은 `src/lib/notePath.ts` 하나에만 둔다. " +
+      "`noteStem` · `stripNoteExt` · `withNoteExt` · `hasNoteExt` · `noteExtOf` 를 쓴다.",
+    when: (f) => f !== "src/lib/notePath.ts",
+    // 정규식 리터럴 안의 확장자 패턴. 문자열 `".md"` 는 안 본다 —
+    // 템플릿 파일 이름처럼 노트 확장자가 아닌 `.md` 도 있다.
+    patterns: [String.raw`\.md$`, String.raw`\.mmd$`, String.raw`\.(md|mmd)`, String.raw`\.m?md`],
   },
 ];
 
@@ -100,17 +129,27 @@ const violations = [];
 for (const f of files) {
   const r = rel(f);
   if (/\.test\.ts$/.test(r) || r.includes("/testHarness/")) continue;
-  const specs = specifiers(readFileSync(f, "utf8"));
-  for (const rule of RULES) {
+  const src = readFileSync(f, "utf8");
+
+  const specs = specifiers(src);
+  for (const rule of IMPORT_RULES) {
     if (!rule.when(r)) continue;
     for (const s of specs) {
       if (rule.forbid(s, r)) violations.push({ rule: rule.id, why: rule.why, file: r, spec: s });
     }
   }
+
+  for (const rule of CONTENT_RULES) {
+    if (!rule.when(r)) continue;
+    for (const p of rule.patterns) {
+      if (src.includes(p)) violations.push({ rule: rule.id, why: rule.why, file: r, spec: p });
+    }
+  }
 }
 
 if (violations.length === 0) {
-  console.log(`아키텍처 게이트 통과 — ${files.length} 파일 · 규칙 ${RULES.length}개`);
+  const n = IMPORT_RULES.length + CONTENT_RULES.length;
+  console.log(`아키텍처 게이트 통과 — ${files.length} 파일 · 규칙 ${n}개`);
   process.exit(0);
 }
 

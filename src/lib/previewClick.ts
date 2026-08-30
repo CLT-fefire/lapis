@@ -3,6 +3,7 @@ import { jumpToWikilink } from "$lib/stores/vault";
 import { exportMermaidHostToPng } from "$lib/mermaidExport";
 import { logError } from "$lib/stores/usage";
 import { m } from "$lib/paraglide/messages.js";
+import { stripNoteExt } from "$lib/notePath";
 import type { OpenSurface } from "$lib/usageSchema";
 
 /**
@@ -44,7 +45,7 @@ export async function handleRenderedClick(
     const host = exportBtn.closest(".mermaid-host") as HTMLElement | null;
     if (host) {
       const fileName = notePath?.split("/").pop() ?? "diagram";
-      const base = fileName.replace(/\.(md|mmd)$/i, "");
+      const base = stripNoteExt(fileName);
       try {
         await exportMermaidHostToPng(host, base);
       } catch (err) {
@@ -88,11 +89,10 @@ export async function handleRenderedClick(
   e.preventDefault();
   if (!href || href === "#") return;
 
-  // `.md` 확장자와 앞 경로를 떼고 **위키링크와 같은 판정**을 쓴다.
-  const cleaned = href
-    .replace(/^\.\//, "")
-    .replace(/^\//, "")
-    .replace(/\.md$/i, "");
+  // 확장자와 앞 경로를 떼고 **위키링크와 같은 판정**을 쓴다.
+  // ⚠️ 벗기는 규칙은 `notePath.ts` 것을 쓴다 — 예전엔 `.md` 만 벗겨서 `.mmd` 링크가
+  //    `diagram.mmd` 인 채로 해소를 시도했고, 위키링크는 `[[diagram]]` 이라 안 맞았다.
+  const cleaned = stripNoteExt(href.replace(/^\.\//, "").replace(/^\//, ""));
   const lastSegment = cleaned.split("/").pop() ?? cleaned;
   const ok = await jumpToWikilink(lastSegment, via);
   if (!ok) console.info("note link unresolved:", href);

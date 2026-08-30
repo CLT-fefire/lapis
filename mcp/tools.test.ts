@@ -213,9 +213,13 @@ describe("내보내기 기본 경로", () => {
     expect(nodePath.basename(defaultHtmlPath("/vault/어떤 노트.md"))).toBe("어떤 노트.html");
   });
 
-  /** ⚠️ `.mmd` · `.markdown` 도 확장자다. 안 벗기면 `x.md.html` 이 된다. */
+  /**
+   * ⚠️ `markdown` 은 **노트 확장자가 아니다.** 인덱서(`vault.rs`)가 안 받는다.
+   * 예전엔 여기서 그것까지 벗겼는데, 생산자가 안 만드는 것을 소비자가 벗기는
+   * 비대칭이었다. 규칙은 이제 `notePath.ts` 하나다.
+   */
   it("확장자를 벗긴다", () => {
-    for (const ext of ["md", "mmd", "markdown", "MD"]) {
+    for (const ext of ["md", "mmd", "MD"]) {
       expect(nodePath.basename(defaultHtmlPath(`/v/x.${ext}`)), ext).toBe("x.html");
     }
   });

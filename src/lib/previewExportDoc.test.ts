@@ -94,9 +94,17 @@ describe("suggestHtmlFileName / documentTitle", () => {
     expect(documentTitle("/a/b/노트 제목.md")).toBe("노트 제목");
   });
 
-  it(".mmd / .markdown 확장자도 벗긴다", () => {
+  it(".mmd 도 벗긴다", () => {
     expect(suggestHtmlFileName("/a/diagram.mmd")).toBe("diagram.html");
-    expect(suggestHtmlFileName("/a/doc.markdown")).toBe("doc.html");
+  });
+
+  /**
+   * 🔴 **`markdown` 은 노트 확장자가 아니다.** 인덱서(`vault.rs`)가 `md`·`mmd` 만 받는다.
+   * 예전엔 여기서 그것까지 벗겼는데, **생산자가 안 만드는 것을 소비자가 벗기는** 비대칭이었다.
+   * 규칙은 이제 `notePath.ts` 하나이고, 이 테스트가 그 비대칭이 돌아오는 것을 막는다.
+   */
+  it("markdown 은 확장자로 안 본다", () => {
+    expect(suggestHtmlFileName("/a/doc.markdown")).toBe("doc.markdown.html");
   });
 
   it("확장자 대소문자를 가리지 않는다", () => {

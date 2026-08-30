@@ -16,6 +16,7 @@ import {
   normPath,
   checkStale,
 } from "../core/cache.ts";
+import { noteStem } from "$lib/notePath";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
@@ -342,7 +343,9 @@ const exportTool: ToolDef = {
  * 없는 곳에 쓰려다 실패하는 것보다, 찾기 어려운 곳이라도 쓰고 **어디 썼는지 말하는** 게 낫다.
  */
 export function defaultHtmlPath(notePath: string): string {
-  const stem = path.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  // ⚠️ 벗기는 규칙은 `notePath.ts` 하나다. 여기 있던 정규식은 `markdown` 까지 벗겼는데
+  //    인덱서가 그걸 노트로 안 받는다 — 생산자가 안 만드는 것을 소비자가 벗기고 있었다.
+  const stem = noteStem(notePath);
   const home = homedir();
   const downloads = home ? path.join(home, "Downloads") : "";
   const dir = downloads && existsSync(downloads) ? downloads : tmpdir();

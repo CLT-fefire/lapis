@@ -7,6 +7,8 @@
  * 불러오면 로드 단계에서 깨지는 것도 함께 피한다.)
  */
 
+import { stripNoteExt } from "$lib/notePath";
+
 /** `var(--name)` / `var(--name, fallback)` 에서 토큰 이름만 뽑는다. */
 export function collectCssVarNames(css: string): string[] {
   const names: string[] = [];
@@ -226,7 +228,8 @@ export function escapeHtml(s: string): string {
 /** 노트 경로 → save 다이얼로그 기본 파일명. */
 export function suggestHtmlFileName(notePath: string | null | undefined): string {
   const base = (notePath ?? "").split("/").pop() ?? "";
-  const stem = base.replace(/\.(md|mmd|markdown)$/i, "").trim();
+  // ⚠️ 벗기는 규칙은 `notePath.ts` 하나다 — 여기 있던 정규식은 `markdown` 까지 벗겼다.
+  const stem = stripNoteExt(base).trim();
   return `${stem || "note"}.html`;
 }
 

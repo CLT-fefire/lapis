@@ -1,3 +1,4 @@
+import { noteStem } from "$lib/notePath";
 import { DEV_VAULT, FIXTURE_NOTES, FIXTURE_READONLY, FIXTURE_COMMITS } from "./fixtureVault";
 
 /**
@@ -70,7 +71,7 @@ function parseProps(fm: string): Record<string, string[]> {
 }
 
 function stemOf(rel: string): string {
-  return (rel.split("/").pop() ?? rel).replace(/\.(md|mmd)$/i, "");
+  return noteStem(rel);
 }
 
 function linkInfoOf(rel: string, raw: string): LinkInfoLike {

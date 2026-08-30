@@ -5,6 +5,7 @@
  * fingerprint가 바뀌고 ⓑ 19,000노트라 느리고 ⓒ 개인 문서 내용이 단정문에 박힌다.
  */
 
+import { noteStem } from "$lib/notePath";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
@@ -195,7 +196,8 @@ function writeGz(file: string, obj: unknown): void {
   writeFileSync(file, gzipSync(JSON.stringify(obj)));
 }
 
-const basename = (rel: string): string => rel.split("/").pop()!.replace(/\.md$/, "");
+// ⚠️ 예전엔 `.md` 만 벗겼다 — 픽스처에도 `.mmd` 가 들어올 수 있다.
+const basename = (rel: string): string => noteStem(rel);
 
 /** 판정 4문항을 축소 재현한 표준 픽스처. */
 /**
