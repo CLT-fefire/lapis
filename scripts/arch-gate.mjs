@@ -145,6 +145,28 @@ const CONTENT_RULES = [
     patterns: ["완료", "반영됨", "해결됨", "닫힘", "이전됨"],
     atLeast: 2,
   },
+  {
+    id: "code-block-single-owner",
+    why:
+      "「어느 줄이 코드인가」는 `src/lib/codeLines.ts` 하나에만 둔다. " +
+      "`codeBlockLines` · `blankCodeBlocks` 를 쓴다.",
+    /**
+     * 🔴 맞는 답이 있는데도 **비공개라서** 사본이 자랐다. `linkRewrite.ts` 는 markdown-it
+     * 블록 파스로 정확히 잡으면서 주석에 그 이유까지 적어 뒀는데, 그 함수가 export 가
+     * 아니었다. 그래서 둘이 각자 naive 사본을 갖게 됐고 **셋이 서로 다른 답**을 냈다:
+     *
+     * - `openTasks` — 줄 토글. 들여쓴 코드블록 안의 `- [ ]` 를 할 일로 셌다
+     * - `maskNonProse` — 정규식. `~~~` 와 들여쓴 코드 안의 낱말을 언급으로 보고했다
+     *
+     * ⚠️ 정규식으로는 못 고친다. 중첩 할 일도 네 칸 들여쓰기라 "네 칸이면 코드"로 두면
+     * `depth` 가 죽는다. 리스트 계속인지 코드인지는 **블록 파서만** 안다.
+     */
+    when: (f) => f !== "src/lib/codeLines.ts",
+    // markdown-it 사본(`code_block` 토큰)과 naive 정규식 사본(펜스 반복) 둘 다 잡는다.
+    // ⚠️ 백틱은 String.raw 안에 못 넣는다(템플릿 종결자다). 코드 포인트로 적는다 —
+    //    역슬래시를 섞으면 **실제 정규식과 안 맞아 가드가 반쪽이 된다.** 실제로 그랬다.
+    patterns: ["code_block", "`{3,}", "~{3,}"],
+  },
 ];
 
 const violations = [];

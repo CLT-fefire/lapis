@@ -46,6 +46,17 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **Examples inside code blocks were counted as open tasks.** Three places answered "which lines
+  are code" differently: `linkRewrite` got it right with a markdown-it block parse but kept that
+  function **private**, so the task scanner used a line toggle (missing indented code blocks) and
+  the unlinked-mention masking used a regex (missing `~~~` fences and indented code blocks). The
+  failure is silent — counting an example as a task only inflates a number, and the decay audit
+  would call a perfectly consistent note contradictory over one example. One owner now holds the
+  rule and `check:arch` blocks copies. A regex cannot fix this: **nested tasks are also indented
+  four spaces**, so treating four spaces as code destroys task depth; only a block parser separates
+  list continuation from code. Parsing every note measured 18× slower, so only notes that contain a
+  checkbox-shaped line (6% here) reach the parser. The measured vault had **zero** real
+  occurrences — this is insurance, not a result.
 - **`lapis tasks audit --json` and `lapis stats --json` emitted absolute paths.** Every other
   CLI JSON surface returns vault-relative ones, and `cli/README.md` promises the output mirrors
   `lapisQuery()`. The failure is silent: each command looks fine on its own, and intersecting two

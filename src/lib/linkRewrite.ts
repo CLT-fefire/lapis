@@ -11,26 +11,11 @@
 
 import { splitFrontmatter } from "$lib/frontmatter";
 import { NOTE_EXTENSIONS } from "$lib/notePath";
-import MarkdownIt from "markdown-it";
+import { codeBlockLines } from "$lib/codeLines";
 
-// 코드 블록(fence / 들여쓰기 code block) 라인 범위를 정확히 식별하기 위한 markdown-it 인스턴스.
-// 렌더는 하지 않고 블록 토큰의 map(라인 범위)만 사용 → 코드 영역 마스킹(AST 기반).
-const codeMd = new MarkdownIt({ html: false });
-
-/**
- * body에서 코드 블록(fence/code_block)에 속한 0-based 라인 인덱스 집합.
- * markdown-it 블록 파스의 token.map(=[startLine, endLine), end 제외)을 펼친다.
- * naive `startsWith("```")` 토글이 놓치던 들여쓰기 코드블록·인용 내부 펜스도 정확히 포함.
- */
-function computeCodeLineSet(body: string): Set<number> {
-  const set = new Set<number>();
-  for (const tok of codeMd.parse(body, {})) {
-    if ((tok.type === "fence" || tok.type === "code_block") && tok.map) {
-      for (let i = tok.map[0]; i < tok.map[1]; i++) set.add(i);
-    }
-  }
-  return set;
-}
+// ⚠️ 이 규칙은 예전에 **여기 비공개로** 있었다. 그래서 같은 교훈이 이 파일 밖으로
+//    나가지 못했고, `openTasks` 와 `maskNonProse` 가 각자 naive 사본을 갖게 됐다.
+//    지금은 `$lib/codeLines` 하나가 주인이고 `check:arch` 가 사본을 막는다.
 
 export interface RewriteResult {
   changed: boolean;
@@ -189,7 +174,7 @@ function rewriteLinksInBody(
   const lines = body.split("\n");
   // 코드 블록(fence / 들여쓰기 코드블록) 라인을 markdown-it 블록 파스로 정확히 식별.
   // 기존 naive ``` 라인 토글이 놓치던 들여쓰기 코드블록·인용 내부 펜스 등도 보호.
-  const codeLines = computeCodeLineSet(body);
+  const codeLines = codeBlockLines(body);
 
   // 정규식 escape
   const escapedOld = escapeRegex(oldStem);

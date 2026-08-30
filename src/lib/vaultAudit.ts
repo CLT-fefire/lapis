@@ -1,6 +1,7 @@
 import { resolveTarget, targetName, type LinkIndex } from "$lib/linkIndex";
 import type { LinkInfo } from "$lib/tauri/notes";
 import { statusLifecycle } from "$lib/docStatus";
+import { blankCodeBlocks } from "$lib/codeLines";
 import type { OpenTaskGroup } from "$lib/openTasks";
 
 /**
@@ -545,8 +546,11 @@ export function maskNonProse(body: string): string {
 
   // frontmatter — `title: 캐시 계약`이 자기 언급으로 잡히면 모든 노트가 자기를 언급한 게 된다.
   out = out.replace(/^---\n[\s\S]*?\n---/, blank);
-  // 코드펜스
-  out = out.replace(/^[ \t]*```[\s\S]*?^[ \t]*```/gm, blank);
+  // 코드 블록(fence · 들여쓰기) — 판정은 `$lib/codeLines` 가 한다.
+  //
+  // ⚠️ 예전엔 여기 정규식이 있었고 **`~~~` 펜스와 들여쓴 코드블록을 놓쳤다.**
+  //    그 안의 낱말이 "안 걸린 언급"으로 보고됐다 — 오탐을 섞으면 목록을 안 믿게 된다.
+  out = blankCodeBlocks(out);
   // 인라인 코드
   out = out.replace(/`[^`\n]*`/g, blank);
   // ⚠️ **본문 첫 h1은 그 노트 자신의 이름이다.** 다른 노트의 제목과 같은 낱말이어도
