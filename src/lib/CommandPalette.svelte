@@ -26,7 +26,7 @@
     pendingFullTextVault,
   } from "$lib/stores/search";
   import {
-    unifiedSearch,
+    unifiedSearchWithFallback,
     groupResults,
     isGroupVisible,
     CYCLE_MODES,
@@ -89,6 +89,12 @@
   // cancellation으로 빠른 타이핑 시 stale 결과 덮어쓰기 방지.
   let results = $state<PaletteResult[]>([]);
   /**
+   * 한글 IME 를 되돌려 다시 찾았을 때 그 질의. 없으면 처음 질의로 찾은 것이다.
+   *
+   * 🔴 **반드시 보여준다.** 조용히 다른 것을 찾아 주면 왜 그게 나왔는지 모른다.
+   */
+  let imeSwappedTo = $state<string | null>(null);
+  /**
    * 마지막으로 기록한 질의. 열림을 그 질의에 붙이기 위한 것.
    *
    * ⚠️ `$state` 가 아니다 — 화면이 안 읽는다. 룬으로 두면 쓸 때마다 재렌더가 돈다.
@@ -99,6 +105,7 @@
   $effect(() => {
     if (!$paletteOpen) {
       results = [];
+      imeSwappedTo = null;
       return;
     }
     const q = query;
@@ -111,9 +118,10 @@
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const r = await unifiedSearch(q, hint);
+          const { results: r, imeSwappedTo: swapped } = await unifiedSearchWithFallback(q, hint);
           if (!cancelled) {
             results = r;
+            imeSwappedTo = swapped ?? null;
             // ⚠️ **빈 질의는 안 남긴다.** Recent/Quick Actions 화면이라 검색이 아니다 —
             //    남기면 "결과 0건 질의"가 빈 문자열로 잔뜩 쌓인다.
             if (q.trim() !== "") {
@@ -126,6 +134,7 @@
           if (!cancelled) {
             logWarn("CommandPalette", "unifiedSearch failed", e);
             results = [];
+            imeSwappedTo = null;
           }
         }
       })();
@@ -566,6 +575,11 @@
             {m.palette_folder_clear()}
           </button>
         </div>
+      {/if}
+
+      {#if imeSwappedTo}
+        <!-- 🔴 조용히 바꾸지 않는다. 무엇으로 찾았는지 말한다. -->
+        <div class="status ime-swap">{m.palette_ime_swapped({ query: imeSwappedTo })}</div>
       {/if}
 
       {#if showContentBuildingHint}
@@ -1073,6 +1087,10 @@
 
   /* ⚠️ `:global()` — 이 문구는 인라인 마크업이 있어 `{@html}`로 그린다.
      Svelte scoped CSS는 `{@html}` 주입 요소에 안 붙는다(스코프 클래스 미부착). */
+  .status.ime-swap {
+    color: var(--accent-text);
+  }
+
   .status.hint :global(kbd) {
     background: var(--surface-overlay);
     border: 1px solid var(--border-strong);

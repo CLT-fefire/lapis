@@ -67,10 +67,17 @@ vi.mock("$lib/stores/filters", () => ({ toggleDocKind: () => {}, toggleTopic: ()
 vi.mock("$lib/tauri/notes", () => ({ readNote: async () => "" }));
 vi.mock("$lib/stores/usage", () => ({ logWarn: () => {}, logCommand: () => {}, logQuery: () => {} }));
 
-// 🔴 `unifiedSearch` 만 대신한다. 그룹핑·가시성 판정은 **진짜**를 쓴다.
+// 🔴 **컴포넌트가 실제로 부르는 것**만 대신한다. 그룹핑·가시성 판정은 진짜를 쓴다.
+//
+// ⚠️ 예전엔 `unifiedSearch` 를 가로챘는데, 컴포넌트가 `unifiedSearchWithFallback` 로
+//    옮겨가자 **가짜가 안 불리고 진짜가 돌아** 결과가 조용히 빈 배열이 됐다. 모듈 안의
+//    호출은 mock 을 안 탄다 — 가로챌 것은 언제나 **경계에서 불리는 이름**이다.
 vi.mock("$lib/palette", async () => {
   const real = await vi.importActual<typeof import("./palette")>("./palette");
-  return { ...real, unifiedSearch: (q: string, h: string) => unifiedSearch(q, h) };
+  return {
+    ...real,
+    unifiedSearchWithFallback: async (q: string, h: string) => ({ results: await unifiedSearch(q, h) }),
+  };
 });
 
 const Palette = (await import("./CommandPalette.svelte")).default;

@@ -17,6 +17,16 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 ## [Unreleased]
 
 ### Added
+- **Searching still works when the Korean IME was left on.** If the palette finds nothing, it
+  retries once with the keyboard layout reversed and says which query produced the results. This
+  came out of the usage log rather than a guess: **seven of the nine** queries that returned zero
+  results were Latin words typed through the Korean IME, and the note being looked for was in the
+  vault the whole time. The 2-beolsik/QWERTY mapping is a fixed table, not an edit-distance guess,
+  so it does not carry the false-positive risk that kept typo detection out of the tag audit. A
+  query that already returns results is never touched — this is a back door that opens only at a
+  dead end, and if the reversed query is also empty the original empty result stands. The opposite
+  direction (Korean typed with the English IME) is deliberately absent: it needs a syllable-
+  composing automaton, and the log contains no instance of it.
 - **A "says done" check in the vault diagnostics.** It counts notes whose frontmatter claims the
   work is finished while the body still holds `- [ ]`. The app's diagnostics screen,
   `lapis doctor` and MCP's `audit:"decay"` all call the **same** function. Notes with no

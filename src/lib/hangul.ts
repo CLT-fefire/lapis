@@ -38,6 +38,36 @@ export function chosungOf(str: string): string {
   return out;
 }
 
+/** 중성 21자 (음절 중성 인덱스 0–20 순서, 호환 자모). */
+const JUNGSEONG = [
+  "ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅘ",
+  "ㅙ", "ㅚ", "ㅛ", "ㅜ", "ㅝ", "ㅞ", "ㅟ", "ㅠ", "ㅡ", "ㅢ", "ㅣ",
+];
+
+/** 종성 28자 (인덱스 0 = 받침 없음). */
+const JONGSEONG = [
+  "", "ㄱ", "ㄲ", "ㄳ", "ㄴ", "ㄵ", "ㄶ", "ㄷ", "ㄹ", "ㄺ",
+  "ㄻ", "ㄼ", "ㄽ", "ㄾ", "ㄿ", "ㅀ", "ㅁ", "ㅂ", "ㅄ", "ㅅ",
+  "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
+];
+
+/**
+ * 완성된 음절 하나를 **초성·중성·종성**으로 푼다. 한글이 아니면 그대로 담아 돌려준다.
+ *
+ * ⚠️ `chosungOf` 와 달리 **모두** 낸다. 초성 검색은 첫 자음만 있으면 되지만, 자판을
+ * 되돌리려면 사람이 실제로 누른 키가 전부 필요하다 — 받침을 빼면 `한글` 이 `gk` 가 된다.
+ */
+export function decomposeSyllable(ch: string): string[] {
+  const code = ch.codePointAt(0);
+  if (code === undefined || code < HANGUL_BASE || code > HANGUL_LAST) return [ch];
+  const i = code - HANGUL_BASE;
+  return [
+    CHOSEONG[Math.floor(i / 588)],
+    JUNGSEONG[Math.floor((i % 588) / 28)],
+    JONGSEONG[i % 28],
+  ].filter((x) => x !== "");
+}
+
 /**
  * 쿼리가 "순수 초성"인가 — 공백을 제외한 모든 문자가 초성 자음(호환 자모)일 때만 true.
  * 한글 음절·모음·라틴 문자가 섞이면 false(일반 fuzzy 경로 사용).
