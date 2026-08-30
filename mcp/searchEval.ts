@@ -39,8 +39,8 @@
 
 import MiniSearch, { type Options, type SearchOptions } from "minisearch";
 import { readFileSync } from "node:fs";
-import { FULLTEXT_OPTIONS, type FullTextDoc, unionRank } from "./entry.ts";
-import { loadShards, norm, resolveVault, type VaultCache } from "./cache.ts";
+import { FULLTEXT_OPTIONS, type FullTextDoc, unionRank } from "../core/entry.ts";
+import { loadShards, norm, resolveVault, type VaultCache } from "../core/cache.ts";
 
 export interface EvalCase {
   kind: "title" | "title-short" | "body";

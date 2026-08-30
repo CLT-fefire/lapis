@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCases } from "./searchEval.ts";
-import type { VaultCache } from "./cache.ts";
+import type { VaultCache } from "../core/cache.ts";
 
 /**
  * **측정 도구가 아무것도 안 재고 통과라고 말하지 않는지** 본다.

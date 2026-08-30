@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { LapisError } from "../mcp/cache.ts";
+import { LapisError } from "../core/cache.ts";
 import { parseArgs, UsageError, type ParsedCommand } from "./args.ts";
 import { HANDLERS, type Out } from "./handlers.ts";
 import { renderRootHelp, renderCommandHelp, renderError } from "./render.ts";

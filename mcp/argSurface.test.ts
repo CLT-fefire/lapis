@@ -28,7 +28,7 @@ import { COMMANDS } from "../cli/spec.ts";
  *   적게 된다.
  */
 
-const QUERY = "mcp/query.ts";
+const QUERY = "core/query.ts";
 const SERVER = "mcp/server.ts";
 
 /** `QueryArgs` 인터페이스 본문에서 키 이름을 뽑는다. */

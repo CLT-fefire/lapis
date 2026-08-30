@@ -98,16 +98,19 @@ describe("쓰기 도구가 없다", () => {
  * **세 곳(Rust · MCP · CLI)** 에 흩어진다. 이 저장소에서 가장 자주 나온 결함이
  * "규칙이 두 곳에 있어 갈린 것"이다.
  *
- * 그래서 `cli/renderRequest.ts` 한 곳에 두고 둘이 부른다. 그 규칙들(옛 결과 먼저
+ * 그래서 `ops/renderRequest.ts` 한 곳에 두고 둘이 부른다. 그 규칙들(옛 결과 먼저
  * 지우기 · 크기 0 은 아직 · 실패 보고 가려내기 · 두 원인을 다 말하기)은
- * `cli/renderRequest.test.ts` 가 지킨다. 여기서는 **두 벌이 안 생겼는지**만 본다.
+ * `ops/renderRequest.test.ts` 가 지킨다. 여기서는 **두 벌이 안 생겼는지**만 본다.
+ *
+ * ⚠️ `ops/` 로 내린 이유 — cli 도 mcp 도 **둘 다 앱의 클라이언트**다. 한쪽 지붕 밑에
+ * 두면 다른 쪽이 그걸 부르느라 순환이 생긴다.
  *
  * 실측 근거: 리팩터 뒤 CLI 와 MCP 가 같은 노트에서 **정확히 같은 16,765 바이트**를 냈다.
  */
 describe("lapis_render", () => {
   it("공유 모듈에 맡긴다", () => {
     expect(src).toMatch(/requestRender\(/);
-    expect(src).toMatch(/from "\.\.\/cli\/renderRequest\.ts"/);
+    expect(src).toMatch(/from "\.\.\/ops\/renderRequest\.ts"/);
   });
 
   /** ⚠️ 옮긴 것을 여기 다시 적으면 두 벌이 된다 — 옮긴 의미가 사라진다. */
@@ -250,7 +253,7 @@ describe("app_timeout 조치문", () => {
   /** ⚠️ 조치문 본문은 `cli/renderRequest.ts` 에 있다 — CLI 도 같은 말을 해야 한다. */
   it("두 원인을 다 말한다", () => {
     const rr = readFileSync(
-      fileURLToPath(new URL("../cli/renderRequest.ts", import.meta.url)),
+      fileURLToPath(new URL("../ops/renderRequest.ts", import.meta.url)),
       "utf-8",
     );
     // ⚠️ 타입 선언(`kind: "app_timeout";`)이 아니라 **구현부**를 찾는다. 앞의 것을

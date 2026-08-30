@@ -6,8 +6,8 @@
  * 프로토콜을 직접 다루는 게 의존성을 하나 더 지는 것보다 싸다.
  */
 
-import { lapisQuery, type QueryArgs } from "./query.ts";
-import { LapisError, mcpDisabledError, readMcpGate } from "./cache.ts";
+import { lapisQuery, type QueryArgs } from "../core/query.ts";
+import { LapisError, mcpDisabledError, readMcpGate } from "../core/cache.ts";
 import { TOOLS } from "./tools.ts";
 
 const TOOL = {

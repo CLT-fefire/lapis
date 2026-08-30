@@ -8,27 +8,27 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { resolveNotePath } from "./query.ts";
+import { resolveNotePath } from "../core/query.ts";
 import {
   LapisError,
   resolveVault,
   usageDirs,
   normPath,
   checkStale,
-} from "./cache.ts";
+} from "../core/cache.ts";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import { buildIndex } from "$lib/linkIndex";
-import { launchOpen, LaunchError } from "../cli/appLaunch.ts";
+import { launchOpen, LaunchError } from "../ops/appLaunch.ts";
 import {
   requestRender,
   RENDER_FORMATS,
   RENDER_TIMEOUT_MS_DEFAULT,
   type RenderFormat,
-} from "../cli/renderRequest.ts";
-import { runIndex, IndexError } from "../cli/indexRun.ts";
-import { runExport, ExportError } from "../cli/exportRun.ts";
+} from "../ops/renderRequest.ts";
+import { runIndex, IndexError } from "../ops/indexRun.ts";
+import { runExport, ExportError } from "../ops/exportRun.ts";
 
 /**
  * MCP 앱 조작 도구들.

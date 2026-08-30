@@ -5,7 +5,7 @@ import {
   resolveNotePath,
   vaultTimeOf,
   type QueryArgs,
-} from "../mcp/query.ts";
+} from "../core/query.ts";
 import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
 import { spawnSync } from "node:child_process";
 import {
@@ -18,8 +18,8 @@ import {
   disableCustomCss,
   settingsFileCandidates,
   LapisError,
-} from "../mcp/cache.ts";
-import { buildIndex } from "../mcp/entry.ts";
+} from "../core/cache.ts";
+import { buildIndex } from "../core/entry.ts";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
 import {
   findOrphans,
@@ -35,20 +35,20 @@ import {
   RENDER_FORMATS,
   RENDER_TIMEOUT_MS_DEFAULT,
   type RenderFormat,
-} from "./renderRequest.ts";
+} from "../ops/renderRequest.ts";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { applyTemplate, defaultBody, TEMPLATE_DIR } from "$lib/noteTemplate";
-import { usageDirs, normPath } from "../mcp/cache.ts";
+import { usageDirs, normPath } from "../core/cache.ts";
 import { homedir, tmpdir } from "node:os";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
-import { runIndex, IndexError } from "./indexRun.ts";
-import { runExport, ExportError } from "./exportRun.ts";
-import { launchOpen, LaunchError } from "./appLaunch.ts";
+import { runIndex, IndexError } from "../ops/indexRun.ts";
+import { runExport, ExportError } from "../ops/exportRun.ts";
+import { launchOpen, LaunchError } from "../ops/appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
 import { FACETS, TAG_ACTIONS, PROPS_ACTIONS, COMMANDS } from "./spec.ts";

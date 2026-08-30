@@ -15,7 +15,7 @@
 ## 무엇인가
 
 `lapis-mcp`가 **AI에게** 인덱스를 열어주는 창구라면, 이쪽은 **사람과 스크립트에게** 여는
-창구다. 같은 캐시를 읽고 같은 랭킹을 쓴다 — `mcp/query.ts`의 `lapisQuery()`가 두 소비자의
+창구다. 같은 캐시를 읽고 같은 랭킹을 쓴다 — `core/query.ts`의 `lapisQuery()`가 두 소비자의
 공용 핵이다.
 
 ```
@@ -289,7 +289,7 @@ vault가 캐시보다 새로우면 `status`가 알려주지만 **막지는 않�
 
 ```
 ① lapis.exe --headless export-index  →  Rust가 vault를 훑어 원자료 JSON
-② Node가 fullTextOptions.ts로 shard 빌드              (cli/indexBuild.ts)
+② Node가 fullTextOptions.ts로 shard 빌드              (ops/indexBuild.ts)
 ③ lapis.exe --headless import-index  →  Rust가 순서를 지켜 캐시에 커밋
 ```
 

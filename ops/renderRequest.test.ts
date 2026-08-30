@@ -18,7 +18,7 @@ import { RENDER_FORMATS, renderArgs, type RenderFormat } from "./renderRequest.t
 
 const src = readFileSync(fileURLToPath(new URL("./renderRequest.ts", import.meta.url)), "utf-8");
 const tools = readFileSync(fileURLToPath(new URL("../mcp/tools.ts", import.meta.url)), "utf-8");
-const handlers = readFileSync(fileURLToPath(new URL("./handlers.ts", import.meta.url)), "utf-8");
+const handlers = readFileSync(fileURLToPath(new URL("../cli/handlers.ts", import.meta.url)), "utf-8");
 
 describe("argv 이름은 한 곳에서 나온다", () => {
   it("Rust 가 읽는 이름 그대로 만든다", () => {

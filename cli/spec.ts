@@ -1,4 +1,4 @@
-import { RENDER_TIMEOUT_MS_DEFAULT } from "./renderRequest.ts";
+import { RENDER_TIMEOUT_MS_DEFAULT } from "../ops/renderRequest.ts";
 /**
  * CLI 표면의 **단일 출처** — 명령·옵션·설명이 여기 한 곳에만 있다.
  *

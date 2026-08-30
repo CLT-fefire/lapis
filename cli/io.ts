@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { normPath } from "../mcp/cache.ts";
+import { normPath } from "../core/cache.ts";
 import { BACKUP_ROOT, relativeToVault, type SafeWriteIo } from "$lib/safeWrite";
 
 /**

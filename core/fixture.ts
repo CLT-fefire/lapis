@@ -10,8 +10,8 @@ import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import MiniSearch from "minisearch";
-import { FULLTEXT_OPTIONS, type FullTextDoc, type LinkInfo } from "./entry.ts";
-import { CACHE_VERSION, fingerprintOf, normPath, normalizeVaultArg } from "./cache.ts";
+import { FULLTEXT_OPTIONS, type FullTextDoc, type LinkInfo } from "../core/entry.ts";
+import { CACHE_VERSION, fingerprintOf, normPath, normalizeVaultArg } from "../core/cache.ts";
 
 export interface FixtureNote {
   rel: string;
