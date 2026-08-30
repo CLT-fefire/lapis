@@ -8,7 +8,8 @@
     isKebab,
     FrontmatterParseError,
   } from "$lib/frontmatter";
-  import { DOC_KIND_ENUM, topicCounts } from "$lib/stores/filters";
+  import { topicCounts } from "$lib/stores/filters";
+import { DOC_KIND_ENUM } from "$lib/filterSelection";
   import { selectTag, showTagsTab, tagIndex } from "$lib/stores/tags";
   import { linkIndex } from "$lib/stores/vault";
   import { noteContentChanged } from "$lib/stores/editor";

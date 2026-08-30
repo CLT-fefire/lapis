@@ -8,7 +8,8 @@ import {
   type QuickEntry,
 } from "$lib/searchIndex";
 import { quickEntries, fullTextIndexReady } from "$lib/stores/search";
-import { tagIndex, type TagIndex } from "$lib/stores/tags";
+import { tagIndex } from "$lib/stores/tags";
+import { type TagIndex } from "$lib/tagIndex";
 import { docKindCounts, topicCounts } from "$lib/stores/filters";
 import { matchCommands, BUILTIN_COMMANDS, type Command } from "$lib/commands";
 import { recentNotePaths, RECENT_DISPLAY } from "$lib/stores/recent";

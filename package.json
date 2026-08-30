@@ -10,6 +10,7 @@
     "check": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:mcp": "tsc -p mcp/tsconfig.json",
     "check:cli": "tsc -p cli/tsconfig.json",
+    "check:arch": "node scripts/arch-gate.mjs",
     "check:watch": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
     "test": "npm run i18n && vitest run",

@@ -5,6 +5,7 @@
 #
 #   npm run check      svelte-check (paraglide 컴파일 선행)
 #   npm run check:mcp  MCP 서버 tsc
+#   npm run check:arch 층 경계 게이트
 #   npm test           vitest (src/ + mcp/)
 #   npm run build      vite 빌드
 #   cargo fmt --check  Rust 포맷
@@ -56,6 +57,11 @@ jobs:
       # 검사되지 않는다 — 설정 파일만 있고 아무도 안 돌리면 없는 것과 같다.
       - name: CLI 타입 체크
         run: npm run check:cli
+
+      # 층 경계 — 헤드리스가 Svelte 를 물지 않는지, cli↔mcp 순환이 자라지 않는지.
+      # 문서에만 있는 규칙은 반드시 새어 나간다.
+      - name: 아키텍처 게이트
+        run: npm run check:arch
 
       - name: 단위 테스트
         run: npm test

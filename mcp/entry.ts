@@ -11,8 +11,11 @@
  */
 
 export { buildIndex } from "$lib/linkIndex";
-export { buildTagIndex } from "$lib/stores/tags";
-export { applyFilters, emptySelection } from "$lib/stores/filters";
+// ⚠️ 둘 다 예전엔 `stores/` 에서 왔다. 스토어를 안 만지는 순수 함수인데 그 파일에 얹혀
+//    있어서, 이 함수 하나 때문에 **Svelte 가 통째로 딸려 왔다.** 순수 모듈로 뗐다.
+//    `scripts/arch-gate.mjs` 가 되돌아오는 것을 막는다.
+export { buildTagIndex } from "$lib/tagIndex";
+export { applyFilters, emptySelection } from "$lib/filterSelection";
 export { collectOpenTasks, countOpenTasks } from "$lib/openTasks";
 export { koBigramTokenize, normalizeTerm } from "$lib/koTokenize";
 export {

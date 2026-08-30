@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTagIndex } from "./tags";
+import { buildTagIndex } from "../tagIndex";
 import type { LinkInfo } from "$lib/tauri/notes";
 
 /**

@@ -69,14 +69,10 @@ import { pendingHeadingAnchor } from "$lib/stores/outline";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { diffFileStats, deltaGate, touchedPaths, type CacheDelta } from "$lib/cacheDelta";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
-import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
-import {
-  buildFacetCounts,
-  docKindCounts,
-  topicCounts,
-  clearFacetCounts,
-  clearFilters,
-} from "$lib/stores/filters";
+import { tagIndex, clearTagIndex } from "$lib/stores/tags";
+import { buildTagIndex } from "$lib/tagIndex";
+import { docKindCounts, topicCounts, clearFacetCounts, clearFilters } from "$lib/stores/filters";
+import { buildFacetCounts } from "$lib/filterSelection";
 import { pushRecent } from "$lib/stores/recent";
 import { scopedKey, pruneOrphanScopedKeys } from "$lib/windowScope";
 import {
