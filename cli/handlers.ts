@@ -21,6 +21,7 @@ import {
 } from "../core/cache.ts";
 import { buildIndex } from "../core/entry.ts";
 import { noteStem, stripNoteExt, withNoteExt } from "$lib/notePath";
+import { readBodies as readNoteBodies } from "$lib/readBodies";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
 import {
   findOrphans,
@@ -146,16 +147,14 @@ function requireFreshIndex(out: Out, vc: VaultCache, p: ParsedCommand): void {
  * ⚠️ 감사 중 `--unlinked` 하나만 본문이 필요하다. 나머지는 인덱스만으로 되므로 이 함수를
  * 부르는 곳을 늘리기 전에 정말 본문이 필요한지 먼저 본다 — 큰 vault에서 비용을 지배한다.
  */
-function readBodies(vc: VaultCache): Map<string, string> {
-  const bodies = new Map<string, string>();
-  for (const info of vc.infos) {
-    try {
-      bodies.set(info.source_path, readFileSync(info.source_path, "utf8"));
-    } catch {
-      // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
-    }
-  }
-  return bodies;
+function readBodies(vc: VaultCache): { map: Map<string, string>; unreadable: number } {
+  // 🔴 읽기와 **못 읽은 수 세기**는 `$lib/readBodies` 한 곳에 있다.
+  //    예전엔 여기서 조용히 건너뛰어서, 결과가 전부인지 아닌지를 알 방법이 없었다.
+  const r = readNoteBodies(
+    vc.infos.map((i) => i.source_path),
+    (p) => readFileSync(p, "utf8"),
+  );
+  return { map: new Map(r.bodies.map((b) => [b.path, b.body])), unreadable: r.unreadable };
 }
 
 /** 공통 옵션을 `QueryArgs`로. 명령별 핸들러가 자기 것만 얹는다. */
@@ -301,7 +300,7 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
   if (unlinked) {
     // ⚠️ 본문을 전부 읽는다. 다른 감사 셋은 인덱스만으로 되지만 이건 본문이 있어야 한다 —
     //    그래서 `--unlinked`가 눈에 띄게 느리고, 도움말에도 그렇게 적어 뒀다.
-    const rows = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
+    const rows = findUnlinkedMentions(index, readBodies(vc).map).map((r) => ({
       ...r,
       target: rel(r.target),
       sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
@@ -705,7 +704,7 @@ function cmdStats(p: ParsedCommand, out: Out): void {
   const tags = new Set<string>();
   for (const i of infos) for (const t of i.tags ?? []) tags.add(t);
   const taskGroups = collectOpenTasks(
-    [...readBodies(vc)].map(([path, body]) => ({ path, body })),
+    [...readBodies(vc).map].map(([path, body]) => ({ path, body })),
   );
   const openTasks = countOpenTasks(taskGroups);
   // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다.
@@ -1235,7 +1234,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   //    doctor 전체가 0.73 → 0.79초였다(+54 ms). 큰 vault에서는 이 항목이 비용을 지배한다.
   const fmIssues = findFrontmatterIssues(index);
 
-  const unlinked = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
+  const unlinked = findUnlinkedMentions(index, readBodies(vc).map).map((r) => ({
     ...r,
     target: rel(r.target),
     sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
@@ -1663,22 +1662,30 @@ function defaultRenderOut(notePath: string, format: RenderFormat): string {
  * ⚠️ **본문을 전부 읽는다.** `links --unlinked` 와 같은 부류다 — 인덱스로는 안 된다.
  * ⚠️ 코드 블록 안은 안 센다. 셸 예시의 `- [ ]` 를 할 일로 세면 목록을 못 믿게 된다.
  */
+/**
+ * 🔴 **못 읽은 노트가 있으면 말한다.**
+ *
+ * 캐시에는 있는데 디스크에서 사라졌거나 권한이 막힌 노트는 집계에서 빠진다. 그걸 안
+ * 말하면 "미완 12건"이 전부인지 아닌지를 **알 방법이 없다** — 분모가 조용히 줄어든 것이다.
+ *
+ * ⚠️ 0 이면 아무 말도 안 한다. 늘 한 줄을 더 내면 정상이 시끄러워지고, 시끄러운 정상은
+ * 곧 안 읽힌다.
+ */
+function reportUnreadable(out: Out, n: number): void {
+  if (n === 0) return;
+  out.line(`  ⚠️ ${n}개 노트를 못 읽어 위 숫자에서 빠졌다 — 'lapis index' 로 캐시를 맞춰 볼 것`);
+}
+
 export function cmdTasks(p: ParsedCommand, out: Out): void {
   const action = p.positional[0];
   if (action !== "audit") {
     out.fail("no_criteria", `모르는 동작: ${action}`, "쓸 수 있는 값: audit", 2);
   }
   const vc = resolveVault(vaultOf(p));
-  const groups = collectOpenTasks(
-    vc.infos.flatMap((info) => {
-      try {
-        return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
-      } catch {
-        // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
-        return [];
-      }
-    }),
-  );
+  // 🔴 못 읽은 노트를 **센다.** 캐시에는 있는데 디스크에서 사라졌거나 권한이 막힌
+  //    노트가 있으면 아래 숫자가 그만큼 덜 센 것이다 — 조용히 빠지면 알 길이 없다.
+  const read = readBodies(vc);
+  const groups = collectOpenTasks([...read.map].map(([path, body]) => ({ path, body })));
   // ⚠️ **거르기는 전체를 센 뒤에 한다.** 거른 것을 분모로 삼으면 "몇 건 숨겼는지"를
   //    말할 수 없고, 그러면 `--under` 한 번에 나머지가 조용히 사라진다.
   const totalAll = countOpenTasks(groups);
@@ -1709,6 +1716,8 @@ export function cmdTasks(p: ParsedCommand, out: Out): void {
       total: totalAll,
       shown: totalShown,
       hidden,
+      // ⚠️ 0 이 아니면 위 숫자가 **그만큼 덜 센 것**이다.
+      unreadable: read.unreadable,
       concentration: conc,
       groups: p.options.count === true ? [] : shown,
     });
@@ -1716,11 +1725,13 @@ export function cmdTasks(p: ParsedCommand, out: Out): void {
 
   if (totalAll.open === 0) {
     out.line("미완 작업이 없다.");
+    reportUnreadable(out, read.unreadable);
     reportStale(out, vc);
     return;
   }
 
   out.line(`${totalAll.open}건 미완 · ${totalAll.done}건 완료`);
+  reportUnreadable(out, read.unreadable);
   if (conc.top) {
     // 🔴 맨숫자 하나는 어디에 몰렸는지를 감춘다 — `stats` 와 같은 이유다.
     out.line(

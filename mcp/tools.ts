@@ -17,6 +17,7 @@ import {
   checkStale,
 } from "../core/cache.ts";
 import { noteStem } from "$lib/notePath";
+import { readBodies } from "$lib/readBodies";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
@@ -190,16 +191,13 @@ const statsTool: ToolDef = {
     };
     const tags = /* @__PURE__ */ new Set();
     for (const i of vc.infos) for (const t of i.tags ?? []) tags.add(t);
-    const bodies: { path: string; body: string }[] = [];
-    for (const i of vc.infos) {
-      try {
-        bodies.push({
-          path: i.source_path,
-          body: readFileSync(i.source_path, "utf-8"),
-        });
-      } catch {}
-    }
-    const groups = collectOpenTasks(bodies);
+    // 🔴 **못 읽은 노트를 센다.** 예전엔 조용히 건너뛰어서 "미완 N건"이 전부인지
+    //    아닌지를 알 방법이 없었다 — 분모가 조용히 줄어든 것이다.
+    const read = readBodies(
+      vc.infos.map((i) => i.source_path),
+      (p) => readFileSync(p, "utf-8"),
+    );
+    const groups = collectOpenTasks(read.bodies);
     return {
       vault: vc.root,
       notes: vc.infos.length,
@@ -208,6 +206,8 @@ const statsTool: ToolDef = {
       tags: tags.size,
       tasks: {
         ...countOpenTasks(groups),
+        // ⚠️ 0 이 아니면 위 숫자가 **그만큼 덜 센 것**이다. 안 내면 알 길이 없다.
+        unreadable: read.unreadable,
         // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다 — 이 vault 는
         //    미완 89건 중 67건이 체크리스트 한 파일이었다.
         concentration: taskConcentration(groups),

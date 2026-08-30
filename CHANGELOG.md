@@ -27,6 +27,15 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **Notes that could not be read were dropped without saying so.** Counting open tasks needs
+  the note bodies, and when a note in the cache is gone from disk — or unreadable — five
+  places quietly skipped it. So "12 open" could mean twelve, or twelve plus however many
+  were skipped, with nothing to tell the two apart. The same file had already added a
+  "where are they concentrated" number because a bare count hides things; the denominator
+  itself could be wrong. Reading and counting now live in one place, and both `lapis_stats`
+  and `tasks audit` report how many were skipped — but only when it is not zero, because a
+  noisy normal stops being read.
+
 - **`.mmd` notes were only half supported.** The app treats `.mmd` as a first-class note —
   Rust indexes it, the watcher watches it, the new-note dialog knows it — but three paths
   still assumed `.md`:
