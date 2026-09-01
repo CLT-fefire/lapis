@@ -225,7 +225,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "doctor",
-    desc: "vault 건강 검진 — 감사 넷 + 인덱스 낡음을 한 번에. 본문을 읽으므로 느리다",
+    desc: "vault 건강 검진 — 감사를 한 번에 돌리고 인덱스 낡음도 본다. 본문을 읽으므로 느리다",
     positional: [],
     options: [],
   },

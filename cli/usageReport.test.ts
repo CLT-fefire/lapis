@@ -129,3 +129,22 @@ describe("사람용 요약이 JSON 과 같은 것을 말한다", () => {
     if (n > 10) expect(text).toMatch(/외 \d+개|더 있다|\.\.\./);
   });
 });
+
+/**
+ * 🔴 **개수를 손으로 적으면 낡는다.**
+ *
+ * `lapis --help` 의 `doctor` 줄이 *"감사 넷"* 이라고 적어 둔 사이에 실제로는 일곱이 됐다.
+ * `cli/README.md` 는 같은 것을 *"다섯"* 이라고 적고 있었다 — **한 사실에 세 숫자.**
+ *
+ * ⚠️ 사용자에게 보이는 자리라 조용히 틀린다. 아무 에러도 안 나고, 읽은 사람만 틀린 것을 믿는다.
+ */
+describe("도움말이 개수를 손으로 적지 않는다", () => {
+  it("doctor 설명에 개수 낱말이 없다", async () => {
+    const { COMMANDS: SPEC } = await import("./spec.ts");
+    const desc = SPEC.find((c) => c.name === "doctor")?.desc ?? "";
+    expect(desc.length, "doctor 설명을 못 찾았다").toBeGreaterThan(0);
+    for (const word of ["셋", "넷", "다섯", "여섯", "일곱", "여덟"]) {
+      expect(desc, `개수(${word})를 적어 두면 검사가 늘 때 낡는다`).not.toContain(word);
+    }
+  });
+});

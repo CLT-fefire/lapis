@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { COMMAND_IDS } from "./commandIds";
+import { HYGIENE_TABS, hygieneCommandId } from "./hygieneTabs";
 import { UsageAnalyzer } from "./usageAnalyzer";
 import { serialize } from "./usageSchema";
 
@@ -68,15 +69,17 @@ describe("실제 명령과 목록이 같다", () => {
     //    옮기면 나머지 순수 검사까지 브라우저 해석을 타게 된다.
     const src = read("./commands.ts");
     const stat = [...src.matchAll(/^\s*id: "([a-z0-9.-]+)",$/gm)].map((m) => m[1]);
-    const dyn = [...src.matchAll(/id: `([a-z-]+)-\$\{(\w+)\}`/g)].flatMap(([, prefix, varName]) => {
-      // `...(["a","b"] as const).map((tab) => ({ id: `audit-${tab}` ...`
-      const listRe = new RegExp(`\\(\\[([^\\]]+)\\] as const\\)\\.map\\(\\(${varName}\\)`);
-      const hit = listRe.exec(src);
-      if (!hit) return [];
-      return hit[1].split(",").map((s) => `${prefix}-${s.trim().replace(/"/g, "")}`);
-    });
+    // 진단 탭 명령은 **목록에서 만든다**(`HYGIENE_TABS`). 소스에 리터럴 id 가 없으므로
+    // 생성이 실제로 거기 있는지 확인하고, 펼치는 것은 **주인 목록**으로 한다.
+    //
+    // ⚠️ 여기서 탭 이름을 손으로 다시 적으면 이 파일이 네 번째 사본이 된다.
+    const gen = /HYGIENE_TABS\.filter\(\((\w+)\) => \1 !== "(\w+)"\)\.map\(/.exec(src);
+    const dyn = gen ? HYGIENE_TABS.filter((t) => t !== gen[2]).map(hygieneCommandId) : [];
     const built = [...stat, ...dyn].sort();
     expect(built.length, "명령을 하나도 못 뽑았다 — 정규식이 코드와 어긋났다").toBeGreaterThan(10);
+    // ⚠️ 생성 쪽도 따로 본다. 위 숫자는 정적 id 만으로도 넘어서 **생성이 통째로 빠져도
+    //    조용히 통과**할 수 있다 — 실제로 생성 방식을 바꿨을 때 그럴 뻔했다.
+    expect(dyn.length, "진단 탭 명령을 하나도 못 뽑았다 — 생성 코드와 어긋났다").toBeGreaterThan(5);
     expect(built).toEqual([...COMMAND_IDS].sort());
   });
 });

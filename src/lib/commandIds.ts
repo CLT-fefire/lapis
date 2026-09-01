@@ -23,9 +23,13 @@
  * - **목록에만 있고 안 만들면** → `commandIds.test.ts` 가 소스에서 뽑아 비교한다
  */
 export const COMMAND_IDS = [
+  "audit-changes",
+  "audit-decay",
   "audit-orphans",
   "audit-props",
+  "audit-stale",
   "audit-tags",
+  "audit-tasks",
   "audit-unlinked",
   "broken-links",
   "copy-current-note-path",

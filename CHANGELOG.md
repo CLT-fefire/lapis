@@ -56,6 +56,16 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
   including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
 
 ### Fixed
+- **The diagnostics screen kept three different lists of its own tabs.** The modal knew nine, the
+  type documented as "shared by the modal and the palette" knew seven, and the palette reached five —
+  so four tabs had no direct palette command, and the type not knowing two of them meant a command
+  could not even be added without a compile error. The comment above that list had predicted this
+  exact failure once before; the cause was the same both times, a list maintained by hand. The list
+  now has one owner, and the label table is typed so that adding a tab without a label fails to
+  compile; the other direction is covered by a test.
+- **The help text hard-coded how many checks `doctor` runs, and went stale.** The CLI help said
+  four and the README said five while it actually runs seven. The counts are gone, and a test keeps
+  them from coming back.
 - **The watcher treated directory events as notes.** The usage log had accumulated **43** occurrences
   of a failed incremental reindex, and every path was a directory. The Rust side forwards directory
   events on purpose (to notice renames), but the frontend heard "a note changed" — the scan failed,

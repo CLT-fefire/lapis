@@ -1,4 +1,5 @@
 import { writable } from "svelte/store";
+import type { HygieneTab } from "$lib/hygieneTabs";
 
 /**
  * 끊긴 링크 감사 화면의 **열림 상태만** 담는다.
@@ -10,8 +11,14 @@ import { writable } from "svelte/store";
  */
 export const brokenLinksOpen = writable<boolean>(false);
 
-/** 위생 화면의 탭 id — 모달과 팔레트가 공유한다. */
-export type HygieneTab = "broken" | "orphans" | "tags" | "unlinked" | "props" | "tasks" | "changes";
+/**
+ * 위생 화면의 탭 id.
+ *
+ * ⚠️ **주인은 `$lib/hygieneTabs` 다.** 예전엔 여기서 유니온을 손으로 적었고, 모달은
+ * 자기 것을 또 적었다 — "공유한다"고 주석에 적어 두고도 셋이 갈렸다(9 · 7 · 5).
+ * 여기서 다시 적지 않는다.
+ */
+export type { HygieneTab };
 
 /**
  * **열 때 어느 탭으로 갈지.** 팔레트가 세우고 모달이 읽는다.

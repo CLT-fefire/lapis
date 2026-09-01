@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
+  import type { HygieneTab } from "$lib/hygieneTabs";
   import { noteStem } from "$lib/notePath";
   import { findStaleNotes } from "$lib/staleNotes";
   import { mtimeOf } from "$lib/stores/mtimes";
@@ -56,16 +57,9 @@
    * 두면 인덱스 재빌드 경로와 어긋날 여지만 는다.
    */
 
-  type Tab =
-    | "broken"
-    | "orphans"
-    | "tags"
-    | "unlinked"
-    | "props"
-    | "tasks"
-    | "decay"
-    | "changes"
-    | "stale";
+  // ⚠️ 목록의 주인은 `$lib/hygieneTabs` 다. 여기서 유니온을 다시 적으면
+  //    `hygieneTabs.test.ts` 가 막는다 — 예전에 셋이 갈렸다(9 · 7 · 5).
+  type Tab = HygieneTab;
   let tab = $state<Tab>("broken");
 
   // 열릴 때 팔레트가 지정한 탭으로 간다. ⚠️ **열릴 때만** — 열려 있는 동안 store 가
