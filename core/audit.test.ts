@@ -18,7 +18,7 @@ import path from "node:path";
  */
 
 const SERVER = readFileSync(
-  fileURLToPath(new URL("./server.ts", import.meta.url)),
+  fileURLToPath(new URL("../mcp/server.ts", import.meta.url)),
   "utf-8",
 );
 

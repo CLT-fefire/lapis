@@ -179,7 +179,7 @@ describe("config", () => {
    * `vault.rs` 의 쓰기 불변식이 여기에도 그대로 필요하다.
    */
   it("쓰기가 원자적이다", () => {
-    const cache = readFileSync(fileURLToPath(new URL("../mcp/cache.ts", import.meta.url)), "utf-8");
+    const cache = readFileSync(fileURLToPath(new URL("../core/cache.ts", import.meta.url)), "utf-8");
     expect(cache).toMatch(/renameSync\(tmp, file\)/);
     // ⚠️ 설정 파일에 직접 쓰는 곳이 하나라도 남으면 그 경로만 위험한 채로 남는다.
     expect(cache, "설정 파일을 직접 덮어쓴다").not.toMatch(/writeFileSync\(file,/);

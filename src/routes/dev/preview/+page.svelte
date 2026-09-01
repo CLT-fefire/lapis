@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { noteStem } from "$lib/notePath";
   import VaultHygieneModal from "$lib/VaultHygieneModal.svelte";
   import GrepModal from "$lib/GrepModal.svelte";
 import SettingsModal from "$lib/SettingsModal.svelte";
@@ -56,10 +57,10 @@ import { settingsOpen } from "$lib/stores/settings";
   let surface = $state<Surface>("hygiene");
 
   const mkInfo = (path: string, extra: Partial<LinkInfo> = {}): LinkInfo => {
-    const segs = path.split("/").filter(Boolean);
     return {
       source_path: path,
-      source_name: (segs[segs.length - 1] ?? path).replace(/\.md$/i, ""),
+      // ⚠️ 예전엔 `.md` 만 벗겼다 — 규칙은 `notePath.ts` 하나다.
+      source_name: noteStem(path),
       title: null,
       aliases: [],
       tags: [],

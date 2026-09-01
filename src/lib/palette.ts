@@ -1,3 +1,4 @@
+import { hangulToQwerty } from "$lib/imeSwap";
 import { get } from "svelte/store";
 import { chosungOf, isChosungQuery } from "$lib/hangul";
 import {
@@ -8,7 +9,8 @@ import {
   type QuickEntry,
 } from "$lib/searchIndex";
 import { quickEntries, fullTextIndexReady } from "$lib/stores/search";
-import { tagIndex, type TagIndex } from "$lib/stores/tags";
+import { tagIndex } from "$lib/stores/tags";
+import { type TagIndex } from "$lib/tagIndex";
 import { docKindCounts, topicCounts } from "$lib/stores/filters";
 import { matchCommands, BUILTIN_COMMANDS, type Command } from "$lib/commands";
 import { recentNotePaths, RECENT_DISPLAY } from "$lib/stores/recent";
@@ -488,6 +490,50 @@ export async function unifiedSearch(
   // 최종 컷에 든 content에만 스니펫 생성 — dedupe(파일과 같은 path)·30컷으로 탈락한 hit은 IO 안 함.
   await fillContentSnippets(final, query);
   return final;
+}
+
+
+/** `unifiedSearchWithFallback` 의 답. */
+export interface UnifiedSearchOutcome {
+  results: PaletteResult[];
+  /**
+   * IME 를 되돌려 **다시 찾은** 질의. 없으면 처음 질의로 찾은 것이다.
+   *
+   * 🔴 화면은 이걸 반드시 보여줘야 한다. 조용히 다른 것을 찾아 주면 사용자는 왜 그게
+   * 나왔는지 모르고, 그러면 다음부터 결과 자체를 안 믿는다.
+   */
+  imeSwappedTo?: string;
+}
+
+/**
+ * 찾고, **0건이면 한 번만** 자판을 되돌려 다시 찾는다.
+ *
+ * ## 🔴 왜 (2026-08-30 실사용 로그)
+ *
+ * "결과가 0건이던 질의" 아홉 중 **일곱**이 한글 IME 를 켠 채 친 영문이었다
+ * (`ㄴㄷ셔ㅔㅠㅁㄴㄷ` → `setupbase`). 찾던 노트는 vault 에 있었는데 못 찾았다.
+ *
+ * ⚠️ **0건일 때만** 돈다. 되는 질의의 순위는 절대 안 건드린다 — 검색 품질을 바꾸는
+ * 변경이 아니라 **막다른 골목에서만** 여는 뒷문이다.
+ *
+ * ⚠️ 한 번만 시도한다. 되돌린 질의가 또 0건이면 거기서 끝이다.
+ */
+export async function unifiedSearchWithFallback(
+  input: string,
+  hint: PaletteMode = "all",
+): Promise<UnifiedSearchOutcome> {
+  const results = await unifiedSearch(input, hint);
+  if (results.length > 0) return { results };
+
+  const { query } = parseInput(input, hint);
+  if (!query.trim()) return { results };
+
+  const swapped = hangulToQwerty(query);
+  if (!swapped) return { results };
+
+  const retry = await unifiedSearch(swapped, hint);
+  if (retry.length === 0) return { results };
+  return { results: retry, imeSwappedTo: swapped };
 }
 
 /** 그룹별로 결과 분할 — UI 렌더링용. 빈 그룹은 제외하지 않음(헤더 결정은 UI에서). */

@@ -1,5 +1,8 @@
 import { resolveTarget, targetName, type LinkIndex } from "$lib/linkIndex";
 import type { LinkInfo } from "$lib/tauri/notes";
+import { statusLifecycle } from "$lib/docStatus";
+import { blankCodeBlocks } from "$lib/codeLines";
+import type { OpenTaskGroup } from "$lib/openTasks";
 
 /**
  * vault 진단 — **백링크 없는 노트 · 태그 중복 후보 · 모호한 이름.**
@@ -288,11 +291,14 @@ function isSuffixOf(short: string, long: string): boolean {
 /**
  * `sparse` — 축이 **굳지 않았다**는 신호.
  *
- * 문자열로 안 걸리는 갈림이 있다. 실측된 `status` 는 `반영됨`·`해결됨`·`닫힘`·`이전됨` 이
- * 전부 "끝났다"를 뜻하는데, 넷 사이에 공통 문자열이 없다.
+ * 문자열로 안 걸리는 갈림이 있다. 실측된 `status` 는 **다섯 낱말이 전부 "끝났다"** 를
+ * 뜻하는데, 그 사이에 공통 문자열이 없다(낱말 표는 `$lib/docStatus`).
  *
  * ⚠️ **동의어라고 말하지 않는다.** 그건 기계가 정할 수 없고, 이 기능의 원칙은
  * "판단하지 않는다"다. 대신 셀 수 있는 것만 말한다 — "여덟 종인데 다섯이 1회다".
+ *
+ * ⚠️ `docStatus` 가 생겼다고 이 판정이 바뀌지 않는다. 저쪽은 **사람이 선언한** 표이지
+ * 기계가 추론한 것이 아니다. 감사는 지금도 추론하지 않는다.
  *
  * ⚠️ 건강한 축에 울리면 감사 전체를 안 믿게 된다. 그래서 문턱이 둘이다:
  * 1회 값이 **셋 이상**이고, 그 비율이 **절반 이상**일 때만.
@@ -540,8 +546,11 @@ export function maskNonProse(body: string): string {
 
   // frontmatter — `title: 캐시 계약`이 자기 언급으로 잡히면 모든 노트가 자기를 언급한 게 된다.
   out = out.replace(/^---\n[\s\S]*?\n---/, blank);
-  // 코드펜스
-  out = out.replace(/^[ \t]*```[\s\S]*?^[ \t]*```/gm, blank);
+  // 코드 블록(fence · 들여쓰기) — 판정은 `$lib/codeLines` 가 한다.
+  //
+  // ⚠️ 예전엔 여기 정규식이 있었고 **`~~~` 펜스와 들여쓴 코드블록을 놓쳤다.**
+  //    그 안의 낱말이 "안 걸린 언급"으로 보고됐다 — 오탐을 섞으면 목록을 안 믿게 된다.
+  out = blankCodeBlocks(out);
   // 인라인 코드
   out = out.replace(/`[^`\n]*`/g, blank);
   // ⚠️ **본문 첫 h1은 그 노트 자신의 이름이다.** 다른 노트의 제목과 같은 낱말이어도
@@ -716,4 +725,76 @@ function displayName(index: LinkIndex, target: string, key: string): string {
     if (cand && cand.toLowerCase() === key) return cand;
   }
   return key;
+}
+
+
+// ─── 지식 부패 ────────────────────────────────────────────────────────────────
+
+export interface DecayedNote {
+  path: string;
+  /** 표시 이름 — `title` 우선, 없으면 파일 이름. `OrphanNote` 와 같은 규칙. */
+  name: string;
+  /**
+   * 노트에 **적힌 그대로**의 `status`.
+   *
+   * ⚠️ 갈래(`done`)로 바꿔 내지 않는다. 사람은 자기가 쓴 낱말로 노트를 찾는다 —
+   * 자기가 쓴 낱말 대신 목록에서 `done` 을 보면 자기 노트인지 알아보지 못한다.
+   */
+  status: string;
+  /** 남은 미완 개수. */
+  open: number;
+}
+
+/**
+ * **한 노트가 자기 자신과 어긋난 것** — 프론트매터는 끝났다는데 본문에 `- [ ]` 가 남았다.
+ *
+ * ## ⚠️ 이것도 판단하지 않는다
+ *
+ * 위 `sparse` 주석의 *"동의어라고 말하지 않는다 — 기계가 정할 수 없다"* 는 그대로 산다.
+ * 저건 **두 노트(또는 두 값) 사이**를 이어붙이는 추론 이야기다. 여기는 한 노트 안이라
+ * 이어붙일 게 없다 — 둘 다 그 노트가 스스로 적은 것이고, 세면 나온다.
+ *
+ * 어떤 낱말이 "끝났다"인지는 **사람이 `docStatus` 에 선언**했다. 이 감사는 그 표를
+ * 읽을 뿐 늘리지 않는다.
+ *
+ * ## 🔴 왜 만들었나 (2026-08-30)
+ *
+ * `todos/mcp-gate-issues-20260827.md` 가 끝났다는 `status` 를 단 채 미체크 12개를 달고 있었다.
+ * 그 안의 낡은 숫자를 믿고 **같은 날 두 번 잘못 쟀다.** 닫힌 문서에 열린 표시가 남으면
+ * 다음 사람이 다 된 일을 다시 한다.
+ *
+ * ⚠️ 그 한 건을 고쳤으므로 **지금 이 vault 에서는 0건이다.** 성과가 아니라 보험이다.
+ *
+ * ## ⚠️ 안 잡는 것
+ *
+ * - **`status` 가 없는 노트** — 실측에서 미완이 있는 노트 넷이 전부 이 경우다.
+ *   `manual-test-checklist.md` 는 68건이 **설계대로** 영원히 미체크다.
+ * - **모르는 `status`** — `statusLifecycle` 이 `null` 을 내면 넘어간다. 추측하지 않는다.
+ * - 날짜로 본 낡음 — 임계값을 정하는 순간 그게 판단이다.
+ *
+ * ## ⚠️ 본문을 읽는다
+ *
+ * `groups` 는 부르는 쪽이 이미 만든 것을 받는다(`collectOpenTasks`). 여기서 다시 읽으면
+ * `tasks` 감사와 나란히 부를 때 vault 를 두 번 훑는다.
+ */
+export function findDecayedNotes(
+  index: LinkIndex,
+  groups: readonly OpenTaskGroup[],
+): DecayedNote[] {
+  const out: DecayedNote[] = [];
+  for (const g of groups) {
+    if (g.open.length === 0) continue;
+    const info = index.byPath.get(g.path);
+    if (!info) continue;
+    const written = info.props?.status?.[0];
+    if (!written || statusLifecycle(written) !== "done") continue;
+    out.push({
+      path: g.path,
+      name: info.title ?? info.source_name,
+      status: written,
+      open: g.open.length,
+    });
+  }
+  // 많이 남은 것부터. 동점은 경로 순 — 같은 입력에 같은 답이 나와야 한다.
+  return out.sort((a, b) => b.open - a.open || asc(a.path, b.path));
 }

@@ -5,13 +5,14 @@
  * fingerprint가 바뀌고 ⓑ 19,000노트라 느리고 ⓒ 개인 문서 내용이 단정문에 박힌다.
  */
 
+import { noteStem } from "$lib/notePath";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import MiniSearch from "minisearch";
-import { FULLTEXT_OPTIONS, type FullTextDoc, type LinkInfo } from "./entry.ts";
-import { CACHE_VERSION, fingerprintOf, normPath, normalizeVaultArg } from "./cache.ts";
+import { FULLTEXT_OPTIONS, type FullTextDoc, type LinkInfo } from "../core/entry.ts";
+import { CACHE_VERSION, fingerprintOf, normPath, normalizeVaultArg } from "../core/cache.ts";
 
 export interface FixtureNote {
   rel: string;
@@ -195,7 +196,8 @@ function writeGz(file: string, obj: unknown): void {
   writeFileSync(file, gzipSync(JSON.stringify(obj)));
 }
 
-const basename = (rel: string): string => rel.split("/").pop()!.replace(/\.md$/, "");
+// ⚠️ 예전엔 `.md` 만 벗겼다 — 픽스처에도 `.mmd` 가 들어올 수 있다.
+const basename = (rel: string): string => noteStem(rel);
 
 /** 판정 4문항을 축소 재현한 표준 픽스처. */
 /**
@@ -240,6 +242,10 @@ export const SAMPLE_NOTES: FixtureNote[] = [
     doc_kind: "plan",
     topic: "graph",
     related: { superseded_by: ["001-abandoned"] },
+    // ⚠️ `완료` 가 아니라 `반영됨` 인 것이 **의도다.** 실측 vault 의 plans 는 이 낱말을
+    //    쓴다. 리터럴 `status: ["완료"]` 로 물으면 이 노트가 조용히 빠지는 것을 보이려고
+    //    둔 것이다 — 통일하면 상태 갈래 테스트가 아무것도 증명하지 못한다.
+    props: { status: ["반영됨"] },
     body: "이 계획은 폐기됐다.",
   },
   {

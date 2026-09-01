@@ -52,6 +52,19 @@ export function renderArgs(a: RenderArgs): string[] {
   ];
 }
 
+/**
+ * 앱을 기다릴 기본 상한. 🔴 **이 숫자가 사는 유일한 자리다** — MCP 도 CLI 도 여기서 가져간다.
+ *
+ * 앱은 요청을 아무도 안 받아가면 `UNCLAIMED_WAIT_MS + UNCLAIMED_GIVE_UP_MS` 뒤에
+ * **실패 파일로 이유를 말한다**(`clirender::render_window_if_unclaimed`).
+ * 그보다 먼저 포기하면 사용자는 "아무도 이 요청을 받지 않았다" 대신
+ * "앱이 N ms 안에 결과를 안 냈다"를 본다 — 정확한 진단이 필요한 그때 사라진다.
+ *
+ * ⚠️ 실측(2026-08-30): 실패 파일은 **약 18초**에 생겼다. 그때 기본값이 20초라
+ * 여유가 2초뿐이었다. `renderTimeout.test.ts` 가 Rust 상수를 읽어 이 관계를 지킨다.
+ */
+export const RENDER_TIMEOUT_MS_DEFAULT = 25_000;
+
 export type RenderOutcome =
   | { ok: true; bytes: number }
   | { ok: false; kind: "app_not_found"; message: string; remedy: string }

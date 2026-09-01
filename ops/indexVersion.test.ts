@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { checkCacheVersion } from "./indexRun.ts";
 import { IndexError } from "./indexRun.ts";
-import { CACHE_VERSION } from "../mcp/cache.ts";
+import { CACHE_VERSION } from "../core/cache.ts";
 
 /**
  * `lapis index`는 **설치된 앱 실행파일**을 시켜 캐시를 쓴다. 그 앱이 이 CLI와 다른

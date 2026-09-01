@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyFilters, propAxes, emptySelection, selectionSize } from "./filters";
+import { applyFilters, propAxes, emptySelection, selectionSize } from "../filterSelection";
 import type { LinkInfo } from "$lib/tauri/notes";
 
 /**

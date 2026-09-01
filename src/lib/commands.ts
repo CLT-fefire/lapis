@@ -1,4 +1,5 @@
 import { m } from "$lib/paraglide/messages.js";
+import { HYGIENE_TABS, hygieneCommandId, type HygieneTab } from "$lib/hygieneTabs";
 import type { CommandId } from "$lib/commandIds";
 import { get } from "svelte/store";
 import { fuzzyMatch, fuzzyMatchLabel } from "$lib/searchIndex";
@@ -54,6 +55,24 @@ export interface CommandHit {
  * import 시점에 한 번 평가돼 로케일 변경을 못 따라온다(`lens.ts`에서 겪은 함정).
  * getter면 접근할 때마다 해소되므로 호출부는 그대로 `c.label`을 쓴다.
  */
+/**
+ * 탭 → 팔레트 라벨.
+ *
+ * 🔴 `Record<HygieneTab, …>` 이 **완전성을 강제한다** — 탭을 늘리고 여기를 안 채우면
+ * 컴파일이 막는다. 목록이 갈리던 자리라 타입으로 못 박는다.
+ */
+const AUDIT_LABELS: Record<HygieneTab, () => string> = {
+  broken: () => m.cmd_broken_links(),
+  orphans: () => m.cmd_audit_orphans(),
+  tags: () => m.cmd_audit_tags(),
+  unlinked: () => m.cmd_audit_unlinked(),
+  props: () => m.cmd_audit_props(),
+  tasks: () => m.cmd_audit_tasks(),
+  decay: () => m.cmd_audit_decay(),
+  changes: () => m.cmd_audit_changes(),
+  stale: () => m.cmd_audit_stale(),
+};
+
 export const BUILTIN_COMMANDS: Command[] = [
   {
     id: "new-note",
@@ -132,20 +151,23 @@ export const BUILTIN_COMMANDS: Command[] = [
     },
   },
   /**
-   * ⚠️ 감사가 다섯이 되고 나서 나머지 넷에 **직행할 길이 없었다.** 팔레트에서 위생을
-   * 열고 탭을 두 번 넘겨야 "속성"에 닿았다. 하나마다 항목을 두는 대신 위 명령 하나로
-   * 두면 목적지를 말할 방법이 없다.
+   * 진단 화면의 **모든 탭에 직행**하는 명령.
+   *
+   * ⚠️ 예전엔 여기 목록을 손으로 적었고, 그 주석이 이렇게 되어 있었다 — *"감사가 다섯이
+   * 되고 나서 나머지 넷에 직행할 길이 없었다."* **같은 일이 또 났다.** 탭이 아홉이 되는
+   * 동안 이 목록은 넷에 머물러 있었고, `tasks`·`decay`·`changes`·`stale` 은 팔레트에서
+   * 못 갔다. 이제 `HYGIENE_TABS` 에서 만든다.
+   *
+   * ⚠️ `broken` 은 뺀다 — 위에 `broken-links` 로 따로 있다(감사 가족이 생기기 전부터
+   * 있던 id 라 바꾸면 사용 기록이 과거와 안 이어진다).
+   *
+   * ⚠️ 라벨 표는 `Record<HygieneTab, …>` 이라 **탭을 늘리면 컴파일이 막는다.**
+   * 반대 방향(명령만 있고 탭이 없는 것)은 `hygieneTabs.test.ts` 가 막는다.
    */
-  ...(["orphans", "tags", "unlinked", "props"] as const).map((tab) => ({
-    // ⚠️ `as const` 가 없으면 템플릿 리터럴이 `string` 으로 넓어져 `CommandId` 를 못 만족한다.
-    id: `audit-${tab}` as const,
+  ...HYGIENE_TABS.filter((tab) => tab !== "broken").map((tab) => ({
+    id: hygieneCommandId(tab) as CommandId,
     get label() {
-      return {
-        orphans: m.cmd_audit_orphans(),
-        tags: m.cmd_audit_tags(),
-        unlinked: m.cmd_audit_unlinked(),
-        props: m.cmd_audit_props(),
-      }[tab];
+      return AUDIT_LABELS[tab]();
     },
     disabled: () => !get(vaultPath),
     run() {

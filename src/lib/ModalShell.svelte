@@ -66,10 +66,26 @@
     if (closeOnBackdrop && e.target === backdropEl) onClose();
   }
 
+  /**
+   * 🔴 **떠 있는 동안 바깥은 조용해야 한다.**
+   *
+   * 전역 단축키는 `<svelte:window onkeydown>` 에 붙어 있고, `+page.svelte` 의
+   * `handleGlobalKey` 는 `inEditing`(INPUT·TEXTAREA·contenteditable)만 본다.
+   * 모달의 기본 초점은 대개 `<button>` 이라 거기 안 걸린다 — 그래서 예전엔 모달 위에서
+   * `⌘R`(rename) 같은 단축키가 **그대로 실행됐다.** 실제로 그것 때문에 두 번째 rename 이
+   * 첫 rename 의 동의 요청을 덮어 첫 rename 이 영원히 기다렸다.
+   *
+   * 그래서 Escape 만이 아니라 **전부** 여기서 멈춘다. 초점은 `onMount` 가 카드 안으로
+   * 넣으므로 키는 이 backdrop 을 지나간다.
+   *
+   * ⚠️ `CommandPalette` 는 이 껍데기를 **안 쓴다.** 팔레트의 타이핑·화살표는 영향 없다.
+   * ⚠️ 막는 것은 **전파**지 기본 동작이 아니다. 카드 안의 입력은 그대로 글자를 받는다.
+   */
   function onKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+
     if (closeOnEsc && e.key === "Escape") {
       e.preventDefault();
-      e.stopPropagation();
       onClose();
       return;
     }

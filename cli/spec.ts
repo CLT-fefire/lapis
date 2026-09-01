@@ -1,3 +1,4 @@
+import { RENDER_TIMEOUT_MS_DEFAULT } from "../ops/renderRequest.ts";
 /**
  * CLI 표면의 **단일 출처** — 명령·옵션·설명이 여기 한 곳에만 있다.
  *
@@ -224,7 +225,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "doctor",
-    desc: "vault 건강 검진 — 감사 넷 + 인덱스 낡음을 한 번에. 본문을 읽으므로 느리다",
+    desc: "vault 건강 검진 — 감사를 한 번에 돌리고 인덱스 낡음도 본다. 본문을 읽으므로 느리다",
     positional: [],
     options: [],
   },
@@ -271,7 +272,11 @@ export const COMMANDS: CommandSpec[] = [
     options: [
       { name: "out", kind: "string", desc: "저장할 경로. 안 주면 ~/Downloads" },
       { name: "format", kind: "string", desc: "html(기본) · png" },
-      { name: "timeout", kind: "number", desc: "앱을 기다릴 ms. 기본 20000" },
+      {
+        name: "timeout",
+        kind: "number",
+        desc: `앱을 기다릴 ms. 기본 ${RENDER_TIMEOUT_MS_DEFAULT}`,
+      },
     ],
   },
   {

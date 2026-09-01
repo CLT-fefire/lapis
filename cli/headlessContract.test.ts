@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
  */
 
 const RUST = "src-tauri/src/headless.rs";
-const RUN = "cli/indexRun.ts";
+const RUN = "ops/indexRun.ts";
 
 function rustSource(): string {
   return readFileSync(RUST, "utf8");
@@ -88,7 +88,7 @@ describe("헤드리스 인자 계약", () => {
  */
 describe("cli open 인자 계약", () => {
   const OPEN_RUST = "src-tauri/src/cliopen.rs";
-  const OPEN_CLI = "cli/appLaunch.ts";
+  const OPEN_CLI = "ops/appLaunch.ts";
 
   const rustOpenOptions = () =>
     [...readFileSync(OPEN_RUST, "utf8").matchAll(/^\s*"(--[a-z-]+)" => \w+ = args/gm)].map(

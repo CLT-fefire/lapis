@@ -58,12 +58,16 @@ import {
   type VaultCache,
 } from "./cache.ts";
 import { findBrokenLinks } from "$lib/brokenLinks";
+import { noteStem } from "$lib/notePath";
+import { noteHasTag } from "$lib/tagMatch";
+import { expandStatusGroup, STATUS_FIELD, STATUS_GROUPS } from "$lib/docStatus";
 import {
   findOrphans,
   findTagIssues,
   findAmbiguousNames,
   findFrontmatterIssues,
   findUnlinkedMentions,
+  findDecayedNotes,
 } from "$lib/vaultAudit";
 
 /**
@@ -146,8 +150,16 @@ export function isAudit(r: QueryResponse): r is AuditResponse {
   return "audit" in r && r.audit !== undefined;
 }
 
-/** 쓸 수 있는 감사. **앱·CLI와 같은 다섯**이다 — 여기만 다르면 답이 갈린다. */
-export const AUDIT_KINDS = ["broken", "orphans", "unlinked", "tags", "props", "tasks"] as const;
+/** 쓸 수 있는 감사. **앱·CLI와 같은 목록**이어야 한다 — 여기만 다르면 답이 갈린다. */
+export const AUDIT_KINDS = [
+  "broken",
+  "orphans",
+  "unlinked",
+  "tags",
+  "props",
+  "tasks",
+  "decay",
+] as const;
 export type AuditKind = (typeof AUDIT_KINDS)[number];
 
 export interface AuditResponse extends ResponseBase {
@@ -216,7 +228,11 @@ export interface QueryArgs {
    * 전부 프로젝트 사이에서 났다.
    */
   /**
-   * 임의 frontmatter 축으로 거른다 — `{ status: ["완료", "반영됨"] }`.
+   * 임의 frontmatter 축으로 거른다 — `{ topic: ["graph", "ui"] }`.
+   *
+   * ⚠️ **`status` 는 갈래로 부른다** — `{ status: ["@done"] }`. 같은 자리를 다섯
+   * 낱말이 나눠 쓰고 있어서, 리터럴 하나로 물으면 조용히 절반만 잡힌다.
+   * 갈래 이름과 낱말 표는 `$lib/docStatus` 하나에만 있다.
    *
    * 같은 필드 안은 **OR**, 필드 사이는 **AND**. 앱의 필터 패널과 같은 규칙이다.
    *
@@ -331,7 +347,8 @@ function resolveNote(st: Loaded, input: string): string {
   if (st.link.byPath.has(asAbs)) return asAbs;
   // resolver는 alias > title > stem 우선순위. grep이 접두 충돌(`ADR-001` → `ADR-0010`)로
   // 오탐을 내던 자리를 정확 해소로 대체한다.
-  const stem = raw.replace(/\.md$/, "").split("/").pop() ?? raw;
+  // ⚠️ `.mmd` 도 노트고 대소문자도 안 가려야 한다 — 규칙은 `notePath.ts` 하나다.
+  const stem = noteStem(raw);
   const candidates = st.link.resolver.get(stem.toLowerCase());
 
   // ## ⚠️ 모호하면 추측하지 않는다
@@ -578,18 +595,17 @@ function runAudit(
       }));
       return { audit: kind, count: all.length, unit: "이름", ...cut(all) };
     }
+    case "decay": {
+      // ⚠️ `tasks` 와 **같은 본문**을 본다. 따로 읽으면 두 감사가 다른 vault 를 보게 된다.
+      const rows = findDecayedNotes(st.link, collectOpenTasks(readableDocs(st))).map((r) => ({
+        ...r,
+        path: rel(r.path),
+      }));
+      return { audit: kind, count: rows.length, unit: "노트", ...cut(rows) };
+    }
     case "tasks": {
       // ⚠️ `unlinked` 와 같은 부류 — 인덱스로는 안 되고 본문을 봐야 한다.
-      const groups = collectOpenTasks(
-        st.vc.infos.flatMap((info) => {
-          try {
-            return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
-          } catch {
-            // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
-            return [];
-          }
-        }),
-      ).map((g) => ({
+      const groups = collectOpenTasks(readableDocs(st)).map((g) => ({
         ...g,
         path: rel(g.path),
         open: g.open.map((t) => ({ ...t, path: rel(t.path) })),
@@ -603,6 +619,65 @@ function runAudit(
       };
     }
   }
+}
+
+/**
+ * 읽히는 노트의 본문 — **못 읽은 것은 조용히 빠진다.**
+ *
+ * ⚠️ `tasks` 와 `decay` 가 **같은 것**을 봐야 한다. 각자 읽으면 한쪽만 실패했을 때
+ * 두 감사가 다른 vault 를 보고 답이 갈린다.
+ */
+function readableDocs(st: Loaded): { path: string; body: string }[] {
+  return st.vc.infos.flatMap((info) => {
+    try {
+      return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
+    } catch {
+      // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
+      return [];
+    }
+  });
+}
+
+/**
+ * `props` 한 축의 값들을 실제로 비교할 문자열로 편다.
+ *
+ * 🔴 **`@` 로 시작하면 갈래다.** `status` 는 같은 자리를 **다섯 낱말**로 부른다.
+ * 그래서 리터럴 하나로 물으면 실측 vault 53건 중 15건만 잡히고 **에러는 안 났다.**
+ * 목록을 호출부마다 손으로 적는 대신 `@done` 으로 부른다.
+ *
+ * ⚠️ 그 다섯이 무엇인지는 **여기 적지 않는다** — `$lib/docStatus` 가 표의 주인이고,
+ * 베낀 표는 반드시 낡는다. `check:arch` 가 이 주석의 첫 판본을 잡았다.
+ *
+ * ⚠️ **모르는 갈래는 운다.** 빈 배열로 두면 오타 난 질의가 0건을 정답처럼 낸다.
+ * ⚠️ **`@` 는 예약이다.** 다른 축에서 쓰면 조용히 no-op 이 아니라 에러다.
+ */
+function expandPropValues(field: string, values: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const raw of values) {
+    const v = raw.trim();
+    if (!v) continue;
+    if (!v.startsWith("@")) {
+      out.push(v);
+      continue;
+    }
+    if (field !== STATUS_FIELD) {
+      throw new LapisError(
+        "no_criteria",
+        `상태 갈래(${v})는 \`${STATUS_FIELD}\` 축에만 쓸 수 있다 — 지금 축은 \`${field}\``,
+        `\`${field}\` 에는 값을 그대로 적어라. 어떤 값이 있는지는 list: "${field}" 가 답한다.`,
+      );
+    }
+    const words = expandStatusGroup(v);
+    if (!words) {
+      throw new LapisError(
+        "no_criteria",
+        `모르는 상태 갈래: ${v}`,
+        `${STATUS_GROUPS.join(" · ")} 중 하나이거나, 값을 그대로 적어라.`,
+      );
+    }
+    out.push(...words);
+  }
+  return out;
 }
 
 export function lapisQuery(args: QueryArgs = {}): QueryResponse {
@@ -628,7 +703,7 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
   } = args;
 
   const propPairs = Object.entries(propFilter ?? {})
-    .map(([f, vs]) => [f, new Set((vs ?? []).map((v) => v.trim()).filter(Boolean))] as const)
+    .map(([f, vs]) => [f, new Set(expandPropValues(f, vs ?? []))] as const)
     .filter(([, set]) => set.size > 0);
   const wantsStructural = Boolean(doc_kind || topic || tag || backlinks_of || propPairs.length > 0);
   if (!list && !audit && !text && !wantsStructural) {
@@ -755,14 +830,12 @@ export function lapisQuery(args: QueryArgs = {}): QueryResponse {
     }
 
     if (tag) {
-      const t = norm(tag);
       const hit = new Set<string>();
       for (const info of st.vc.infos) {
-        // nested prefix — `tech`를 주면 `tech/*` 전부.
-        if ((info.tags ?? []).some((x) => {
-          const n = norm(x);
-          return n === t || n.startsWith(t + "/");
-        })) {
+        // 🔴 규칙은 `$lib/tagMatch` 하나다 — 앱 필터·저장된 질의와 같은 답을 낸다.
+        //    예전엔 여기서 `norm()`(NFC 만)으로 비교해서 **대소문자를 가렸고**,
+        //    태그 인덱스는 소문자로 색인해서 안 가렸다. 같은 태그를 다르게 봤다.
+        if (noteHasTag(info.tags, tag)) {
           hit.add(info.source_path);
         }
       }

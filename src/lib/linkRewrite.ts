@@ -10,26 +10,12 @@
  */
 
 import { splitFrontmatter } from "$lib/frontmatter";
-import MarkdownIt from "markdown-it";
+import { NOTE_EXTENSIONS } from "$lib/notePath";
+import { codeBlockLines } from "$lib/codeLines";
 
-// 코드 블록(fence / 들여쓰기 code block) 라인 범위를 정확히 식별하기 위한 markdown-it 인스턴스.
-// 렌더는 하지 않고 블록 토큰의 map(라인 범위)만 사용 → 코드 영역 마스킹(AST 기반).
-const codeMd = new MarkdownIt({ html: false });
-
-/**
- * body에서 코드 블록(fence/code_block)에 속한 0-based 라인 인덱스 집합.
- * markdown-it 블록 파스의 token.map(=[startLine, endLine), end 제외)을 펼친다.
- * naive `startsWith("```")` 토글이 놓치던 들여쓰기 코드블록·인용 내부 펜스도 정확히 포함.
- */
-function computeCodeLineSet(body: string): Set<number> {
-  const set = new Set<number>();
-  for (const tok of codeMd.parse(body, {})) {
-    if ((tok.type === "fence" || tok.type === "code_block") && tok.map) {
-      for (let i = tok.map[0]; i < tok.map[1]; i++) set.add(i);
-    }
-  }
-  return set;
-}
+// ⚠️ 이 규칙은 예전에 **여기 비공개로** 있었다. 그래서 같은 교훈이 이 파일 밖으로
+//    나가지 못했고, `openTasks` 와 `maskNonProse` 가 각자 naive 사본을 갖게 됐다.
+//    지금은 `$lib/codeLines` 하나가 주인이고 `check:arch` 가 사본을 막는다.
 
 export interface RewriteResult {
   changed: boolean;
@@ -188,7 +174,7 @@ function rewriteLinksInBody(
   const lines = body.split("\n");
   // 코드 블록(fence / 들여쓰기 코드블록) 라인을 markdown-it 블록 파스로 정확히 식별.
   // 기존 naive ``` 라인 토글이 놓치던 들여쓰기 코드블록·인용 내부 펜스 등도 보호.
-  const codeLines = computeCodeLineSet(body);
+  const codeLines = codeBlockLines(body);
 
   // 정규식 escape
   const escapedOld = escapeRegex(oldStem);
@@ -201,8 +187,15 @@ function rewriteLinksInBody(
     "g",
   );
   // MD link: [text](oldStem.md) or [text](path/oldStem.md) or [text](oldStem.md#anchor)
+  //
+  // 🔴 **확장자를 잡아서 그대로 되쓴다.** 예전엔 `(\.md)` 만 잡고 치환에서 `.md` 를
+  //    하드코딩했다. 그래서 `.mmd` 노트는 링크가 **아예 안 잡히거나**(못 바꿈),
+  //    바꾸면 없는 `.md` 를 가리켰다 — 둘 다 조용히 끊긴다.
+  //
+  // ⚠️ 목록은 `notePath.ts` 것을 쓴다. 여기 다시 적으면 그게 갈린다.
+  const extAlt = NOTE_EXTENSIONS.join("|");
   const mdlinkRe = new RegExp(
-    `(\\]\\(\\s*)([^)\\n]*?\\/)?${escapedOld}(\\.md)(#[^)\\n]*)?(\\s*\\))`,
+    `(\\]\\(\\s*)([^)\\n]*?\\/)?${escapedOld}(\\.(?:${extAlt}))(#[^)\\n]*)?(\\s*\\))`,
     "gi",
   );
 
@@ -220,9 +213,11 @@ function rewriteLinksInBody(
           count++;
           return `[[${newStem}${anchorPart ?? ""}${aliasPart ?? ""}]]`;
         });
-        s = s.replace(mdlinkRe, (_match, prefix, pathPart, _ext, anchor, suffix) => {
+        // ⚠️ `ext` 는 **원문 그대로**다(`.mmd` · `.MMD` 포함). 소문자로 눕히거나
+        //    `.md` 로 바꾸면 가리키는 파일이 없어진다.
+        s = s.replace(mdlinkRe, (_match, prefix, pathPart, ext, anchor, suffix) => {
           count++;
-          return `${prefix}${pathPart ?? ""}${newStem}.md${anchor ?? ""}${suffix}`;
+          return `${prefix}${pathPart ?? ""}${newStem}${ext}${anchor ?? ""}${suffix}`;
         });
         return s;
       })

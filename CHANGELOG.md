@@ -16,6 +16,139 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.11.0] — 2026-09-01
+
+### Added
+- **Searching still works when the Korean IME was left on.** If the palette finds nothing, it
+  retries once with the keyboard layout reversed and says which query produced the results. This
+  came out of the usage log rather than a guess: **seven of the nine** queries that returned zero
+  results were Latin words typed through the Korean IME, and the note being looked for was in the
+  vault the whole time. The 2-beolsik/QWERTY mapping is a fixed table, not an edit-distance guess,
+  so it does not carry the false-positive risk that kept typo detection out of the tag audit. A
+  query that already returns results is never touched — this is a back door that opens only at a
+  dead end, and if the reversed query is also empty the original empty result stands. The opposite
+  direction (Korean typed with the English IME) is deliberately absent: it needs a syllable-
+  composing automaton, and the log contains no instance of it.
+- **A "says done" check in the vault diagnostics.** It counts notes whose frontmatter claims the
+  work is finished while the body still holds `- [ ]`. The app's diagnostics screen,
+  `lapis doctor` and MCP's `audit:"decay"` all call the **same** function. Notes with no
+  `status`, or a status outside the vocabulary, are **left out** — a checklist is supposed to stay
+  unchecked, and a list that mixes in false positives stops being trusted. This does not break the
+  audits' rule against judging: unlike inferring that two words are synonyms, both statements here
+  belong to the same note, so it is counted rather than inferred. It reports **0** on the measured
+  vault — the one note that prompted it was fixed the same day, so this is insurance, not a result.
+- **Ask `status` by lifecycle, not by word — `@done`, `@active`, `@todo`.** People name the
+  same state differently depending on the kind of document, and to code those are simply different
+  strings, so asking with one literal quietly matched half of what was there — no error. In the
+  measured vault, `status=완료` found 15 notes and `status=@done` found 41 of the 53 that carry a
+  status. Both surfaces take the groups (`{"status":["@done"]}` for MCP, `--props status=@done`
+  for the CLI). **An unknown group is an error**, because a typo returning zero hits reads exactly
+  like a correct answer, and `@` on any other axis is an error rather than a silent no-op.
+  This is a table a person declared, not synonyms a machine inferred — the vault audit still refuses
+  to call two words synonyms. The table lives in one file and `npm run check:arch` blocks copies of
+  it; when the rule went up it found three copies already, and **every one of them listed two of the
+  five words**.
+- **Saved queries inside a note.** A `lapis-query` fenced block runs where it sits and lists
+  what matches, by `doc_kind`, `topic` and free text. It calls the same matcher the table
+  view uses, so a query cannot mean one thing in a table and another in a note, and results are
+  ordinary wikilinks, so clicking one goes through the same rule as every other link. The block
+  states how many matched and says so again when the list was cut short — a truncated list that
+  looks complete is worse than no list — and a query it cannot read is shown as an error in place,
+  because an empty result would read as "no such notes". Nothing is written back into the note,
+  including a `tag` axis that matches by exact name or nested prefix (`subject` finds `subject/ui`).
+
+### Fixed
+- **The diagnostics screen kept three different lists of its own tabs.** The modal knew nine, the
+  type documented as "shared by the modal and the palette" knew seven, and the palette reached five —
+  so four tabs had no direct palette command, and the type not knowing two of them meant a command
+  could not even be added without a compile error. The comment above that list had predicted this
+  exact failure once before; the cause was the same both times, a list maintained by hand. The list
+  now has one owner, and the label table is typed so that adding a tab without a label fails to
+  compile; the other direction is covered by a test.
+- **The help text hard-coded how many checks `doctor` runs, and went stale.** The CLI help said
+  four and the README said five while it actually runs seven. The counts are gone, and a test keeps
+  them from coming back.
+- **The watcher treated directory events as notes.** The usage log had accumulated **43** occurrences
+  of a failed incremental reindex, and every path was a directory. The Rust side forwards directory
+  events on purpose (to notice renames), but the frontend heard "a note changed" — the scan failed,
+  and the recency map and the "changed while you were away" marks were polluted with directories.
+  The failure was silent: the loop continued, other notes indexed fine, and the human-readable report
+  showed only a bare "50 warnings". Events are now sorted into note / ignore / full reload: a
+  directory being modified or created is ignored (the file events inside cover it), while one being
+  removed or renamed triggers a full reload, since its scope cannot be known from the event. That
+  second case previously left the index holding the old paths.
+- **`lapis usage` showed only half of what it computed.** Named error counts, the notes actually
+  opened, and the commands never used were available in `--json` and absent from the human report.
+  Reading "most used command: open:note 3" suggested the app was barely used, when opens actually
+  totalled **31** — that line counts only palette-initiated commands. Lists that get truncated now
+  say so.
+- **Examples inside code blocks were counted as open tasks.** Three places answered "which lines
+  are code" differently: `linkRewrite` got it right with a markdown-it block parse but kept that
+  function **private**, so the task scanner used a line toggle (missing indented code blocks) and
+  the unlinked-mention masking used a regex (missing `~~~` fences and indented code blocks). The
+  failure is silent — counting an example as a task only inflates a number, and the decay audit
+  would call a perfectly consistent note contradictory over one example. One owner now holds the
+  rule and `check:arch` blocks copies. A regex cannot fix this: **nested tasks are also indented
+  four spaces**, so treating four spaces as code destroys task depth; only a block parser separates
+  list continuation from code. Parsing every note measured 18× slower, so only notes that contain a
+  checkbox-shaped line (6% here) reach the parser. The measured vault had **zero** real
+  occurrences — this is insurance, not a result.
+- **`lapis tasks audit --json` and `lapis stats --json` emitted absolute paths.** Every other
+  CLI JSON surface returns vault-relative ones, and `cli/README.md` promises the output mirrors
+  `lapisQuery()`. The failure is silent: each command looks fine on its own, and intersecting two
+  of them yields **zero rows** rather than an error. The handler built its relativizer and used it
+  only for filtering, never for the output — the human-readable line had it right all along. A test
+  now walks **every** `--json` surface, so the next audit is covered too.
+- **Notes that could not be read were dropped without saying so.** Counting open tasks needs
+  the note bodies, and when a note in the cache is gone from disk — or unreadable — five
+  places quietly skipped it. So "12 open" could mean twelve, or twelve plus however many
+  were skipped, with nothing to tell the two apart. The same file had already added a
+  "where are they concentrated" number because a bare count hides things; the denominator
+  itself could be wrong. Reading and counting now live in one place, and both `lapis_stats`
+  and `tasks audit` report how many were skipped — but only when it is not zero, because a
+  noisy normal stops being read.
+
+- **`.mmd` notes were only half supported.** The app treats `.mmd` as a first-class note —
+  Rust indexes it, the watcher watches it, the new-note dialog knows it — but three paths
+  still assumed `.md`:
+
+  - `lapis new diagram.mmd` created **`diagram.mmd.md`**. Rust's own rename check had it right.
+  - Renaming a `.mmd` note **silently broke incoming markdown links**: the pattern only
+    matched `.md`, and the replacement hardcoded `.md` regardless of what it found.
+  - Clicking a `.mmd` link, and resolving one in a query, stripped only `.md`.
+
+  The rule for what counts as a note extension now lives in one module, and the architecture
+  gate fails the build if it is written anywhere else. A comment had claimed single ownership
+  for a long time; eight places had drifted from it, and three of those were wrong.
+
+- **The same tag question could get two answers.** The query engine compared tags after
+  Unicode normalisation only, while the app's tag index also lowercased them — so
+  `subject/UI` and `subject/ui` were one tag in the sidebar and two in a `tag:` query.
+  Both now go through one module. Measured on this vault the gap was **zero**: none of the
+  85 tags differ only by case. This is insurance, not a win.
+
+- **The caller gave up two seconds before the app explained itself.** When nobody claims a
+  render request the app writes a failure file saying so, but that only happens after its
+  own 15.5 second wait — and the default limit on the calling side was 20 seconds. Measured
+  end to end, the file lands at about 18 seconds. A slightly slower window meant the user
+  saw "the app produced nothing in time" instead of the actual reason, exactly when the
+  precise diagnosis mattered. The limit is now 25 seconds, and it lives in one place
+  instead of the four it had been copied into.
+
+- **A second rename could leave the first one waiting forever.** The link-rewrite consent
+  modal is held in a store slot that carries the caller's resolve callback, and the slot
+  could simply be overwritten. When that happened nobody ever answered the first request,
+  so the rename sat on an unresolved promise — no error, no timeout, and the note ended up
+  renamed with its incoming links untouched. Global shortcuts are not suppressed while a
+  modal is open, so a second rename was reachable.
+
+  The store now owns the pair: a new request cancels the pending one, and settling resolves
+  and clears in a single step. Nothing outside can set the slot directly.
+
+  The modal itself had no tests at all despite being the consent gate for a write that
+  touches many files at once. All four ways of closing it are now pinned, along with the
+  default focus sitting on **cancel** — one stray Enter must not apply an irreversible write.
+
 ## [3.10.0] — 2026-08-29
 
 > The MCP server can now drive the app, and the CLI can sit in the middle of a pipe.
@@ -2574,7 +2707,9 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.11.0...main
+[3.11.0]: https://github.com/eren0315/lapis/compare/v3.10.0...v3.11.0
+[3.10.0]: https://github.com/eren0315/lapis/compare/v3.9.0...v3.10.0
 [3.9.0]: https://github.com/eren0315/lapis/compare/v3.8.0...v3.9.0
 [3.8.0]: https://github.com/eren0315/lapis/compare/v3.7.2...v3.8.0
 [3.7.2]: https://github.com/eren0315/lapis/compare/v3.7.1...v3.7.2

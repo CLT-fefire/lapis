@@ -1,15 +1,19 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
   import ModalShell from "$lib/ModalShell.svelte";
-  import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
+  import {
+    linkRewritePreviewRequest,
+    settleLinkRewritePreview,
+  } from "$lib/stores/linkRewritePreview";
 
   const req = $derived($linkRewritePreviewRequest);
 
+  /**
+   * ⚠️ 닫는 길이 넷이다 — 적용 · 취소 · ✕ · 배경/ESC. 그래서 `resolve` 와 슬롯 비우기를
+   * 여기서 손으로 짝짓지 않는다. 스토어가 한 번만 매듭짓는 것을 보장한다.
+   */
   function close(apply: boolean) {
-    const r = $linkRewritePreviewRequest;
-    if (!r) return;
-    r.resolve(apply);
-    linkRewritePreviewRequest.set(null);
+    settleLinkRewritePreview(apply);
   }
 
 </script>

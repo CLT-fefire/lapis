@@ -27,10 +27,10 @@
  */
 import MiniSearch from "minisearch";
 import { readFileSync } from "node:fs";
-import { resolveVault } from "./cache.ts";
+import { resolveVault } from "../core/cache.ts";
 import { deterministicShuffle } from "./searchEval.ts";
 import { readDevArgs } from "./devArgs.ts";
-import { FULLTEXT_OPTIONS, type FullTextDoc } from "./entry.ts";
+import { FULLTEXT_OPTIONS, type FullTextDoc } from "../core/entry.ts";
 
 /**
  * 예산. **세 지표가 서로 다른 것을 잡는다** — 실측 근거는 카나리아로 확인했다.

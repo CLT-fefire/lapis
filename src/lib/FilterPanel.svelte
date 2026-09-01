@@ -1,22 +1,7 @@
 <script lang="ts">
   import { m } from "$lib/paraglide/messages.js";
-  import {
-    DOC_KIND_ENUM,
-    docKindCounts,
-    topicCounts,
-    selectedDocKinds,
-    selectedTopics,
-    selectedFolders,
-    selectedProps,
-    toggleDocKind,
-    toggleTopic,
-    toggleFolder,
-    togglePropValue,
-    propAxes,
-    selectionSize,
-    clearFilters,
-    applyFilters,
-  } from "$lib/stores/filters";
+  import { docKindCounts, topicCounts, selectedDocKinds, selectedTopics, selectedFolders, selectedProps, toggleDocKind, toggleTopic, toggleFolder, togglePropValue, clearFilters } from "$lib/stores/filters";
+import { DOC_KIND_ENUM, propAxes, selectionSize, applyFilters } from "$lib/filterSelection";
   import { scopeOptions } from "$lib/folderScope";
   import {
     selectNote,

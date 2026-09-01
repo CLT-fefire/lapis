@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { buildShards, type NoteContentIn } from "./indexBuild.ts";
 import { locateApp, locateRemedy } from "./appLocate.ts";
-import { CACHE_VERSION } from "../mcp/cache.ts";
+import { CACHE_VERSION } from "../core/cache.ts";
 
 /**
  * `lapis index` 오케스트레이션 — 앱 실행파일을 **두 번** 부른다.

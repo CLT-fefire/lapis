@@ -1,11 +1,17 @@
-import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
+import {
+  collectOpenTasks,
+  countOpenTasks,
+  taskConcentration,
+  type OpenTaskGroup,
+  type TaskConcentration,
+} from "$lib/openTasks";
 import {
   lapisQuery,
   isAudit,
   resolveNotePath,
   vaultTimeOf,
   type QueryArgs,
-} from "../mcp/query.ts";
+} from "../core/query.ts";
 import { parseSince, partitionSince, sortRecent, sortPath, SinceError } from "$lib/recency";
 import { spawnSync } from "node:child_process";
 import {
@@ -18,32 +24,40 @@ import {
   disableCustomCss,
   settingsFileCandidates,
   LapisError,
-} from "../mcp/cache.ts";
-import { buildIndex } from "../mcp/entry.ts";
+} from "../core/cache.ts";
+import { buildIndex } from "../core/entry.ts";
+import { noteStem, stripNoteExt, withNoteExt } from "$lib/notePath";
+import { readBodies as readNoteBodies } from "$lib/readBodies";
 import { findBrokenLinks, countBrokenLinks } from "$lib/brokenLinks";
 import {
   findOrphans,
   findTagIssues,
   findAmbiguousNames,
   findUnlinkedMentions,
+  findDecayedNotes,
   findFrontmatterIssues,
 } from "$lib/vaultAudit";
 import { computeTagRewritePreview } from "$lib/tagRewrite";
 import { computePropRewritePreview, SCALAR_PROP_KEYS } from "$lib/propsRewrite";
-import { requestRender, RENDER_FORMATS, type RenderFormat } from "./renderRequest.ts";
+import {
+  requestRender,
+  RENDER_FORMATS,
+  RENDER_TIMEOUT_MS_DEFAULT,
+  type RenderFormat,
+} from "../ops/renderRequest.ts";
 import { computeReplacePreview, ReplacePatternError } from "$lib/replacePlan";
 import { backupAndWrite, describeFailure } from "$lib/safeWrite";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { applyTemplate, defaultBody, TEMPLATE_DIR } from "$lib/noteTemplate";
-import { usageDirs, normPath } from "../mcp/cache.ts";
+import { usageDirs, normPath } from "../core/cache.ts";
 import { homedir, tmpdir } from "node:os";
 import nodePath from "node:path";
 import { makeCliIo } from "./io.ts";
-import { runIndex, IndexError } from "./indexRun.ts";
-import { runExport, ExportError } from "./exportRun.ts";
-import { launchOpen, LaunchError } from "./appLaunch.ts";
+import { runIndex, IndexError } from "../ops/indexRun.ts";
+import { runExport, ExportError } from "../ops/exportRun.ts";
+import { launchOpen, LaunchError } from "../ops/appLaunch.ts";
 
 import type { ParsedCommand } from "./args.ts";
 import { FACETS, TAG_ACTIONS, PROPS_ACTIONS, COMMANDS } from "./spec.ts";
@@ -140,16 +154,14 @@ function requireFreshIndex(out: Out, vc: VaultCache, p: ParsedCommand): void {
  * ⚠️ 감사 중 `--unlinked` 하나만 본문이 필요하다. 나머지는 인덱스만으로 되므로 이 함수를
  * 부르는 곳을 늘리기 전에 정말 본문이 필요한지 먼저 본다 — 큰 vault에서 비용을 지배한다.
  */
-function readBodies(vc: VaultCache): Map<string, string> {
-  const bodies = new Map<string, string>();
-  for (const info of vc.infos) {
-    try {
-      bodies.set(info.source_path, readFileSync(info.source_path, "utf8"));
-    } catch {
-      // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
-    }
-  }
-  return bodies;
+function readBodies(vc: VaultCache): { map: Map<string, string>; unreadable: number } {
+  // 🔴 읽기와 **못 읽은 수 세기**는 `$lib/readBodies` 한 곳에 있다.
+  //    예전엔 여기서 조용히 건너뛰어서, 결과가 전부인지 아닌지를 알 방법이 없었다.
+  const r = readNoteBodies(
+    vc.infos.map((i) => i.source_path),
+    (p) => readFileSync(p, "utf8"),
+  );
+  return { map: new Map(r.bodies.map((b) => [b.path, b.body])), unreadable: r.unreadable };
 }
 
 /** 공통 옵션을 `QueryArgs`로. 명령별 핸들러가 자기 것만 얹는다. */
@@ -183,7 +195,12 @@ function relativizer(root: string): (abs: string) => string {
 }
 
 /**
- * `--props status=완료 --props status=반영됨` → `{ status: ["완료", "반영됨"] }`.
+ * `--props topic=graph --props topic=ui` → `{ topic: ["graph", "ui"] }`.
+ *
+ * ⚠️ **낱말 목록을 여기 적지 않는다.** 예전엔 이 주석이 `status` 의 "끝났다" 낱말 중
+ * 둘만 적어 두었고, 그대로 베껴 쓰면 실측 vault 53건 중 15건만 잡혔다. 상태를 물을
+ * 때는 `--props status=@done` 처럼 **갈래**로 부른다(`core/query.ts` 의
+ * `expandPropValues`, 낱말 표는 `$lib/docStatus`).
  *
  * ⚠️ 값에 `=` 가 들어갈 수 있다(`date=2026-08-28`은 아니지만 자유 텍스트 축은 그럴 수 있다).
  * **첫 `=` 에서만** 가른다.
@@ -295,7 +312,7 @@ export function cmdLinks(p: ParsedCommand, out: Out): void {
   if (unlinked) {
     // ⚠️ 본문을 전부 읽는다. 다른 감사 셋은 인덱스만으로 되지만 이건 본문이 있어야 한다 —
     //    그래서 `--unlinked`가 눈에 띄게 느리고, 도움말에도 그렇게 적어 뒀다.
-    const rows = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
+    const rows = findUnlinkedMentions(index, readBodies(vc).map).map((r) => ({
       ...r,
       target: rel(r.target),
       sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
@@ -699,11 +716,12 @@ function cmdStats(p: ParsedCommand, out: Out): void {
   const tags = new Set<string>();
   for (const i of infos) for (const t of i.tags ?? []) tags.add(t);
   const taskGroups = collectOpenTasks(
-    [...readBodies(vc)].map(([path, body]) => ({ path, body })),
+    [...readBodies(vc).map].map(([path, body]) => ({ path, body })),
   );
   const openTasks = countOpenTasks(taskGroups);
   // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다.
-  const conc = taskConcentration(taskGroups);
+  // ⚠️ 경로는 **여기서** 상대로 만든다 — JSON 이 절대 경로를 내던 자리다.
+  const conc = relConcentration(taskConcentration(taskGroups), relativizer(vc.root));
 
   if (out.json) {
     return out.json_({
@@ -752,6 +770,21 @@ function cmdStats(p: ParsedCommand, out: Out): void {
  * ⚠️ **달을 하나씩 흘려보낸다.** 월 파일 상한이 16 MB 라 열두 달을 한 배열로 모으면
  * 최악 192 MB 다.
  */
+/** 열기 합계 — 노트별 수를 더한다. */
+function opensTotal(opens: readonly { total: number }[]): number {
+  return opens.reduce((n, o) => n + o.total, 0);
+}
+
+/**
+ * 목록에 쓰는 짧은 경로 — 파일 이름과 부모 하나.
+ *
+ * ⚠️ 전체 경로를 쓰면 표가 가로로 터져 옆의 숫자가 안 보인다. `--json` 은 전체를 낸다.
+ */
+function shortPath(abs: string): string {
+  const segs = abs.split(/[\\/]/).filter(Boolean);
+  return segs.slice(-2).join("/");
+}
+
 function cmdUsage(p: ParsedCommand, out: Out): void {
   const dirs = typeof p.options.dir === "string" ? [p.options.dir] : usageDirs();
   const dir = dirs.find((d) => existsSync(d));
@@ -804,6 +837,51 @@ function cmdUsage(p: ParsedCommand, out: Out): void {
     table(r.commands.slice(0, top).map((c) => ["  " + c.id, `${c.total} (${via(c.via)})`])) ||
       "  없음",
   );
+  // 🔴 **"경고 50" 은 어디에 몰렸는지를 감춘다.** 실측에서 43이 한 실패에 몰려 있었는데
+  //    이름이 안 나왔고, 그래서 그 실패가 오래 안 보였다. `taskConcentration` 이 맨숫자
+  //    하나를 거부하는 것과 같은 이유다.
+  if (r.errors.length > 0) {
+    out.line("");
+    out.line("오류 · 경고 (많은 것부터)");
+    out.line(
+      table(
+        r.errors.slice(0, top).map((e) => ["  " + e.at, `${e.msg} — ${e.count}회 (${e.lvl})`]),
+      ),
+    );
+    // ⚠️ 자른 것을 말한다. 안 말하면 잘린 목록이 전부로 읽힌다.
+    if (r.errors.length > top) out.line(`  외 ${r.errors.length - top}종`);
+  }
+
+  // 🔴 **"많이 쓴 명령"과 다른 축이다.** 저건 팔레트발 명령만 센다 — 실측에서 `open:note 3`
+  //    이라 적혀 있는데 실제 열기는 31회였고, 그걸 읽고 "앱을 거의 안 쓴다"고 잘못 읽었다.
+  if (r.opens.length > 0) {
+    out.line("");
+    out.line(`많이 연 노트 (합계 ${opensTotal(r.opens)}회 · ${via(r.openVia)})`);
+    out.line(
+      table(
+        r.opens
+          .slice(0, top)
+          .map((o) => ["  " + shortPath(o.path), `${o.total} (${via(o.via)})`]),
+      ),
+    );
+    if (r.opens.length > top) out.line(`  외 ${r.opens.length - top}개 노트`);
+  }
+
+  // ⚠️ `null` 은 **"모른다"** 다 — 앱의 명령 목록을 분모로 못 받았다는 뜻이고, 0 과 다르다.
+  //    이 필드는 예전에 늘 빈 배열이라 "안 쓴 명령 없음"이라고 거짓말한 적이 있다(6차).
+  if (r.unusedCommands === null) {
+    out.line("");
+    out.line("한 번도 안 쓴 명령  모름 (명령 목록을 못 받았다)");
+  } else if (r.unusedCommands.length > 0) {
+    out.line("");
+    out.line(`한 번도 안 쓴 명령  ${r.unusedCommands.length}개`);
+    const shown = r.unusedCommands.slice(0, top);
+    out.line("  " + shown.join(" · "));
+    if (r.unusedCommands.length > top) {
+      out.line(`  외 ${r.unusedCommands.length - top}개`);
+    }
+  }
+
   if (r.queries.empty.length > 0) {
     out.line("");
     out.line("결과가 0건이던 질의");
@@ -844,7 +922,9 @@ function cmdNew(p: ParsedCommand, out: Out): void {
   const raw = String(p.positional[0] ?? "").trim();
   if (!raw) return out.fail("usage", "이름이 필요하다", "lapis new <이름>", 2);
 
-  const rel = raw.endsWith(".md") ? raw : `${raw}.md`;
+  // 🔴 `.mmd` 도 노트다. 예전엔 `.md` 만 보고 `diagram.mmd` → `diagram.mmd.md` 를 만들었다.
+  //    `vault.rs` 의 `already_has_supported_ext` 는 같은 판정을 제대로 하고 있었다.
+  const rel = withNoteExt(raw);
   const target = nodePath.resolve(vc.root, rel);
   // 🔴 vault 밖으로 못 나간다. 문자열이 아니라 **해소한 경로**로 본다.
   const root = nodePath.resolve(vc.root);
@@ -1227,11 +1307,21 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   //    doctor 전체가 0.73 → 0.79초였다(+54 ms). 큰 vault에서는 이 항목이 비용을 지배한다.
   const fmIssues = findFrontmatterIssues(index);
 
-  const unlinked = findUnlinkedMentions(index, readBodies(vc)).map((r) => ({
+  // ⚠️ 본문은 **한 번만** 읽는다. `unlinked` 와 `decay` 가 각자 읽으면 vault 를 두 번
+  //    훑고, 한쪽만 실패했을 때 두 검사가 다른 vault 를 보고 답이 갈린다.
+  const bodies = readBodies(vc);
+
+  const unlinked = findUnlinkedMentions(index, bodies.map).map((r) => ({
     ...r,
     target: rel(r.target),
     sources: r.sources.map((x) => ({ ...x, path: rel(x.path) })),
   }));
+
+  // 프론트매터는 끝났다는데 본문에 미완이 남은 노트 — 한 노트가 자기 자신과 어긋난 것.
+  const decayed = findDecayedNotes(
+    index,
+    collectOpenTasks([...bodies.map].map(([path, body]) => ({ path, body }))),
+  ).map((d) => ({ ...d, path: rel(d.path) }));
 
   const problems =
     broken.length +
@@ -1239,7 +1329,8 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
     tagIssues.length +
     ambiguous.length +
     unlinked.length +
-    fmIssues.length;
+    fmIssues.length +
+    decayed.length;
 
   if (out.json) {
     out.json_({
@@ -1257,6 +1348,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
         mentions: unlinked.reduce((n, r) => n + r.total, 0),
         rows: unlinked,
       },
+      decayed_notes: { count: decayed.length, notes: decayed },
     });
     // ⚠️ `json_`는 출력만 한다. 종료 코드는 여기서 정해야 한다.
     if (problems > 0) process.exitCode = 1;
@@ -1279,6 +1371,7 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
       ["모호한 이름", ambiguous.length === 0 ? "없음" : `${ambiguous.length}개`],
       ["안 걸린 언급", unlinked.length === 0 ? "없음" : `이름 ${unlinked.length}개`],
       ["frontmatter", fmIssues.length === 0 ? "없음" : `${fmIssues.length}묶음`],
+      ["끝났다는데 미완", decayed.length === 0 ? "없음" : `${decayed.length}개`],
     ]),
   );
 
@@ -1292,6 +1385,11 @@ export function cmdDoctor(p: ParsedCommand, out: Out): void {
   if (tagIssues.length > 0 || ambiguous.length > 0) out.line("  lapis tag audit");
   if (unlinked.length > 0) out.line("  lapis links --unlinked");
   if (fmIssues.length > 0) out.line("  lapis props audit");
+  // ⚠️ 전용 CLI 명령을 안 만들었다 — 0건짜리 감사에 명령을 얹는 것은 과하다.
+  //    앱의 진단 화면과 MCP 의 `audit:"decay"` 가 목록을 낸다.
+  if (decayed.length > 0) {
+    for (const d of decayed) out.line(`  ${d.path} — "${d.status}" 인데 미완 ${d.open}건`);
+  }
   process.exitCode = 1;
 }
 
@@ -1319,7 +1417,7 @@ function exportAll(p: ParsedCommand, out: Out, outDir: string): void {
   const failed: { note: string; why: string }[] = [];
   for (const info of vc.infos) {
     const relPath = rel(info.source_path);
-    const dest = nodePath.resolve(destRoot, relPath.replace(/\.(md|mmd|markdown)$/i, ".html"));
+    const dest = nodePath.resolve(destRoot, `${stripNoteExt(relPath)}.html`);
     // ⚠️ 경로 이탈 검사. vault 상대 경로에서 만들었으니 새면 안 되지만, 새면 조용하다.
     if (!dest.startsWith(destRoot + nodePath.sep)) {
       failed.push({ note: relPath, why: "출력 디렉터리 밖" });
@@ -1614,7 +1712,8 @@ function cmdRender(p: ParsedCommand, out: Out): void {
       ? p.options.out
       : defaultRenderOut(resolved.path, format),
   );
-  const timeout = typeof p.options.timeout === "number" ? p.options.timeout : 20_000;
+  const timeout =
+    typeof p.options.timeout === "number" ? p.options.timeout : RENDER_TIMEOUT_MS_DEFAULT;
 
   const r = requestRender(
     { notePath: resolved.path, vault: resolved.vault, outNative, format },
@@ -1641,7 +1740,7 @@ function cmdRender(p: ParsedCommand, out: Out): void {
  * 이유로 같은 자리를 쓴다.
  */
 function defaultRenderOut(notePath: string, format: RenderFormat): string {
-  const stem = nodePath.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  const stem = noteStem(notePath);
   const home = homedir();
   const downloads = home ? nodePath.join(home, "Downloads") : "";
   const dir = downloads && existsSync(downloads) ? downloads : tmpdir();
@@ -1654,22 +1753,56 @@ function defaultRenderOut(notePath: string, format: RenderFormat): string {
  * ⚠️ **본문을 전부 읽는다.** `links --unlinked` 와 같은 부류다 — 인덱스로는 안 된다.
  * ⚠️ 코드 블록 안은 안 센다. 셸 예시의 `- [ ]` 를 할 일로 세면 목록을 못 믿게 된다.
  */
+/**
+ * 🔴 **못 읽은 노트가 있으면 말한다.**
+ *
+ * 캐시에는 있는데 디스크에서 사라졌거나 권한이 막힌 노트는 집계에서 빠진다. 그걸 안
+ * 말하면 "미완 12건"이 전부인지 아닌지를 **알 방법이 없다** — 분모가 조용히 줄어든 것이다.
+ *
+ * ⚠️ 0 이면 아무 말도 안 한다. 늘 한 줄을 더 내면 정상이 시끄러워지고, 시끄러운 정상은
+ * 곧 안 읽힌다.
+ */
+function reportUnreadable(out: Out, n: number): void {
+  if (n === 0) return;
+  out.line(`  ⚠️ ${n}개 노트를 못 읽어 위 숫자에서 빠졌다 — 'lapis index' 로 캐시를 맞춰 볼 것`);
+}
+
+/**
+ * 미완 작업 묶음·몰림의 경로를 **vault 상대**로.
+ *
+ * 🔴 사람용 줄은 이미 `rel` 을 태우고 있었는데 **JSON 만 안 태웠다.** 같은 규칙이 두
+ * 곳에 있고 한쪽이 틀린 자리다 — `tasks audit --json` 과 `stats --json` 둘 다 절대
+ * 경로를 냈고, 다른 표면은 전부 상대라 **두 출력을 교집합하면 조용히 0건**이 됐다.
+ * `cli/jsonPathForm.test.ts` 가 이제 표면 전부를 훑는다.
+ */
+function relTaskGroups(
+  groups: readonly OpenTaskGroup[],
+  rel: (abs: string) => string,
+): OpenTaskGroup[] {
+  return groups.map((g) => ({
+    ...g,
+    path: rel(g.path),
+    open: g.open.map((t) => ({ ...t, path: rel(t.path) })),
+  }));
+}
+
+function relConcentration(
+  conc: TaskConcentration,
+  rel: (abs: string) => string,
+): TaskConcentration {
+  return conc.top ? { ...conc, top: { ...conc.top, path: rel(conc.top.path) } } : conc;
+}
+
 export function cmdTasks(p: ParsedCommand, out: Out): void {
   const action = p.positional[0];
   if (action !== "audit") {
     out.fail("no_criteria", `모르는 동작: ${action}`, "쓸 수 있는 값: audit", 2);
   }
   const vc = resolveVault(vaultOf(p));
-  const groups = collectOpenTasks(
-    vc.infos.flatMap((info) => {
-      try {
-        return [{ path: info.source_path, body: readFileSync(info.source_path, "utf8") }];
-      } catch {
-        // 캐시에는 있는데 디스크에서 사라진 노트. 그 노트만 빠진다.
-        return [];
-      }
-    }),
-  );
+  // 🔴 못 읽은 노트를 **센다.** 캐시에는 있는데 디스크에서 사라졌거나 권한이 막힌
+  //    노트가 있으면 아래 숫자가 그만큼 덜 센 것이다 — 조용히 빠지면 알 길이 없다.
+  const read = readBodies(vc);
+  const groups = collectOpenTasks([...read.map].map(([path, body]) => ({ path, body })));
   // ⚠️ **거르기는 전체를 센 뒤에 한다.** 거른 것을 분모로 삼으면 "몇 건 숨겼는지"를
   //    말할 수 없고, 그러면 `--under` 한 번에 나머지가 조용히 사라진다.
   const totalAll = countOpenTasks(groups);
@@ -1700,18 +1833,22 @@ export function cmdTasks(p: ParsedCommand, out: Out): void {
       total: totalAll,
       shown: totalShown,
       hidden,
-      concentration: conc,
-      groups: p.options.count === true ? [] : shown,
+      // ⚠️ 0 이 아니면 위 숫자가 **그만큼 덜 센 것**이다.
+      unreadable: read.unreadable,
+      concentration: relConcentration(conc, rel),
+      groups: p.options.count === true ? [] : relTaskGroups(shown, rel),
     });
   }
 
   if (totalAll.open === 0) {
     out.line("미완 작업이 없다.");
+    reportUnreadable(out, read.unreadable);
     reportStale(out, vc);
     return;
   }
 
   out.line(`${totalAll.open}건 미완 · ${totalAll.done}건 완료`);
+  reportUnreadable(out, read.unreadable);
   if (conc.top) {
     // 🔴 맨숫자 하나는 어디에 몰렸는지를 감춘다 — `stats` 와 같은 이유다.
     out.line(

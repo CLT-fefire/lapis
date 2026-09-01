@@ -11,8 +11,8 @@ import {
   suggestHtmlFileName,
 } from "$lib/previewExportDoc";
 import { themeCss } from "$lib/colorThemes";
-import { normPath } from "../mcp/cache.ts";
-import { buildIndex } from "../mcp/entry.ts";
+import { normPath } from "../core/cache.ts";
+import { buildIndex } from "../core/entry.ts";
 import { resolveWikilink, type LinkIndex } from "$lib/linkIndex";
 import {
   EMBED_MAX_DEPTH,

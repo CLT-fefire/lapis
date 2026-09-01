@@ -8,22 +8,29 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { resolveNotePath } from "./query.ts";
+import { resolveNotePath } from "../core/query.ts";
 import {
   LapisError,
   resolveVault,
   usageDirs,
   normPath,
   checkStale,
-} from "./cache.ts";
+} from "../core/cache.ts";
+import { noteStem } from "$lib/notePath";
+import { readBodies } from "$lib/readBodies";
 import { UsageAnalyzer } from "$lib/usageAnalyzer";
 import { COMMAND_IDS } from "$lib/commandIds";
 import { collectOpenTasks, countOpenTasks, taskConcentration } from "$lib/openTasks";
 import { buildIndex } from "$lib/linkIndex";
-import { launchOpen, LaunchError } from "../cli/appLaunch.ts";
-import { requestRender, RENDER_FORMATS, type RenderFormat } from "../cli/renderRequest.ts";
-import { runIndex, IndexError } from "../cli/indexRun.ts";
-import { runExport, ExportError } from "../cli/exportRun.ts";
+import { launchOpen, LaunchError } from "../ops/appLaunch.ts";
+import {
+  requestRender,
+  RENDER_FORMATS,
+  RENDER_TIMEOUT_MS_DEFAULT,
+  type RenderFormat,
+} from "../ops/renderRequest.ts";
+import { runIndex, IndexError } from "../ops/indexRun.ts";
+import { runExport, ExportError } from "../ops/exportRun.ts";
 
 /**
  * MCP 앱 조작 도구들.
@@ -184,16 +191,13 @@ const statsTool: ToolDef = {
     };
     const tags = /* @__PURE__ */ new Set();
     for (const i of vc.infos) for (const t of i.tags ?? []) tags.add(t);
-    const bodies: { path: string; body: string }[] = [];
-    for (const i of vc.infos) {
-      try {
-        bodies.push({
-          path: i.source_path,
-          body: readFileSync(i.source_path, "utf-8"),
-        });
-      } catch {}
-    }
-    const groups = collectOpenTasks(bodies);
+    // 🔴 **못 읽은 노트를 센다.** 예전엔 조용히 건너뛰어서 "미완 N건"이 전부인지
+    //    아닌지를 알 방법이 없었다 — 분모가 조용히 줄어든 것이다.
+    const read = readBodies(
+      vc.infos.map((i) => i.source_path),
+      (p) => readFileSync(p, "utf-8"),
+    );
+    const groups = collectOpenTasks(read.bodies);
     return {
       vault: vc.root,
       notes: vc.infos.length,
@@ -202,6 +206,8 @@ const statsTool: ToolDef = {
       tags: tags.size,
       tasks: {
         ...countOpenTasks(groups),
+        // ⚠️ 0 이 아니면 위 숫자가 **그만큼 덜 센 것**이다. 안 내면 알 길이 없다.
+        unreadable: read.unreadable,
         // ⚠️ 맨숫자만 내면 어디에 몰렸는지가 안 보인다 — 이 vault 는
         //    미완 89건 중 67건이 체크리스트 한 파일이었다.
         concentration: taskConcentration(groups),
@@ -337,7 +343,9 @@ const exportTool: ToolDef = {
  * 없는 곳에 쓰려다 실패하는 것보다, 찾기 어려운 곳이라도 쓰고 **어디 썼는지 말하는** 게 낫다.
  */
 export function defaultHtmlPath(notePath: string): string {
-  const stem = path.basename(notePath).replace(/\.(md|mmd|markdown)$/i, "");
+  // ⚠️ 벗기는 규칙은 `notePath.ts` 하나다. 여기 있던 정규식은 `markdown` 까지 벗겼는데
+  //    인덱서가 그걸 노트로 안 받는다 — 생산자가 안 만드는 것을 소비자가 벗기고 있었다.
+  const stem = noteStem(notePath);
   const home = homedir();
   const downloads = home ? path.join(home, "Downloads") : "";
   const dir = downloads && existsSync(downloads) ? downloads : tmpdir();
@@ -358,7 +366,10 @@ const renderTool: ToolDef = {
         description: "기본 html",
       },
       vault: { type: "string", description: "vault 루트" },
-      timeout_ms: { type: "number", description: "기다릴 상한. 기본 20000" },
+      timeout_ms: {
+        type: "number",
+        description: `기다릴 상한. 기본 ${RENDER_TIMEOUT_MS_DEFAULT}`,
+      },
     },
     required: ["note", "out"],
   },
@@ -382,7 +393,8 @@ const renderTool: ToolDef = {
       );
     }
     const resolved = resolveNotePath(note, str(args.vault));
-    const timeout = typeof args.timeout_ms === "number" ? args.timeout_ms : 2e4;
+    const timeout =
+      typeof args.timeout_ms === "number" ? args.timeout_ms : RENDER_TIMEOUT_MS_DEFAULT;
 
     // 🔴 **두 모양을 나눠 둔다.**
     //

@@ -24,7 +24,7 @@ import {
   type CaseResult,
 } from "./searchEval.ts";
 import { readDevArgs } from "./devArgs.ts";
-import { unionRankDetailed } from "./entry.ts";
+import { unionRankDetailed } from "../core/entry.ts";
 
 /**
  * 지연 예산(ms). 이 머신(M-series · 19,313 노트 · 8샤드) 실측의 **2.5~3배**로 잡았다.

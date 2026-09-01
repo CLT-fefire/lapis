@@ -577,3 +577,67 @@
   content: " ▼";
   color: var(--accent-text);
 }
+
+/**
+ * 저장된 질의 — 노트 안에 적어 둔 질의의 결과.
+ *
+ * ⚠️ 색을 하드코딩하지 않는다. 테마 3종이 app.css 의 토큰에서 갈린다.
+ * ⚠️ 오류 글자색은 `--danger` 가 아니라 `--danger-text` 다 — app.css 의 계약.
+ */
+.rendered .lapis-query {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--surface-sunken);
+}
+
+.rendered .lapis-query-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.rendered .lapis-query--error .lapis-query-title {
+  color: var(--danger-text);
+}
+
+.rendered .lapis-query-errors {
+  margin: 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.rendered .lapis-query-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.rendered .lapis-query-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* 경로는 이름 뒤에 흐리게 — 같은 이름이 둘일 때 구별이 된다. */
+.rendered .lapis-query-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rendered .lapis-query-empty,
+.rendered .lapis-query-more {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}

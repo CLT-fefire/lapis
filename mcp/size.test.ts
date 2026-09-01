@@ -8,8 +8,8 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanupFixtures, makeFixture, type FixtureNote } from "./fixture.ts";
-import { lapisQuery, isAudit, resetState } from "./query.ts";
+import { cleanupFixtures, makeFixture, type FixtureNote } from "../core/fixture.ts";
+import { lapisQuery, isAudit, resetState } from "../core/query.ts";
 
 afterEach(() => {
   delete process.env.LAPIS_CACHE_DIR;

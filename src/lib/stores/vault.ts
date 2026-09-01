@@ -50,7 +50,7 @@ import {
   type LinkRewritePreview,
   type LinkRewritePreviewItem,
 } from "$lib/linkRewrite";
-import { linkRewritePreviewRequest } from "$lib/stores/linkRewritePreview";
+import { requestLinkRewritePreview } from "$lib/stores/linkRewritePreview";
 import {
   backupAndWrite as safeBackupAndWrite,
   describeFailure,
@@ -69,14 +69,10 @@ import { pendingHeadingAnchor } from "$lib/stores/outline";
 import { clearBacklinkCache } from "$lib/backlinks";
 import { diffFileStats, deltaGate, touchedPaths, type CacheDelta } from "$lib/cacheDelta";
 import { rebuildIndexes, clearIndexes } from "$lib/stores/search";
-import { buildTagIndex, tagIndex, clearTagIndex } from "$lib/stores/tags";
-import {
-  buildFacetCounts,
-  docKindCounts,
-  topicCounts,
-  clearFacetCounts,
-  clearFilters,
-} from "$lib/stores/filters";
+import { tagIndex, clearTagIndex } from "$lib/stores/tags";
+import { buildTagIndex } from "$lib/tagIndex";
+import { docKindCounts, topicCounts, clearFacetCounts, clearFilters } from "$lib/stores/filters";
+import { buildFacetCounts } from "$lib/filterSelection";
 import { pushRecent } from "$lib/stores/recent";
 import { scopedKey, pruneOrphanScopedKeys } from "$lib/windowScope";
 import {
@@ -547,6 +543,19 @@ async function buildFullTextFromPending(): Promise<void> {
  * scheduleFullReload(500ms 디바운스)도 같은 burst 끝에 한 번 부른다 → guard로 중복 차단.
  */
 let reloadInFlight = false;
+
+/**
+ * 풀 리로드 **요청** — 다른 reload/reindex 가 돌고 있으면 `false`.
+ *
+ * ⚠️ `reindexIncremental` 과 **같은 계약**이다(바쁘면 false, 부르는 쪽이 재큐).
+ * `reloadNotes` 는 바쁠 때 조용히 돌아가서, 워처가 그걸 그대로 쓰면 폴더 이름 바꾸기가
+ * **한 번 씹히고 아무도 모른다.**
+ */
+export async function requestFullReload(): Promise<boolean> {
+  if (reloadInFlight) return false;
+  await reloadNotes();
+  return true;
+}
 
 export async function reloadNotes(): Promise<void> {
   if (reloadInFlight) return;
@@ -1151,8 +1160,10 @@ async function rewriteAllLinksWithPreview(
   if (preview.items.length === 0) return;
 
   // 3) 사용자 confirm 대기
+  // ⚠️ `set` 이 아니라 함수로 넣는다 — 이미 떠 있는 요청이 있으면 그쪽을 취소로 닫아야
+  //    한다. 그냥 덮으면 먼저 온 rename 이 여기서 영원히 기다린다.
   const apply = await new Promise<boolean>((resolve) => {
-    linkRewritePreviewRequest.set({ preview, resolve });
+    requestLinkRewritePreview(preview, resolve);
   });
   if (!apply) return;
 

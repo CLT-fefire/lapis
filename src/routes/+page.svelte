@@ -132,6 +132,8 @@ import { isPanicChord } from "$lib/userCss";
   import type { HeadingInfo } from "$lib/markdownPlugins/headingAnchor";
   import { groupRelations, type RelationGroup } from "$lib/relations";
   import { renderMermaidIn, resetMermaidHosts } from "$lib/mermaid-runtime";
+  import { renderQueriesIn } from "$lib/queryRuntime";
+  import { queryText, queryContext } from "$lib/queryWiring";
   import { handleRenderedClick } from "$lib/previewClick";
   import { rewriteImageSources } from "$lib/assetPath";
   import { isDebugBuild, type LinkInfo } from "$lib/tauri/notes";
@@ -440,7 +442,11 @@ import { isPanicChord } from "$lib/userCss";
   // Preview 갱신 시 mermaid 코드블록 렌더 (lazy + dynamic import) — Phase 4.4.a
   $effect(() => {
     trackPreviewHtml();
-    afterPreviewRender((body) => renderMermaidIn(body));
+    afterPreviewRender((body) => {
+      renderMermaidIn(body);
+      // 저장된 질의도 같은 자리에서 채운다 — 본문이 다시 그려질 때마다 새로 센다.
+      renderQueriesIn(body, queryContext(), queryText());
+    });
   });
 
   // ⚠️ 예전엔 여기 테마 전환용 mermaid 재렌더 effect가 둘 있었다(모드 변경 추적 +

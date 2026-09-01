@@ -206,6 +206,10 @@ pub fn render_window_if_unclaimed(app: &AppHandle, wait_ms: u64, give_up_ms: u64
             return;
         };
 
+        // ⚠️ 라벨을 창을 만들기 **전에** 기억할 수는 없다(라벨을 그때 정한다). 하지만
+        // 창이 프런트를 띄우고 명령을 부르기까지는 늘 이 대입보다 늦으므로 경합이 없다.
+        // `cliopen::open_window_if_unclaimed` 에 같은 근거가 적혀 있다 — 기제를 베낄 때
+        // **근거도 같이** 베낀다. 안 그러면 다음 사람이 없는 경합을 고치려 든다.
         match crate::spawn_window(&app) {
             Ok(label) => {
                 if let Ok(mut w) = state.cli_window.lock() {

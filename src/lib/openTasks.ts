@@ -14,6 +14,8 @@
  * 그래서 `audit: all` 이 없는 것과 같은 이유로 이것도 **부를 때만** 돈다.
  */
 
+import { codeBlockLines } from "$lib/codeLines";
+
 export interface OpenTask {
   path: string;
   /** 노트 안 0-based 줄 번호. 열었을 때 그 줄로 갈 수 있게. */
@@ -48,29 +50,27 @@ export interface OpenTaskGroup {
 const TASK_LINE = /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+\[([ xX])\]\s+(.*)$/;
 
 /**
- * ⚠️ **코드 펜스 안은 안 센다.** 이 vault 는 코드블록이 63노트에 있고, 셸 예시에
+ * ⚠️ **코드 블록 안은 안 센다.** 이 vault 는 코드블록이 63노트에 있고, 셸 예시에
  * `- [ ]` 가 들어가는 일이 있다. 세면 있지도 않은 할 일이 목록에 뜬다.
+ *
+ * 🔴 판정은 `$lib/codeLines` 가 한다. 예전엔 여기 줄 단위 토글이 있었는데
+ * **들여쓴 코드블록을 놓쳤다** — 4칸 들여쓴 `- [ ]` 가 할 일로 세어졌다.
+ * 정규식으로는 못 고친다: 중첩 할 일도 4칸이라 "4칸이면 코드"로 두면 `depth` 가 죽는다.
+ *
+ * ⚠️ **후보가 없으면 파스하지 않는다.** 전량 파스는 실측 18배다(1.6ms → 29.3ms).
+ * 체크박스처럼 생긴 줄이 하나라도 있는 노트만 파서를 태운다(실측 6%).
  */
 export function findOpenTasks(path: string, body: string): OpenTaskGroup {
   const open: OpenTask[] = [];
   let done = 0;
-  let inFence = false;
-  let fence = "";
 
   const lines = body.split("\n");
+  if (!lines.some((l) => TASK_LINE.test(l))) return { path, open, done };
+
+  const code = codeBlockLines(body);
   for (let i = 0; i < lines.length; i++) {
+    if (code.has(i)) continue;
     const line = lines[i];
-    const f = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (f) {
-      if (!inFence) {
-        inFence = true;
-        fence = f[1][0];
-      } else if (f[1][0] === fence) {
-        inFence = false;
-      }
-      continue;
-    }
-    if (inFence) continue;
 
     const m = TASK_LINE.exec(line);
     if (!m) continue;

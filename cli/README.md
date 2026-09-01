@@ -15,7 +15,7 @@
 ## 무엇인가
 
 `lapis-mcp`가 **AI에게** 인덱스를 열어주는 창구라면, 이쪽은 **사람과 스크립트에게** 여는
-창구다. 같은 캐시를 읽고 같은 랭킹을 쓴다 — `mcp/query.ts`의 `lapisQuery()`가 두 소비자의
+창구다. 같은 캐시를 읽고 같은 랭킹을 쓴다 — `core/query.ts`의 `lapisQuery()`가 두 소비자의
 공용 핵이다.
 
 ```
@@ -93,7 +93,7 @@ PowerShell에서 `cli/lapis`를 치면 **"이 파일을 열 앱을 고르라"는
 | `export --all --out-dir <디렉터리>` | vault 전체. **구조를 그대로** 만든다 |
 | `links --unlinked` | 다른 노트의 이름을 말했는데 링크는 안 건 자리. **본문을 전부 읽는다** |
 | `replace <패턴> <치환>` | vault 전체 찾아 바꾸기. **기본은 dry-run**, `--apply`가 있어야 쓴다 |
-| `doctor` | 위 감사 다섯 + 인덱스 낡음을 **한 번에**. 종료 코드로 답한다 |
+| `doctor` | 위 감사를 **한 번에** 돌리고 인덱스 낡음도 본다. 종료 코드로 답한다 |
 | `read <노트>` | 노트 본문. **`-`면 표준입력**에서 경로를 읽는다 |
 | `stats` | vault 통계 — 노트·태그·주제·열린 할 일 수 |
 | `usage` | 앱 사용 기록 집계. 앱의 `analysis.md`와 **같은 클래스**로 센다 |
@@ -223,10 +223,30 @@ watcher가 잡고, 아니면 다음에 vault를 열 때 재색인된다.
 | `--doc-kind <k>` · `--topic <t>` | 정확 일치. ⚠️ frontmatter 선언 기준이라 폴더와 다를 수 있다 |
 | `--min-rel <0~1>` | 상대 점수 하한. 결과가 넓을 때 꼬리를 자른다 |
 | `--exclude <prefix>` | vault 상대 **문자열 prefix**. 여러 번 줄 수 있다 |
+| `--props <키>=<값>` | 임의 frontmatter 축. 여러 번 주면 같은 키는 OR, 다른 키는 AND |
+| `--props status=@done` | 상태 **갈래** — `@done` · `@active` · `@todo`. 아래 참조 |
 | `--include-archive` | `_memories` 기본 제외를 해제 |
 
 `--min-rel`이 왜 필요한지는 `mcp/README.md`의 **동작 6번**을 보라 — raw 점수는 질의 간
 비교가 안 되고, `rel`은 그 질의 안에서 top-1을 1.0으로 둔 값이다.
+
+### 🔴 `status` 는 낱말이 아니라 갈래로 묻는다
+
+사람은 같은 자리를 doc_kind 마다 다른 말로 부른다. 코드에게는 전부 다른 문자열이라
+리터럴 하나로 물으면 **조용히 절반만** 잡힌다:
+
+```bash
+lapis search --props status=완료    --limit 50 --json   # 15건
+lapis search --props status=@done  --limit 50 --json   # 41건
+```
+
+(2026-08-30 실측, `status` 있는 노트 53건. `@done`·`@active`·`@todo` 를 합치면 53 —
+남는 값이 없다.)
+
+⚠️ **모르는 갈래는 운다.** `@dnoe` 는 0건이 아니라 에러다. ⚠️ `@` 는 예약이라
+다른 축(`--props topic=@done`)에서 쓰면 조용한 no-op 이 아니라 에러다.
+
+낱말 표는 `src/lib/docStatus.ts` 하나에 있다 — `npm run check:arch` 가 사본을 막는다.
 
 ## 출력 계약
 
@@ -289,7 +309,7 @@ vault가 캐시보다 새로우면 `status`가 알려주지만 **막지는 않�
 
 ```
 ① lapis.exe --headless export-index  →  Rust가 vault를 훑어 원자료 JSON
-② Node가 fullTextOptions.ts로 shard 빌드              (cli/indexBuild.ts)
+② Node가 fullTextOptions.ts로 shard 빌드              (ops/indexBuild.ts)
 ③ lapis.exe --headless import-index  →  Rust가 순서를 지켜 캐시에 커밋
 ```
 
@@ -495,10 +515,11 @@ lapis props audit
 ⚠️ **자유 서술을 오류라 부르지 않는다.** `status: 완료 — #232`는 사람에게 유용하다.
 보고하는 것은 "같은 접두사로 시작하는 값이 여럿"이라는 사실뿐이다.
 
-### 안 걸린 언급 — 이것만 본문을 읽는다
+### 안 걸린 언급 — 본문을 읽는 쪽
 
-감사 넷 중 `links --unlinked`만 인덱스로 안 된다. 다른 셋은 링크 그래프만 보면 되지만
-이건 **본문에 그 이름이 나왔는가**를 물어서다.
+대부분의 감사는 인덱스만 보면 된다. 이건 **본문에 그 이름이 나왔는가**를 물어서 안 된다 —
+`tasks audit`(미완 `- [ ]`)와 `doctor` 의 "끝났다는데"도 같은 부류다. 그래서 이것들만 느리고,
+`audit: all` 이 없는 이유이기도 하다.
 
 ```bash
 lapis links --unlinked

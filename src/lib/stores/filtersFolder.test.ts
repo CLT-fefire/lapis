@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { applyFilters, buildFacetCounts, emptySelection } from "./filters";
+import { applyFilters, buildFacetCounts, emptySelection } from "../filterSelection";
 import type { LinkInfo } from "$lib/tauri/notes";
 
 /**
