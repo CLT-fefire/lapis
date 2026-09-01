@@ -18,6 +18,8 @@ Lapis의 버전별 변경 이력. 형식은 [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+## [3.11.0] — 2026-09-01
+
 ### 추가
 - **한글 IME 를 켠 채 영문을 쳐도 찾는다.** 팔레트가 **0건일 때만** 자판을 되돌려 한 번 더
   찾고, 무엇으로 찾았는지 한 줄로 말한다(*"한글로 찍혀서 0건이었습니다 — \"state\" 로 찾은
@@ -2546,7 +2548,9 @@ vault를 git으로 버전 관리.
 
 <!-- 링크 참조 -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.11.0...main
+[3.11.0]: https://github.com/eren0315/lapis/compare/v3.10.0...v3.11.0
+[3.10.0]: https://github.com/eren0315/lapis/compare/v3.9.0...v3.10.0
 [3.9.0]: https://github.com/eren0315/lapis/compare/v3.8.0...v3.9.0
 [3.8.0]: https://github.com/eren0315/lapis/compare/v3.7.2...v3.8.0
 [3.7.2]: https://github.com/eren0315/lapis/compare/v3.7.1...v3.7.2

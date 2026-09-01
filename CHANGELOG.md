@@ -16,6 +16,8 @@ trimmed down for a one-person project. Versioning follows [Semantic Versioning](
 
 ## [Unreleased]
 
+## [3.11.0] — 2026-09-01
+
 ### Added
 - **Searching still works when the Korean IME was left on.** If the palette finds nothing, it
   retries once with the keyboard layout reversed and says which query produced the results. This
@@ -2705,7 +2707,9 @@ The first tag. Everything from Phase 0 through 5.0 landed here.
 
 <!-- link references -->
 
-[Unreleased]: https://github.com/eren0315/lapis/compare/v3.5.0...main
+[Unreleased]: https://github.com/eren0315/lapis/compare/v3.11.0...main
+[3.11.0]: https://github.com/eren0315/lapis/compare/v3.10.0...v3.11.0
+[3.10.0]: https://github.com/eren0315/lapis/compare/v3.9.0...v3.10.0
 [3.9.0]: https://github.com/eren0315/lapis/compare/v3.8.0...v3.9.0
 [3.8.0]: https://github.com/eren0315/lapis/compare/v3.7.2...v3.8.0
 [3.7.2]: https://github.com/eren0315/lapis/compare/v3.7.1...v3.7.2
